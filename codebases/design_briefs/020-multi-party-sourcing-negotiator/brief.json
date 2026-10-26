@@ -1,0 +1,49 @@
+{
+  "application_id": "020",
+  "title": "Multi-party sourcing negotiator",
+  "source_relative_path": "applications/04-procurement-and-supplier-management/020-multi-party-sourcing-negotiator.md",
+  "program_root": "codebases/design_briefs/020-multi-party-sourcing-negotiator",
+  "source_sha256": "7d12452f70c678d85c518bb5a0c0674498f226d645f68a38c397ed822ee7dfe8",
+  "domain_id": "04",
+  "stages": [
+    {
+      "name": "modelPackage",
+      "output_type": "SourcingRequirement",
+      "algorithm": "Translate the sourcing objective into functional, quantity, timing, and service requirements. Identify which terms may be traded and which are binding, and represent dependencies that make individual line-item offers valuable only as a package.",
+      "gate": "Hard constraints and delegated negotiation limits are separate and explicit."
+    },
+    {
+      "name": "normalizeOffers",
+      "output_type": "SupplierOffer",
+      "algorithm": "Reconcile quotations into comparable units and scopes while preserving bundles, exclusions, and conditional discounts. Distinguish an indicative quote from a binding offer and expose missing service or logistics costs rather than assuming comparability.",
+      "gate": "Exact totals and quote validity; no hidden removal of supplier conditions."
+    },
+    {
+      "name": "constructPackages",
+      "output_type": "SourcingPackage",
+      "algorithm": "Use exact allocation services to enumerate feasible combinations, then compare operational resilience and semantic fit under supplied priorities. Consider split supply and alternative delivery patterns without creating allocations that suppliers have not offered capacity to fulfill.",
+      "gate": "Quantity conservation, capacity limits, and conditional-offer compatibility all pass."
+    },
+    {
+      "name": "formCounteroffers",
+      "output_type": "Counteroffer",
+      "algorithm": "Draft conditional counteroffers that exchange permitted concessions for improvements in the whole package. Keep supplier-confidential information isolated and make dependencies explicit so acceptance of one term cannot accidentally commit the buyer to an unapproved package.",
+      "gate": "No disclosure of rival bids or offer beyond the signed negotiation mandate."
+    },
+    {
+      "name": "reconcileAgreement",
+      "output_type": "SourcingAgreement",
+      "algorithm": "Interpret responses as acceptance, rejection, or qualified counteroffer at the term level. Rebuild package feasibility after each material change, identify unresolved conditions, and prepare a final agreement only when all linked commitments are mutually consistent.",
+      "gate": "Qualified acceptance is not final acceptance; exact final package must match approvals."
+    }
+  ],
+  "operational_details": [
+    "One supplier’s discount requires exclusivity: invalidate split-supply packages using that discount.",
+    "An offer expires overnight: revalidate before presenting it as available.",
+    "A salesperson accepts only verbally: retain provisional status pending the configured evidence.",
+    "A currency rate changes: freeze the approved conversion basis and show sensitivity separately.",
+    "A buyer changes the mandate: stop outstanding unapproved offers and review their external status."
+  ],
+  "representative_episode": "Two suppliers can jointly cover demand, but one discount requires exclusive volume and the other’s lead time depends on early commitment.",
+  "independent_truth_basis": "Hidden supplier offers and capacities, exact allocation constraints, mandate boundaries, and simulated conditional responses."
+}

@@ -1,0 +1,13 @@
+# 067 — Agricultural cooperative harvest coordinator
+
+## Distinct algorithm: conserve lot identity through a perishable allocation frontier
+
+Harvest planning is not a generic five-stage record pipeline. `coordinateHarvest` treats each lot as a perishable supply interval and each customer delivery as a constrained demand. It first freezes the previous grower estimate and the new field observation as separate versions. It then builds an eligibility relation between exact variety/quality lots and customer commitments; only after that relation is established does it allocate labor, equipment, cold storage, and transport capacity. A revision walks the affected lot-to-commitment edges only, retains unmet demand when a substitution is rejected, and reconciles actual harvested, stored, and delivered quantities as distinct ledger values.
+
+The central structure is a flow network with provenance: lot supply is the source side, accepted customer commitments are the sink side, and a candidate edge exists only when variety, quality, delivery window, substitution permission, and evidence all fit. Exact quantity conservation belongs to typed arithmetic helpers. The model interprets agronomic notes, names what evidence would establish readiness, and proposes a fair contingency; it may not convert a forecast into a guarantee or allocate a disputed lot.
+
+A changed estimate invalidates allocations consuming that lot, not unrelated growers. A common crop name never collapses distinct variety IDs. An equipment record without a qualified operator contributes no feasible capacity. A refused substitution remains visible as an unmet original commitment. The resume ledger preserves old estimates, lot assignments, accepted customer decisions, and actual movement receipts so a restart can continue from the latest committed round without inventing deliveries.
+
+## Exact boundary
+
+Language handles evidence interpretation, quality suitability, and customer-facing alternatives. `sumMovementQuantities.ts` and `verifyQuantityLimits.ts` own exact decimal summation, unit equality, duplicate assignment detection and lot, commitment or typed resource-capacity comparisons using integer-scaled `BigInt` values. Natural Language still interprets evidence, decides which eligible flows to propose, compares source-backed time windows, rejects overlapping resource use, and keeps absent capacity limits unresolved. The movement reconciliation consumes the exact totals before assessing physical transitions. Store operations own versioning and idempotency. A proposal is never a committed harvest or fulfilled delivery.

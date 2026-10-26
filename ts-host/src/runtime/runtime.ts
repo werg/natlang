@@ -1,3 +1,5 @@
+import type { WeightBinding } from '../adaptation/weights/binding.js';
+import { setLexicalNativeAdapterSource, setLexicalSoftStateSource, type NativeAdapterBinding } from '../native/model-recording.js';
 import { ProgramView } from '../adaptation/program-view.js';
 import { nativeProgramGuidance as validateNativeProgramGuidance } from '../adaptation/prompts.js';
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
@@ -69,6 +71,9 @@ export type NatlangRuntimeOptions = {
   onFolderProposal?: () => void;
   program?: ProgramDescriptor;
   adaptation?: AdaptationBinding | null;
+  /** Tuned weight releases (`natlang tune`), one per program. A function is read at each task creation, so a newly
+   * activated release serves new tasks while running tasks finish on the one they pinned. */
+  weights?: readonly WeightBinding[] | (() => readonly WeightBinding[]);
   /** Exact stored native guidance binding emitted by the memetic guidance exporter. */
   nativeProgramGuidance?: MemeticGuidanceBinding;
   executorIdentity?: ExecutorIdentity;
@@ -143,7 +148,10 @@ export type NatlangRuntimeOptions = {
   refinements?: RefinementSettings & { cache?: VerdictCache; crisp?: Record<string, (value: unknown) => boolean | undefined> };
 };
 
-export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
+export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null;
+  /** Pin these weight releases instead of the runtime's current ones. */
+  weights?: readonly WeightBinding[];
+  services?: Services; serviceDeclarations?: Record<string, string>;
   nativeProgramGuidance?: MemeticGuidanceBinding;
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string;
   /** Live events of this task (`LiveEvent`), besides the runtime's `onLive`. */
@@ -160,6 +168,21 @@ export function setDefaultCallStoreFactory(factory: () => CallStoreLike | undefi
 /** Installed by the Node and browser entry points. */
 export function setDefaultEnvironmentFactory(factory: (options: NatlangRuntimeOptions) => EvalEnvironment): void { defaultEnvironment = factory; }
 
+// Model drivers read the current invocation's tuned stack from its frame (Node and browser alike).
+const lexicalAdapters = new WeakMap<object, readonly NativeAdapterBinding[]>();
+setLexicalNativeAdapterSource(() => {
+  const stack = currentFrame()?.weights;
+  if (!stack?.effective.length) return undefined;
+  let adapters = lexicalAdapters.get(stack);
+  if (!adapters) lexicalAdapters.set(stack, adapters = Object.freeze(stack.effective.map(({ id, scale }) => Object.freeze({ id, scale }))));
+  return adapters;
+});
+
+setLexicalSoftStateSource(() => {
+  const soft = currentFrame()?.weights?.soft;
+  return soft ? [...(soft.instructions ? [soft.instructions.state] : []), ...Object.values(soft.skills).map(use => use.state)] : undefined;
+});
+
 let taskSequence = 0;
 const activeTasks = new Set<NatlangTask>();
 
@@ -174,6 +197,8 @@ export class NatlangTask {
   readonly traces: InvocationTrace[] = [];
   private readonly executionOccurrenceCounts = new Map<string, number>();
   readonly programView: ProgramView;
+  /** The weight releases pinned at creation; every call of this task, inner calls included, resolves from these. */
+  readonly weights: readonly WeightBinding[];
   readonly nativeProgramGuidance?: NativeProgramGuidance;
   readonly specialization?: SpecializationMode;
   readonly auditOf?: string;
@@ -181,6 +206,13 @@ export class NatlangTask {
   readonly failedCalls = new Map<string, string>();
   readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
   private readonly pending = new Set<Promise<unknown>>();
+  private readonly cleanups = new Set<() => void>();
+  /** Register a task-owned native resource; released exactly once at task close. */
+  onClose(cleanup: () => void): () => void {
+    if (this.closed) { cleanup(); return () => {}; }
+    this.cleanups.add(cleanup);
+    return () => { this.cleanups.delete(cleanup); };
+  }
   private readonly pendingChildren = new Map<string, Set<Promise<unknown>>>();
   track<T>(call: Promise<T>, parentCallId?: string): Promise<T> {
     this.pending.add(call);
@@ -259,6 +291,8 @@ export class NatlangTask {
       } else if (this.appPromptSnapshot) throw new Error('declare evaluated systemPromptHash or use program guidance');
     }
     this.programView = new ProgramView(program, binding);
+    const weights = options.weights ?? runtime.options.weights;
+    this.weights = Object.freeze([...(typeof weights === 'function' ? weights() : weights ?? [])]);
     this.taskOrdinal = ++taskSequence;
     // Call IDs are persisted in a machine-wide store and can be produced by many short-lived
     // worker processes. A short Math.random suffix is not an execution namespace: independent
@@ -372,6 +406,12 @@ export class NatlangTask {
     // are released promptly instead of waiting for garbage collection.
     this.abort.abort(new Error('natlang task finished'));
     activeTasks.delete(this);
+    const failures: unknown[] = [];
+    for (const cleanup of this.cleanups) {
+      try { cleanup(); } catch (error) { failures.push(error); }
+    }
+    this.cleanups.clear();
+    if (failures.length) throw new AggregateError(failures, 'Natlang task resource cleanup failed');
   }
 }
 

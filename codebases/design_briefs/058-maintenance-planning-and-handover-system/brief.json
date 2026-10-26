@@ -1,0 +1,90 @@
+{
+  "application_id": "058",
+  "title": "Maintenance planning and handover system",
+  "source_relative_path": "applications/12-manufacturing-maintenance-and-industrial-quality/058-maintenance-planning-and-handover-system.md",
+  "source_sha256": "3aaf1a7a871fd0cdbd7567d5e5eeea768a2165824ad896251b5cb9b24bc04f74",
+  "domain_id": "12",
+  "stages": [
+    {
+      "name": "interpretObservations",
+      "output_type": "AssetObservation",
+      "algorithm": "Reconcile inspection notes, service history, and operator reports to identify observed conditions and unresolved discrepancies. Separate symptoms from diagnosis, retain intermittent behavior, and identify information needed for routing under approved maintenance procedures.",
+      "gate": "Observations do not become established faults without supporting evidence."
+    },
+    {
+      "name": "selectProcedure",
+      "output_type": "MaintenanceProcedureFit",
+      "algorithm": "Match the asset variant and observed condition to approved procedures, checking revision, qualification, and required isolation or access conditions. Escalate unsupported cases rather than inventing maintenance instructions from general knowledge.",
+      "gate": "Correct asset and procedure edition with all critical prerequisites established."
+    },
+    {
+      "name": "constructWorkPlan",
+      "output_type": "MaintenanceWorkOrder",
+      "algorithm": "Decompose the approved procedure into accountable tasks, resource reservations, and verification steps. Sequence shared access and parts availability, preserve stop conditions, and distinguish planned work from authorized readiness to begin.",
+      "gate": "Exact resource feasibility and no bypass of required safety or qualification checks."
+    },
+    {
+      "name": "interpretProgress",
+      "output_type": "MaintenanceProgress",
+      "algorithm": "Compare technician notes and system events with task completion criteria. Distinguish work attempted, work completed, and verification passed; preserve changed conditions and unexpected findings that alter the remaining plan.",
+      "gate": "No completion based solely on free-text optimism or elapsed time."
+    },
+    {
+      "name": "composeHandover",
+      "output_type": "MaintenanceHandover",
+      "algorithm": "Prepare a shift handover describing actual asset state, work in progress, unresolved findings, and required next checks. Require acknowledgment from the receiving owner and preserve the distinction between maintenance completion and authorized return to service.",
+      "gate": "Handover includes all open obligations and current safety-relevant state."
+    }
+  ],
+  "operational_details": [
+    "A technician reports done but the verification is missing: keep the task incomplete.",
+    "A spare part has a different revision: require compatibility review before installation.",
+    "A shift ends during isolation: carry the exact state and required checks into handover.",
+    "A recurring fault disappears temporarily: retain its history and approved monitoring requirement.",
+    "An asset identifier is ambiguous: verify identity before dispatching work."
+  ],
+  "domain_records": {
+    "MaintenanceCase": [
+      "assetId: ID",
+      "observedIssue: string",
+      "maintenanceOwnerId: ID",
+      "serviceWindow: string",
+      "procedureIds: ID[]"
+    ],
+    "AssetObservation": [
+      "caseId: ID",
+      "assetId: ID",
+      "symptom: string",
+      "operatingContext: string",
+      "priorWorkRefs: Ref[]"
+    ],
+    "MaintenanceProcedureFit": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "procedureId: ID",
+      "applicability: string",
+      "missingPrerequisite: string"
+    ],
+    "MaintenanceWorkOrder": [
+      "caseId: ID",
+      "procedureId: ID",
+      "taskIds: ID[]",
+      "partIds: ID[]",
+      "prerequisiteIds: ID[]"
+    ],
+    "MaintenanceProgress": [
+      "caseId: ID",
+      "taskId: ID",
+      "completedAction: string",
+      "verificationRef: Ref",
+      "remainingState: string"
+    ],
+    "MaintenanceHandover": [
+      "caseId: ID",
+      "openTaskIds: ID[]",
+      "assetState: string",
+      "nextRequiredChecks: string[]",
+      "receivingOwnerId: ID"
+    ]
+  }
+}

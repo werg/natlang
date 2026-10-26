@@ -1,0 +1,3502 @@
+[
+  {
+    "application_id": "001",
+    "title": "Decision-dependency ledger",
+    "domain_id": "01",
+    "split": "train",
+    "source_root": "codebases/design_briefs/001-decision-dependency-ledger",
+    "fixture_path": "training/semantic_applications/design_briefs/001-decision-dependency-ledger/cases.json",
+    "brief_sha256": "5a2770d0b379fcfa81b85ad9e7b3226d45846de368286bf23dd3658984bf014c",
+    "source_sha256": "531589655feec1e4a80814be101dcc545c2ebaf639d6d24ef7a7630a739ec5c2",
+    "metadata_sha256": "2266c9f9dcfa1267a2d2b67fc7f959a16bbc529bfb05e1782446c0b7a3e9129d",
+    "fixture_sha256": "d37ef9a2cdc6e8054f351aecb28e80fd05f097b43a4ad69343f0a12a8ce1238e",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractDecisions",
+      "bindAssumptions",
+      "assessChange",
+      "planReconsideration",
+      "recordResolution"
+    ]
+  },
+  {
+    "application_id": "002",
+    "title": "Contradiction-aware knowledge publisher",
+    "domain_id": "01",
+    "split": "train",
+    "source_root": "codebases/design_briefs/002-contradiction-aware-knowledge-publisher",
+    "fixture_path": "training/semantic_applications/design_briefs/002-contradiction-aware-knowledge-publisher/cases.json",
+    "brief_sha256": "a897b1a9ac04dd4ca7c4c28323514f45f9fb6c2721bece250b47c5522ed42a78",
+    "source_sha256": "b342c6707b02802390a82cd5a755d5dda7c3c5877b8586eec22d9416e9b45b65",
+    "metadata_sha256": "a6dd5e77c79749b328d66231ffa36e15f0605ec6d79e28a3b74df05e13cfe6a7",
+    "fixture_sha256": "49a5e11a8d811194ac133695a428a66830cb48541b813b2a00ac41925d74e8d8",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "indexClaims",
+      "compareClaims",
+      "resolveAuthority",
+      "composePatchSet",
+      "verifyPublication"
+    ]
+  },
+  {
+    "application_id": "003",
+    "title": "Handover continuity manager",
+    "domain_id": "01",
+    "split": "train",
+    "source_root": "codebases/design_briefs/003-handover-continuity-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/003-handover-continuity-manager/cases.json",
+    "brief_sha256": "99514843910d5d0b0cc352c797c30c8a5af29f1c5b19fd9f92ba1afab00661ea",
+    "source_sha256": "1336619adb790d9918051eedee301c0a922ceb3ab56fd496ffbcebe84fa97d24",
+    "metadata_sha256": "13a14e27f595ebecbe4b66c0368f5bd873cd02c9709905f0f8d6f49a022007ed",
+    "fixture_sha256": "76b761733da0d6a64a353c89ad0d9b3402e84a43c492eb223e30a6f18a1cd3ed",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverCommitments",
+      "reconstructStatus",
+      "mapDependencies",
+      "allocateOwnership",
+      "verifyContinuity"
+    ]
+  },
+  {
+    "application_id": "004",
+    "title": "Organizational knowledge integration workbench",
+    "domain_id": "01",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/004-organizational-knowledge-integration-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/004-organizational-knowledge-integration-workbench/cases.json",
+    "brief_sha256": "20a5029c1e329691a53ab9fdb2f654db36ac1ceeddff534d67ff20746fffda3b",
+    "source_sha256": "4ab8275ad49561611c72cbcebca0d8134140903b7e1899be4c11187b08a90e5e",
+    "metadata_sha256": "3df2e4a2d5bbaf43ea67fd65b04428ca97b77dcff985163d894bce4732ea584e",
+    "fixture_sha256": "0d1f46120caf14a6bbe598270b8f926ee9dca560dc3d07f6e7e837acc674fe7f",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "mapVocabularies",
+      "alignConcepts",
+      "reconcileRoles",
+      "planMigration",
+      "validateInterfaces"
+    ]
+  },
+  {
+    "application_id": "005",
+    "title": "Exception and precedent steward",
+    "domain_id": "01",
+    "split": "test",
+    "source_root": "codebases/design_briefs/005-exception-and-precedent-steward",
+    "fixture_path": "training/semantic_applications/design_briefs/005-exception-and-precedent-steward/cases.json",
+    "brief_sha256": "c323caff81ed58a217c1c2ba9a478ee4eeb2c8eb161a60653d0264f2ff24323c",
+    "source_sha256": "9fa53ce6d66b157229ab024bef85a1e6fa21c5780be262acd33a60c6cfe3c716",
+    "metadata_sha256": "f905dfb6e02e754bc313ce62afca5117520a0729fff8ea9c567485412111671f",
+    "fixture_sha256": "74963211af430395d5d516463dd399d01430316b7cf77ccd04c559118bd96e4d",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeExceptions",
+      "retrievePrecedents",
+      "judgeApplicability",
+      "formDecision",
+      "reviewPatterns"
+    ]
+  },
+  {
+    "application_id": "006",
+    "title": "Continuous customer-problem observatory",
+    "domain_id": "02",
+    "split": "train",
+    "source_root": "codebases/design_briefs/006-continuous-customer-problem-observatory",
+    "fixture_path": "training/semantic_applications/design_briefs/006-continuous-customer-problem-observatory/cases.json",
+    "brief_sha256": "d150081d5174b60294b16baeeb09b7942a45097edc259a99823f8ece5e30b98b",
+    "source_sha256": "236d803ede60736ccc6a1f25e553d0efb92dad3b2a960abf92640a3378090ff4",
+    "metadata_sha256": "96447b9b6b4adaea84270d021cce59f94552ec3aa006e4dfd07f44f11d05435f",
+    "fixture_sha256": "9587bf98d73b2303eeffbad3cd575334be19787861642f33d313f922150d26c7",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractEpisodes",
+      "linkIncidents",
+      "maintainProblemMap",
+      "computeTrends",
+      "commissionInvestigation"
+    ]
+  },
+  {
+    "application_id": "007",
+    "title": "Qualitative research studio",
+    "domain_id": "02",
+    "split": "train",
+    "source_root": "codebases/design_briefs/007-qualitative-research-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/007-qualitative-research-studio/cases.json",
+    "brief_sha256": "7093631f8b130a0857c0473b4acbf0a391f804a3be4f73351cbe07a7ede499ee",
+    "source_sha256": "51fb6f85e44bc604c33d0a5a5a77d87974886edafebc68dc7e18c37005b97805",
+    "metadata_sha256": "d69def3324d6dc3bea17fec461cf6977e55300d318da58f555929741846f898a",
+    "fixture_sha256": "ef8fcb2c8c794b9ec097464981469b7ceee33adaa6ad46dfc84b4d7f72d0b234",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "frameInquiry",
+      "selectSample",
+      "buildCodebook",
+      "codeAndReconcile",
+      "synthesizeFindings"
+    ]
+  },
+  {
+    "application_id": "008",
+    "title": "Product opportunity portfolio manager",
+    "domain_id": "02",
+    "split": "train",
+    "source_root": "codebases/design_briefs/008-product-opportunity-portfolio-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/008-product-opportunity-portfolio-manager/cases.json",
+    "brief_sha256": "39fa127844d267a31b0df9b5cd819c61500e54e9ab2af78462458b331b4329d6",
+    "source_sha256": "bed204a882c3c66397a279438b4e475cb5c968661314af3e0c1e9a43f145f72a",
+    "metadata_sha256": "1453868f64e702b01e49850137d1205008d79fb8a29c15d2b9742b9d0be07f6a",
+    "fixture_sha256": "14f90770ae99837d3106ea319ebe8677459715cdb68e33dfc63470e629980819",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "reconstructNeeds",
+      "generateInterventions",
+      "estimateDependencies",
+      "constructPortfolios",
+      "planLearning"
+    ]
+  },
+  {
+    "application_id": "009",
+    "title": "Experiment interpretation workbench",
+    "domain_id": "02",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/009-experiment-interpretation-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/009-experiment-interpretation-workbench/cases.json",
+    "brief_sha256": "8e6a40c8260a377ade4135294f37a7ded5fc25b069789d229067bd9e656e21ff",
+    "source_sha256": "fbb0544cfa378f7dd346c5bd59fbc90a05fa2053d127d4a3a2018a1d3aa065af",
+    "metadata_sha256": "35b491e6646aedb62f1e60013a7eb5daa20ef1a50aebe73bd9921e6426d8e6d1",
+    "fixture_sha256": "2ca0ce7ce6026733eebed8b47516bf9fdf60a81356be393ccf7d75e5af053c88",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 33
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverDesign",
+      "auditMeasurement",
+      "interpretResults",
+      "reconcileFeedback",
+      "compileFollowups"
+    ]
+  },
+  {
+    "application_id": "010",
+    "title": "Requirements negotiation workspace",
+    "domain_id": "02",
+    "split": "test",
+    "source_root": "codebases/design_briefs/010-requirements-negotiation-workspace",
+    "fixture_path": "training/semantic_applications/design_briefs/010-requirements-negotiation-workspace/cases.json",
+    "brief_sha256": "e2c7c1eb622305dab9cd5cc030b3c3755b192d626b9372fc39d0aa92f165ad83",
+    "source_sha256": "e90077a7c1d3221f8f34bdcd5675304b29082d75757c6b7b6efd25c4762b27a4",
+    "metadata_sha256": "c0869d0933b003adbbb55da22d67faa9ca5bb9682b1b2ac2e8ee06c2540a5bfe",
+    "fixture_sha256": "800347361a9c27a97dbbcb82cb17835f00765fb39e95d5f7f118be0a715936a0",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 33
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractPositions",
+      "modelConflicts",
+      "designCompromises",
+      "writeSpecification",
+      "replayAcceptance"
+    ]
+  },
+  {
+    "application_id": "011",
+    "title": "Multi-issue service recovery desk",
+    "domain_id": "03",
+    "split": "train",
+    "source_root": "codebases/design_briefs/011-multi-issue-service-recovery-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/011-multi-issue-service-recovery-desk/cases.json",
+    "brief_sha256": "9da44a0b5c5bf7afd1d3831a2a565c06c8ff730087ede5985c9c10d2c99af333",
+    "source_sha256": "568a82406e4baf0d28fa2f89632f7a1c605f36dbc5b41227b26d44bca2a74a68",
+    "metadata_sha256": "4d854ae06838f9947f971e696c0181c3ea43591a29e16721a4d80c5ede8a8111",
+    "fixture_sha256": "d00e69ebfb30e219950a88e767e186950d7546d57b0cebe151a0da76c2cf75b0",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "decomposeCase",
+      "interpretEntitlements",
+      "composeRecovery",
+      "coordinateActions",
+      "verifyClosure"
+    ]
+  },
+  {
+    "application_id": "012",
+    "title": "Returns, repair, and resale orchestrator",
+    "domain_id": "03",
+    "split": "train",
+    "source_root": "codebases/design_briefs/012-returns-repair-and-resale-orchestrator",
+    "fixture_path": "training/semantic_applications/design_briefs/012-returns-repair-and-resale-orchestrator/cases.json",
+    "brief_sha256": "567f681cd1aec6bb950d9cf03c7db33e0abe478f85b710ad08aca933f24eca03",
+    "source_sha256": "5b16c810518db4a75e96367168c62ae67846df81ca30418f2a667b5219a5eeb1",
+    "metadata_sha256": "3d4d4f1742137054603bb11c709e4b070d52c21c3840e3a150e611035b77757a",
+    "fixture_sha256": "3416e509af97d6214796e38698f76dc80ce30d0559dda6d7bf1fd1833f784713",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "assessCondition",
+      "selectPath",
+      "planRepair",
+      "reconcileCustody",
+      "prepareResale"
+    ]
+  },
+  {
+    "application_id": "013",
+    "title": "Marketplace dispute case builder",
+    "domain_id": "03",
+    "split": "train",
+    "source_root": "codebases/design_briefs/013-marketplace-dispute-case-builder",
+    "fixture_path": "training/semantic_applications/design_briefs/013-marketplace-dispute-case-builder/cases.json",
+    "brief_sha256": "d43a4656336847949042774f0ee223e36d2624e50ca1de55dd5a8088ef5baf1d",
+    "source_sha256": "fbaaebd6565a118ce227927585702fe3a5b09361ae60b3789e70e261dc78a739",
+    "metadata_sha256": "937aad21da862511f2084471b6c74030d96eff981eca31539546d810cc860b35",
+    "fixture_sha256": "53207ab679d7957e91bbdf40ec8a03ece7b7aa927bc70ad41d87d29cfbd722dd",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "reconstructTimeline",
+      "identifyQuestions",
+      "assessEvidence",
+      "applyRules",
+      "prepareDisputeDossier"
+    ]
+  },
+  {
+    "application_id": "014",
+    "title": "Complex customer onboarding director",
+    "domain_id": "03",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/014-complex-customer-onboarding-director",
+    "fixture_path": "training/semantic_applications/design_briefs/014-complex-customer-onboarding-director/cases.json",
+    "brief_sha256": "d6c572234d8e8a0217219f5eabf3b05d904906f309d04b207b509a0b22b5b7e4",
+    "source_sha256": "b5ad980f62e11e53b4d5e3d5f292b0b1290b0c2242538bf4dd7fdfcf88c66212",
+    "metadata_sha256": "f1b5e4a5d529b2d7a663cf0103155270cf6b2af629944a348b64fdfe03ae7135",
+    "fixture_sha256": "85577d4842399d7e982fb4a9c4ec4663d601d9abc121fe252372b61c117f81af",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "clarifyOutcomes",
+      "mapEnvironment",
+      "constructPlan",
+      "interpretProgress",
+      "replanAndAccept"
+    ]
+  },
+  {
+    "application_id": "015",
+    "title": "Subscription change and exit coordinator",
+    "domain_id": "03",
+    "split": "test",
+    "source_root": "codebases/design_briefs/015-subscription-change-and-exit-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/015-subscription-change-and-exit-coordinator/cases.json",
+    "brief_sha256": "f8083c67f5c1ffb593662e98792524ed22923d144cbef19dce91608f50e9d7de",
+    "source_sha256": "35cb4018dc852b9195091a86ee64fe7c28286c755c21e8b0479338e23c694d12",
+    "metadata_sha256": "9669c4f5774592e20456101fbff4d30f3dcdbb4a509d544ddabe2210cc306c9c",
+    "fixture_sha256": "c39b98288b7f73be463d1be81f69007bdb3011521d5109f28322bbb6d85507fc",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretIntent",
+      "computeConsequences",
+      "constructChoices",
+      "executeSelection",
+      "verifyExit"
+    ]
+  },
+  {
+    "application_id": "016",
+    "title": "Tender response factory",
+    "domain_id": "04",
+    "split": "train",
+    "source_root": "codebases/design_briefs/016-tender-response-factory",
+    "fixture_path": "training/semantic_applications/design_briefs/016-tender-response-factory/cases.json",
+    "brief_sha256": "f4821f2edd71003096f8a67ccfddb896ac3e6b519c5382d9be99cb591197c51b",
+    "source_sha256": "c1b0c4f50ac251836a4c447895a8110ef920be55d770d45d868610af5bf00bca",
+    "metadata_sha256": "27d87cb6f26f6ed6ae9fe56c23556cf81fcdfcef298a5d77d70a0dd3e26edb0b",
+    "fixture_sha256": "093a996080af88d5346e473cc7d35a958936fb34b720eb5e29de15c787a2b961",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "parseObligations",
+      "mapCapabilities",
+      "commissionInputs",
+      "composeResponse",
+      "validateSubmission"
+    ]
+  },
+  {
+    "application_id": "017",
+    "title": "Functional substitution sourcing desk",
+    "domain_id": "04",
+    "split": "train",
+    "source_root": "codebases/design_briefs/017-functional-substitution-sourcing-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/017-functional-substitution-sourcing-desk/cases.json",
+    "brief_sha256": "d60a408104eb75e0bb1f1bda2b4d9df9818a63a7c4e04fac3c440be3b4916eef",
+    "source_sha256": "6242b794e494bdfc78cd83ef296ec4da668627260b47f611b5b20431d94d0552",
+    "metadata_sha256": "a369ca853460cc666dbe0008f383805671323f12517ebf39c77644de2a2c657b",
+    "fixture_sha256": "78bf89c6664942ecf6fac0f6a3267e2130b17692944812c07973275f52a3112e",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverFunction",
+      "generateCandidates",
+      "assessCompatibility",
+      "requestQualification",
+      "packageSubstitution"
+    ]
+  },
+  {
+    "application_id": "018",
+    "title": "Supplier incident coordinator",
+    "domain_id": "04",
+    "split": "train",
+    "source_root": "codebases/design_briefs/018-supplier-incident-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/018-supplier-incident-coordinator/cases.json",
+    "brief_sha256": "42f0201e79352d15b8694065ce146a51d1ae5ab3586db1a6197c88072f653320",
+    "source_sha256": "2944622bbbe40d713057004ed1167b8d88307aa4b9ffe4a4ee7edfff35de79ce",
+    "metadata_sha256": "7a551c5b584663f6f64b8408ced6eadf64e27f10973fcf9c175d2d760ab34e8e",
+    "fixture_sha256": "ea351716b41134bfeb1db87c544a7e9af3c8bc81177bf59d7d0addbd9f0dac37",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "linkReports",
+      "assessExposure",
+      "planContainment",
+      "interpretCorrection",
+      "verifyClosure"
+    ]
+  },
+  {
+    "application_id": "019",
+    "title": "Contract-to-purchasing conformance desk",
+    "domain_id": "04",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/019-contract-to-purchasing-conformance-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/019-contract-to-purchasing-conformance-desk/cases.json",
+    "brief_sha256": "d1b0a7134fd4b9804703d862c39c2d07d987bd0fdb093f0d603c1efa34770c28",
+    "source_sha256": "48721abe741d3421a74bfc28aa33c35c549cc72c5ef3707badefef0f06e338b7",
+    "metadata_sha256": "7daa51f99c82c177f960ae82bd2d0a72b5db5dbbd8e000b6bb095e26e81af80a",
+    "fixture_sha256": "1247c20d44e817bcabde23503424ff8d7b57c25e6ff0ea90e0a670e0f60cf709",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretRequest",
+      "selectAgreement",
+      "judgeConformance",
+      "proposeAlternatives",
+      "routeApproval"
+    ]
+  },
+  {
+    "application_id": "020",
+    "title": "Multi-party sourcing negotiator",
+    "domain_id": "04",
+    "split": "test",
+    "source_root": "codebases/design_briefs/020-multi-party-sourcing-negotiator",
+    "fixture_path": "training/semantic_applications/design_briefs/020-multi-party-sourcing-negotiator/cases.json",
+    "brief_sha256": "7d12452f70c678d85c518bb5a0c0674498f226d645f68a38c397ed822ee7dfe8",
+    "source_sha256": "d56e8863de451e5efc07e676aaee38b194cf05f0cde38c9579fa393972ee024e",
+    "metadata_sha256": "d6af34278220e0e373713253df282e2bf2d2145344b758f66655cfe2d15e030a",
+    "fixture_sha256": "12e1c58c5687a16a8b7124d24548faaf69fc15f4a92e45a8f64fe77064d6772a",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "modelPackage",
+      "normalizeOffers",
+      "constructPackages",
+      "formCounteroffers",
+      "reconcileAgreement"
+    ]
+  },
+  {
+    "application_id": "021",
+    "title": "Accounts-payable exception resolver",
+    "domain_id": "05",
+    "split": "train",
+    "source_root": "codebases/design_briefs/021-accounts-payable-exception-resolver",
+    "fixture_path": "training/semantic_applications/design_briefs/021-accounts-payable-exception-resolver/cases.json",
+    "brief_sha256": "b51da6a727d4f3afa34e986549dc7d5b6d429cb7c99e58eee0432856f96f8c9e",
+    "source_sha256": "566fa87d6e4b3ca0b8cc3895dbfa68be6e5bd192b9291bc6f6622d41e6c8efad",
+    "metadata_sha256": "6b5bb27a9dae7cead783dc118fe3a78db1b8343acd6c33404bea87382902d258",
+    "fixture_sha256": "dd1472535f919565c9256192b78b9d9adcaef4fd4ce2a8cf853feffe276948e0",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "matchDocuments",
+      "classifyDiscrepancy",
+      "resolveAllocation",
+      "prepareDisposition",
+      "reconcilePosting"
+    ]
+  },
+  {
+    "application_id": "022",
+    "title": "Delivery-to-billing obligation reconciler",
+    "domain_id": "05",
+    "split": "train",
+    "source_root": "codebases/design_briefs/022-delivery-to-billing-obligation-reconciler",
+    "fixture_path": "training/semantic_applications/design_briefs/022-delivery-to-billing-obligation-reconciler/cases.json",
+    "brief_sha256": "97376406e83d56f30f9523106f4a79e505ea0e58d2243c3de89640f9e685ee5c",
+    "source_sha256": "4131fbe46b1be8cd2e2eb9fa611dce5a4a3f005e5103ee001a07bc2b18be08be",
+    "metadata_sha256": "e8eb724ea1b03458732275ffdb88bffa91d607291e37854b5ed37f5b5fe7319a",
+    "fixture_sha256": "b135ddbf411c6c8b70e2b8fef38d6b19d6dcb6c4943dc87cf864490adcc800a7",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractConditions",
+      "mapDelivery",
+      "assessAcceptance",
+      "calculateBillability",
+      "assemblePacket"
+    ]
+  },
+  {
+    "application_id": "023",
+    "title": "Expense policy casework system",
+    "domain_id": "05",
+    "split": "train",
+    "source_root": "codebases/design_briefs/023-expense-policy-casework-system",
+    "fixture_path": "training/semantic_applications/design_briefs/023-expense-policy-casework-system/cases.json",
+    "brief_sha256": "a91ba9a4b02180626100db1da258d42abbfa46d0ae77e13d0c3bb70553607f17",
+    "source_sha256": "2491271e607468ca45a8471106f71029e724a4586abb7ea1063ec8fedb9d3c61",
+    "metadata_sha256": "ebee32bfbbe95f1ed8ae15f72f0c0226cc87a57fc414bd4616dcb583ba3f0de2",
+    "fixture_sha256": "bdb5507c7a7be6346842e123d58535743baeb679c4dbfd8f9990ce677263a987",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeClaim",
+      "interpretPurpose",
+      "applyPolicy",
+      "requestResolution",
+      "prepareExpenseDisposition"
+    ]
+  },
+  {
+    "application_id": "024",
+    "title": "Financial close workpaper coordinator",
+    "domain_id": "05",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/024-financial-close-workpaper-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/024-financial-close-workpaper-coordinator/cases.json",
+    "brief_sha256": "51b534c088fa49e5367a10e8efd3ca2920fa08d05fe6dcd0d752c1ad3e8075ab",
+    "source_sha256": "a312900a8fea563636d56643d5e601f5b05b27d7ecfcfe3f416da54ebde778c1",
+    "metadata_sha256": "9fe1a12b89f60446ac31109eb1ad6350e52b028986d3b47235092ddb55564b90",
+    "fixture_sha256": "b744f07c013131c15d4a4b1ded28fa765d6ca0793c577ce33f9bec600fe1fe58",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "frameReconciliation",
+      "classifyBreaks",
+      "commissionEvidence",
+      "composeWorkpaper",
+      "maintainSignoff"
+    ]
+  },
+  {
+    "application_id": "025",
+    "title": "Grant spending and reporting manager",
+    "domain_id": "05",
+    "split": "test",
+    "source_root": "codebases/design_briefs/025-grant-spending-and-reporting-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/025-grant-spending-and-reporting-manager/cases.json",
+    "brief_sha256": "b5217140553752b33f8d91ffc9fe465c8e8f2a66ea5bf6ef80cb9f132e68d571",
+    "source_sha256": "a76ca372da7700e38986d37578e091af86f567c5a162c42500202bf2f1dfb21e",
+    "metadata_sha256": "130c1046e4223449f6b6a1ac6da21eb5f1767174abf9dd8a056648a363b24966",
+    "fixture_sha256": "65397c998438c6caac3c1ec37a4e507b3b3660df4f9174ff66ea989326171f2f",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractGrantRules",
+      "allocateSpending",
+      "verifyActivities",
+      "composeReport",
+      "manageSubmission"
+    ]
+  },
+  {
+    "application_id": "026",
+    "title": "Contract obligation workbench",
+    "domain_id": "06",
+    "split": "train",
+    "source_root": "codebases/design_briefs/026-contract-obligation-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/026-contract-obligation-workbench/cases.json",
+    "brief_sha256": "31e60e2c3a8e0be91263c1ca1a25da83c8601128327df1fd7c03171d1b4dd33d",
+    "source_sha256": "f11c49daf6757eaf911ea3c2e95649a4a352b0fe067e1b5bd3005cebac4b9f41",
+    "metadata_sha256": "4b8c504d1243ee199914993e9ced683d512a8356c62f7bfd743d135cd576231d",
+    "fixture_sha256": "b0246f4a19ea24b796ee379e7cfa973cb27de17574e5e8c8c49bc8089f429ac1",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "parseObligations",
+      "resolveInteractions",
+      "assessEvents",
+      "planPerformance",
+      "verifyDischarge"
+    ]
+  },
+  {
+    "application_id": "027",
+    "title": "Amendment impact engine",
+    "domain_id": "06",
+    "split": "train",
+    "source_root": "codebases/design_briefs/027-amendment-impact-engine",
+    "fixture_path": "training/semantic_applications/design_briefs/027-amendment-impact-engine/cases.json",
+    "brief_sha256": "2232f5287491c1e16c536942520a803801a5777de972360951be30ec788ff50a",
+    "source_sha256": "14e474533e6086070b50ced842e94839d0709229d5f81f2e8b587b2c52f32f11",
+    "metadata_sha256": "cf3a46a9e3b37ff48d938b32f7a58da51fb1f9b8a3f0b61d5c693a3121a1446d",
+    "fixture_sha256": "c54654bbe79cdac1c370dafae46bd0350704e37ba1e7998500700203b54abf61",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "identifyTargets",
+      "interpretScope",
+      "composeObligations",
+      "traceImpacts",
+      "releaseRevision"
+    ]
+  },
+  {
+    "application_id": "028",
+    "title": "Negotiation clause package designer",
+    "domain_id": "06",
+    "split": "train",
+    "source_root": "codebases/design_briefs/028-negotiation-clause-package-designer",
+    "fixture_path": "training/semantic_applications/design_briefs/028-negotiation-clause-package-designer/cases.json",
+    "brief_sha256": "168937c330620d96b8600a11e0b14b4aa1a47b53d43a2e024bd82a2a4b0ccdae",
+    "source_sha256": "4689e3a3c285a015124b49aae4caba091ec0f9af608f0e41d96176dadd69bcd8",
+    "metadata_sha256": "4a0d541d824bbc1f22f265435f804d3b71cc215d69db92eab7c7f4bb626e2f8e",
+    "fixture_sha256": "9decdf89e5cc567758cea0aa89789fd641f80cdd83e08e89be42657956e8e612",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverPositions",
+      "mapClauseInteractions",
+      "generatePackages",
+      "reconcileRedlines",
+      "prepareOffer"
+    ]
+  },
+  {
+    "application_id": "029",
+    "title": "Policy change simulator",
+    "domain_id": "06",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/029-policy-change-simulator",
+    "fixture_path": "training/semantic_applications/design_briefs/029-policy-change-simulator/cases.json",
+    "brief_sha256": "bee260b16b2f822b4ef705926852f8584cc2eba3e7565c55b807694c8c778903",
+    "source_sha256": "5b558e55dc4802253efd43ab5fc0833f288f902fb657a6b491302d72bf234840",
+    "metadata_sha256": "aa38d204ffd6583984f3f1190ddcf98597b67a10d24e0fe21757844a1a45d18f",
+    "fixture_sha256": "f7109c745edfb84810c4f709c867b7784061da6bc606edf236756b10278f168c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 28
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "compilePolicyDifference",
+      "prepareCases",
+      "compareOutcomes",
+      "generateBoundaries",
+      "preparePolicyOptions"
+    ]
+  },
+  {
+    "application_id": "030",
+    "title": "Disclosure and redaction review workspace",
+    "domain_id": "06",
+    "split": "test",
+    "source_root": "codebases/design_briefs/030-disclosure-and-redaction-review-workspace",
+    "fixture_path": "training/semantic_applications/design_briefs/030-disclosure-and-redaction-review-workspace/cases.json",
+    "brief_sha256": "3872e912794b5083a82d243790b1ecbd3fe228643f71cb98b445c945b8a8101d",
+    "source_sha256": "e4d59a02d074f9d37a2ad0d6bf6bd6986f2928436a0233cd1fcbf72b0ce4ac96",
+    "metadata_sha256": "80bce9e715c0cd29ad7fb73cd11a5044605f3d4ad6424669d9f2f46fb2a4e2dd",
+    "fixture_sha256": "8c70e8af7755ef7fe68ed0f3b17d25e3dcf7332a7a7b52a156e316e383535332",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretScope",
+      "selectMaterial",
+      "proposeRedactions",
+      "inspectComposition",
+      "renderAndRelease"
+    ]
+  },
+  {
+    "application_id": "031",
+    "title": "Living evidence map",
+    "domain_id": "07",
+    "split": "train",
+    "source_root": "codebases/design_briefs/031-living-evidence-map",
+    "fixture_path": "training/semantic_applications/design_briefs/031-living-evidence-map/cases.json",
+    "brief_sha256": "11c2d91b1907bdefa361acce66452a81c107a6c4c01f6b6be7c9ad75da41a859",
+    "source_sha256": "75004250ad9509aa4431abc6eb2031c78e7d3811b6bc5288c018f0f7d46927d0",
+    "metadata_sha256": "c5d0293cf3998f9019e55d5a38d1d1b116e730ebe9ef6b6b4b2f3772194cbabd",
+    "fixture_sha256": "b2f55216fe99460b1c851dfb9ff4b354aaf1d31807bfce3cf0a563202b91052b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "frameEligibility",
+      "linkStudyReports",
+      "screenAndExtract",
+      "mapClaims",
+      "maintainReview"
+    ]
+  },
+  {
+    "application_id": "032",
+    "title": "Cross-study measurement harmonizer",
+    "domain_id": "07",
+    "split": "train",
+    "source_root": "codebases/design_briefs/032-cross-study-measurement-harmonizer",
+    "fixture_path": "training/semantic_applications/design_briefs/032-cross-study-measurement-harmonizer/cases.json",
+    "brief_sha256": "4c194bd8011a241561cab55dd814ad519f05f1fc97eea03dd36170c0e65ef4c1",
+    "source_sha256": "561159d1249bf4c7194b08c242147afafe949af132d4bf6537a1a0894ee4d343",
+    "metadata_sha256": "e5e9912f593f437805ab09d903c41704bf680a67e0a8ea9d9d0c3e18a89d210a",
+    "fixture_sha256": "dffa38710f9416ef6770aa786af35ea4eb9ee015a53c70cd8713966c15b72616",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverMeasures",
+      "assessComparability",
+      "proposeTransforms",
+      "constructCohort",
+      "auditSensitivity"
+    ]
+  },
+  {
+    "application_id": "033",
+    "title": "Replication planning workbench",
+    "domain_id": "07",
+    "split": "train",
+    "source_root": "codebases/design_briefs/033-replication-planning-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/033-replication-planning-workbench/cases.json",
+    "brief_sha256": "c843b753daab03d553a614e73a94b6854afb0e4ec63bd80aee0aad8b47f48833",
+    "source_sha256": "fb4996d5f6e5836c2fe230324c8fd23aa02e46e9e46e7d5eca28965f769306a1",
+    "metadata_sha256": "f6a9cb1252dddf42964dbd2579f942615069d249dacecb7a970e21ce4adc5593",
+    "fixture_sha256": "4605b1d7e58aafd7287823e567f23603623164d69361feee68ac5a5723408c99",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverProcedure",
+      "mapDependencies",
+      "resolveAmbiguities",
+      "compileExecution",
+      "compareOutcomes"
+    ]
+  },
+  {
+    "application_id": "034",
+    "title": "Research resource and experiment rescue coordinator",
+    "domain_id": "07",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/034-research-resource-and-experiment-rescue-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/034-research-resource-and-experiment-rescue-coordinator/cases.json",
+    "brief_sha256": "9e887da7fab28aa895d2362c1a6448ab43a040d8d8a5cfef0423242eaa25871e",
+    "source_sha256": "63e56b9380305e848f04ef827cd3063f2ef527bb4dad4e679df022de3946b4ee",
+    "metadata_sha256": "7b392d3a13f191d8621b0612b32106f02b4da344932a44a213ae7d30b8bffd8a",
+    "fixture_sha256": "e213a9677ddc62004012048143cfff5aa1c8a17b41c61f87f503afd985a7b622",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretRequirements",
+      "modelResources",
+      "constructSchedule",
+      "planRescue",
+      "coordinateReadiness"
+    ]
+  },
+  {
+    "application_id": "035",
+    "title": "Negative-result learning archive",
+    "domain_id": "07",
+    "split": "test",
+    "source_root": "codebases/design_briefs/035-negative-result-learning-archive",
+    "fixture_path": "training/semantic_applications/design_briefs/035-negative-result-learning-archive/cases.json",
+    "brief_sha256": "5b9d07694ad108fd23e6d59bb0b8aae344a0b78db40e50952388eabfeaaee1ab",
+    "source_sha256": "7647819e56ee9730ff52cef276cdfcff66ad947f53d5ae5dd3e2839721e75a86",
+    "metadata_sha256": "8163e9f4d4b39db94f3fae37852199469f64fdc3872a3bb91e41ddc4f73605f1",
+    "fixture_sha256": "094602e1672fb3a20ea50ad3ae876c4f832c49b8f2b77afaf7e00b5f7f5b6a26",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "reconstructAttempt",
+      "classifyFailure",
+      "compareExplanations",
+      "designFollowups",
+      "maintainLessons"
+    ]
+  },
+  {
+    "application_id": "036",
+    "title": "Misconception repair studio",
+    "domain_id": "08",
+    "split": "train",
+    "source_root": "codebases/design_briefs/036-misconception-repair-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/036-misconception-repair-studio/cases.json",
+    "brief_sha256": "b82152acac77cc5ca1f3a2eae8a8b468ae78ac721b4fd1c66f41ad3b3ed38613",
+    "source_sha256": "cdfa90708ac1ce0cd20b2d46989dd5e206972fea936226504d668a1ea135ae5f",
+    "metadata_sha256": "051e0251f1614709ff5513831eb34460c6189e355fe7dfc8172dcd7f2ac1a61c",
+    "fixture_sha256": "8e5001965269a4d4ccde62aeb3254156371224cca9dd88b773ddd084e88f7d70",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretResponses",
+      "formHypotheses",
+      "generateDiagnostics",
+      "planRepair",
+      "verifyTransfer"
+    ]
+  },
+  {
+    "application_id": "037",
+    "title": "Assessment production and moderation system",
+    "domain_id": "08",
+    "split": "train",
+    "source_root": "codebases/design_briefs/037-assessment-production-and-moderation-system",
+    "fixture_path": "training/semantic_applications/design_briefs/037-assessment-production-and-moderation-system/cases.json",
+    "brief_sha256": "14b5b23a5dc0e57c8af28fe616d67f4756023be182ab62cf5c95b242e2a1f94d",
+    "source_sha256": "124f27ccc0481c01f70f032f26b6a1b7ba71f8a2f8e68045005d0859747d6250",
+    "metadata_sha256": "01bfbeafcffd1490203217862cf94f5b14d4e76e867b3f084e0d15c507488270",
+    "fixture_sha256": "332e7e29276aca755bd4a878206d3266d2ce44fd59bc0ba3993e0cbf75e65d3c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "blueprintCoverage",
+      "generateItems",
+      "constructRubrics",
+      "challengeAssessment",
+      "moderateAndAppeal"
+    ]
+  },
+  {
+    "application_id": "038",
+    "title": "Project-based learning director",
+    "domain_id": "08",
+    "split": "train",
+    "source_root": "codebases/design_briefs/038-project-based-learning-director",
+    "fixture_path": "training/semantic_applications/design_briefs/038-project-based-learning-director/cases.json",
+    "brief_sha256": "87551fe95c80a58243d3b42f25a611492fa2fc9564707e75f7aa1c0d8f425fbc",
+    "source_sha256": "bf8c0e0f30bba9d3d4a6bf7ca8b5709e75c7216808dde3d0b3f22f02d2db2735",
+    "metadata_sha256": "b4fa3b78bdbdb4b6ea3563e7c6b197657f70fb3f451d9ea99502db4caeb9fe0f",
+    "fixture_sha256": "e1a9a0fe45e40633edb15b77a039160efcb00891c0d38299ffbd2c27882d005c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "translateGoals",
+      "designProject",
+      "sequenceMilestones",
+      "adaptScaffolding",
+      "introduceComplications"
+    ]
+  },
+  {
+    "application_id": "039",
+    "title": "Apprenticeship practice simulator",
+    "domain_id": "08",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/039-apprenticeship-practice-simulator",
+    "fixture_path": "training/semantic_applications/design_briefs/039-apprenticeship-practice-simulator/cases.json",
+    "brief_sha256": "44b45faff848562d8af36e36324b10f3a93e8eb6ffd78ba62ecd3bad5d5c36e8",
+    "source_sha256": "aa8fa4e60a2a5601bf8cfdb6ae732ba55caedf12129b300560507fba91e22657",
+    "metadata_sha256": "19bc6755c739e6d380cf4830dda7c7ce5b8928561f3b11c8d6d1cd4f4c37bb43",
+    "fixture_sha256": "3eef4c420011fc84b92f66eba9e79cf3ad32ccac3e01dc3b43f599487881f688",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "authorSituation",
+      "interpretAction",
+      "advanceWorld",
+      "introduceChallenge",
+      "debriefPerformance"
+    ]
+  },
+  {
+    "application_id": "040",
+    "title": "Learning portfolio evidence assessor",
+    "domain_id": "08",
+    "split": "test",
+    "source_root": "codebases/design_briefs/040-learning-portfolio-evidence-assessor",
+    "fixture_path": "training/semantic_applications/design_briefs/040-learning-portfolio-evidence-assessor/cases.json",
+    "brief_sha256": "c4e01da118e9a0d487804ef3b8c078a02d1127079286299ebe3a4de29797d3d0",
+    "source_sha256": "f8f56505d45d949d4cdc66bffa02c70e10e6ae42f2093ada898bb62713d531cb",
+    "metadata_sha256": "626f499b0e30a5629fc9f3a006eae4086311c83cf3a2bb772392724776409d70",
+    "fixture_sha256": "0b62331495bf932257baac09c08aa13555f8c85fb0f6e467d15f43c927d13e1e",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "indexEvidence",
+      "mapCompetencies",
+      "assessSufficiency",
+      "formNextTasks",
+      "prepareAssessment"
+    ]
+  },
+  {
+    "application_id": "041",
+    "title": "Requirement-to-regression factory",
+    "domain_id": "09",
+    "split": "train",
+    "source_root": "codebases/design_briefs/041-requirement-to-regression-factory",
+    "fixture_path": "training/semantic_applications/design_briefs/041-requirement-to-regression-factory/cases.json",
+    "brief_sha256": "68b1b838bfcb0d3bd036ed859a2dfc5a2afc8a8ccd6c1169d184149ecc3666b7",
+    "source_sha256": "fe20a2dca3c64e38c98eb2846bf6c4b7e48f5851ad8d8c3a59a9e3429751ae99",
+    "metadata_sha256": "717d0743a3976706f8476a4f644a5a0f3f4a892600de1ecba009e992a60df17b",
+    "fixture_sha256": "ad634efb04a847159b9c0d186e73930fe95b16daf5935906eb24188de2236d8b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverBehavior",
+      "modelPartitions",
+      "constructTests",
+      "interpretFailures",
+      "qualifySuite"
+    ]
+  },
+  {
+    "application_id": "042",
+    "title": "Release compatibility coordinator",
+    "domain_id": "09",
+    "split": "train",
+    "source_root": "codebases/design_briefs/042-release-compatibility-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/042-release-compatibility-coordinator/cases.json",
+    "brief_sha256": "76f114748f03ac4b83348e39dc238e9f810a73dda2f093a8243d6f9bcab9feb5",
+    "source_sha256": "ca7655840728de7a791c12480dd9bfd9149e9239c64bd1b34276abdbf88efbcd",
+    "metadata_sha256": "cd845999f26d1bdf566e188e6ae2ba91e03b91d95108fc2d4c2c6e220a444424",
+    "fixture_sha256": "8504d67f218d7092334804b74a4bc6d03b8313af753d2b4fd41f7e9771922108",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretChanges",
+      "mapConsumers",
+      "replayCompatibility",
+      "planMigration",
+      "coordinateRelease"
+    ]
+  },
+  {
+    "application_id": "043",
+    "title": "Incident recovery orchestrator",
+    "domain_id": "09",
+    "split": "train",
+    "source_root": "codebases/design_briefs/043-incident-recovery-orchestrator",
+    "fixture_path": "training/semantic_applications/design_briefs/043-incident-recovery-orchestrator/cases.json",
+    "brief_sha256": "a7eaa0c07c624b7a62923c2aedee076d9943a89377727254f989315f9962e500",
+    "source_sha256": "448988e3ca7102839b2d08827d039a842c673785182ac602778a40e8ccd6b09d",
+    "metadata_sha256": "a16b491a783c8e2f1f12942332577601445f4e663b17527cd79f72c2f8fb4ce4",
+    "fixture_sha256": "9bf406e9aae3f2cc99b6f65c5b2fc9acfb7515c37fd13efbbaf1fdb55892ef26",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "frameImpact",
+      "maintainHypotheses",
+      "selectDiagnostics",
+      "planRecovery",
+      "verifyRestoration"
+    ]
+  },
+  {
+    "application_id": "044",
+    "title": "Documentation-behavior synchronizer",
+    "domain_id": "09",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/044-documentation-behavior-synchronizer",
+    "fixture_path": "training/semantic_applications/design_briefs/044-documentation-behavior-synchronizer/cases.json",
+    "brief_sha256": "c7607452ec5f9ba6f73c20eeabd08e357e7c21a2a187066e605c443d2c921f3a",
+    "source_sha256": "3e4dd4eec2eef1a4c3ef3db752f053988feb2baf4f1470425a515597be9f4cb5",
+    "metadata_sha256": "79de1c9b164fc8affe140887d2ba39fae55c383e2c29faa34a1515cc162ca443",
+    "fixture_sha256": "014f780aebaffb093a422d6b6ad30b6db91d204f153733f435535ca84d204984",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractPromises",
+      "probeBehavior",
+      "classifyMismatch",
+      "constructRepairs",
+      "verifyConsistency"
+    ]
+  },
+  {
+    "application_id": "045",
+    "title": "Technical debt campaign planner",
+    "domain_id": "09",
+    "split": "test",
+    "source_root": "codebases/design_briefs/045-technical-debt-campaign-planner",
+    "fixture_path": "training/semantic_applications/design_briefs/045-technical-debt-campaign-planner/cases.json",
+    "brief_sha256": "b87b1cb10cdce1af4e650c6b20d9ba54d32630c0b72dc220ee14e8c1ce986620",
+    "source_sha256": "49c233b5540482f55428ce8a2cb34c29510282c9385cd1358d026c796f476491",
+    "metadata_sha256": "92dda6b3b4389b855affe5be145c62dae86804d5e4fe4f783ca35ce93d5715b6",
+    "fixture_sha256": "9d3f1af18f953a88b72a927a26562b3a05d6d6301ae90e1f46c7bb83edb27383",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "collectSymptoms",
+      "formMechanisms",
+      "designWorkPackages",
+      "sequenceCampaign",
+      "verifyImprovement"
+    ]
+  },
+  {
+    "application_id": "046",
+    "title": "Semantic analysis work-order compiler",
+    "domain_id": "10",
+    "split": "train",
+    "source_root": "codebases/design_briefs/046-semantic-analysis-work-order-compiler",
+    "fixture_path": "training/semantic_applications/design_briefs/046-semantic-analysis-work-order-compiler/cases.json",
+    "brief_sha256": "9028abc984eafd76e6c4eaa1ddc7e94c612a8b6aea4c9cf4e3fe42d5da9af56e",
+    "source_sha256": "23c0c43e110677a2c4b970dea82a17a94f09de9f044b90c070cb712959e40353",
+    "metadata_sha256": "5525a52b0006bc453d1e864e64c27f8210120d283605a64fad750d729477b71a",
+    "fixture_sha256": "7e9334456ad244b2a158213f7378b84fce3d618a4b374bfcad9aa2e3cafca333",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "formalizeQuestion",
+      "inspectData",
+      "compileGraph",
+      "executeAndAudit",
+      "explainResult"
+    ]
+  },
+  {
+    "application_id": "047",
+    "title": "Domain data migration workshop",
+    "domain_id": "10",
+    "split": "train",
+    "source_root": "codebases/design_briefs/047-domain-data-migration-workshop",
+    "fixture_path": "training/semantic_applications/design_briefs/047-domain-data-migration-workshop/cases.json",
+    "brief_sha256": "3df48b6e162061b5b8ef307604e3e4ae266d9e75abb78f271c48c0864a10c703",
+    "source_sha256": "4f3380140f0468dbe23230cc8f986d55ce3844d99af0b2715b3a96de55b8e3ab",
+    "metadata_sha256": "478ce89d44e24fa84ad8820e0c3f2ccd606407ba0cdc038363640c1e93a6113e",
+    "fixture_sha256": "2aaae32b383c73482d308d1719e3f3f9381c70c646c98f82eb0a57bbe3091049",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverSourceMeaning",
+      "designMappings",
+      "resolveRecords",
+      "rehearseMigration",
+      "coordinateCutover"
+    ]
+  },
+  {
+    "application_id": "048",
+    "title": "Taxonomy evolution service",
+    "domain_id": "10",
+    "split": "train",
+    "source_root": "codebases/design_briefs/048-taxonomy-evolution-service",
+    "fixture_path": "training/semantic_applications/design_briefs/048-taxonomy-evolution-service/cases.json",
+    "brief_sha256": "35e57664c70448ace4570a48a7f473d7bdff73a28715e376e88bbabaaa714b5f",
+    "source_sha256": "4fe3c23a42b77671925e2cd430bd8e3c1f399f84ed2433198aa44c0fc31d74ce",
+    "metadata_sha256": "85107fe1c6cbfe84d42faea7b1db596d341843baa820d6f3f4d372fe2d03de3a",
+    "fixture_sha256": "89b71338ca856f5f8bd90e7c16101d5dd00e92278f91936b66138b38df74e530",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "assessFit",
+      "diagnoseStructure",
+      "designCategoryRevision",
+      "simulateReclassification",
+      "promoteTaxonomy"
+    ]
+  },
+  {
+    "application_id": "049",
+    "title": "Cross-collection entity resolution workbench",
+    "domain_id": "10",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/049-cross-collection-entity-resolution-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/049-cross-collection-entity-resolution-workbench/cases.json",
+    "brief_sha256": "29f3d17da111ca4b0a320d09bf9e935ba4dcf87d7cd97e67f27fc17d056f509c",
+    "source_sha256": "418fde61634070097edec32eda5ee73c14e27bca224292ddbe3aa73bd0005baf",
+    "metadata_sha256": "e04c618831dee5b72894b2fb496f7c032cce9c558be34178ee050efde06cf1b4",
+    "fixture_sha256": "a4a1ae1562c0a1b04865a2a493697bbfcc7b66a8204cc79ea5da5f95c0a16ec6",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "constructCandidates",
+      "judgePairs",
+      "reconcileClusters",
+      "constructCanonical",
+      "maintainIdentity"
+    ]
+  },
+  {
+    "application_id": "050",
+    "title": "Dataset specification and audit studio",
+    "domain_id": "10",
+    "split": "test",
+    "source_root": "codebases/design_briefs/050-dataset-specification-and-audit-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/050-dataset-specification-and-audit-studio/cases.json",
+    "brief_sha256": "a0f57946b71859c90ab3c71127bfeef6d7a02a16b55ad839264e6aab97d4d4ef",
+    "source_sha256": "a375d979cd5ec7aaa7ce630b4945991e214c5ea65e074dca3108a1eb15a9d2fa",
+    "metadata_sha256": "fb14f059a1dc04702723eb02fc217b289b348f4a436f0a6eba687c43145bda02",
+    "fixture_sha256": "361c94a468b7827ec1d8b0e955d031e5006bd92154a3f6a96c941c476ce8756c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "defineUseContract",
+      "writeAnnotationSpec",
+      "auditCandidates",
+      "measureCoverage",
+      "commissionAndRelease"
+    ]
+  },
+  {
+    "application_id": "051",
+    "title": "Disruption-aware shipment replanner",
+    "domain_id": "11",
+    "split": "train",
+    "source_root": "codebases/design_briefs/051-disruption-aware-shipment-replanner",
+    "fixture_path": "training/semantic_applications/design_briefs/051-disruption-aware-shipment-replanner/cases.json",
+    "brief_sha256": "7ca56c30d09b6e9b13f35f240507c94ec3130965c04e216044693eeb95e95be7",
+    "source_sha256": "a3045e753bf0b030d5d4dff6465fbd3491d43b1ea9b441aabafa8a9a1567af2e",
+    "metadata_sha256": "8ed8213e0f35812787cecbd28ac427bdd9d2dd2999adae5e69c4d480212960ae",
+    "fixture_sha256": "7762377ac3f98e7c5d20678ecd98a60aa20729eea825595303cf0215c34b01b8",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretDisruption",
+      "recoverPromises",
+      "constructAlternatives",
+      "allocateCapacity",
+      "coordinateRecovery"
+    ]
+  },
+  {
+    "application_id": "052",
+    "title": "Warehouse exception controller",
+    "domain_id": "11",
+    "split": "train",
+    "source_root": "codebases/design_briefs/052-warehouse-exception-controller",
+    "fixture_path": "training/semantic_applications/design_briefs/052-warehouse-exception-controller/cases.json",
+    "brief_sha256": "664671115ac9da8cf6824d21656b050cc04877aa9238ce78fa9867a853fa5702",
+    "source_sha256": "67ab50ca0da967b7d5f32b4df1c57dde3ff3a454da37072e96bdd1077a7dc3b9",
+    "metadata_sha256": "84d6e3f7bb4e876fd591a3e34598e60f96aa958b59b3594564a6c9132d9b68d5",
+    "fixture_sha256": "2b15182770ddedc023291724e5bd2a33d97c8d6543759d24407bebcc435979bb",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "reconstructStock",
+      "matchIdentity",
+      "classifyException",
+      "planResolution",
+      "reconcileInventory"
+    ]
+  },
+  {
+    "application_id": "053",
+    "title": "Industrial surplus exchange",
+    "domain_id": "11",
+    "split": "train",
+    "source_root": "codebases/design_briefs/053-industrial-surplus-exchange",
+    "fixture_path": "training/semantic_applications/design_briefs/053-industrial-surplus-exchange/cases.json",
+    "brief_sha256": "77980837c353219f532038e625470a74984fb767e18e4a2918e7764ec44bd39f",
+    "source_sha256": "0c9d50efe2356d8860f636bd104f63df71bd4221070590b72d05f5eaca98323e",
+    "metadata_sha256": "34b0a91b86f5e42fb7ab30ccfdcb2b6ef4d597dc3cc179d1a6ac33be9dd71080",
+    "fixture_sha256": "b26c077ddc216ea730911a1d4a83e11909587895fe9b9660593cdf85a9700517",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretOffers",
+      "interpretNeeds",
+      "generateReuse",
+      "assembleExchange",
+      "verifyTransfer"
+    ]
+  },
+  {
+    "application_id": "054",
+    "title": "Donation redistribution coordinator",
+    "domain_id": "11",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/054-donation-redistribution-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/054-donation-redistribution-coordinator/cases.json",
+    "brief_sha256": "a7ef45d1c35dc61a003deac483ddcb6ed3140c8ef1736d587fbba75d600678c7",
+    "source_sha256": "0b440508de9047f510a5384f27619c9627ebd0118cbb1602aca574f6b5fc3306",
+    "metadata_sha256": "12e7fd6f5dea6b4abbe10e2233f4bab8621e37adae684b6aff3a524340322662",
+    "fixture_sha256": "de19b8849c8cfbc2a3a669be7a783e11b9a1b52cca1ab8afb061f1f3345c158b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeDonations",
+      "interpretNeeds",
+      "constructBundles",
+      "applyAllocation",
+      "coordinateDelivery"
+    ]
+  },
+  {
+    "application_id": "055",
+    "title": "Repair cooperative dispatcher",
+    "domain_id": "11",
+    "split": "test",
+    "source_root": "codebases/design_briefs/055-repair-cooperative-dispatcher",
+    "fixture_path": "training/semantic_applications/design_briefs/055-repair-cooperative-dispatcher/cases.json",
+    "brief_sha256": "334d3e548f79c0e1d1a8f39916f151245f651ed12aa276602f89176d5a1735b7",
+    "source_sha256": "5cc09e6bf80d511d01b2f70d2c4ab063d802ceade41d2a4d7fea33a39b4c0bb0",
+    "metadata_sha256": "b0a83c134a4686ec3abbcefe1a164a15bc6cd268a1a987b044ed5782870ab82e",
+    "fixture_sha256": "cb04388539e7fa0a7ff36947105340abdecd8c862f28adae08f2d0556b6d61c3",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretSymptoms",
+      "planDiagnostics",
+      "matchRepairers",
+      "coordinateWork",
+      "captureOutcomes"
+    ]
+  },
+  {
+    "application_id": "056",
+    "title": "Quality escape investigator",
+    "domain_id": "12",
+    "split": "train",
+    "source_root": "codebases/design_briefs/056-quality-escape-investigator",
+    "fixture_path": "training/semantic_applications/design_briefs/056-quality-escape-investigator/cases.json",
+    "brief_sha256": "2de8b1a4b9096d2d1233a92b7492b15bb2e5adeb0fb530a6ce625159de966af9",
+    "source_sha256": "33ba67dcd6de6ddcf5a4a2fcbcb1490d84013a4c26c8c3b4e2626f2594c65ee6",
+    "metadata_sha256": "0a37b0625d71e25030f9d1463b56ddca3a95c466c5ccc7e7d3b31df94067cbba",
+    "fixture_sha256": "8076d3c0235468820a11e328061208a94f3737009ffb57d84586bb7cdbb9edee",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeDefects",
+      "traceExposure",
+      "compareCauses",
+      "planCorrection",
+      "verifyEffectiveness"
+    ]
+  },
+  {
+    "application_id": "057",
+    "title": "Work instruction adaptation studio",
+    "domain_id": "12",
+    "split": "train",
+    "source_root": "codebases/design_briefs/057-work-instruction-adaptation-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/057-work-instruction-adaptation-studio/cases.json",
+    "brief_sha256": "84739c82d80d3b9b53cd1bd18caa23b8854d72905902efecde20ca11d78099bd",
+    "source_sha256": "bd8f8a9a9557f28729e54133b88dd5d4974e62c69bcf0f86d8713ce439dfc6bc",
+    "metadata_sha256": "468713d24283ce97906da20a79546b1b2cb0d1de47819ae29316be315400b87f",
+    "fixture_sha256": "35398fba069c44c9184269a333f36c96d0a10f5c5ec4a838a42350cff9f3a727",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverProcedure",
+      "mapLocalContext",
+      "constructVariant",
+      "replayProcedure",
+      "releaseInstruction"
+    ]
+  },
+  {
+    "application_id": "058",
+    "title": "Maintenance planning and handover system",
+    "domain_id": "12",
+    "split": "train",
+    "source_root": "codebases/design_briefs/058-maintenance-planning-and-handover-system",
+    "fixture_path": "training/semantic_applications/design_briefs/058-maintenance-planning-and-handover-system/cases.json",
+    "brief_sha256": "3aaf1a7a871fd0cdbd7567d5e5eeea768a2165824ad896251b5cb9b24bc04f74",
+    "source_sha256": "2a945a0f2a6a2bbe89eea9ed4cdd691036d38bbe6966dc97d2bf970f4b2a82f1",
+    "metadata_sha256": "f7687f18c14b9707564c42e8cad92b982c20a656e730636f95df6d81b09a848c",
+    "fixture_sha256": "50ea717e8fffa3e4333437f1caceec9012589557b3282ec0a96b1c8cd81b3f82",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretObservations",
+      "selectProcedure",
+      "constructWorkPlan",
+      "interpretProgress",
+      "composeHandover"
+    ]
+  },
+  {
+    "application_id": "059",
+    "title": "Engineering change impact manager",
+    "domain_id": "12",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/059-engineering-change-impact-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/059-engineering-change-impact-manager/cases.json",
+    "brief_sha256": "a16b927aec9fed5cc3df5222499143ad0c975e8a8224a356df3d5985c80fdc36",
+    "source_sha256": "ec17fc3d882300a05d5c6a33fa4bac69eab725b6b1eeb317bdd639bcb8358e10",
+    "metadata_sha256": "f88ad32fd7a64ebcfc37d908036870adb45fddd06610769693af77620c975abd",
+    "fixture_sha256": "8b564a4b1acf5779dc70f046b299061ecb055b3a026a8385e68b726b2c83b5d0",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretChange",
+      "resolveApplicability",
+      "traceDependencies",
+      "planImplementation",
+      "verifyConfiguration"
+    ]
+  },
+  {
+    "application_id": "060",
+    "title": "Custom fabrication quoting desk",
+    "domain_id": "12",
+    "split": "test",
+    "source_root": "codebases/design_briefs/060-custom-fabrication-quoting-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/060-custom-fabrication-quoting-desk/cases.json",
+    "brief_sha256": "9f18443ff3d1fa89a35b79c336d4430cf9a7f5f6cdecfbb8650786f6b49e4a17",
+    "source_sha256": "b8e451e9c30f727f7251e01636ae5b9e8eae4843e90de75a44c8a06968ac5249",
+    "metadata_sha256": "039db553dd9ece31a8f710691796a4ea01b2f26c114de3fc6f15e66cbe3bfef6",
+    "fixture_sha256": "f9f2fc414fafa655a50600a34c005066325973739abbfe882d6f78dfa8c8bd3b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverRequirements",
+      "generateConcepts",
+      "planProduction",
+      "calculateQuote",
+      "confirmScope"
+    ]
+  },
+  {
+    "application_id": "061",
+    "title": "Change-order impact coordinator",
+    "domain_id": "13",
+    "split": "train",
+    "source_root": "codebases/design_briefs/061-change-order-impact-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/061-change-order-impact-coordinator/cases.json",
+    "brief_sha256": "0575a66190c63f702ad7c3af38840a0367a7849158279b591f41f21d06089a12",
+    "source_sha256": "6aacfaf00c4a9071f53f33f156c3c7f98ac9447eadb31d24a06f062c036160f3",
+    "metadata_sha256": "7e73aa490062635b7b7cc8872e05a4b881e16a6dc20b2aea87f5643b72e68f8e",
+    "fixture_sha256": "ef6fec33a07aad90b3f812f2a0ac9f0093940cd5dd6ace58b9e5bd5987ab8fe7",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "reconstructInstruction",
+      "compareScope",
+      "traceDependencies",
+      "formOptions",
+      "assembleChange"
+    ]
+  },
+  {
+    "application_id": "062",
+    "title": "Tender scope gap resolver",
+    "domain_id": "13",
+    "split": "train",
+    "source_root": "codebases/design_briefs/062-tender-scope-gap-resolver",
+    "fixture_path": "training/semantic_applications/design_briefs/062-tender-scope-gap-resolver/cases.json",
+    "brief_sha256": "877173fe784b717d984e9473809481f0afa16956c0f41e685ad1c3bae1901842",
+    "source_sha256": "0a025852169d3d966b25d77ea4bc3b2e9a65ad843833cb3e380ffbe5e8f73e17",
+    "metadata_sha256": "7bb27be19143f73ec00a2458b4642025e3fbb58ecba48ae73610e84ae74fbe83",
+    "fixture_sha256": "df89e5fa1987edb70eedad46decd5846899a68ca95b2dcdd1eff4d64001b57eb",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeBids",
+      "mapRequirements",
+      "identifySeams",
+      "runClarifications",
+      "freezeMatrix"
+    ]
+  },
+  {
+    "application_id": "063",
+    "title": "Building handover dossier compiler",
+    "domain_id": "13",
+    "split": "train",
+    "source_root": "codebases/design_briefs/063-building-handover-dossier-compiler",
+    "fixture_path": "training/semantic_applications/design_briefs/063-building-handover-dossier-compiler/cases.json",
+    "brief_sha256": "33500c97e0c67e0998ec85805f3c28899858191aa6158e3689f07db0d169d0fc",
+    "source_sha256": "aaa190da66b016ae304c3b22a96af8b6b72882ba042d32e61c8fe938c7175010",
+    "metadata_sha256": "b838bb4c2a376351d90f14fbc1cbbb690b2436efdb46422493461e85dacb906e",
+    "fixture_sha256": "489eb9564293e3108de80b23bee211ee809031ac5d232c395d1b4dee2ef26338",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverRequirements",
+      "resolveAssets",
+      "matchArtifacts",
+      "planClosure",
+      "assembleDossier"
+    ]
+  },
+  {
+    "application_id": "064",
+    "title": "Facility complaint-to-work-order system",
+    "domain_id": "13",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/064-facility-complaint-to-work-order-system",
+    "fixture_path": "training/semantic_applications/design_briefs/064-facility-complaint-to-work-order-system/cases.json",
+    "brief_sha256": "ea373054f3f320e21aebfca69edc889e8b81bec5682cbe75affd9e986c0f705b",
+    "source_sha256": "0563ee6ea602efbbc0cb07be72cecb26eda60e76267a4ea6b27202a2ff2d169a",
+    "metadata_sha256": "73046860abce2a2b5423206bd2a87e553b790b650e8737eaa8fbeebdf1dc0bba",
+    "fixture_sha256": "50cdfc87f478cf3c17d683454e1795ed7cd9b36e0526be8c89b88f79d0dc5698",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretComplaint",
+      "linkRelatedIssues",
+      "formWorkOrders",
+      "coordinateVisits",
+      "verifyResolution"
+    ]
+  },
+  {
+    "application_id": "065",
+    "title": "Adaptive reuse feasibility studio",
+    "domain_id": "13",
+    "split": "test",
+    "source_root": "codebases/design_briefs/065-adaptive-reuse-feasibility-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/065-adaptive-reuse-feasibility-studio/cases.json",
+    "brief_sha256": "e6d2599ccaea5c00798fcced990117be91a92f2a9ae66a8e2999230bcface2d3",
+    "source_sha256": "91fd25258df6b95c908a86300c1774895597193d4c6ea87e11ee8e9256fc2611",
+    "metadata_sha256": "be69c7ee657206403e770135c4d798687e72fcd4b847ab920b30f4aa5db2f2c6",
+    "fixture_sha256": "87f0f3435e912ebdb5381a9ab461cd4dcaeecbd69962be986f128529ad67c2a6",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverSiteFacts",
+      "interpretGoals",
+      "generateConcepts",
+      "planInvestigations",
+      "compareFeasibility"
+    ]
+  },
+  {
+    "application_id": "066",
+    "title": "Habitat restoration planner",
+    "domain_id": "14",
+    "split": "train",
+    "source_root": "codebases/design_briefs/066-habitat-restoration-planner",
+    "fixture_path": "training/semantic_applications/design_briefs/066-habitat-restoration-planner/cases.json",
+    "brief_sha256": "0834b9c77e772de5be96a714cc0789c6c04ffc091b28c1882c831d05823e4f0f",
+    "source_sha256": "461700d059d78b15436150accdd6caefec7a7fea1e62d8e954fd69fc811d40f6",
+    "metadata_sha256": "3e061e5646871e8c9bf792bbdb6fcdf37fa93c0905ba207e75c7d6c7f392d975",
+    "fixture_sha256": "5117ccc0876919cebb500525017d76d81c28fe95a2d55e99b01b84ff82196c69",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretBaseline",
+      "translateObjectives",
+      "constructInterventions",
+      "planMonitoring",
+      "adaptManagement"
+    ]
+  },
+  {
+    "application_id": "067",
+    "title": "Agricultural cooperative harvest coordinator",
+    "domain_id": "14",
+    "split": "train",
+    "source_root": "codebases/design_briefs/067-agricultural-cooperative-harvest-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/067-agricultural-cooperative-harvest-coordinator/cases.json",
+    "brief_sha256": "632d2791c13ebe10c8bcc87c80eae685c76e5c3f3b6fa51260b3cf112fee8286",
+    "source_sha256": "669d8b91d26463a613c47662db6144e538d48bb0e8a2e23338def530acc78fbe",
+    "metadata_sha256": "18129f5743fd921136584d85202946e80ef75ea219eecd8f4871dddf97a54551",
+    "fixture_sha256": "143e76a48d6d60c498153325057c7d317117cfbc014c20b06ec9215ea0f03114",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretReadiness",
+      "recoverCommitments",
+      "matchLots",
+      "scheduleResources",
+      "replanDelivery"
+    ]
+  },
+  {
+    "application_id": "068",
+    "title": "Citizen-science observation curator",
+    "domain_id": "14",
+    "split": "train",
+    "source_root": "codebases/design_briefs/068-citizen-science-observation-curator",
+    "fixture_path": "training/semantic_applications/design_briefs/068-citizen-science-observation-curator/cases.json",
+    "brief_sha256": "22c7f8cd4ed6559e6a6274b869a6e2a2cb54897918e9c1f6cb0ef89ee50f5352",
+    "source_sha256": "740eab2ad67131ef26e59c49baf717917ebfcb6211cf65ccd914c8ad3d7ba8c5",
+    "metadata_sha256": "a424b8b30819f9ea767fa04cacc66b4c99883ec51e2182984a6e9ce4cf64c0cd",
+    "fixture_sha256": "86ea87b6956f0d10fa34f70cb300bfdaf2f636d87121c82149ad04d3137af83c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeObservations",
+      "resolveTerminology",
+      "detectDuplicates",
+      "requestVerification",
+      "publishCurated"
+    ]
+  },
+  {
+    "application_id": "069",
+    "title": "Environmental reporting evidence assembler",
+    "domain_id": "14",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/069-environmental-reporting-evidence-assembler",
+    "fixture_path": "training/semantic_applications/design_briefs/069-environmental-reporting-evidence-assembler/cases.json",
+    "brief_sha256": "cb228bdabd7359b12664a1cb6ba36fc7c697bb29d99296ceefdd77f1809db992",
+    "source_sha256": "1c91b00fe57cb1c2de63841bc7d91eecf31d0c3b0cc8ba1f36e3163a856a688f",
+    "metadata_sha256": "8313ed6219a10603990bdb78aed7830da3e4c68f9ae12dcf30dad3a2db5ddb49",
+    "fixture_sha256": "28ac08c3692f5ef1c47626f92cb0abb114628ac33e7d6294decafbc5cdd74d41",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretBoundaries",
+      "mapMeasurements",
+      "reconcileAttribution",
+      "substantiateClaims",
+      "assembleSubmission"
+    ]
+  },
+  {
+    "application_id": "070",
+    "title": "Community garden steward",
+    "domain_id": "14",
+    "split": "test",
+    "source_root": "codebases/design_briefs/070-community-garden-steward",
+    "fixture_path": "training/semantic_applications/design_briefs/070-community-garden-steward/cases.json",
+    "brief_sha256": "b2a5aa8e182c4e940487a94f880998798710ab0b253f60324b9c7a233bcbb4fd",
+    "source_sha256": "2bfcb007ba9c946881647486c990f5950ebcefc05ef91998a0622ac3df15cfea",
+    "metadata_sha256": "5e907608e68d43b3c17b8ea85c1c2481bc3111245b36446c00a70fcaacba59e4",
+    "fixture_sha256": "9dcd6a4f65078ad22c383e9028dbbc4cf01c6053e3b843fe8d6f6493c6a53112",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 40
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretPreferences",
+      "modelPlots",
+      "generatePlans",
+      "negotiateAllocation",
+      "coordinateSeason"
+    ]
+  },
+  {
+    "application_id": "071",
+    "title": "Public Consultation Synthesis Studio",
+    "domain_id": "15",
+    "split": "train",
+    "source_root": "codebases/design_briefs/071-public-consultation-synthesis-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/071-public-consultation-synthesis-studio/cases.json",
+    "brief_sha256": "e724b9479b576637be6f93dc03df0f28372b4522665cd753190d5c6f79ed5312",
+    "source_sha256": "a60915d5e39e6939af710d052860623dc18fc1e0e3eacff59468c40ea2f7f4d6",
+    "metadata_sha256": "0e32d54565c129b4721e5ff4d91a813ea06787f94db757a8976b543bef3c304f",
+    "fixture_sha256": "4eb60ef134d0062e47b9c127fc347bffdcc8fdba19463be62519792d6e04b0e5",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractArguments",
+      "linkCampaigns",
+      "mapPositions",
+      "formResponses",
+      "verifySynthesis"
+    ]
+  },
+  {
+    "application_id": "072",
+    "title": "Participatory Budgeting Facilitator",
+    "domain_id": "15",
+    "split": "train",
+    "source_root": "codebases/design_briefs/072-participatory-budgeting-facilitator",
+    "fixture_path": "training/semantic_applications/design_briefs/072-participatory-budgeting-facilitator/cases.json",
+    "brief_sha256": "6e19f006d2bcf8830837ff3d1edc01267b08449e3513b79efa42188d99a98eac",
+    "source_sha256": "a5dd8ec3079bebf71a54c4de1197923e46469f46c21fd150a7ef33124b0f67e4",
+    "metadata_sha256": "d79ddd686d7f91ee798933a78fa745d03f87d1ade6981103f447ea08018ee84d",
+    "fixture_sha256": "00aa7b1fae46abfc277e0c7f788d780a41973bb384f6c1b5e4b288514beb66db",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 29
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretProposals",
+      "assessOverlap",
+      "qualifyFeasibility",
+      "constructPortfolios",
+      "prepareDeliberation"
+    ]
+  },
+  {
+    "application_id": "073",
+    "title": "Public Service Application Navigator",
+    "domain_id": "15",
+    "split": "train",
+    "source_root": "codebases/design_briefs/073-public-service-application-navigator",
+    "fixture_path": "training/semantic_applications/design_briefs/073-public-service-application-navigator/cases.json",
+    "brief_sha256": "536de2d7cf6f64aa4ec5b8a5a1084458253a72bb0097fba8823c7f04c40f09a4",
+    "source_sha256": "64660446c6eb24002f7c4ea005ad155a96f5c1ecbcc7fc1ab2a4ffe872e6bc82",
+    "metadata_sha256": "fc665506675203cd6a0503e2898b031156606ec036299368667400236ff13904",
+    "fixture_sha256": "ea66024992380b5cc63aec3f257b9678b438d72ed15437f826946fb97277bb52",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretSituation",
+      "identifyPathways",
+      "chooseQuestions",
+      "assembleApplications",
+      "trackOutcomes"
+    ]
+  },
+  {
+    "application_id": "074",
+    "title": "Volunteer Deployment Coordinator",
+    "domain_id": "15",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/074-volunteer-deployment-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/074-volunteer-deployment-coordinator/cases.json",
+    "brief_sha256": "631d100557bf787a6d01b1b516e74192db7b64c9a571754ea62b90d98d9d4361",
+    "source_sha256": "7fbd5a3663cec98e7c49bc2c5f376db0442b9630fac2daff2c996d9e0be9efe1",
+    "metadata_sha256": "c397aed4fd0eb612e7db67dfb0ccd480ba828d4c17b7151a39a043f5605d2fb1",
+    "fixture_sha256": "9f2d1641436784bce0b6a50d5f6137774f0b59414acfd22cd951c25c9e4d5b47",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretMission",
+      "interpretProfiles",
+      "constructTeams",
+      "prepareBriefings",
+      "replanAssignments"
+    ]
+  },
+  {
+    "application_id": "075",
+    "title": "Community Agreement Mediator",
+    "domain_id": "15",
+    "split": "test",
+    "source_root": "codebases/design_briefs/075-community-agreement-mediator",
+    "fixture_path": "training/semantic_applications/design_briefs/075-community-agreement-mediator/cases.json",
+    "brief_sha256": "e6be8801330bd01a9ba82628bde5c2348228c6addf2a5a8c9273a8ac4bdf86f7",
+    "source_sha256": "7846dea16be9dcf65bd3103684ca03174c1b0e3bc8269b259d0f51d04011e3a2",
+    "metadata_sha256": "f5286151dacecd4e3fa537f435325d3aec385db4c6f9aab5f2826c2970587ba6",
+    "fixture_sha256": "61fdd1149a1bb3915962ae2a105821ca209ac45570f23222354ad9f2d100c133",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverAgreements",
+      "mapPositions",
+      "identifyOptions",
+      "designTrial",
+      "reviewOutcome"
+    ]
+  },
+  {
+    "application_id": "076",
+    "title": "Referral Packet Completeness Manager",
+    "domain_id": "16",
+    "split": "train",
+    "source_root": "codebases/design_briefs/076-referral-packet-completeness-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/076-referral-packet-completeness-manager/cases.json",
+    "brief_sha256": "7a222ffc9216fbdae3b2549770ac858785e051156714df3f312b1ad6e53fed08",
+    "source_sha256": "828bddf390aa7490f021c9bc7c41ec72bbb2950d6f6306a6e92cc15cd898b59b",
+    "metadata_sha256": "a05d455a0f3a6aa79f2c35f4b3e8baaefaecee11292267ae6ca6c7bcbf659a6b",
+    "fixture_sha256": "e9a1244aa7b0ad102b32e9e00e1e901c4dca6664cfcc26359767a2ec4246bcd3",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretRequirements",
+      "matchPatientRecords",
+      "assessCompleteness",
+      "requestMaterial",
+      "releaseAndTrack"
+    ]
+  },
+  {
+    "application_id": "077",
+    "title": "Care Transition Logistics Coordinator",
+    "domain_id": "16",
+    "split": "train",
+    "source_root": "codebases/design_briefs/077-care-transition-logistics-coordinator",
+    "fixture_path": "training/semantic_applications/design_briefs/077-care-transition-logistics-coordinator/cases.json",
+    "brief_sha256": "a0376d9df0bca2e58b9681c90397564c602bccc1541ef91d6b6897c8d437e672",
+    "source_sha256": "459e9669ea3582ed94b9325f07b0f8c8f47c1a19082f4aa51a81294e4bbbf24d",
+    "metadata_sha256": "f2fd42d6cc96e2ad290fdddf49699dc145251be14a0a96547cc6ec168259d214",
+    "fixture_sha256": "976153552d7c40a2df613adc1364a503e8f4a61257e0109cfa90523bc4e50c40",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractLogistics",
+      "mapParticipants",
+      "constructSequence",
+      "resolveConflicts",
+      "verifyReadiness"
+    ]
+  },
+  {
+    "application_id": "078",
+    "title": "Appointment Preparation Service",
+    "domain_id": "16",
+    "split": "train",
+    "source_root": "codebases/design_briefs/078-appointment-preparation-service",
+    "fixture_path": "training/semantic_applications/design_briefs/078-appointment-preparation-service/cases.json",
+    "brief_sha256": "d798596c1a4210359d7a6f3ce4af675986e5a62258fb9be16a4468cf6ad6421d",
+    "source_sha256": "c69fd35a1b0650d6206b26d403f3b69a8f263253d9b262ab94a868bc9cab4280",
+    "metadata_sha256": "d35bccfed252a894a77ded61cd47aae3cc5e9fd0c9f6451ecf14080809f5fdeb",
+    "fixture_sha256": "20108c5647c203625a741d14d21c307cfee3452499ccd9addfc2ae0acd2d6d3f",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverInstructions",
+      "interpretCircumstances",
+      "composeChecklist",
+      "routeQuestions",
+      "trackAcknowledgment"
+    ]
+  },
+  {
+    "application_id": "079",
+    "title": "Health Record Request Fulfillment Workbench",
+    "domain_id": "16",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/079-health-record-request-fulfillment-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/079-health-record-request-fulfillment-workbench/cases.json",
+    "brief_sha256": "deff23886b70ac4000e2161a29b68d8a78e6e6f3471672884c18533523c77bb7",
+    "source_sha256": "b55e2cc1883b90cd22c0ee6a0088049e2de6ff2f92d54fe5913cf6fd05a2d702",
+    "metadata_sha256": "3e4a25f7dfc5be966b6e9f70a2dbac50d030acf0bfe2e7ed34a825b43f87be29",
+    "fixture_sha256": "ce0014ff404c3370896263ea8c2dd9962dcb8ec91aa428aa21c5bbb81e431093",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretAuthorization",
+      "locateRecords",
+      "reviewContent",
+      "assembleFulfillment",
+      "verifyDelivery"
+    ]
+  },
+  {
+    "application_id": "080",
+    "title": "Patient Experience Improvement Laboratory",
+    "domain_id": "16",
+    "split": "test",
+    "source_root": "codebases/design_briefs/080-patient-experience-improvement-laboratory",
+    "fixture_path": "training/semantic_applications/design_briefs/080-patient-experience-improvement-laboratory/cases.json",
+    "brief_sha256": "4ee0691410c635293de18dba16e0266de43c8ae178fe036c1cafb9f740b12ac5",
+    "source_sha256": "30354e19a72d21b25ddc3a5b2fe2d9fe754d5cd4be7f8508368c33c7edf85fb5",
+    "metadata_sha256": "0195bd0a4f4a354165ef936a5388a3bd9ba281305df25a5dbc0df73c2af06ee4",
+    "fixture_sha256": "1d43b741195a6586a652acf6d92c2f2b8c3cc1376e9ad0e682ca89037b09c01b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractExperiences",
+      "linkJourneyEvents",
+      "formMechanisms",
+      "designImprovements",
+      "reviewResults"
+    ]
+  },
+  {
+    "application_id": "081",
+    "title": "Localization Release Manager",
+    "domain_id": "17",
+    "split": "train",
+    "source_root": "codebases/design_briefs/081-localization-release-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/081-localization-release-manager/cases.json",
+    "brief_sha256": "a0c1098e93a1bb19f335e159fb3a614b947e9be2498546e30ae177ba191c0294",
+    "source_sha256": "8d5e5b15656e5b8b8ca7697a1e301d7b3af3a5778e33d93f3f91ec3501012de4",
+    "metadata_sha256": "81d4e1b4389fd038eeea43b40746d73b87efbb272f404064564a5d1ceae30246",
+    "fixture_sha256": "af1f6a5a2339db412badbd4adade95a3b983036fd61148ba44a1b8e3e6103e71",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "segmentWithContext",
+      "resolveTerminology",
+      "transformContent",
+      "validateLocale",
+      "assembleLocaleRelease"
+    ]
+  },
+  {
+    "application_id": "082",
+    "title": "Plain Language Transformation Studio",
+    "domain_id": "17",
+    "split": "train",
+    "source_root": "codebases/design_briefs/082-plain-language-transformation-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/082-plain-language-transformation-studio/cases.json",
+    "brief_sha256": "a332056cc42d9c86798938c3e2541e4fe6e755688ca76ac6d265e2c72f2f57b0",
+    "source_sha256": "d3125fa7370de817257fd8a8154c20d2e9f45c3176254a2d53f3ca197033a0e4",
+    "metadata_sha256": "f04775de81314b523c3f33e40b524c0af5cae03a10a43d52bd383d0a2965d496",
+    "fixture_sha256": "c024bd1843baa92121478d799035627e5e88cdb424d07baf9bf2b32cc54ceaba",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverMeaning",
+      "modelReaderTasks",
+      "rewriteStructure",
+      "challengeComprehension",
+      "releaseAccessible"
+    ]
+  },
+  {
+    "application_id": "083",
+    "title": "Accessible Narrative Production Desk",
+    "domain_id": "17",
+    "split": "train",
+    "source_root": "codebases/design_briefs/083-accessible-narrative-production-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/083-accessible-narrative-production-desk/cases.json",
+    "brief_sha256": "93248ae5383c3a4a81db2b70dd3444c28c366e29c72ed5994b8c5841fd9f9a80",
+    "source_sha256": "eaac200c4fdbebadab30eba022c67067057e87207d270b4760d557cdbca36369",
+    "metadata_sha256": "5f8640912f8e36725a0a16f6074556c23445a3a564fd76146f9477ec746e5006",
+    "fixture_sha256": "7e7d5cdb307724e8788e6331e2d1e076bc08e4912f293a17c61edcf2908ca3ba",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "modelNarrativeInformation",
+      "planChannels",
+      "writeAccessibleText",
+      "validateSynchronization",
+      "packageAccessibleMedia"
+    ]
+  },
+  {
+    "application_id": "084",
+    "title": "Cross Cultural Training Adaptation Studio",
+    "domain_id": "17",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/084-cross-cultural-training-adaptation-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/084-cross-cultural-training-adaptation-studio/cases.json",
+    "brief_sha256": "239d2e4093fd8d44f6a26a5540657cf0ef49b27679409e949c74f04f04a48231",
+    "source_sha256": "c280fc47ad2f42ae9bc28905fe85001cb0653af56407cf86e879ac567acd3946",
+    "metadata_sha256": "e9d41b8335428f80b84e911cd316b71561620850f57d692f108bca5c32138d20",
+    "fixture_sha256": "fd92652cd4d3f26e5b0d3228116ae25156bd72c09d61d927a2ad9056d42fa02b",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverLearningMechanism",
+      "assessContextFit",
+      "generateAlternatives",
+      "replayLearning",
+      "releaseTraining"
+    ]
+  },
+  {
+    "application_id": "085",
+    "title": "Multilingual Terminology Negotiation Workbench",
+    "domain_id": "17",
+    "split": "test",
+    "source_root": "codebases/design_briefs/085-multilingual-terminology-negotiation-workbench",
+    "fixture_path": "training/semantic_applications/design_briefs/085-multilingual-terminology-negotiation-workbench/cases.json",
+    "brief_sha256": "52c18c12cacc8563e7aa64caf997cd13549752e229b767b8caf11f199445e3e6",
+    "source_sha256": "896acc5fca9fa4cd360ec1c3dcefbdc3320324c956b7fa89f47339ec70753f00",
+    "metadata_sha256": "8ffe6ca82aa8a7ce50c81ccafe6e86f01e9842608901ee016c21e2a0ba15c5af",
+    "fixture_sha256": "ea1c2147e22700945080e12e4e768a817ee24eaba23e965483342e701a4c7ad0",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractSenses",
+      "alignConcepts",
+      "constructTermOptions",
+      "negotiateDecision",
+      "propagateTerminology"
+    ]
+  },
+  {
+    "application_id": "086",
+    "title": "Museum Exhibition Curator",
+    "domain_id": "18",
+    "split": "train",
+    "source_root": "codebases/design_briefs/086-museum-exhibition-curator",
+    "fixture_path": "training/semantic_applications/design_briefs/086-museum-exhibition-curator/cases.json",
+    "brief_sha256": "b8538ccf4f55b91e78ee0e3d943d16d4d98130b0cc1867444971dc1ce5d9b9c4",
+    "source_sha256": "f41ea327f4060f58954bf6caabe42773a3c22247e51c8793c8c759cfd6307955",
+    "metadata_sha256": "02ba7a30c4f81594fb3185a310a57d1ecca00e1fc430068728747726be4888c0",
+    "fixture_sha256": "94ba2778ac2f00c705de28adb2e50a883da4a6b3d65577cbd85c2d9c6026a90c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretCollection",
+      "formNarratives",
+      "designVisitorPaths",
+      "writeInterpretation",
+      "qualifyExhibition"
+    ]
+  },
+  {
+    "application_id": "087",
+    "title": "Oral History Reconciliation Archive",
+    "domain_id": "18",
+    "split": "train",
+    "source_root": "codebases/design_briefs/087-oral-history-reconciliation-archive",
+    "fixture_path": "training/semantic_applications/design_briefs/087-oral-history-reconciliation-archive/cases.json",
+    "brief_sha256": "42947977dcf4cb4de85e99ac3ee05d508442eb25ab98a216ae4b2a25c3566367",
+    "source_sha256": "fdc371a164f4e89cbe1c0eb0ba5e204e1e7c21b9cdf8cf607ce9b0f65e78d8a0",
+    "metadata_sha256": "f3cabd030622aa36dbdd595beb4d801ebac90e3e9a0301409126c52760a7595d",
+    "fixture_sha256": "ba3fccfc26ec82e17e293b78a6499f7766e25b49fa017e1a68d89a3a51457dff",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "segmentAccounts",
+      "resolveReferences",
+      "reconcileEvents",
+      "formFollowups",
+      "publishArchive"
+    ]
+  },
+  {
+    "application_id": "088",
+    "title": "Historical Record Linkage Atelier",
+    "domain_id": "18",
+    "split": "train",
+    "source_root": "codebases/design_briefs/088-historical-record-linkage-atelier",
+    "fixture_path": "training/semantic_applications/design_briefs/088-historical-record-linkage-atelier/cases.json",
+    "brief_sha256": "09f918b53fa9b3dc29a7a920e07df15af1b9dcd708d4dc417b1c3a44576e9d6e",
+    "source_sha256": "a9ee363188bcb9edd8bf6c6077afe90b9569611d0987227be2a58dcd2c07889c",
+    "metadata_sha256": "9fc4364d31bcc8622fe73efaa907c391db0660e128180b0e5fa2c8164b009980",
+    "fixture_sha256": "60e177713d9bf4276bfe4f9d49205a42eb453b371a2bcb9d3584e25e8041ba30",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "normalizeRecords",
+      "generateLinks",
+      "judgeIdentity",
+      "reconcileNetworks",
+      "prepareResearchView"
+    ]
+  },
+  {
+    "application_id": "089",
+    "title": "Collection Rights And Consent Steward",
+    "domain_id": "18",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/089-collection-rights-and-consent-steward",
+    "fixture_path": "training/semantic_applications/design_briefs/089-collection-rights-and-consent-steward/cases.json",
+    "brief_sha256": "3efc7160b2498ee76e2386c08f2ebad028dda6e04c649d746bc6c29b711dc304",
+    "source_sha256": "5729ac471d7c38962d9ef9a3d4d1099b6aeef1f20c170a34896640a67fed97b2",
+    "metadata_sha256": "ea9d8df0a3f59aa8feca500132f3af0181f82157cb1bb5b9b58adf13e230f821",
+    "fixture_sha256": "c3644c22d9cba507715ca6eaecc6b25a33289c1b01d8c71b7a0882bbb586c807",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 32
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "extractPermissions",
+      "interpretUse",
+      "assessCompatibility",
+      "requestClearance",
+      "maintainUseRegister"
+    ]
+  },
+  {
+    "application_id": "090",
+    "title": "Archive Research Commission Manager",
+    "domain_id": "18",
+    "split": "test",
+    "source_root": "codebases/design_briefs/090-archive-research-commission-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/090-archive-research-commission-manager/cases.json",
+    "brief_sha256": "2c9279061efd71859527c257efb64e0a3decc5b7e317fae38ea63e27291b244a",
+    "source_sha256": "6c1e0661dadbd9e48ba5601a1f0e730f0ac99a9877a5639ba1030f1eed42145b",
+    "metadata_sha256": "9adea068c1ec4482c37e6e44d4174a6cf9b11d62039c20f91ea586126cc6eb5e",
+    "fixture_sha256": "b391bc306c1d3f592751b3e2bddf109f10f1c042d2678d326b6b4e5696c6cffd",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "frameCommission",
+      "planSearch",
+      "followEvidence",
+      "reconcileFindings",
+      "assembleDossier"
+    ]
+  },
+  {
+    "application_id": "091",
+    "title": "Serial Fiction Continuity Room",
+    "domain_id": "19",
+    "split": "train",
+    "source_root": "codebases/design_briefs/091-serial-fiction-continuity-room",
+    "fixture_path": "training/semantic_applications/design_briefs/091-serial-fiction-continuity-room/cases.json",
+    "brief_sha256": "f4113fa692d5f21e34fd25e533db59c9c7164d32d118f6a50f9148a73250c429",
+    "source_sha256": "f93703f581abe076dda9c525d71429c9584920f77e4c13bf77b39079ad974753",
+    "metadata_sha256": "7599fba6bda894f1a02c90e6fe16fc376d290a57bceb8a8ba905c9206c4a45d1",
+    "fixture_sha256": "deb7725a899bb354d4e0566affc62e75adaff9d4bac7554ff81c806ffe277b72",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverCanon",
+      "trackArcs",
+      "assessProposals",
+      "generateRepairs",
+      "verifyEdition"
+    ]
+  },
+  {
+    "application_id": "092",
+    "title": "Documentary Assembly Studio",
+    "domain_id": "19",
+    "split": "train",
+    "source_root": "codebases/design_briefs/092-documentary-assembly-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/092-documentary-assembly-studio/cases.json",
+    "brief_sha256": "d7d36f39d4e3db776179367f6b27490bddd23e76405ddd3a5c2f4e5ef0e10adc",
+    "source_sha256": "acc83c6b71412ca3bce57f86cb83309f19d5df5911d6849b125790b5b16d955a",
+    "metadata_sha256": "e1df6ea27403092e1d7f90fb22f4567f46efd1870c1d65986d6093fbde4ff256",
+    "fixture_sha256": "b654b037cb31716a4a907af3fa299eaa6053d6a1c8505678d67780a0d655c8a6",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "indexMaterial",
+      "constructArguments",
+      "selectEdits",
+      "reviewProduction",
+      "freezeAssembly"
+    ]
+  },
+  {
+    "application_id": "093",
+    "title": "Magazine Commissioning And Issue Planning Desk",
+    "domain_id": "19",
+    "split": "train",
+    "source_root": "codebases/design_briefs/093-magazine-commissioning-and-issue-planning-desk",
+    "fixture_path": "training/semantic_applications/design_briefs/093-magazine-commissioning-and-issue-planning-desk/cases.json",
+    "brief_sha256": "ce2077bfa9e1fe90a11831bf871cd3ec208a09b2f49cfd4998ba4e6d62c7cf78",
+    "source_sha256": "5cfb4c3f4ecf199a1e0aab456a70a27a031754657e7924ee3e5d4087ebdadf87",
+    "metadata_sha256": "74fa9f10d22469d5323673a4218e2101460958333b6a530573674417d5596588",
+    "fixture_sha256": "dae09c96d1fcf045b23726d3982391705a9ad800a55161005c3fdbd5da088cb6",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretPitches",
+      "mapCoverage",
+      "commissionPieces",
+      "manageEditorialWork",
+      "qualifyIssue"
+    ]
+  },
+  {
+    "application_id": "094",
+    "title": "Brand And Design Language Studio",
+    "domain_id": "19",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/094-brand-and-design-language-studio",
+    "fixture_path": "training/semantic_applications/design_briefs/094-brand-and-design-language-studio/cases.json",
+    "brief_sha256": "191c13875725ff3bb7da8cfa865ad63da1e4addd6b2c316e9d701a01f03ea470",
+    "source_sha256": "3b81526946bf8c59d508339143d8f4f114c661598aa59294842f20382ea6bd50",
+    "metadata_sha256": "91d22f221bf02b2dd4cca13369617151b3677aece6a2bb3a522d6ad4d64eb656",
+    "fixture_sha256": "5694d81e07266557d4ce8af260650975ed4949d8e96e193a2aa8b3c3aa9021d5",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverBrandConstraints",
+      "generateDirections",
+      "constructSystem",
+      "applyChannels",
+      "reviewCoherence"
+    ]
+  },
+  {
+    "application_id": "095",
+    "title": "Culinary Concept Development Kitchen",
+    "domain_id": "19",
+    "split": "test",
+    "source_root": "codebases/design_briefs/095-culinary-concept-development-kitchen",
+    "fixture_path": "training/semantic_applications/design_briefs/095-culinary-concept-development-kitchen/cases.json",
+    "brief_sha256": "c006bab4bdb38f87b4797bd98f7db53209c26a526977f1f1663d84eac79912b1",
+    "source_sha256": "49dabd990fef884333c68e9f1eb9cd02a6609e8f47ac046c35d8ca91409d952c",
+    "metadata_sha256": "5f4b33966b202aca41bd74448ea180fb292689708cf6a0871f5ead0891caaf4b",
+    "fixture_sha256": "62c7c54930211a5cbe6f58b8e9826122ac1f0c618b03e04eb3cb743bf66906ba",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretBrief",
+      "generateDishes",
+      "constructMenu",
+      "planAndCost",
+      "reviewTastings"
+    ]
+  },
+  {
+    "application_id": "096",
+    "title": "Escape Room Foundry",
+    "domain_id": "20",
+    "split": "train",
+    "source_root": "codebases/design_briefs/096-escape-room-foundry",
+    "fixture_path": "training/semantic_applications/design_briefs/096-escape-room-foundry/cases.json",
+    "brief_sha256": "79d484ef31392b994c96c227e5b435de229764287c69bae6f861033dddad3af1",
+    "source_sha256": "61ac03247ffb30d93f2f1e7618062a50a1ee70eb2a28cbb10fccfa9dd908ab17",
+    "metadata_sha256": "4cec1e265d42e6d3aa03bea4784f247f63256d39d8fed5f4ddc973fd12c7b94d",
+    "fixture_sha256": "41b9b3bef17f4e31a1c321fe172be0a26887794cda4ad16fa87495f328f4f821",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "modelExperience",
+      "constructPuzzleGraph",
+      "writeArtifacts",
+      "simulatePlayers",
+      "packageOperations"
+    ]
+  },
+  {
+    "application_id": "097",
+    "title": "Live Event Disruption Director",
+    "domain_id": "20",
+    "split": "train",
+    "source_root": "codebases/design_briefs/097-live-event-disruption-director",
+    "fixture_path": "training/semantic_applications/design_briefs/097-live-event-disruption-director/cases.json",
+    "brief_sha256": "ced01667f62e29611dde958bd0458105af100eba13e429be99fc4ddc85302db6",
+    "source_sha256": "2ada9bd3ad3389539344537cbcb5d40c34101bcf159db2fc7c40c60649d6591b",
+    "metadata_sha256": "7ca49e0624999893af9ca6c14521f2d4497d553320a3001dfadf17bce34755ee",
+    "fixture_sha256": "4d765b067405b4dc9154cc4ee3f49a44c28b716abb2160041416538676ea42d8",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "recoverEventPromises",
+      "interpretFailure",
+      "generateFormats",
+      "rebuildRunOfShow",
+      "coordinateLiveChange"
+    ]
+  },
+  {
+    "application_id": "098",
+    "title": "Persistent World Game Director",
+    "domain_id": "20",
+    "split": "train",
+    "source_root": "codebases/design_briefs/098-persistent-world-game-director",
+    "fixture_path": "training/semantic_applications/design_briefs/098-persistent-world-game-director/cases.json",
+    "brief_sha256": "4eda27fc62a69a6cae89201f03b07cfedf2c3ea1f86b135e3e98159a71d505e0",
+    "source_sha256": "14f3004251016daa66596280fa690c9334ba3af4bbd0b0f7816ba227b194e683",
+    "metadata_sha256": "b256f9948c4f2c2d06e710cc69d9ed16cd8dc13d429b71e4c306616dbbead94b",
+    "fixture_sha256": "93ffd95279371f22cc9d9a7df426444010e552ba853fa02dce1ffce260cb138c",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 31
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "interpretIntent",
+      "modelCharacterViews",
+      "chooseWorldActions",
+      "advanceConsequences",
+      "maintainContinuity"
+    ]
+  },
+  {
+    "application_id": "099",
+    "title": "Negotiation Training Arena",
+    "domain_id": "20",
+    "split": "dev",
+    "source_root": "codebases/design_briefs/099-negotiation-training-arena",
+    "fixture_path": "training/semantic_applications/design_briefs/099-negotiation-training-arena/cases.json",
+    "brief_sha256": "87d23fece83eb93503a8e04fab48bcebecb15e97e1179e1a6d5d0421f4c239f6",
+    "source_sha256": "e533ee896df7947a2e47805e31cf1e105c5268382777bc5606d0243e27690377",
+    "metadata_sha256": "d9a932c512336ddc6af30f5fdc42fcfec5b82e058c184aa55a63547d5f296d78",
+    "fixture_sha256": "298ddc3a7e23466f4b29e61162871f0da8bd2760911e50b5e721b9a89b57b493",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "authorNegotiation",
+      "prepareRoles",
+      "interpretOffers",
+      "runCounterparts",
+      "debriefNegotiation"
+    ]
+  },
+  {
+    "application_id": "100",
+    "title": "Immersive Theatre Stage Manager",
+    "domain_id": "20",
+    "split": "test",
+    "source_root": "codebases/design_briefs/100-immersive-theatre-stage-manager",
+    "fixture_path": "training/semantic_applications/design_briefs/100-immersive-theatre-stage-manager/cases.json",
+    "brief_sha256": "5178fac921e07a15752e1798f54e9ad49a78485babd6f1786011a851cb99b965",
+    "source_sha256": "f00da156d82f1b3627c7b576bb7dc7a4af2a817b5fada3e7c16f5bb088ea97a6",
+    "metadata_sha256": "8619c639d5d75484528c1481fdd245368dde90e08796c80dea6e1c856d8c0741",
+    "fixture_sha256": "e30855ea1d6da13c0d4e4b8104f97b040798b5e30888f1217692bf9e030a7bc8",
+    "native_functions": 41,
+    "tasks": 8,
+    "domain_contracts": {
+      "records": 6,
+      "fields": 30
+    },
+    "callable_scope": {
+      "functions": 41,
+      "visible_references": 39
+    },
+    "operational_coverage": {
+      "original_details": 5,
+      "mapped_workflows": 5
+    },
+    "gate_tasks": 3,
+    "workflow_tasks": 5,
+    "stage_names": [
+      "modelDramaturgy",
+      "modelProduction",
+      "selectSceneVariants",
+      "coordinatePerformance",
+      "recoverContinuity"
+    ]
+  }
+]

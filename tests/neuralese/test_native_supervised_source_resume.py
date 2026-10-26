@@ -157,4 +157,7 @@ def test_actual_partial_trainer_retry_updates_once_and_retains_exact_source_cred
         assert supervised.execute(config,result,state_path,None)==result and len(calls)==1
     else:
         assert result['round']==1 and result['trained_task_ids']==[]
-        assert result['update_mode']=='seed' and not result['production_complete']
+        audit=result['last_completed_update']
+        assert audit['mode']=='seed'
+        assert audit['operation_receipt']['scope']=='seed-supervised-exposure'
+        assert not result['production_complete']

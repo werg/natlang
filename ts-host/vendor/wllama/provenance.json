@@ -1,0 +1,19 @@
+{
+ "schema": "natlang.wllama-vendor/1",
+ "upstream": "https://github.com/ngxson/wllama tag 3.6.1 (llama.cpp submodule 83d855c5a)",
+ "patches": {
+  "patches/wllama.patch": "TypeScript: LoRA adapters from Blobs mounted as their own files; Wllama.capabilities.loraBlobs",
+  "patches/llama.cpp-server-lora-cache.patch": "server: a request without lora fields compares and clears like one with them; host prompt cache and idle-slot caching off while LoRA adapters are loaded"
+ },
+ "local_source": "~/wllama-natlang branch natlang-lora (commit fe35f09; llama.cpp submodule branch natlang-lora 07758bad5), unpushed; UPSTREAM.md there",
+ "build": "wllama scripts/docker-compose.yml steps run with docker run (emscripten/emsdk:4.0.20-arm64, image sha256:db0f491cb72e01f66be890c83f1b2705926b59998c2208e6b44f65d7f0cbcb47, DGX 2026-10-26): main build -DGGML_WEBGPU=ON -DGGML_WEBGPU_JSPI=ON; compat -DWLLAMA_COMPAT=ON -DLLAMA_WASM_MEM64=OFF -DGGML_WEBGPU=ON -DGGML_WEBGPU_JSPI=OFF; then npm run build:worker, tsup (esm), build:typedef, scripts/post_build.sh. Only esm/index.js, type declarations and wasm are vendored.",
+ "sha256": {
+  "wllama/esm/index.js": "66952081357492eaa20044dc99ebdacb410049eb2f10bc16adad5755ec3e3fa3",
+  "wllama/esm/wasm/wllama.wasm": "b48091c81a11c72538dbd92164886bb3d73547704eab634457491b4f963c7b6b",
+  "wllama-compat/index.js": "230a2796112eae62a3b75b46ff7e34218ce206ead88fd584ae68868102a8d244",
+  "wllama-compat/wasm/wllama.js": "97f88f7bf26b17ead6be6e7c0c39d20e21661e71827eb5e3c9a468667fc249f5",
+  "wllama-compat/wasm/wllama.wasm": "438a632fcceab3ec59abab171e695596df34c6dfd79d8f73197e92e21c8060d4"
+ },
+ "verify": "node scripts/wllama-lora-smoke.mjs --wllama vendor/wllama --base <base.gguf> --lora a.gguf --lora b.gguf",
+ "measured": "2026-10-26, headless Chromium 1208, LFM2.5-350M f16 base + two LoRA GGUFs (convert_lora_to_gguf from PEFT), CPU, 9.8 s for 7 greedy 24-token completions: every adapter changes the output, base after an adapter (explicit zero scales and no lora field) equals the base exactly, each stack reproducible after others. Compat build not exercised by the smoke (Chromium uses the main build)."
+}

@@ -1,0 +1,5 @@
+# Archive Research Commission Manager
+
+Research begins by bounding questions, evidence paths, inference limits, and a finite stopping rule. Searches model each collection as accessible, closed, restricted, unsearched, or exhausted, with query variants retained as coverage evidence. Contextual citations create follow-up leads; a reference to missing material remains an explicit absence and cannot support claims. Citation ancestry prevents duplicated references from posing as corroboration.
+
+Lead pursuit consumes an explicit effort budget. When a promising lead exceeds the remaining budget, the workflow returns an extension decision and preserves the lead. Claims are reconciled against source revisions, direct and contradictory evidence, and the exact query coverage. Resumption keeps unchanged claims and reopens only descendants of changed sources. The dossier is a reproducible manifest plus a reader-facing separation of source fact, interpretation, access limitation, and reuse restriction.

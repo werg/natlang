@@ -1,0 +1,139 @@
+{
+  "schema": "natlang.application/1",
+  "id": "037",
+  "title": "Assessment production and moderation system",
+  "entrypoint": "freezeAssessmentEdition.nl",
+  "interfaces": [
+    {
+      "name": "freezeAssessmentEdition",
+      "path": "freezeAssessmentEdition.nl",
+      "purpose": "Develop and independently challenge a versioned assessment edition, with release and regrade decisions kept pending review."
+    },
+    {
+      "name": "reconcileAppealEvidence",
+      "path": "freezeAssessmentEdition/reconcileAppealEvidence.nl",
+      "purpose": "Trace one learner response against the exact frozen rubric and route unfamiliar valid reasoning to semantic moderation."
+    },
+    {
+      "name": "reconcileAssessmentRelease",
+      "path": "reconcileAssessmentRelease.nl",
+      "purpose": "Freeze or retire an assessment edition only against a current compiler plan and actual authorized moderator receipt, preserving historical response and appeal records.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "assessment-edition-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "blueprintCoverage",
+        "paths": [
+          "freezeAssessmentEdition/traceBlueprintEvidence/assignObservableEvidenceTasks.nl"
+        ]
+      },
+      {
+        "stage": "generateItems",
+        "paths": [
+          "freezeAssessmentEdition/inspectAnswerability.nl"
+        ]
+      },
+      {
+        "stage": "constructRubrics",
+        "paths": [
+          "freezeAssessmentEdition/scoreWithAlternativeMethods/enumerateValidMethods.nl",
+          "freezeAssessmentEdition/scoreWithAlternativeMethods/placePartialCreditBoundaries.nl"
+        ]
+      },
+      {
+        "stage": "challengeAssessment",
+        "paths": [
+          "freezeAssessmentEdition/challengeEditionBlindly/solveWithoutKey.nl",
+          "freezeAssessmentEdition/challengeEditionBlindly/replayBorderlineResponses.nl",
+          "freezeAssessmentEdition/recheckAfterRepairs.nl"
+        ]
+      },
+      {
+        "stage": "moderateAndAppeal",
+        "paths": [
+          "freezeAssessmentEdition/reconcileAppealEvidence.nl",
+          "freezeAssessmentEdition/planConsistentRegrade.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "freezeAssessmentEdition/retireLeakedItems.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "freezeAssessmentEdition/planConsistentRegrade.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "freezeAssessmentEdition/reconcileAppealEvidence/semanticMethodAppeal.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "freezeAssessmentEdition/traceBlueprintEvidence/separateIncidentalDemands.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "freezeAssessmentEdition/decideEditionRelease.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "recordFamilies": [
+      "AssessmentEdition",
+      "AssessmentReleaseReceipt",
+      "AssessmentResponse",
+      "RegradeRecord"
+    ],
+    "history": "immutable edition versions, release receipts, response history, and moderation/regrade lineage",
+    "release": "freeze requires ready edition evidence and applied authorized regrades; retirement only stops future administration"
+  },
+  "effects": {
+    "gradeChanges": "proposal only; requires exact-cohort moderator authorization",
+    "publication": "release decision only; accountable publication remains separate"
+  },
+  "source_files": [
+    "freezeAssessmentEdition.nl",
+    "freezeAssessmentEdition/authorAssessmentItems.nl",
+    "freezeAssessmentEdition/challengeEditionBlindly.nl",
+    "freezeAssessmentEdition/challengeEditionBlindly/replayBorderlineResponses.nl",
+    "freezeAssessmentEdition/challengeEditionBlindly/solveWithoutKey.nl",
+    "freezeAssessmentEdition/decideEditionRelease.nl",
+    "freezeAssessmentEdition/inspectAnswerability.nl",
+    "freezeAssessmentEdition/planConsistentRegrade.nl",
+    "freezeAssessmentEdition/recheckAfterRepairs.nl",
+    "freezeAssessmentEdition/reconcileAppealEvidence.nl",
+    "freezeAssessmentEdition/reconcileAppealEvidence/semanticMethodAppeal.nl",
+    "freezeAssessmentEdition/retireLeakedItems.nl",
+    "freezeAssessmentEdition/scoreWithAlternativeMethods.nl",
+    "freezeAssessmentEdition/scoreWithAlternativeMethods/defineVisibleScoringCriteria.nl",
+    "freezeAssessmentEdition/scoreWithAlternativeMethods/enumerateValidMethods.nl",
+    "freezeAssessmentEdition/scoreWithAlternativeMethods/placePartialCreditBoundaries.nl",
+    "freezeAssessmentEdition/scoreWithAlternativeMethods/preserveSemanticReviewPath.nl",
+    "freezeAssessmentEdition/traceBlueprintEvidence.nl",
+    "freezeAssessmentEdition/traceBlueprintEvidence/assignObservableEvidenceTasks.nl",
+    "freezeAssessmentEdition/traceBlueprintEvidence/inspectCompetencyWeights.nl",
+    "freezeAssessmentEdition/traceBlueprintEvidence/separateIncidentalDemands.nl",
+    "qualification/blueprintCoverage.nl",
+    "reconcileAssessmentRelease.nl",
+    "reconcileAssessmentRelease/verifyEditionFreezeReadiness.nl",
+    "types.ts"
+  ]
+}

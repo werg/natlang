@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "055",
+  "title": "Repair cooperative dispatcher",
+  "entrypoint": "dispatchRepairCase.nl",
+  "interfaces": [
+    {
+      "name": "dispatchRepairCase",
+      "path": "dispatchRepairCase.nl",
+      "purpose": "Separate reported symptoms from causes, route hazardous checks, qualify consensual repair assignments, and capture recurrence-aware outcomes.",
+      "stateParameter": "repair",
+      "stateInputPath": ["priorState"],
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "cooperative-repair-case-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretSymptoms",
+        "paths": [
+          "dispatchRepairCase/separateObservedSymptomsFromCause.nl"
+        ]
+      },
+      {
+        "stage": "planDiagnostics",
+        "paths": [
+          "dispatchRepairCase/selectApprovedBoundedCheck.nl"
+        ]
+      },
+      {
+        "stage": "matchRepairers",
+        "paths": [
+          "dispatchRepairCase/verifyRepairerFitAndConsent.nl"
+        ]
+      },
+      {
+        "stage": "coordinateWork",
+        "paths": [
+          "dispatchRepairCase/scheduleAuthorizedRepairSequence.nl"
+        ]
+      },
+      {
+        "stage": "captureOutcomes",
+        "paths": [
+          "dispatchRepairCase/verifyRepairAgainstOriginalSymptom.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "dispatchRepairCase/verifyRepairerFitAndConsent.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "dispatchRepairCase/scheduleAuthorizedRepairSequence.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "dispatchRepairCase/scheduleAuthorizedRepairSequence.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "dispatchRepairCase/verifyRepairAgainstOriginalSymptom.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "dispatchRepairCase/selectApprovedBoundedCheck.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "checkpoint": "repair-specific task completion and recurrence watch",
+    "writes": "proposal only; commitAllowed false"
+  },
+  "effects": [
+    "specialist-referral proposal",
+    "customer reapproval request"
+  ],
+  "source_files": [
+    "dispatchRepairCase.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/reserveSharedRepairTools.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/reviewAuthorizedRepairBudget.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/verifySparePartCompatibility.nl",
+    "dispatchRepairCase/selectApprovedBoundedCheck.nl",
+    "dispatchRepairCase/separateObservedSymptomsFromCause.nl",
+    "dispatchRepairCase/verifyRepairAgainstOriginalSymptom.nl",
+    "dispatchRepairCase/verifyRepairAgainstOriginalSymptom/comparePostWorkChecksToOriginal.nl",
+    "dispatchRepairCase/verifyRepairAgainstOriginalSymptom/identifyTemporaryMasking.nl",
+    "dispatchRepairCase/verifyRepairerFitAndConsent.nl",
+    "dispatchRepairCase/verifyRepairerFitAndConsent/filterRepairersByConsentAndAvailability.nl",
+    "dispatchRepairCase/verifyRepairerFitAndConsent/validateTaskCredentialScope.nl",
+    "qualification/interpretSymptoms.nl",
+    "types.ts"
+  ]
+}

@@ -781,3 +781,29 @@ Make native program improvement a default producer in the general training pipel
 Execute every task through the ordinary authored directory-reducer improvement program with Luna as optimizer and Bonsai as target executor. Use three finite experiments per task; persist resumable source/allocation journals and every failed disposition. Allocate the whole collection explicitly: 192 tasks, 34,560 calls, 6,144 executions and 192 hours, with per-task ceilings of 180 calls, 32 executions and one hour. No successful-headroom probe or per-family pass condition gates later collection. Run one serial worker to respect shared serving resources.
 
 Replay and independently admit actual trajectories against the collection SDK. Publish admitted turns incrementally into the shared content-addressed self-improvement registry, retaining other producers and historical receipts. Include both generation stages and their verified corpus output in every newly built default general training recipe. Retain failed/rejected trajectories as evidence for subsequent curriculum construction rather than positive demonstrations. Pin already running recipes and the separately declared Sharp distillation pilot. Implementation and live collection paths are documented in `docs/NATIVE_DIRECTORY_CAMPAIGN.md`.
+
+## Worker startup mechanism (2026-10-26)
+
+The source evaluator's explicit copy of `process.execArgv` turned inherited
+process-wide V8/crypto/snapshot options into Worker constructor arguments. Node
+rejects those flags before any target runs. Filtering just `--input-type` did
+not repair that boundary. Do not clear all flags: native inheritance also carries
+the parent's applicable permissions, loaders and runtime settings.
+
+Use an ESM data-URL bootstrap that imports the existing absolute source-worker
+module, and omit `execArgv`. Node owns option inheritance; the data URL supports
+parents launched with `--input-type=module`. This is exact startup plumbing:
+target policy, source confinement, worker data, timeouts, cancellation, model
+calls and scoring stay in their current implementations. Regression coverage
+starts real source-evaluation workers under a parent with V8 flags and an
+input-type launch, then checks a completed target result. Existing timeout and
+cancellation tests verify the same worker lifecycle.
+
+
+The same regression pass found terminal input already at EOF could close readline while buffered lines remained. The terminal transport now tracks closure and drains its existing iterator without prompting a closed interface. The existing piped-input regression verifies both queued actions still execute. This is terminal I/O mechanism; application semantics and event reduction stay unchanged.
+
+## Exact helper visibility at the native boundary (2026-10-26)
+
+The application review found a Natlang child mentioning a TypeScript helper that its callable folder did not expose. The old packaging check examined only other `.nl` names and could pass this program. Extend that exact source check to the loader's real TypeScript module exports: distinguish default callables from named namespace members, reject inaccessible helper references, and check explicit positional arity. A mechanical scripted native execution verifies the bridge independently of source declarations. This does not evaluate Natlang policy or generate a learned-model answer.
+
+The final graph audit also exposed a native function placed an extra directory below its caller. Its directory was visible as a namespace but was incorrectly accepted as callable. The checker now distinguishes the two and follows qualified namespace-child edges; the research scheduler's actual frontier and feasibility children are reachable. The apprenticeship operation consumes its actual utterance classification and completes questions or clarification without entering the simulation transition path. These repairs retain original independent fixtures and need the same live semantic qualification as the rest of the application sources.

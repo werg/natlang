@@ -1,0 +1,75 @@
+export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
+export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
+
+export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
+
+export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
+export type Decimal = string;
+export type Ratio = { numerator: Decimal; denominator: Decimal; };
+export type Quantity = { value: Decimal; unit: string; };
+export type Money = { minorUnits: string; currency: string; scale: number; };
+export type CareTransition = RecordMeta & WorkRecord & {
+  patientId: string;
+  approvedPlanId: string;
+  destinationId: string;
+  coordinatorId: string;
+  transitionWindow: string;
+};
+export type TransitionRequirement = RecordMeta & WorkRecord & {
+  caseId: string;
+  planRef: string;
+  logisticalOutcome: string;
+  prerequisite: string;
+  responsibleRole: string;
+};
+export type TransitionParticipant = RecordMeta & WorkRecord & {
+  caseId: string;
+  participantId: string;
+  role: string;
+  acceptedResponsibility: string;
+  consentScope: string;
+};
+export type TransitionTask = RecordMeta & WorkRecord & {
+  caseId: string;
+  requirementId: string;
+  prerequisiteIds: string[];
+  scheduledWindow: string;
+  completionEvidence: string;
+};
+export type TransitionOption = RecordMeta & WorkRecord & {
+  caseId: string;
+  affectedTaskIds: string[];
+  logisticalAlternative: string;
+  clinicalReviewNeeded: boolean;
+  approvalRef: string;
+};
+export type TransitionReadiness = RecordMeta & WorkRecord & {
+  caseId: string;
+  taskIds: string[];
+  confirmationRefs: string[];
+  unresolvedBlockers: string[];
+  releaseAuthorityRef: string;
+};
+export type DraftTransitionRequirement = { values: {
+    id?: string;
+    caseId?: string;
+    sourceRefs?: string[];
+    state?: 'draft' | 'qualified' | 'blocked';
+    kind?: string;
+    subject?: string;
+    evidenceIds?: string[];
+    fields?: Record<string, string>;
+    status?: string;
+    planRef?: string;
+    logisticalOutcome?: string;
+    prerequisite?: string;
+    responsibleRole?: string;
+  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
+
+export type TransitionCoordinator = { id: string };
+export type TransitionChange = { equipmentReceipts: EvidenceItem[]; caregiverResponses: EvidenceItem[]; transportUpdates: EvidenceItem[]; appointmentUpdates: EvidenceItem[]; clinicalReviews: EvidenceItem[]; receivingAcknowledgments: EvidenceItem[] };
+export type TransitionDossier = { transition: CareTransition; requirements: TransitionRequirement[]; participants: TransitionParticipant[]; tasks: TransitionTask[]; options: TransitionOption[]; readiness: TransitionReadiness[]; evidence: EvidenceItem[]; checkpoint: TransitionCheckpoint };
+export type PrerequisiteState = { taskId: string; prerequisites: string[]; satisfiedBy: string[]; blockedBy: string[]; state: 'blocked'|'ready'|'completed'|'unknown'; };
+export type ScheduleImpact = { taskId: string; priorWindow: string; revisedWindow: string; affectedAppointments: string[]; accessConflicts: string[]; sourceIds: string[]; };
+export type TransitionCheckpoint = { revision: string; transition: CareTransition; taskStates: PrerequisiteState[]; schedule: ScheduleImpact[]; equipmentDeliveryRefs: string[]; caregiverAcceptances: string[]; clinicalReviewRefs: string[]; receivingAckRefs: string[]; lastCompletedTaskIds: string[]; blockers: string[]; };
+export type TransitionProposal = { application: 'Care Transition Logistics Coordinator'; status: 'ready-for-review'|'blocked'; dependencyStates: PrerequisiteState[]; scheduleImpacts: ScheduleImpact[]; options: TransitionOption[]; readiness: TransitionReadiness[]; blockedTasks: string[]; clinicalEscalations: string[]; actionBoundary: string; resumeState: TransitionCheckpoint; };

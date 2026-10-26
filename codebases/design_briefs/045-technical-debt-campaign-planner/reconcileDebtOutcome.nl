@@ -1,0 +1,8 @@
+---
+args: { ledger: DebtCampaignLedger, request: DebtCampaignRequest, proposal: DebtCampaignProposal, receipt: DebtMeasurementReceipt }
+returns: DebtOutcomeReconciliation
+---
+1. For a consumed receiptId, compare every field with stored evidence. Exact replay locates the matching DebtObservedOutcome and returns { ledger, outcome: stored outcome, receiptDisposition: "replayed" }. Conflicting or unbound identity returns { ledger, outcome: { receiptId, packageId, disposition: "unknown", comparable: false, denominatorChanges: [], residualSymptoms: receipt.residualSymptoms, evidenceRefs: receipt.evidenceRefs, nextReview: ["reconcile measurement receipt identity"] }, receiptDisposition: "held" }; neither branch changes the ledger.
+2. Bind comparison = compareMeasurementContext(request, proposal, receipt). Preserve incomparable observations as unknown rather than normalizing away a changed denominator, workload, window, or metric.
+3. Append the actual receipt and its scoped outcome once. A measured improvement does not erase residual symptoms or a continued workaround; those remain follow-up work. A worse result reopens the implicated package and mechanism review.
+4. Increment revision once and preserve earlier and contradictory outcomes. Bind outcome = { receiptId: receipt.receiptId, packageId: receipt.packageId, disposition: comparison.disposition, comparable: comparison.comparable, denominatorChanges: comparison.reasons, residualSymptoms: receipt.residualSymptoms, evidenceRefs: receipt.evidenceRefs, nextReview: comparison.followUp }. Bind result = { ledger: updatedLedger, outcome, receiptDisposition: "recorded" }; return result. Outcome evidence does not automatically authorize another campaign wave.

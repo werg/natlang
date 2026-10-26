@@ -1,0 +1,124 @@
+{
+  "schema": "natlang.application/1",
+  "id": "033",
+  "title": "Replication planning workbench",
+  "entrypoint": "planReplication.nl",
+  "interfaces": [
+    {
+      "name": "planReplication",
+      "path": "planReplication.nl",
+      "purpose": "Recover a versioned method, resolve dependencies, pin data and seeds, compile only executable tasks, and compare exact complete run receipts.",
+      "stateParameter": "evidence",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "replication-workbench"
+    }
+  ],
+  "persistence": [
+    "ReplicationFrame",
+    "MethodProcedure",
+    "ReplicationGraph",
+    "SeedSensitivityPlan",
+    "DatasetPin",
+    "ReplicationTask",
+    "ArtifactCompleteness",
+    "ReplicationComparison"
+  ],
+  "effects": [
+    "label substitute dependency or changed dataset as adaptation, never exact replication",
+    "withhold incomplete crashed outputs from reuse",
+    "preregister sensitivity seeds before outcomes are observed"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverProcedure",
+        "paths": [
+          "replicationDesk/recoverMethodProcedure.nl",
+          "runCase/recoverProcedure/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "mapDependencies",
+        "paths": [
+          "replicationDesk/constructDependencyGraph.nl",
+          "replicationDesk/adaptUnavailableDependency.nl"
+        ]
+      },
+      {
+        "stage": "resolveAmbiguities",
+        "paths": [
+          "replicationDesk/recoverMethodProcedure.nl",
+          "replicationDesk/preregisterSeedSensitivity.nl"
+        ]
+      },
+      {
+        "stage": "compileExecution",
+        "paths": [
+          "replicationDesk/pinDatasetVersion.nl",
+          "replicationDesk/compileExecutablePlan.nl"
+        ]
+      },
+      {
+        "stage": "compareOutcomes",
+        "paths": [
+          "replicationDesk/verifyArtifactCompleteness.nl",
+          "replicationDesk/compareCompletedRuns.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "replicationDesk/adaptUnavailableDependency.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "replicationDesk/preregisterSeedSensitivity.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "replicationDesk/pinDatasetVersion.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "replicationDesk/verifyArtifactCompleteness.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "replicationDesk/recoverMethodProcedure.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "planReplication.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/recoverProcedure/audit/qualify.nl",
+    "replicationDesk/frameReplication.nl",
+    "replicationDesk/recoverMethodProcedure.nl",
+    "replicationDesk/constructDependencyGraph.nl",
+    "replicationDesk/adaptUnavailableDependency.nl",
+    "replicationDesk/preregisterSeedSensitivity.nl",
+    "replicationDesk/pinDatasetVersion.nl",
+    "replicationDesk/compileExecutablePlan.nl",
+    "replicationDesk/verifyArtifactCompleteness.nl",
+    "replicationDesk/compareCompletedRuns.nl",
+    "planReplication/reconcileReplicationCheckpoint.nl",
+    "replicationDesk/compareCompletedRuns/compareOneCompletedRun.nl"
+  ]
+}

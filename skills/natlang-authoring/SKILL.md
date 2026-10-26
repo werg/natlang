@@ -7,7 +7,7 @@ description: Author, refactor, review, evaluate, and adapt natlang code — inli
 
 You are the capable program author; the interpreter may be a small model. Put the algorithm, decomposition, data contracts, and recovery decisions in source so execution does not depend on the interpreter inventing an architecture.
 
-Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and orchestration. A natural-language function owns a judgment: interpretation, planning, semantic merging, choosing among options, explaining. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
+Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and mechanical sequencing. Natural-language functions own interpretation, planning, semantic merging, choosing among options, explaining, and semantic decisions about which work to perform next. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
 
 For a student served with `program-header` rendering, native natlang calls omit their generic tool schemas because that tool surface was trained into the student. A separate application calling the student directly should still supply schemas for its own tools; serving retains those schemas in this mode.
 
@@ -26,12 +26,36 @@ For evaluation suites, instruction optimization, or trainable program guidance, 
 ## Build a real program
 
 1. State the behavior as typed inputs, results, and observable scenarios, including ambiguity, empty inputs, and partial failure. Types check structure, not meaning.
-2. Write the orchestration in TypeScript. Call natural language where judgment is needed: inline with `` nl`…` `` for a one-off decision, or a named `.nl` function when the instruction deserves its own file, its own helpers, or reuse.
+2. Put semantic control flow in natural-language instructions: which hypothesis to test, which dependencies to reopen, when to change strategy, and what an unresolved result permits next. Use TypeScript for exact transport, arithmetic, and mechanical sequencing. Use inline `` nl`…` `` for a focused decision, or a named `.nl` function when it deserves its own file and typed children. Moving a TypeScript algorithm verbatim into an `.nl` body does not make its design NatLang-native.
 3. Give each natural-language function one coherent responsibility, a precise signature, and the helpers it may call in its callable folder (`foo/` beside `foo.nl`, or `natlang.d/` for inline calls in application code). Put only the program's own code there; the systems it acts on (stores, boards, simulators, verifiers, APIs) are services with declarations, scoped to the functions that should use them.
    When one named function must call another during its own active call, place the second `.nl` inside the first function's callable folder. For a chain `root -> inspect -> decide`, use `root/inspect.nl` and `root/inspect/decide.nl`; two sibling files under `root/` do not give `inspect` access to `decide`.
 4. Write each instruction so a small interpreter can take the next step: name the data and how to reach it, state the step a loop repeats, and keep the words for finishing statuses ("missing", "cannot") for real blockers. See [patterns](references/patterns.md).
 5. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
 6. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
+
+## Design independent applications for a diverse corpus
+
+Start each application from its own users, decisions, persistent domain records, events, and failure modes. Choose its public operations and typed intermediate structures before designing helper functions. A shared request envelope, a fixed number of stages, or identical prepare/decide/construct/audit children across unrelated programs creates repeated architecture even when domain nouns change. Do not use one generator or common semantic scaffold to stand in for those individual designs.
+
+Depth must represent real work. A dependency ledger may need interval-scoped edge traversal; a scheduler may need a finite candidate frontier; a tutoring application may need competing diagnostic hypotheses and an interrupted-session checkpoint. Give each distinct judgment its own typed child when the parent needs that child's result. Reference actual calls with their supplied inputs, pass returned values to downstream decisions, and preserve unresolved outcomes. More files and unused helpers do not establish deeper execution.
+
+Expose meaningful domain operations as the application's interface. Internal parsing or policy-selection helpers are not automatically public endpoints. Let the program own its request types, checkpoint state, result, and recovery operations; optional exact persistence or HTTP infrastructure must not prescribe those semantic contracts. A type-compatible saved checkpoint is necessary for resume: a version number cannot substitute for the domain state that the next call expects.
+
+Own operational behavior in the program as well as analysis. A returned plan needs the domain's real next operations: for example, a learner attempt that updates a diagnostic hypothesis, an issued quote bound to customer terms, or a reset verified against observed room inventory. Decompose these choices into typed Natlang children where the parent needs their findings. Do not append the same generic receipt/review paragraph to every application. Bind the parent’s complete returned value to actual child results on each branch, including blocked and interrupted branches; naming an audit without using its finding leaves the program incomplete. State the actual ledgers, dependencies, authority evidence and invalidation rules for that domain. Exact storage saves these values; it does not choose a universal approval lifecycle. Remove retired crisp solvers and uncalled helpers from both the source inventory and the package after their Natlang replacements cover the actual obligations.
+
+Connect carried state explicitly. A checkpoint nested in a dossier can use `stateParameter` plus `stateInputPath`; a direct checkpoint uses an empty input path. Bind `stateResultPath` to the actual next state and share a `stateKey` only between operations that deliberately consume the same domain state. Keep initial state optional when existing initial invocations supply none; initialize from their actual evidence and preserve independent fixtures. Treat `invalid_checkpoint` as a contract repair: restore or explicitly migrate the domain state rather than substituting an empty ledger.
+
+Validate the frozen program as well as the working directory. Native `uses:` paths need the package boundary (`natlang.json`) in the snapshot. Sibling functions require an explicit supported import or the correct callable-folder relationship. Native type grammar is narrower than TypeScript: use optional fields or `null`, not a type named `undefined`, and use `boolean` rather than boolean literal types. Run the native loader, callable-scope check, fixture type check, and interface-state compatibility check; a compiler-only pass cannot establish those contracts.
+
+An exact TypeScript helper is callable only through the exports visible to its Natlang parent. A default export may bind to the module name; named exports use the module's namespace, such as `prepareWorldActionEffects.worldActionEffectKey(...)`. A similarly named file elsewhere in the application does not create that binding. Recover an unavailable-helper error by correcting the callable folder, declared import or qualified export and checking its actual parameters. Execute the real source through the native loader when verifying an exact helper bridge. A scripted driver can establish that binding and arithmetic work; it cannot establish the quality of the surrounding semantic judgments.
+
+A directory namespace is not itself a callable. An extra directory between a parent and its intended child can hide an entire reasoning tree even when each source parses. Use the actual qualified child or correct the companion-folder placement, then inspect reachability from the public operation and fixture roots. Remove inactive qualification wrappers only after confirming that their original invariants remain owned by active semantic functions and that exact independent fixture roots are retained.
+
+After moving an exact helper, check its relative imports against the frozen source inventory, including type-only imports erased by execution. Keep a domain retry's complete prior result, not just its transition identifier: replay must not select a new challenge, repeat a follow-up or rewind newer history. A missing legacy receipt stays unresolved. Separate a proposed action, its simulated transition and an independently observed action in the values passed to a debrief.
+
+After replacing an inherited scaffold, trace remaining type references from every packaged source and preserve the original domain contracts before pruning unused declarations. Remove a retired source only after checking its callers and concrete replacement. Keeping a dead implementation next to its replacement makes the program's actual ownership harder to review.
+
+Preserve independent oracle answers and observed fixture evidence while changing API representations. Keep source ownership for every original domain invariant and operational scenario, without forcing those obligations into a common pipeline. Static potential-call graphs document source structure; only captured model execution demonstrates actual child calls and result consumption. Do not claim learned quality, training admission, or production deployment from structural checks.
 
 ## Improve instructions with measured adaptation
 
@@ -39,7 +63,21 @@ Use adaptation when the callable contracts and decomposition are sound and the t
 
 Keep search overlays separate from authored source. Load a compatible artifact explicitly, use `adaptation: null` for a baseline task, and revalidate after source or model changes. Read the [adaptation reference](references/adaptation.md) for SDK and CLI examples; use `natlang-integration` when wiring an application host or browser deployment.
 
+## Specialize a student with `natlang tune`
+
+When a program's calls should run on a smaller student, add root examples to `tune.examples.jsonl` (one `{"function", "input", "expected"?, "group"?}` object per line; mark held examples `"protected": true`) and run `natlang tune <program>`. Each call then runs its own definition's adapter stack, never its caller's; call sites, types and instructions stay unchanged. Group examples that share a world so they split together. After editing a definition, run `natlang tune <program> --incremental`; until then the changed definition runs untuned. Recovery: `weights-unavailable` means an adapter is not loaded by the backend (rerun `natlang tune` or restart the process); `weights-incompatible` means the release belongs to another base model (retune); `weights-stale` means a definition changed (`--incremental`). See [docs/TUNING.md](../../docs/TUNING.md).
+
 ## Preserve the execution model
+
+When the host selects semantic execution, await callable-folder module entry
+and inline native boundaries. Captured mutable bindings are shared cells:
+complete the current step before consuming the next Fold event, and use bounded
+Map only for independent work. A capture-conflict means another writer changed
+the binding; reread current state and retry the owning computation deliberately.
+Do not retry a failed native write merely because the surrounding eval failed.
+After a realm-authority change, restart the task and reload its modules instead
+of keeping old exported functions. Keep source and invocation identities in
+controlled fixtures, and distinguish those fixtures from learned-model results.
 
 - A natural-language call is an ordinary awaited function call returning a checked, typed value; a failure rejects with `NatlangCallError` (`outcome`, `detail`, `trace`). Catch it where the application can recover.
 - When a stage invokes an inline literal for one relation, give the literal its source-backed item, supporting evidence and prior semantic context. Its typed result is the relation decision; the parent appends that returned decision to its carried state and passes the original complete input to the next named stage. A narrow literal cannot reconstruct a full source bundle from partial state.
@@ -596,3 +634,15 @@ declared result type after completing the original task. The fresh TRAIN
 self-hosted teacher; it does not change ordinary runtime or compiler semantics.
 
 A completed reply cut off before any executable action consumes an explicitly configured repair budget. Recover with the existing instruction to take the next step with one tool call; return the actual typed result when ready. `model_incomplete: truncated_without_action` records exhausted repairs, separately from transport errors. Successful executed actions/results can establish progress; an emitted rejected proposal cannot. One still-pending long decode is not a failed continuation.
+
+
+### Complete source-level branches
+
+A public Natlang operation must construct its complete declared result on blocked, replayed, partial and successful paths. Initialize nullable downstream values before conditional work, retain the exact missing evidence and checkpoint on blocked paths, and consume each child's actual declared result. Review argument types and field names against the child declaration: an array of sanitization receipts is not a redaction plan, and a string array has no named status fields. Static potential-call and interface checks do not establish this semantic data flow. Preserve distinct domain reasoning trees; remove unused inherited scaffold types instead of carrying old run/stage abstractions into every program.
+
+Persist proposed work separately from witnessed completion. For example, a repair plan's steps cannot populate completed task IDs; completion must name the authorized step and actual verification evidence. A program with a useful analysis result still needs its own history for later appeals, source revisions, interruption and continuation. Choose the domain state representation from that history rather than assigning the same checkpoint schema to unrelated programs.
+
+A root operation that returns outgoing intentions must declare a required effects
+array and construct it on every branch, including `[]` for no action. Calling a
+preparation child does not deliver its intentions: return its actual effects and
+checkpoint together through the root's declared application boundary.

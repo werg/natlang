@@ -1,0 +1,90 @@
+{
+  "application_id": "064",
+  "title": "Facility complaint-to-work-order system",
+  "source_relative_path": "applications/13-construction-property-and-facilities/064-facility-complaint-to-work-order-system.md",
+  "source_sha256": "ea373054f3f320e21aebfca69edc889e8b81bec5682cbe75affd9e986c0f705b",
+  "domain_id": "13",
+  "stages": [
+    {
+      "name": "interpretComplaint",
+      "output_type": "FacilityObservation",
+      "algorithm": "Read occupant descriptions to identify location, symptom, timing, and practical impact. Distinguish observed behavior from guessed causes, resolve ambiguous room names, and preserve access or communication preferences without inferring sensitive personal circumstances.",
+      "gate": "Location and symptom are established or a targeted clarification is requested."
+    },
+    {
+      "name": "linkRelatedIssues",
+      "output_type": "FacilityIssueGroup",
+      "algorithm": "Compare reports by location, asset dependencies, timing, and symptom mechanism. Group likely shared issues for coordinated investigation while retaining unrelated complaints that use similar language; do not close a new report solely because a nearby task was completed.",
+      "gate": "Grouping has evidence and preserves independent outcomes."
+    },
+    {
+      "name": "formWorkOrders",
+      "output_type": "FacilityWorkOrder",
+      "algorithm": "Choose approved inspection or repair task types and required trade qualifications. Sequence dependencies, include access arrangements and occupant impact, and route safety-sensitive or uncertain cases to qualified personnel rather than generating improvised repairs.",
+      "gate": "Task scope and qualification match the observed issue and approved procedure."
+    },
+    {
+      "name": "coordinateVisits",
+      "output_type": "FacilityVisit",
+      "algorithm": "Schedule visits using exact availability and resource constraints, obtain required access consent, and coordinate multiple trades. Preserve cancellations and failed-access events, and update occupants with truthful windows rather than unsupported precise arrival promises.",
+      "gate": "No unauthorized access or impossible trade sequence."
+    },
+    {
+      "name": "verifyResolution",
+      "output_type": "FacilityResolution",
+      "algorithm": "Compare technician completion evidence and subsequent occupant observations with the original complaint. Distinguish a replaced component from resolution of the symptom, detect recurrence, and reopen only the relevant issue when work does not achieve the intended outcome.",
+      "gate": "Closure requires the defined outcome evidence or an explicit accepted monitoring state."
+    }
+  ],
+  "operational_details": [
+    "A room has an informal name: maintain aliases without changing the official asset location.",
+    "A technician cannot gain access: record the failed visit and renegotiate consented access.",
+    "Noise occurs only at certain times: schedule observation under the relevant conditions.",
+    "Several occupants report one issue: send privacy-preserving updates without exposing identities.",
+    "A repair recurs repeatedly: escalate the mechanism investigation rather than opening disconnected tickets."
+  ],
+  "domain_records": {
+    "FacilityCase": [
+      "buildingId: ID",
+      "occupantId: ID",
+      "reportedProblem: string",
+      "accessConstraints: string[]",
+      "coordinatorId: ID"
+    ],
+    "FacilityObservation": [
+      "caseId: ID",
+      "locationId: ID",
+      "assetCandidateIds: ID[]",
+      "symptom: string",
+      "occurrencePattern: string"
+    ],
+    "FacilityIssueGroup": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "sharedMechanism: string",
+      "separateIssueIds: ID[]",
+      "uncertainty: string"
+    ],
+    "FacilityWorkOrder": [
+      "caseId: ID",
+      "issueIds: ID[]",
+      "trade: string",
+      "task: string",
+      "completionEvidence: string"
+    ],
+    "FacilityVisit": [
+      "caseId: ID",
+      "workOrderIds: ID[]",
+      "assignedPartyId: ID",
+      "accessWindow: string",
+      "prerequisiteIds: ID[]"
+    ],
+    "FacilityResolution": [
+      "caseId: ID",
+      "workOrderId: ID",
+      "technicianEvidence: Ref[]",
+      "occupantResponse: Ref",
+      "residualSymptom: string"
+    ]
+  }
+}

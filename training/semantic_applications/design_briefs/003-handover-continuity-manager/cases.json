@@ -1,0 +1,807 @@
+[
+  {
+    "id": "003-recoverCommitments-supported",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "HAND-3",
+          "promisorId": "Arun Vale",
+          "beneficiaryId": "Nia Chen",
+          "promisedOutcome": "Deliver audit packet",
+          "dueAt": "2026-11-03T17:00:00Z",
+          "commitmentKind": "handover",
+          "tenantId": "tenant-003",
+          "id": "Commitment-003",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-003",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-003"
+          ],
+          "retentionPolicyId": "retention-003"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "personId": "Arun Vale",
+        "departureDate": "2026-10-04",
+        "successorIds": [
+          "Nia Chen"
+        ],
+        "projectIds": [
+          "DEC-1"
+        ],
+        "scope": "one named case, current period",
+        "tenantId": "tenant-003",
+        "id": "HANDOVER-ARUN-3",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-003",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-003"
+        ],
+        "retentionPolicyId": "retention-003"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "003-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for recoverCommitments: A departing manager promised three deliverables, completed one without acceptance, and mentioned a potential successor who has not agreed.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "003-recoverCommitments-contradictory",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "HAND-3",
+          "promisorId": "Arun Vale",
+          "beneficiaryId": "Nia Chen",
+          "promisedOutcome": "Deliver audit packet",
+          "dueAt": "2026-11-03T17:00:00Z",
+          "commitmentKind": "handover",
+          "tenantId": "tenant-003",
+          "id": "Commitment-003",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-003",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-003"
+          ],
+          "retentionPolicyId": "retention-003"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "personId": "Arun Vale",
+        "departureDate": "2026-10-04",
+        "successorIds": [
+          "Nia Chen"
+        ],
+        "projectIds": [
+          "DEC-1"
+        ],
+        "scope": "one named case, current period",
+        "tenantId": "tenant-003",
+        "id": "HANDOVER-ARUN-3",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-003",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-003"
+        ],
+        "retentionPolicyId": "retention-003"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "003-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The handover says C-8 was a suggestion with no accepted owner; the draft records a binding promise by Arun."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for recoverCommitments: A departing manager promised three deliverables, completed one without acceptance, and mentioned a potential successor who has not agreed.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "003-recoverCommitments-missing",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "HAND-3",
+          "promisorId": "Arun Vale",
+          "beneficiaryId": "Nia Chen",
+          "promisedOutcome": "Deliver audit packet",
+          "dueAt": "2026-11-03T17:00:00Z",
+          "commitmentKind": "handover",
+          "tenantId": "tenant-003",
+          "id": "Commitment-003",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-003",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-003"
+          ],
+          "retentionPolicyId": "retention-003"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "personId": "Arun Vale",
+        "departureDate": "2026-10-04",
+        "successorIds": [
+          "Nia Chen"
+        ],
+        "projectIds": [
+          "DEC-1"
+        ],
+        "scope": "one named case, current period",
+        "tenantId": "tenant-003",
+        "id": "HANDOVER-ARUN-3",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-003",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-003"
+        ],
+        "retentionPolicyId": "retention-003"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "003-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A chat fragment mentions an audit packet but omits speaker, recipient, and due date."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for recoverCommitments: A departing manager promised three deliverables, completed one without acceptance, and mentioned a potential successor who has not agreed.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "003-workflow-01",
+    "root": "planDepartureHandover.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "docket": {
+        "handoverId": "SYN-003-01",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
+          {
+            "personId": "Arun Vale",
+            "departureDate": "2026-10-04",
+            "successorIds": [
+              "Nia Chen"
+            ],
+            "projectIds": [
+              "DEC-1"
+            ],
+            "scope": "one named case",
+            "tenantId": "tenant-003",
+            "id": "HANDOVER-ARUN-3",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-003",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-003"
+            ],
+            "retentionPolicyId": "retention-003"
+          }
+        ],
+        "correspondence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "003-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+              },
+              {
+                "id": "E2",
+                "source": "003-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Mailbox ACL for employee EV-3 expires Oct 3, one day before Arun Vale’s departure on Oct 4; authorized handover snapshot H-3 includes project commitments but excludes unrelated personal mail."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharingRules": [
+          {
+            "id": "POL-003",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedFolders": [
+          "case-folder-2026"
+        ]
+      },
+      "portfolio": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail. Use only the facts in caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—freeze authorized evidence snapshots without retaining unnecessary personal mail.—as a versioned proposal against caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (freeze authorized evidence snapshots without retaining unnecessary personal mail.) against caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail. Use only the facts in caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—freeze authorized evidence snapshots without retaining unnecessary personal mail.—as a versioned proposal against caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (freeze authorized evidence snapshots without retaining unnecessary personal mail.) against caseId=SYN-003-01, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "003-workflow-02",
+    "root": "planDepartureHandover.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "docket": {
+        "handoverId": "SYN-003-02",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
+          {
+            "personId": "Arun Vale",
+            "departureDate": "2026-10-04",
+            "successorIds": [
+              "Nia Chen"
+            ],
+            "projectIds": [
+              "DEC-1"
+            ],
+            "scope": "one named case",
+            "tenantId": "tenant-003",
+            "id": "HANDOVER-ARUN-3",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-003",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-003"
+            ],
+            "retentionPolicyId": "retention-003"
+          }
+        ],
+        "correspondence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "003-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+              },
+              {
+                "id": "E2",
+                "source": "003-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Successor Nia Chen accepts task T-1 for migration but declines task T-2 for analytics; neither response mentions task T-3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharingRules": [
+          {
+            "id": "POL-003",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedFolders": [
+          "case-folder-2026"
+        ]
+      },
+      "portfolio": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A successor accepts only part of a project: split obligations before acknowledging ownership. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A successor accepts only part of a project: split obligations before acknowledging ownership. Use only the facts in caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—split obligations before acknowledging ownership.—as a versioned proposal against caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (split obligations before acknowledging ownership.) against caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A successor accepts only part of a project: split obligations before acknowledging ownership.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A successor accepts only part of a project: split obligations before acknowledging ownership.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A successor accepts only part of a project: split obligations before acknowledging ownership. Use only the facts in caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—split obligations before acknowledging ownership.—as a versioned proposal against caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (split obligations before acknowledging ownership.) against caseId=SYN-003-02, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "003-workflow-03",
+    "root": "planDepartureHandover.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "docket": {
+        "handoverId": "SYN-003-03",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
+          {
+            "personId": "Arun Vale",
+            "departureDate": "2026-10-04",
+            "successorIds": [
+              "Nia Chen"
+            ],
+            "projectIds": [
+              "DEC-1"
+            ],
+            "scope": "one named case",
+            "tenantId": "tenant-003",
+            "id": "HANDOVER-ARUN-3",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-003",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-003"
+            ],
+            "retentionPolicyId": "retention-003"
+          }
+        ],
+        "correspondence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "003-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+              },
+              {
+                "id": "E2",
+                "source": "003-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer C-3 asks to meet the named engineer Arun Vale; introduction draft INT-3 has no send receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharingRules": [
+          {
+            "id": "POL-003",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedFolders": [
+          "case-folder-2026"
+        ]
+      },
+      "portfolio": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An external customer expects a named person: draft a reviewed introduction and record delivery. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An external customer expects a named person: draft a reviewed introduction and record delivery. Use only the facts in caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—draft a reviewed introduction and record delivery.—as a versioned proposal against caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (draft a reviewed introduction and record delivery.) against caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An external customer expects a named person: draft a reviewed introduction and record delivery.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "An external customer expects a named person: draft a reviewed introduction and record delivery.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An external customer expects a named person: draft a reviewed introduction and record delivery. Use only the facts in caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—draft a reviewed introduction and record delivery.—as a versioned proposal against caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (draft a reviewed introduction and record delivery.) against caseId=SYN-003-03, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "003-workflow-04",
+    "root": "planDepartureHandover.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "docket": {
+        "handoverId": "SYN-003-04",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
+          {
+            "personId": "Arun Vale",
+            "departureDate": "2026-10-04",
+            "successorIds": [
+              "Nia Chen"
+            ],
+            "projectIds": [
+              "DEC-1"
+            ],
+            "scope": "one named case",
+            "tenantId": "tenant-003",
+            "id": "HANDOVER-ARUN-3",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-003",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-003"
+            ],
+            "retentionPolicyId": "retention-003"
+          }
+        ],
+        "correspondence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "003-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+              },
+              {
+                "id": "E2",
+                "source": "003-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Recurring audit job J-3 has three completions at 30-day intervals but no written next due date."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharingRules": [
+          {
+            "id": "POL-003",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedFolders": [
+          "case-folder-2026"
+        ]
+      },
+      "portfolio": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A recurring task has no written deadline: derive a proposed cadence but require owner confirmation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A recurring task has no written deadline: derive a proposed cadence but require owner confirmation. Use only the facts in caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—derive a proposed cadence but require owner confirmation.—as a versioned proposal against caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (derive a proposed cadence but require owner confirmation.) against caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A recurring task has no written deadline: derive a proposed cadence but require owner confirmation.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A recurring task has no written deadline: derive a proposed cadence but require owner confirmation.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A recurring task has no written deadline: derive a proposed cadence but require owner confirmation. Use only the facts in caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—derive a proposed cadence but require owner confirmation.—as a versioned proposal against caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (derive a proposed cadence but require owner confirmation.) against caseId=SYN-003-04, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "003-workflow-05",
+    "root": "planDepartureHandover.nl",
+    "split_group": "design-brief-app-003",
+    "inputs": {
+      "docket": {
+        "handoverId": "SYN-003-05",
+        "desiredOutcome": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "coordinator": "case owner",
+        "expectedVersion": "v1",
+        "sourceVersion": "v1",
+        "departures": [
+          {
+            "personId": "Arun Vale",
+            "departureDate": "2026-10-04",
+            "successorIds": [
+              "Nia Chen"
+            ],
+            "projectIds": [
+              "DEC-1"
+            ],
+            "scope": "one named case",
+            "tenantId": "tenant-003",
+            "id": "HANDOVER-ARUN-3",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-003",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-003"
+            ],
+            "retentionPolicyId": "retention-003"
+          }
+        ],
+        "correspondence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "003-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project lead Arun Vale's signed handover lists commitment C-8: deliver the audit packet to Nia Chen by 2026-11-03; the receiving team acknowledged the owner and deadline."
+              },
+              {
+                "id": "E2",
+                "source": "003-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notebook N-3 contains a private note about delayed field access; its owner has not approved whole-notebook export."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharingRules": [
+          {
+            "id": "POL-003",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedFolders": [
+          "case-folder-2026"
+        ]
+      },
+      "portfolio": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A personal note contains useful context: request selective sharing rather than exporting the whole notebook. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A personal note contains useful context: request selective sharing rather than exporting the whole notebook. Use only the facts in caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—request selective sharing rather than exporting the whole notebook.—as a versioned proposal against caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (request selective sharing rather than exporting the whole notebook.) against caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A personal note contains useful context: request selective sharing rather than exporting the whole notebook.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A personal note contains useful context: request selective sharing rather than exporting the whole notebook.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A personal note contains useful context: request selective sharing rather than exporting the whole notebook. Use only the facts in caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—request selective sharing rather than exporting the whole notebook.—as a versioned proposal against caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (request selective sharing rather than exporting the whole notebook.) against caseId=SYN-003-05, expectedVersion=v1, version=v1, id=HANDOVER-ARUN-3, version=1, id=E1, source=003-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

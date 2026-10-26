@@ -1,0 +1,9 @@
+{
+  "name": "@wllama/wllama",
+  "version": "3.6.1-natlang.1",
+  "description": "wllama 3.6.1 with LoRA blob loading and adapter-safe prompt caching (provenance.json)",
+  "type": "module",
+  "main": "esm/index.js",
+  "types": "esm/index.d.ts",
+  "license": "MIT"
+}

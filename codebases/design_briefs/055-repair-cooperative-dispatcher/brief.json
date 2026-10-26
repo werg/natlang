@@ -1,0 +1,90 @@
+{
+  "application_id": "055",
+  "title": "Repair cooperative dispatcher",
+  "source_relative_path": "applications/11-logistics-redistribution-and-circular-economy/055-repair-cooperative-dispatcher.md",
+  "source_sha256": "334d3e548f79c0e1d1a8f39916f151245f651ed12aa276602f89176d5a1735b7",
+  "domain_id": "11",
+  "stages": [
+    {
+      "name": "interpretSymptoms",
+      "output_type": "RepairSymptom",
+      "algorithm": "Read the request and prior attempts to separate observations from the requester’s diagnosis. Identify approved handling restrictions and information needed for safe routing, without inventing technical causes or giving unqualified hazardous repair instructions.",
+      "gate": "Observations and inferred causes remain distinct; risk flags trigger specialist routing."
+    },
+    {
+      "name": "planDiagnostics",
+      "output_type": "RepairDiagnostic",
+      "algorithm": "Choose a bounded diagnostic task from supplied safe procedures that distinguishes plausible issues. Specify required qualifications, tools, and stop conditions; route work beyond cooperative capability to an appropriate specialist rather than improvising.",
+      "gate": "Diagnostic is approved, informative, and within assigned capability."
+    },
+    {
+      "name": "matchRepairers",
+      "output_type": "RepairAssignment",
+      "algorithm": "Match tasks to volunteers or specialists using stated skills, verified qualifications where required, availability, and consent. Do not infer capability from identity or enthusiasm, and preserve supervision requirements for trainees.",
+      "gate": "Exact scheduling and required qualification checks pass."
+    },
+    {
+      "name": "coordinateWork",
+      "output_type": "RepairWorkPlan",
+      "algorithm": "Sequence inspection, parts procurement, repair, and verification under approved procedures. Reserve shared tools, obtain consent for cost or scope changes, and preserve an explicit stop-and-escalate path when findings exceed the original plan.",
+      "gate": "No unauthorized repair scope, double-booked resource, or unapproved part substitution."
+    },
+    {
+      "name": "captureOutcomes",
+      "output_type": "RepairOutcome",
+      "algorithm": "Compare post-work checks and customer observations with the original symptoms. Record partial success, recurrence, and specialist referrals, then extract scoped lessons that improve future routing without treating one repair as universal proof of a cause.",
+      "gate": "Outcome is verified and lessons retain applicability limits."
+    }
+  ],
+  "operational_details": [
+    "A volunteer’s qualification expires: block assignment requiring it while retaining unrelated skills.",
+    "A donated spare part has uncertain compatibility: request evidence before use.",
+    "The customer’s budget changes: reapprove scope before additional work.",
+    "A repair temporarily masks the symptom: keep a monitoring or recurrence record.",
+    "An item is unsafe to handle in the workshop: route it through the approved specialist process."
+  ],
+  "domain_records": {
+    "RepairRequest": [
+      "requesterId: ID",
+      "itemDescription: string",
+      "reportedSymptoms: string[]",
+      "preferredWindow: string",
+      "coordinatorId: ID"
+    ],
+    "RepairSymptom": [
+      "caseId: ID",
+      "itemId: ID",
+      "observedBehavior: string",
+      "priorAttempt: string",
+      "riskFlag: string"
+    ],
+    "RepairDiagnostic": [
+      "caseId: ID",
+      "symptomIds: ID[]",
+      "approvedCheck: string",
+      "requiredSkill: string",
+      "expectedDistinction: string"
+    ],
+    "RepairAssignment": [
+      "caseId: ID",
+      "taskIds: ID[]",
+      "repairerId: ID",
+      "skillEvidence: Ref[]",
+      "capacitySlot: string"
+    ],
+    "RepairWorkPlan": [
+      "caseId: ID",
+      "assignmentIds: ID[]",
+      "partIds: ID[]",
+      "prerequisiteIds: ID[]",
+      "customerApprovalRef: Ref"
+    ],
+    "RepairOutcome": [
+      "caseId: ID",
+      "workPlanId: ID",
+      "verifiedResult: string",
+      "remainingIssue: string",
+      "reusableLesson: string"
+    ]
+  }
+}

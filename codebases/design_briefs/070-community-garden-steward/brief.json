@@ -1,0 +1,90 @@
+{
+  "application_id": "070",
+  "title": "Community garden steward",
+  "source_relative_path": "applications/14-agriculture-ecology-and-environmental-stewardship/070-community-garden-steward.md",
+  "source_sha256": "b2a5aa8e182c4e940487a94f880998798710ab0b253f60324b9c7a233bcbb4fd",
+  "domain_id": "14",
+  "stages": [
+    {
+      "name": "interpretPreferences",
+      "output_type": "GardenPreference",
+      "algorithm": "Read member requests and prior agreements to identify desired uses, availability, and explicitly stated access needs. Separate preferences from accepted communal obligations and avoid inferring personal circumstances or assigning work without consent.",
+      "gate": "Member commitments are explicit and attributable."
+    },
+    {
+      "name": "modelPlots",
+      "output_type": "PlotConstraint",
+      "algorithm": "Reconcile plot records, field observations, and supplied gardening guidance to describe known conditions and constraints. Preserve uncertainty about soil or other untested properties, and route consequential interventions to appropriate local expertise.",
+      "gate": "Planning uses verified or explicitly uncertain conditions, not invented agronomic facts."
+    },
+    {
+      "name": "generatePlans",
+      "output_type": "GardenPlan",
+      "algorithm": "Propose varied planting and shared-space concepts consistent with supplied guidance and member goals. Include creative communal uses, preserve access paths and resource limits, and identify tradeoffs rather than optimizing only one member’s preferences.",
+      "gate": "Known hard constraints and approved garden rules remain satisfied."
+    },
+    {
+      "name": "negotiateAllocation",
+      "output_type": "GardenAgreement",
+      "algorithm": "Apply supplied allocation principles to feasible plans and propose fair compromises for contested plots or duties. Distinguish a suggestion from accepted responsibility and use reversible trials where preferences conflict without a clear rule-based resolution.",
+      "gate": "No unconsented duty or opaque allocation criterion."
+    },
+    {
+      "name": "coordinateSeason",
+      "output_type": "GardenTask",
+      "algorithm": "Turn accepted plans into bounded seasonal tasks, shared-tool reservations, and reminders. Adapt to changed availability or observations, preserve agreements across seasons, and record actual completion without treating missed tasks as automatic grounds for exclusion.",
+      "gate": "Resource scheduling and member consent remain current through replanning."
+    }
+  ],
+  "operational_details": [
+    "A member becomes unavailable: renegotiate duties instead of silently assigning them to someone else.",
+    "A shared tool breaks: replan affected tasks and preserve reservations awaiting repair.",
+    "A plot’s condition is uncertain: request appropriate assessment before consequential changes.",
+    "A trial allocation succeeds: seek explicit agreement before making it permanent.",
+    "A member leaves mid-season: transfer care and harvest rights through a documented agreement."
+  ],
+  "domain_records": {
+    "GardenSeason": [
+      "gardenId: ID",
+      "memberIds: ID[]",
+      "plotIds: ID[]",
+      "season: string",
+      "coordinatorId: ID"
+    ],
+    "GardenPreference": [
+      "caseId: ID",
+      "memberId: ID",
+      "desiredUse: string",
+      "availability: string",
+      "accessibilityNeed: string"
+    ],
+    "PlotConstraint": [
+      "caseId: ID",
+      "plotId: ID",
+      "observedConditions: string[]",
+      "sharedResourceIds: ID[]",
+      "useRestrictions: string[]"
+    ],
+    "GardenPlan": [
+      "caseId: ID",
+      "plotIds: ID[]",
+      "plantingConcept: string",
+      "sharedActivities: string[]",
+      "requiredResources: string[]"
+    ],
+    "GardenAgreement": [
+      "caseId: ID",
+      "memberIds: ID[]",
+      "plotAssignments: string[]",
+      "sharedDuties: string[]",
+      "acceptanceRefs: Ref[]"
+    ],
+    "GardenTask": [
+      "caseId: ID",
+      "agreementId: ID",
+      "activity: string",
+      "ownerId: ID",
+      "dueWindow: string"
+    ]
+  }
+}

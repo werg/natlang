@@ -1,0 +1,90 @@
+{
+  "application_id": "042",
+  "title": "Release compatibility coordinator",
+  "source_relative_path": "applications/09-software-engineering-and-technical-operations/042-release-compatibility-coordinator.md",
+  "source_sha256": "76f114748f03ac4b83348e39dc238e9f810a73dda2f093a8243d6f9bcab9feb5",
+  "domain_id": "09",
+  "stages": [
+    {
+      "name": "interpretChanges",
+      "output_type": "BehavioralChange",
+      "algorithm": "Read release diffs, requirements, and observed behavior to identify changed semantics, defaults, timing, and error handling. Distinguish internal refactoring from externally meaningful changes even when schemas and type signatures remain compatible.",
+      "gate": "Every claimed behavioral change has evidence or a targeted verification task."
+    },
+    {
+      "name": "mapConsumers",
+      "output_type": "ConsumerDependency",
+      "algorithm": "Relate integrations, customer configurations, examples, and runbooks to the changed behavior. Identify implicit reliance such as ordering or retry assumptions, and preserve uncertain dependencies for targeted replay rather than declaring them unaffected.",
+      "gate": "Dependency claims are specific to behavior, not mere package-name overlap."
+    },
+    {
+      "name": "replayCompatibility",
+      "output_type": "CompatibilityTest",
+      "algorithm": "Execute representative consumer scenarios against baseline and candidate in isolated environments. Compare intended outcomes rather than raw output equality alone, and identify whether a difference is acceptable, breaking, or dependent on an unresolved contract.",
+      "gate": "Paired replay uses identical inputs and independent consumer acceptance criteria."
+    },
+    {
+      "name": "planMigration",
+      "output_type": "MigrationWave",
+      "algorithm": "Construct staged migration plans with prerequisites, owners, compatibility shims where approved, and rollback conditions. Group consumers by meaningful risk and avoid advancing a wave before its required operational readiness evidence exists.",
+      "gate": "Each wave is feasible and has a tested rollback or explicit irreversible-change approval."
+    },
+    {
+      "name": "coordinateRelease",
+      "output_type": "ReleaseReadiness",
+      "algorithm": "Reconcile code, documentation, support guidance, and customer notices into one release state. Explain audience-specific consequences and verify that approved migrations and communications match the exact release artifact being promoted.",
+      "gate": "No release readiness claim over mismatched versions or unresolved blocking compatibility failures."
+    }
+  ],
+  "operational_details": [
+    "A default changes without a schema change: include default-dependent consumer scenarios.",
+    "An integration is unowned: block risky migration and escalate ownership.",
+    "A customer pins an old version: preserve its supported behavior and migration window.",
+    "Rollback would lose newly written data: require an explicit data-compatibility plan.",
+    "Documentation publishes early: label the applicable release and prevent misleading current guidance."
+  ],
+  "domain_records": {
+    "ReleaseReview": [
+      "releaseId: ID",
+      "baselineRevision: string",
+      "candidateRevision: string",
+      "integrationIds: ID[]",
+      "releaseOwnerId: ID"
+    ],
+    "BehavioralChange": [
+      "caseId: ID",
+      "componentId: ID",
+      "oldBehavior: string",
+      "newBehavior: string",
+      "affectedContract: string"
+    ],
+    "ConsumerDependency": [
+      "caseId: ID",
+      "consumerId: ID",
+      "reliedOnBehavior: string",
+      "evidenceRefs: Ref[]",
+      "exposure: string"
+    ],
+    "CompatibilityTest": [
+      "caseId: ID",
+      "consumerId: ID",
+      "scenario: string",
+      "baselineResult: string",
+      "candidateResult: string"
+    ],
+    "MigrationWave": [
+      "caseId: ID",
+      "consumerIds: ID[]",
+      "prerequisiteIds: ID[]",
+      "fallbackPlan: string",
+      "acceptanceCriteria: string[]"
+    ],
+    "ReleaseReadiness": [
+      "caseId: ID",
+      "waveIds: ID[]",
+      "documentationIds: ID[]",
+      "ownerApprovals: Ref[]",
+      "unresolvedRisk: string"
+    ]
+  }
+}

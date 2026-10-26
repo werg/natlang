@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "095",
+  "title": "Culinary Concept Development Kitchen",
+  "entrypoint": "developMenu.nl",
+  "interfaces": [
+    {
+      "name": "developMenu",
+      "path": "developMenu.nl",
+      "purpose": "Develop and stage a service menu against dietary, ingredient, equipment, cost, and tasting constraints.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "kitchen-service-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretBrief",
+        "paths": [
+          "developMenu/interpretKitchenBrief.nl"
+        ]
+      },
+      {
+        "stage": "generateDishes",
+        "paths": [
+          "developMenu/designDishConcepts.nl"
+        ]
+      },
+      {
+        "stage": "constructMenu",
+        "paths": [
+          "developMenu/composeServiceMenu.nl"
+        ]
+      },
+      {
+        "stage": "planAndCost",
+        "paths": [
+          "developMenu/scheduleKitchenLine.nl",
+          "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl",
+          "developMenu/verifyIngredientAndServiceControls.nl",
+          "developMenu/verifyIngredientAndServiceControls/checkDishSafetyByLot.nl",
+          "developMenu/reconcileKitchenBatches.nl"
+        ]
+      },
+      {
+        "stage": "reviewTastings",
+        "paths": [
+          "developMenu/propagateTastingRevisions.nl",
+          "developMenu/verifyIngredientAndServiceControls.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "developMenu/interpretKitchenBrief.nl",
+          "developMenu/verifyIngredientAndServiceControls.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "developMenu/verifyIngredientAndServiceControls.nl",
+          "developMenu/reconcileKitchenBatches.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "developMenu/scheduleKitchenLine.nl",
+          "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "developMenu/propagateTastingRevisions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "developMenu/verifyIngredientAndServiceControls.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "developMenu.nl",
+    "developMenu/composeServiceMenu.nl",
+    "developMenu/assembleKitchenProposal.nl",
+    "developMenu/designDishConcepts.nl",
+    "developMenu/interpretKitchenBrief.nl",
+    "developMenu/propagateTastingRevisions.nl",
+    "developMenu/reconcileKitchenBatches.nl",
+    "developMenu/reconcileKitchenBatches/reconcileScaledBatches.ts",
+    "developMenu/scheduleKitchenLine.nl",
+    "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl",
+    "developMenu/verifyIngredientAndServiceControls.nl",
+    "developMenu/verifyIngredientAndServiceControls/checkDishSafetyByLot.nl",
+    "runCase/interpretBrief/audit/qualify.nl",
+    "types.ts"
+  ]
+}

@@ -372,12 +372,16 @@ export function limitedTransport(transport: ChatTransport, limit: RequestLimit):
   };
 }
 
-export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json } = {}): DecisionScorer {
+export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json;
+  /** Per-decision request fields (a tuned call's weight selection) carried on the decision item itself. */
+  extraFor?: (item: object) => Json | undefined } = {}): DecisionScorer {
   const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
-  return async ({ messages, options: replies }, signal) => {
+  return async (item, signal) => {
+    const { messages, options: replies } = item;
     if (!replies.length) throw new Error('a decision needs at least one option');
+    const itemExtra = options.extraFor?.(item);
     const sequences = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...extra, messages: [...messages, { role: 'assistant', content: reply }],
+      const raw = await transport({ ...extra, ...itemExtra, messages: [...messages, { role: 'assistant', content: reply }],
         add_generation_prompt: false, continue_final_message: false, prompt_logprobs: 0, max_tokens: 1 }, signal);
       const body = isStream(raw) ? await assembleChatCompletion(raw) : raw;
       const rows = body.prompt_logprobs;
@@ -452,6 +456,8 @@ async function* serverSentChunks(body: ReadableStream<Uint8Array>): AsyncIterabl
   } finally { reader.releaseLock(); }
 }
 
+const withoutOverride = (body: Json): Json => { const { x_natlang_model_override: _override, ...rest } = body; return rest; };
+
 export type HttpChatOptions = { endpoint: string; model: string; apiKey?: string; headers?: Record<string, string>;
   /** Exact chat-completions URL for APIs whose route is not `{endpoint}/v1/chat/completions`. */
   chatCompletionsUrl?: string;
@@ -473,7 +479,8 @@ export function httpChatTransport(options: HttpChatOptions): ChatTransport {
     try {
       response = await fetchModel(url, { method: 'POST', signal, headers: { 'content-type': 'application/json',
         ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}), ...options.headers },
-        body: JSON.stringify({ ...body, model: options.model,
+        // A tuned call on a one-adapter-per-request backend names its whole-stack adapter (vLLM LoRA by model name).
+        body: JSON.stringify({ ...withoutOverride(body), model: typeof body.x_natlang_model_override === 'string' ? body.x_natlang_model_override : options.model,
           ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}) }) });
     } catch (error) {
       const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;

@@ -21,7 +21,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
+import { activeNativeAdapters, activeNativeStates, activeRecorder, activeSoftStates, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
@@ -242,6 +242,61 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
   return [...ids];
 }
 
+/** One native-state import at its request location, retaining its declared writer occurrence when present. */
+export type NativeStateRequestBinding = { id: string; source_occurrence?: string; path: string };
+
+/**
+ * Native IDs alone are enough to restore artifacts, but not to bind execution
+ * graph edges: repeated same-ID imports can have distinct writer occurrences.
+ * Keep every occurrence and a stable request path for graph consumers.
+ */
+export function requestNativeStateBindings(messages: readonly unknown[]): NativeStateRequestBinding[] {
+  const bindings: NativeStateRequestBinding[] = [];
+  const add = (id: unknown, source: unknown, path: string) => {
+    if (!isNativeStateId(id)) return;
+    if (source !== undefined && (typeof source !== 'string' || !source))
+      throw Object.assign(new Error(`neuralese-native-grad-invalid: malformed native source occurrence at ${path}`),
+        { code: 'neuralese-native-grad-invalid' });
+    bindings.push({ id, ...(typeof source === 'string' ? { source_occurrence: source } : {}), path });
+  };
+  const visit = (value: unknown, key: string | undefined, path: string) => {
+    if (key === 'arguments' && typeof value === 'string') {
+      try { visit(JSON.parse(value), undefined, path); } catch (error) {
+        if (error instanceof SyntaxError) return; // The transport reports malformed tool arguments separately.
+        throw error;
+      }
+      return;
+    }
+    if (malformedNativePartList(value)) return;
+    if (Array.isArray(value) && value.length > 0 && value.every(part => part && typeof part === 'object' &&
+        (part.type === 'text' && typeof part.text === 'string' ||
+         part.type === 'native_state' && isNativeStateId(part.id)))) {
+      value.forEach((part, index) => {
+        if (part.type === 'native_state') add(part.id, part.source_occurrence, `${path}[${index}]`);
+      });
+      return;
+    }
+    if (typeof value === 'string') {
+      let occurrence = 0;
+      for (const part of runtimeTextToParts(value)) if (part.type === 'native_state')
+        add(part.id, part.source_occurrence, `${path}.sentinel[${occurrence++}]`);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, undefined, `${path}[${index}]`));
+    } else if (value && typeof value === 'object') {
+      const part = value as { type?: unknown; id?: unknown; source_occurrence?: unknown };
+      if (part.type === 'native_state' && isNativeStateId(part.id)) {
+        add(part.id, part.source_occurrence, path);
+        return;
+      }
+      for (const [name, item] of Object.entries(value)) visit(item, name, `${path}.${name}`);
+    }
+  };
+  visit(messages, undefined, 'messages');
+  return bindings;
+}
+
 function materializeNativeStateSentinels(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) {
     if (value.some(part => part && typeof part === 'object' && (part as Json).type === 'neuralese'))
@@ -428,6 +483,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       const artifact = await store.getNativeState(id);
       if (artifact?.metadata.adapter_binding) modes[id] = 'same-base-adapter-state';
     }
+    // A tuned call's own soft states were written by the exact base and are read by its adapted stack.
+    if (activeNativeAdapters().length) for (const id of activeSoftStates()) if (actualIds.has(id)) modes[id] = 'same-base-adapter-state';
     return coefficientStateModes(coefficientPolicy, ids, Object.keys(modes).length ? modes : undefined);
   };
   const requireExactNativeImports = (capture: unknown, ids: readonly string[],

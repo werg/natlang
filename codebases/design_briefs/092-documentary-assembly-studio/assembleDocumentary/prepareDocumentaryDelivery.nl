@@ -1,0 +1,12 @@
+---
+description: Prepare a digest-bound documentary package transfer or reconcile an earlier delivery attempt.
+args:{release:AssemblyRelease;checkpoint:DocumentaryCheckpoint;readback:DocumentaryDeliveryReadback|null}
+returns:DocumentaryDeliveryPreparation
+---
+Require release.status to be frozen, the numeric `release.assembly.revision` to equal numeric checkpoint.revision, the release assembly ID to equal checkpoint.assemblyId, and every deliverable's assemblyDigest to equal checkpoint.digest. Preserve revision as a number in the effect and readback contracts; do not compare stringified deliverable revisions to the assembly revision. If any condition fails, return no effects with the checkpoint unchanged.
+
+When checkpoint.receiptStatus is none, prepare exactly one `deliver-documentary-package` intention containing the frozen deliverables, current clearance refs, assembly ID, numeric assembly revision and digest. Set its idempotency key to `deliver-documentary-package:<assemblyId>:<revision-number>:<digest>`. Return checkpoint advanced to sent for this exact revision before the effect is handed off, so a crash between checkpoint custody and delivery causes status readback rather than a blind resend.
+
+When checkpoint.receiptStatus is confirmed, return no effects and preserve the actual deliveryReceiptId. When checkpoint.receiptStatus is sent or unknown, do not prepare a second delivery. If no readback is supplied, prepare one `read-documentary-delivery-status` intention for the exact package identity with idempotency key `read-documentary-delivery-status:<assemblyId>:<revision>:<digest>`, distinct from delivery, and keep receiptStatus unknown. If a readback is supplied, compare its assembly ID, revision and digest to the frozen package. A matching confirmed readback with a nonempty receipt ID records confirmed status, that exact value in checkpoint.deliveryReceiptId and readback.observedAt in checkpoint.deliveryObservedAt. A matching absent readback returns receiptStatus to none and clears prior deliveryReceiptId and deliveryObservedAt so the exact package may be retried on the next call. Any conflicting identity, conflict status, or missing receipt keeps status unknown and blocks resend. Preserve observedAt and receipt identity as supplied evidence.
+
+Return the prepared effect list and the checkpoint. An effect is only an outgoing intention; only a matching observed readback closes delivery.

@@ -1,0 +1,6 @@
+---
+description: Enumerate every distinct player-visible solved/available state without collapsing branch order.
+args: { room: EscapeRoomState; structure: PuzzleStructureAudit }
+returns: PuzzleFrontierAnalysis
+---
+Use the node identity convention that `requires` lists node IDs that must already be solved and `solves` lists node IDs made available by solving this node. Start with no solved nodes and only room.startNodeId available. For each state, enable an available unsolved node only when every required node is in that state's solved set. Create one successor for each enabled action: add that node to solved and add its `solves` IDs to available. Keep distinct solved/available sets as distinct states; merge two paths only when both exact sets match. Continue until the finite frontier has no unseen state. Preserve an independent branch for each enabled order because later choices can expose a lock that another order avoids. A terminal state is a soft lock when a required goal remains unsolved. Mark a goal reachable only when some enumerated state has solved it; available alone does not prove completion. Return a stable state ID formed from the sorted solved IDs and sorted available IDs, the complete reachable node union, all goals never solved, and every incomplete terminal state ID.

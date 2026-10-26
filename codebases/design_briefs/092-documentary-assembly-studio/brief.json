@@ -1,0 +1,50 @@
+{
+  "application_id": "092",
+  "title": "Documentary Assembly Studio",
+  "source_relative_path": "applications/19-publishing-and-creative-production/092-documentary-assembly-studio.md",
+  "source_sha256": "d7d36f39d4e3db776179367f6b27490bddd23e76405ddd3a5c2f4e5ef0e10adc",
+  "domain_id": "19",
+  "stages": [
+    {
+      "name": "indexMaterial",
+      "output_type": "DocumentarySegment",
+      "algorithm": "Segment interviews and archive descriptions while preserving timecodes, speaker context, and rights. Separate a speaker’s claim from independently established fact and retain qualifiers or questions that affect the meaning of an extract.",
+      "gate": "Every segment has source timecodes, context, and permitted-use status."
+    },
+    {
+      "name": "constructArguments",
+      "output_type": "DocumentaryStructure",
+      "algorithm": "Develop alternative narrative structures around the editorial question and available evidence. Include relevant contradictions and uncertainty, distinguish thematic juxtaposition from causal implication, and avoid inventing connective facts to make the story more dramatic.",
+      "gate": "Narrative argument remains supportable by the selected material."
+    },
+    {
+      "name": "selectEdits",
+      "output_type": "DocumentaryEdit",
+      "algorithm": "Assemble candidate sequences and transitions under exact duration constraints. Inspect how cuts, adjacency, and narration change the apparent meaning of statements, preserving necessary context and identifying misleading implications even when every individual clip is authentic.",
+      "gate": "No materially misleading quote edit or unsupported causal implication."
+    },
+    {
+      "name": "reviewProduction",
+      "output_type": "DocumentaryClearance",
+      "algorithm": "Review the proposed assembly for factual support, rights, attribution, accessibility, and unresolved editorial issues. Distinguish verified claims from attributed testimony and commission targeted fact-checking or clearance tasks before locking the edit.",
+      "gate": "Required factual and rights gates pass; open issues remain visible."
+    },
+    {
+      "name": "freezeAssembly",
+      "output_type": "DocumentaryRelease",
+      "algorithm": "Produce a versioned edit decision list, script, asset manifest, and unresolved-work register. Verify exact timecodes and duration, bind approvals to the assembly, and invalidate affected checks when a source clip or sequence changes.",
+      "gate": "All deliverables refer to the same approved assembly and licensed source versions."
+    }
+  ],
+  "operational_details": [
+    "A short quote loses its qualifier: restore context or reject the cut.",
+    "Two adjacent clips imply causation: require evidence or revise the transition.",
+    "Archive rights expire before release: obtain renewal or replace the asset.",
+    "A speaker corrects a factual statement: preserve the correction in editorial review.",
+    "A late edit shifts duration: update captions, descriptions, and clearance references together."
+  ],
+  "scenario": {
+    "representative_episode": "An interview contains a qualified accusation, archive footage predates the event, and a dramatic sequence would misleadingly imply direct causation.",
+    "independent_truth": "Synthetic source claims and contexts, exact timecodes and durations, rights scopes, and independent misleading-edit review."
+  }
+}

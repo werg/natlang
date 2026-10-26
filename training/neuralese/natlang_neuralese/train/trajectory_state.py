@@ -120,6 +120,7 @@ def drop_file_cache(target):
 
 CHECKPOINT_WRITES = os.environ.get('NATLANG_CHECKPOINT_WRITES',
                                    os.path.expanduser('~/.local/state/natlang/checkpoint-writes.jsonl'))
+CHECKPOINT_SYNC_WINDOW_BYTES = 64 * 1024 * 1024
 
 
 def record_checkpoint_write(path, nbytes, seconds):
@@ -136,42 +137,87 @@ def record_checkpoint_write(path, nbytes, seconds):
 
 def atomic_checkpoint(path, state):
     """Write ``state`` atomically; data jobs pause (io-quiet marker) while the bytes are going out."""
-    with io_quiet(f'checkpoint write {Path(path).name}'):
-        _atomic_checkpoint(path, state)
+    from .checkpoint_safety import CheckpointWriteAdmission, checkpoint_size_upper_bound
+    bound = checkpoint_size_upper_bound(state)
+    with CheckpointWriteAdmission(path, bound):
+        with io_quiet(f'checkpoint write {Path(path).name}'):
+            _atomic_checkpoint(path, state, write_bound_bytes=bound)
     # The verified copy to the external disk runs in the background (checkpoint_offload; never fails the write).
     from .checkpoint_offload import after_write
     after_write(path)
 
 
 class _CheckpointDigestWriter:
-    """Hash the sequential zip writer without exposing a bypassing descriptor."""
-    def __init__(self, stream):
+    """Hash sequential zip output and durably drain bounded write windows."""
+    def __init__(self, stream, *, sync_window_bytes=CHECKPOINT_SYNC_WINDOW_BYTES, write_bound_bytes=None):
+        if type(sync_window_bytes) is not int or sync_window_bytes < 0:
+            raise ValueError('checkpoint sync window must be a nonnegative integer')
         self.stream = stream
         self.digest = hashlib.sha256()
         self.bytes = 0
+        self.sync_window_bytes = sync_window_bytes
+        self._window_start = 0
+        self.write_bound_bytes = write_bound_bytes
+
+    def _sync_window(self):
+        self.stream.flush()
+        fd = self.stream.fileno()
+        if hasattr(os, 'fdatasync'):
+            os.fdatasync(fd)
+        else:
+            os.fsync(fd)
+        drop_file_cache(fd)
+        self._window_start = self.bytes
 
     def write(self, value):
+        view = memoryview(value).cast('B')
+        total = view.nbytes
+        if self.write_bound_bytes is not None and self.bytes + total > self.write_bound_bytes:
+            from .checkpoint_safety import CheckpointReserveError
+            raise CheckpointReserveError('checkpoint stream exceeds its preallocated byte bound')
         if self.stream.tell() != self.bytes:
             raise OSError('checkpoint stream is no longer sequential')
-        written = self.stream.write(value)
-        if written != len(value) or self.stream.tell() != self.bytes + written:
-            raise OSError('checkpoint stream did not write its complete bytes')
-        self.digest.update(value)
-        self.bytes += written
-        return written
+        offset = 0
+        while offset < total:
+            if self.sync_window_bytes:
+                room = self.sync_window_bytes - (self.bytes - self._window_start)
+                if room <= 0:
+                    self._sync_window()
+                    room = self.sync_window_bytes
+                stop = min(total, offset + room)
+            else:
+                stop = total
+            chunk = view[offset:stop]
+            written = self.stream.write(chunk)
+            if written != chunk.nbytes or self.stream.tell() != self.bytes + written:
+                raise OSError('checkpoint stream did not write its complete bytes')
+            self.digest.update(chunk)
+            self.bytes += written
+            offset += written
+            if self.sync_window_bytes and self.bytes - self._window_start == self.sync_window_bytes:
+                self._sync_window()
+        return total
 
     def flush(self):
         return self.stream.flush()
 
 
-def _atomic_checkpoint(path, state):
+def _atomic_checkpoint(path, state, *, write_bound_bytes=None):
     path = Path(path)
     pending = path.with_suffix('.pending')
     started = time.monotonic()
     try:
         with pending.open('wb') as stream:
-            writer = _CheckpointDigestWriter(stream)
+            if write_bound_bytes is not None:
+                # Reserve the actual pending inode too. An unrelated writer
+                # need not honor our lock, so a free-space check alone cannot
+                # protect the bytes this serialization will consume.
+                os.posix_fallocate(stream.fileno(), 0, write_bound_bytes)
+            writer = _CheckpointDigestWriter(stream, sync_window_bytes=CHECKPOINT_SYNC_WINDOW_BYTES,
+                                             write_bound_bytes=write_bound_bytes)
             torch.save(state, writer)
+            if write_bound_bytes is not None:
+                stream.truncate(writer.bytes)
             stream.flush()
             os.fsync(stream.fileno())
             written_stat = os.fstat(stream.fileno())

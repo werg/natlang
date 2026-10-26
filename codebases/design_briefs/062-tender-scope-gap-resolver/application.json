@@ -1,0 +1,106 @@
+{
+  "schema": "natlang.application/1",
+  "id": "062",
+  "title": "Tender scope gap resolver",
+  "entrypoint": "resolveTenderScope.nl",
+  "interfaces": [
+    {
+      "name": "resolveTenderScope",
+      "path": "resolveTenderScope.nl",
+      "purpose": "Compare bidder coverage by current revision, preserve allowances as uncertain, assign unresolved trade seams, apply clarifications with invalidation, and expose commissioning omissions.",
+      "stateParameter": "tender",
+      "stateInputPath": ["comparisonState"],
+      "stateResultPath": ["comparisonState"],
+      "stateKey": "tender-addendum-lineage"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeBids",
+        "paths": [
+          "resolveTenderScope/classifyBidCoverage.nl"
+        ]
+      },
+      {
+        "stage": "mapRequirements",
+        "paths": [
+          "resolveTenderScope/classifyBidCoverage.nl"
+        ]
+      },
+      {
+        "stage": "identifySeams",
+        "paths": [
+          "resolveTenderScope/assignTradeInterfaces.nl"
+        ]
+      },
+      {
+        "stage": "runClarifications",
+        "paths": [
+          "resolveTenderScope/applyTenderClarifications.nl"
+        ]
+      },
+      {
+        "stage": "freezeMatrix",
+        "paths": [
+          "resolveTenderScope/checkCommissioningCoverage.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "resolveTenderScope/classifyBidCoverage.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "resolveTenderScope/applyTenderClarifications.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "resolveTenderScope/assignTradeInterfaces.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "resolveTenderScope/applyTenderClarifications.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "resolveTenderScope/checkCommissioningCoverage.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "bid revision and bidder-requirement cells",
+    "writes": "comparison proposal only"
+  },
+  "effects": [
+    "clarification request",
+    "trade acceptance task",
+    "commissioning gap review"
+  ],
+  "source_files": [
+    "qualification/normalizeBids.nl",
+    "resolveTenderScope.nl",
+    "resolveTenderScope/applyTenderClarifications.nl",
+    "resolveTenderScope/applyTenderClarifications/invalidateClarificationsAfterRevision.nl",
+    "resolveTenderScope/assignTradeInterfaces.nl",
+    "resolveTenderScope/assignTradeInterfaces/compareTradeBoundaryAssumptions.nl",
+    "resolveTenderScope/assignTradeInterfaces/createUnownedConnectionAcceptanceTask.nl",
+    "resolveTenderScope/checkCommissioningCoverage.nl",
+    "resolveTenderScope/classifyBidCoverage.nl",
+    "resolveTenderScope/classifyBidCoverage/assessAllowanceBasis.nl",
+    "resolveTenderScope/classifyBidCoverage/selectCurrentBidRevisions.nl",
+    "types.ts"
+  ]
+}

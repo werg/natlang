@@ -305,10 +305,12 @@ def authenticated_recurrence_context_view(records, pieces):
     def occurrence_path(row, path):
         current = row
         for part in path:
-            if part == "arguments<json>":
-                if not isinstance(current, str):
+            if part.endswith("<json>"):
+                field=part[:-6]
+                raw=(current.get(field) if isinstance(current,dict) else current)
+                if not isinstance(raw,str):
                     return None
-                try: current = json.loads(current)
+                try: current = json.loads(raw)
                 except json.JSONDecodeError: return None
             elif isinstance(current, list) and part.isdigit():
                 index = int(part)
@@ -395,6 +397,16 @@ def authenticated_recurrence_context_view(records, pieces):
                         {"source_receipts": meta.get("source_receipts")})
                 value = occurrence_path(root, occurrence["path"])
                 exact = value == occurrence["body"]
+                if (not exact and occurrence["role"] == "producer"
+                        and occurrence["path"][-1:] == ["$write"]
+                        and isinstance(value, dict)):
+                    # Typed tool-result records bind the producer occurrence
+                    # at the exact `$write` descriptor. Authenticate its
+                    # declared type, event name, and source bytes instead of
+                    # requiring the descriptor object itself to equal text.
+                    exact = (value.get("type") == "Neuralese<string>"
+                             and value.get("name") == occurrence.get("reference")
+                             and value.get("source") == occurrence["body"])
                 if not exact and isinstance(value, (dict, list)):
                     try:
                         exact = json.loads(occurrence["body"]) == value

@@ -12,7 +12,7 @@ import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } fr
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
-import { canGenerateNl } from '../runtime/context.js';
+import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, invocationNodeId } from './graph.js';
+import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -661,9 +661,34 @@ export class NativeToolAgent {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
+    const resolveReadSource = (block: string, declared?: string): string => {
+      // A producer may live in a child or parent invocation's local trace. The
+      // active episode recorder has already authenticated those actual graph
+      // nodes; include them alongside this request's trace without consulting
+      // the global recent-producer cache (which can refer to another episode).
+      const recorded=activeRecorder()?.nativeStateWriters?.(block)??[];
+      const writers=[...new Set([...trace.events.filter(event=>event.kind==='block_write'&&event.block===block&&
+        typeof event.node==='string')
+        .map(event=>String(event.node)),...producerOccurrences(block,producerScopeForTrace(trace)),...recorded])];
+      if (declared === 'external') {
+        if (writers.length) throw new Error(`neuralese-native-grad-invalid: native read ${block} declares external despite an in-episode writer`);
+        return 'external';
+      }
+      if (declared !== undefined) {
+        // Keep the actual episode recorder's cross-invocation writers and the
+        // task-scoped inference index. Neither can borrow another task's state.
+        if (!writers.includes(declared) &&
+            !hasProducerOccurrence(block, declared, session.runtime.episodeBudget))
+          throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
+        return declared;
+      }
+      if (writers.length > 1)
+        throw new Error(`neuralese-native-grad-invalid: native read ${block} has multiple in-episode writers and no occurrence binding`);
+      return writers[0] ?? 'external';
+    };
     const scopedReads = response.raw_response?.__natlang_native_read_occurrences;
     const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
-    const reads: { node: string; port: string; block: string }[] = [];
+    const reads: { node: string; port: string; block: string; source: string; stop: boolean }[] = [];
     type Use={block:string;stop?:true;source?:string};
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
@@ -704,15 +729,15 @@ export class NativeToolAgent {
           const block=use.block;
           const artifact = await this.options.neuralese?.store.getNativeState?.(block);
           if (!artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
+          const source = resolveReadSource(block, use.source);
           const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
             ...(use.stop?{stop_gradient:true}:{}),
             format: 'native-state', native_identity: {
               architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
               embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block',
-              use.source ?? activeRecorder()?.nativeStateWriter?.(block))]);
-          if (node) reads.push({ node, port: 'read', block });
+            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
+          if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
         }
       }
     }
@@ -732,20 +757,64 @@ export class NativeToolAgent {
       const [messageIndex, partIndex] = item.positions[0] as [number, number];
       const artifact = await this.options.neuralese?.store.getNativeState?.(item.id);
       if (!artifact) throw new Error(`native-state consumer artifact ${item.id} is unavailable for provenance`);
+      const source = resolveReadSource(item.id, typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined);
       const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: item.id,
         ...(item.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {
           architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
-        [blockInput(item.id, 'block', typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined)]);
-      if (node) reads.push({ node, port: 'read', block: item.id });
+        [blockInput(item.id, 'block', source, producerScopeForTrace(trace))]);
+      if (node) reads.push({ node, port: 'read', block: item.id, source, stop: item.stop_gradient === true });
+    }
+    // The model server's captured prompt is the authoritative record of what
+    // entered the model. A caller can supply context outside `messages`, so
+    // reconcile that inventory here instead of silently omitting a consumed
+    // state from the episode graph.
+    const capturedPrompt = response.raw_response?.x_natlang_rl_capture as { prompt?: unknown } | undefined;
+    if (Array.isArray(capturedPrompt?.prompt)) {
+      const remaining = [...reads];
+      for (const [promptIndex, raw] of capturedPrompt.prompt.entries()) {
+        if (!raw || typeof raw !== 'object' || (raw as { kind?: unknown }).kind !== 'native_state') continue;
+        const segment = raw as { id?: unknown; source_state_id?: unknown; source_occurrence?: unknown;
+          stop_gradient?: unknown; semantic_adaptation?: unknown };
+        if (typeof segment.id !== 'string' || !/^nzs1_[a-z2-7]{52}$/.test(segment.id) ||
+            segment.source_state_id !== undefined && (typeof segment.source_state_id !== 'string' ||
+              !/^nzs1_[a-z2-7]{52}$/.test(segment.source_state_id)) ||
+            segment.source_occurrence !== undefined && typeof segment.source_occurrence !== 'string' ||
+            segment.stop_gradient !== undefined && segment.stop_gradient !== true)
+          throw new Error('neuralese-native-grad-invalid: captured prompt has an invalid native-state occurrence');
+        const sourceBlock = segment.source_state_id ?? segment.id;
+        if (sourceBlock !== segment.id && !segment.semantic_adaptation)
+          throw new Error('neuralese-native-grad-invalid: decoded native prompt lacks its differentiable adaptation receipt');
+        const candidates = remaining.filter(read => read.block === sourceBlock && read.stop === (segment.stop_gradient === true) &&
+          (segment.source_occurrence === undefined || read.source === segment.source_occurrence));
+        if (candidates.length) {
+          if (segment.source_occurrence === undefined && new Set(candidates.map(read => read.source)).size !== 1)
+            throw new Error('neuralese-native-grad-invalid: captured native input has multiple possible graph origins');
+          const matched = candidates[0]!;
+          remaining.splice(remaining.indexOf(matched), 1);
+          continue;
+        }
+        const artifact = await this.options.neuralese?.store.getNativeState?.(sourceBlock);
+        if (!artifact) throw new Error(`native-state consumer artifact ${sourceBlock} is unavailable for provenance`);
+        const source = resolveReadSource(sourceBlock, typeof segment.source_occurrence === 'string' ? segment.source_occurrence : undefined);
+        const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: sourceBlock,
+          ...(segment.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {
+            architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+            tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+            embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
+          positions: [0, promptIndex], position_source: 'captured_prompt_segment' }, [blockInput(sourceBlock, 'block', source, producerScopeForTrace(trace))]);
+        if (node) reads.push({ node, port: 'read', block: sourceBlock, source, stop: segment.stop_gradient === true });
+      }
+      if (remaining.length)
+        throw new Error('neuralese-native-grad-invalid: request graph contains native reads absent from the captured model prompt');
     }
     return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), temperature: readout?null:this.options.temperature ?? null,
       seed: readout || session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
         runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
-      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads], turnId);
+      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port}))], turnId);
   }
 
   private reviewTools(): unknown[] {
@@ -1086,7 +1155,8 @@ export class NativeToolAgent {
       const adapters = adapterCells(lam);
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
-      scores = await decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) }, session.runtime.signal);
+      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) },
+        session.runtime.signal));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
@@ -1385,7 +1455,9 @@ export class NativeToolAgent {
             deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
           max_tokens: statedWindow === null ? limit :
             Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
-        response = await (turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
+        // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
+        // across the awaits above, so the call starts inside its own frame on every platform.
+        response = await runInFrame(session.runtime.frame, () => turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
           this.driver(turnRequest, session.runtime.signal));
         streamed = false;
       } catch (error) {

@@ -44,7 +44,13 @@ def _fixture(tmp_path, monkeypatch):
             # The tiny fixture uses dense experts/attention in FP32 for CPU
             # exactness. Select the dense latent policy, never ternary codes.
             fresh.model.port.hf.natlang_precision = 'bf16'
-        fresh.optimizer = make_native_optimizer(fresh.model, lr=config['backbone_lr'], in_backward=False)[0]
+        source_lr=3e-4 if name=='lfm' else 7e-5
+        source_ns='cubic5' if name=='lfm' else 'quintic'
+        fresh.optimizer = make_native_optimizer(fresh.model, lr=source_lr, latent_ns=source_ns, in_backward=False)[0]
+        fresh.optimizer_options = {'lr':source_lr,'weight_decay':.1,'latent_ns':source_ns,
+            'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None}
+        fresh.optimizer_state_storage = 'device'
+        fresh.fp8_profile = {'kind':'off','recipe':'delayed','amax_history_len':16}
         return fresh
     monkeypatch.setattr(stage, 'load_participant', load)
     return config_path, manifest, config, row
@@ -65,6 +71,79 @@ def _assert_same(left, right):
         assert left == right
 
 
+def _install_source_baseline_eval(monkeypatch,tmp_path,config_path,config):
+    """Protocol fixture for collector outcomes; the real runner stays separate."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.eval.native_state import task_execution_receipt
+    from natlang_neuralese.eval.task_cadence import task_eval_policy_identity,task_eval_runtime_identity
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    packet=tmp_path/'source-baseline-packet.json';packet.write_text('{}\n')
+    declaration={'packet':{'path':str(packet.resolve()),'sha256':sha256_file_hex(packet)},
+        'cases':[0],'reference_successes':None,'min_successes':0}
+    config['task_eval']=declaration
+    config_path.write_text(json.dumps(config))
+    def measure(participants,export,selected,out,step,device,vae=None,stop_requested=None,source_baseline=False):
+        if not source_baseline:return {}
+        assert vae is None and step>=0
+        result={}
+        for name,participant in participants.items():
+            run=Path(out)/name.replace(':','-');run.mkdir(parents=True,exist_ok=True)
+            counts={outcome:0 for outcome in TASK_OUTCOMES};counts['invalid_action']=1
+            score={'schema':'natlang.in-run-task-eval/1','step':step,'run':str(run),'cases':1,
+                'case_indices':[0],'packet_sha256':declaration['packet']['sha256'],'outcome_counts':counts,
+                'complete':True,'eligible':True,'task_successes':0,
+                'cases_detail':[{'id':name+':baseline','outcome':'invalid_action'}]}
+            score_path=run/'task-score.json';score_path.write_text(json.dumps(score))
+            summary={key:value for key,value in score.items()if key!='cases_detail'}
+            receipt=task_execution_receipt(summary,participant.identity,
+                checkpoint_sha256=participant.identity['checkpoint_sha256'])
+            policy_sha=task_eval_policy_identity(declaration)
+            runtime=task_eval_runtime_identity(declaration)
+            receipt.update(source_baseline=True,baseline_comparison_floor=0,
+                task_eval_policy_sha256=policy_sha,task_runtime_identity=runtime)
+            path=run/'native-task-execution-receipt.json';path.write_text(json.dumps(receipt))
+            result[name]={'path':str(path.resolve()),'sha256':sha256_file_hex(path),
+                'passed':receipt['passed'],'task_successes':receipt['task_successes']}
+        return result
+    monkeypatch.setattr(stage,'measure_tasks',measure)
+
+
+def test_inherited_participant_optimizer_policy_beats_generic_curriculum_defaults():
+    from natlang_neuralese.train.native_semantic_stage import _inherited_optimizer_options
+
+    saved={'identity':{'optimizer_options':{'lr':3e-4,'learned_row_lr':2e-4,
+        'interface_row_lr':1e-4,'weight_decay':.02,'latent_ns':'cubic5',
+        'native_optimizer_migration':None}}}
+    actual=_inherited_optimizer_options(saved,participant='lfm')
+    assert actual==saved['identity']['optimizer_options']
+    shared={'training_options':{'optimizer_options':{'lr':7e-5,'weight_decay':.08,
+        'latent_ns':'quintic','learned_row_lr':None,'interface_row_lr':None}}}
+    assert _inherited_optimizer_options(shared,participant='mellum')['lr']==7e-5
+    assert _inherited_optimizer_options(shared,participant='mellum')['latent_ns']=='quintic'
+    with pytest.raises(ValueError,match='omitted its exact optimizer'):
+        _inherited_optimizer_options({'options':{'latent_ns':'quintic'}},participant='mellum')
+
+
+def test_semantic_participant_preserves_optimizer_state_storage_policy():
+    from natlang_neuralese.train.native_semantic_stage import _apply_optimizer_state_storage
+    from natlang_neuralese.train.optim import MuonSR
+
+    parameter=torch.nn.Parameter(torch.ones(3,3))
+    optimizer=MuonSR([parameter],lr=1e-4)
+    # The regular optimizer load path materializes tensors on the parameter
+    # device, so semantic continuation reapplies the bound storage policy after
+    # loading rather than treating serialized tensor placement as authority.
+    optimizer.state[parameter]['momentum']=torch.ones_like(parameter)
+    state=copy.deepcopy(optimizer.state_dict())
+    optimizer.load_state_dict(state)
+    assert optimizer.state_storage=='device'
+    assert _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'cpu'},participant='lfm')=='cpu'
+    assert optimizer.state_storage=='cpu'
+    assert torch.equal(optimizer.state[parameter]['momentum'],torch.ones_like(parameter))
+    with pytest.raises(ValueError,match='unknown optimizer state storage'):
+        _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'pinned'},participant='lfm')
+
+
 def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypatch):
     config, manifest, _, row = _fixture(tmp_path, monkeypatch)
     torch.manual_seed(1234)
@@ -83,6 +162,13 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
     for name in whole['participants']:
         _assert_same(whole['participants'][name]['model_state'], restored['participants'][name]['model_state'])
         _assert_same(whole['participants'][name]['optimizer'], restored['participants'][name]['optimizer'])
+        expected_lr=3e-4 if name=='lfm' else 7e-5
+        assert restored['participants'][name]['training_options']['optimizer_options']['lr']==expected_lr
+        assert restored['participants'][name]['training_options']['optimizer_options']['latent_ns']==(
+            'cubic5' if name=='lfm' else 'quintic')
+        assert restored['participants'][name]['training_options']['fp8_profile']=={
+            'kind':'off','recipe':'delayed','amax_history_len':16}
+        assert restored['participants'][name]['training_options']['optimizer_state_storage']=='device'
     _assert_same(whole['training']['rng'], restored['training']['rng'])
     assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
                for values in resumed['exposure'].values() for counts in values.values())
@@ -90,6 +176,50 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
     assert export['checkpoint']['sha256'] == sha256_file_hex(checkpoint)
     assert {value['native_identity']['checkpoint_sha256'] for value in export['models'].values()} == {
         export['checkpoint']['sha256']}
+
+
+def test_shared_completion_exports_resumable_participant_return_bundle(tmp_path,monkeypatch):
+    from natlang_neuralese.model.native_bundle import export_bundle
+    from natlang_neuralese.rl.local_cycle_semantic_return import _checkpoint_state
+    from natlang_neuralese.common.hashing import sha256_file_hex
+
+    config_path,manifest,_,_=_fixture(tmp_path,monkeypatch)
+    from natlang_neuralese.eval import native_semantic_runtime
+    monkeypatch.setattr(native_semantic_runtime,'qualify_semantic_transport',
+        lambda *args,**kwargs:{'passed':False,'fixture_scope':'bundle-custody-only'})
+    original=stage.load_participant
+    parent=tmp_path/'source-parent.pt';parent.write_bytes(b'actual lineage anchor')
+    parent_sha=sha256_file_hex(parent)
+    def load(name,binding,config,device):
+        entry=original(name,binding,config,device)
+        entry.snapshot_ancestors=[parent_sha]
+        entry.source_rng={'torch_cpu':torch.get_rng_state().clone()}
+        def save_pretrained(directory):
+            directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+            (directory/'tokenizer.json').write_text(json.dumps({'participant':name}))
+        entry.tokenizer.save_pretrained=save_pretrained
+        entry.tokenizer.chat_template='{{ messages }}'
+        entry.tokenizer.apply_chat_template=lambda messages,**kwargs:'fixture transcript'
+        return entry
+    monkeypatch.setattr(stage,'load_participant',load)
+    out=tmp_path/'shared'
+    result=stage.run(config_path,manifest,out,device='cpu')
+    assert result['completed']
+    completion=json.loads((out/'shared-stage-completion.json').read_text())
+    assert completion['checkpoint']['sha256']==sha256_file_hex(out/'checkpoint.pt')
+    assert completion['adapter']['sha256']==sha256_file_hex(out/'semantic-adapter.json')
+
+    for participant in ('lfm','mellum'):
+        bundle=export_bundle(out/'checkpoint.pt',tmp_path/'returns'/participant,
+            semantic_adapter=out/'semantic-adapter.json',participant=participant)
+        payload,training=_checkpoint_state(bundle['checkpoint']['resolved'],participant)
+        assert payload['optimizer'] and payload['source_rng']
+        assert payload['training_options']['native_snapshot_ancestors']==[parent_sha]
+        assert payload['sft_progress'] is not None
+        assert training['sft_progress']==payload['sft_progress']
+        adapter=json.loads(Path(bundle['semantic_adapter']['resolved']).read_text())
+        assert adapter['models'][participant]['checkpoint']['sha256']==bundle['checkpoint']['sha256']
+        assert adapter['models'][participant]['mandatory_sft'] is not None
 
 
 def test_appended_data_and_larger_epochs_are_not_mistaken_for_finished(tmp_path, monkeypatch):
@@ -437,6 +567,7 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
     """Actual two-port VAE/joint updates; readiness transport is a protocol fixture."""
     path,manifest,config,_=_fixture(tmp_path,monkeypatch)
     config['snapshot_preparation']=True
+    _install_source_baseline_eval(monkeypatch,tmp_path,path,config)
     bindings=json.loads(manifest.read_text())
     for binding in bindings['models']:
         binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
@@ -463,7 +594,8 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
         native_readiness.validate_completion(tmp_path/'preparation/shared-stage-completion.json',published)
     controller=tmp_path/'controller.json'
     controller.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1',
-        'participants':bindings['models'],'out':str(tmp_path/'preparation'),'curriculum':str(path),
+        'participants':bindings['models'],'out':str(tmp_path/'preparation'),
+        'curriculum':frozen['curriculum']['path'],
         'command':['unused-no-launch-during-once-inspection','--participants','{participants}','--out','{out}']}))
     with monkeypatch.context() as local:
         local.setattr(native_readiness,'ready_participants',lambda config:(bindings['models'],[]))
@@ -509,6 +641,10 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
         device='cpu',max_updates=1)
     adopted=CheckpointPolicy.load(tmp_path/'adopted/checkpoint.pt')
     assert continued['step']==2 and not continued['production_ready']
+    for name in ('lfm','mellum'):
+        assert continued['source_task_baselines'][name]['native_identity']['checkpoint_sha256']=='b'*64
+        resolved=json.loads(Path(continued['resolved_curriculum']['path']).read_text())
+        assert resolved['models'][name]['task_eval']['reference_successes']==0
     assert adopted['training']['participant_refreshes'][-1]['changed_models']==['lfm','mellum']
     for name,participant in adopted['participants'].items():
         _assert_same(participant['optimizer'],loaded[name])
@@ -524,6 +660,7 @@ def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exa
     """Actual tiny two-port optimizer/VAE work; readiness proofs are protocol fixtures."""
     path,manifest,config,_=_fixture(tmp_path,monkeypatch)
     config.update(snapshot_preparation=True,adaptive_refresh={'updates_per_phase':1})
+    _install_source_baseline_eval(monkeypatch,tmp_path,path,config)
     bindings=json.loads(manifest.read_text())
     for binding in bindings['models']:
         binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
@@ -599,6 +736,7 @@ def test_generated_snapshot_full_multirow_vae_epoch_resumes_after_quantum(tmp_pa
     config['snapshot_preparation']=snapshot['snapshot_preparation']
     if 'adaptive_refresh'in snapshot:config['adaptive_refresh']=snapshot['adaptive_refresh']
     config['inherit_optimizer']=snapshot['inherit_optimizer']
+    _install_source_baseline_eval(monkeypatch,actual,path,config)
     monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
     from natlang_neuralese.train import native_continuation
     monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))

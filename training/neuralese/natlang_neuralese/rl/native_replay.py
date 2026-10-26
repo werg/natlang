@@ -557,8 +557,16 @@ def _validate_adapter_transition(engine,before_identity,before_binding,after_ide
                 or current.native_identity!=engine.native_identity or behavior.source_artifact_id!=current.source_artifact_id
                 or (behavior.provenance or {}).get('adapter_spec')!=(current.provenance or {}).get('adapter_spec')):
             raise ValueError('native-policy evaluation changed the exact frozen basis or matrix specification')
+        spec=(behavior.provenance or {}).get('adapter_spec') or {}
+        if spec.get('kind')=='free-lora':
+            # Free LoRA carries both factors in its coefficients; there is no separate frozen basis.
+            if behavior.source_artifact_id is not None:
+                raise ValueError('native-policy free-LoRA behavior adapter names a basis')
+            continue
         basis=archived(behavior.source_artifact_id)
-        if basis.kind!='adapter-basis' or (basis.provenance or {}).get('adapter_spec')!=(behavior.provenance or {}).get('adapter_spec'):
+        # A nested canonical slice binds the shared canonical basis spec it slices (tune §5.3).
+        expected=spec.get('basis_spec') if spec.get('bases')=='nested-canonical-slice-v1' else spec
+        if basis.kind!='adapter-basis' or (basis.provenance or {}).get('adapter_spec')!=expected:
             raise ValueError('native-policy behavior archive does not bind its actual frozen basis')
 
 

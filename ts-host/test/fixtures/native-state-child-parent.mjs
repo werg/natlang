@@ -10,6 +10,8 @@ import { validateSchema } from '../../dist/native/graph.js';
 import { ModelTurnRecorder, setRecorderSource } from '../../dist/native/model-recording.js';
 import { nativeStateConsumerFromInfo } from '../../dist/native/neuralese.js';
 const [endpoint, archive, recording] = process.argv.slice(2);
+// These manually opened invocations belong to one actual execution graph.
+const sharedEpisodeBudget = { used: 0 };
 const recorder = recording ? new ModelTurnRecorder() : undefined;
 const recordingScope=new AsyncLocalStorage();
 if (recorder) setRecorderSource(() => recordingScope.getStore() ?? recorder);
@@ -27,7 +29,7 @@ const driver = Object.assign(async request => {
   if (raw.raw_response?.native_state?.blocks?.length) assert.ok(produced, 'native output retains its actual wire parts');
   return { ...raw, text: undefined, calls: [['return_result', { status: 'success', value: produced ? content : raw.text || 'consumed' }]] };
 }, { neuralese: true, decide: server.decide });
-const child = open({ type: '() => Neuralese<string>', instructions: 'Produce a useful memo.' }, { neuralese }).session;
+const child = open({ type: '() => Neuralese<string>', instructions: 'Produce a useful memo.' }, { neuralese, sharedEpisodeBudget }).session;
 await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(child);
 assert.ok(child.lam.return?.$neuralese, JSON.stringify(child.lam));
 const id = child.lam.return.$neuralese.id;
@@ -40,15 +42,15 @@ assert.equal((await reopened.getNativeState(id)).id, id);
 assert.deepEqual(await server.artifacts.collect(new Set()), [id]);
 assert.equal(await server.artifacts.hasNativeState(id), false, 'parent must restore exact native state from its persistent archive');
 const parent = open({ type: '(memo: Neuralese<string>) => string', instructions: 'Consume the child memo.',
-  args: { memo: child.lam.return } }, { neuralese }).session;
+  args: { memo: child.lam.return } }, { neuralese, sharedEpisodeBudget }).session;
 await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(parent);
 assert.equal(parent.lam.return, 'consumed');
 const read = parent.runtime.trace.events.find(event => event.kind === 'block_read' && event.block === id);
 assert.ok(read?.inputs.some(input => input.node === write.node), 'parent reads the actual child producer, not an invented external edge');
 if (recorder) {
   const decisions = [0,1].map(index => open({ type: "(memo: Neuralese<string>) => 'yes' | 'no'",
-    instructions:'Choose the result from the memo.', args:{memo:child.lam.return} }, {neuralese}).session);
-  const decisionRecorders=decisions.map(()=>new ModelTurnRecorder());
+    instructions:'Choose the result from the memo.', args:{memo:child.lam.return} }, {neuralese, sharedEpisodeBudget}).session);
+  const decisionRecorders=decisions.map(()=>{const own=new ModelTurnRecorder();own.absorb(recorder);return own;});
   await Promise.all(decisions.map((session,index)=>recordingScope.run(decisionRecorders[index],()=>
     new NativeToolAgent(driver,{maxTurns:2,neuralese,decisionReadout:'finite-returns'}).run(session))));
   for(const own of decisionRecorders){

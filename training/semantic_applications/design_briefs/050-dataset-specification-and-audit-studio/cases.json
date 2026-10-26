@@ -1,0 +1,559 @@
+[
+  {
+    "id": "050-dataset-specification-and-audit-studio-gate-supported",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ],
+          "caseId": "case-50"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "targetPopulation",
+            "evidenceIds": [
+              "050-dataset-specification-and-audit-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "dataset intended-use brief and sample audit",
+        "evidence": [
+          {
+            "id": "050-dataset-specification-and-audit-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Dataset sample lacks rural-language and consent-purpose fields for 240 intended-use records. Case case-50; current first-stage record values: {\"prohibitedUses\": [\"credit scoring\", \"law-enforcement screening\"], \"requiredSlices\": [\"rural-language coverage\", \"consent purpose\"], \"targetPopulation\": \"rural-language applicants in the intended service region\", \"task\": \"train a service eligibility classifier\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "targetPopulation",
+          "value": "rural-language applicants in the intended service region",
+          "evidenceIds": [
+            "050-dataset-specification-and-audit-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "dataset intended-use brief and sample audit: The intended model use requires rural-language coverage and consent-purpose provenance. A sample partition of 240 records has neither language nor consent fields populated. Apply the first-stage gate to the record and source versions; Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-gate-contradictory",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "urban-English applicants"
+          ],
+          "caseId": "case-50"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "targetPopulation",
+            "evidenceIds": [
+              "050-dataset-specification-and-audit-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "dataset intended-use brief and sample audit",
+        "evidence": [
+          {
+            "id": "050-dataset-specification-and-audit-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Dataset sample lacks rural-language and consent-purpose fields for 240 intended-use records. Case case-50; current first-stage record values: {\"prohibitedUses\": [\"credit scoring\", \"law-enforcement screening\"], \"requiredSlices\": [\"rural-language coverage\", \"consent purpose\"], \"targetPopulation\": \"rural-language applicants in the intended service region\", \"task\": \"train a service eligibility classifier\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "requiredSlices",
+          "value": "[\"urban-English applicants\"]",
+          "evidenceIds": [
+            "050-dataset-specification-and-audit-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "dataset intended-use brief and sample audit: The intended model use requires rural-language coverage and consent-purpose provenance. A sample partition of 240 records has neither language nor consent fields populated. Apply the first-stage gate to the record and source versions; Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-gate-missing",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-50"
+        },
+        "missingFields": [
+          "targetPopulation"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes targetPopulation?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "dataset intended-use brief and sample audit",
+        "evidence": [],
+        "missing": [
+          "targetPopulation"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "dataset intended-use brief and sample audit: The intended model use requires rural-language coverage and consent-purpose provenance. A sample partition of 240 records has neither language nor consent fields populated. Apply the first-stage gate to the record and source versions; Report both coverage gaps and stop acquisition claims until the intended-use criteria are observable.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-operational-1",
+    "root": "governDatasetEdition.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-1",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-1; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-1",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
+          {
+            "id": "050-operational-detail-1-source-v2",
+            "source": "Dataset specification and audit studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R050 Dataset steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R050 Dataset steward records: License L50 permits research analysis of dataset D50 but expressly forbids redistribution of source documents. Release candidate RC50 includes the raw documents and is scheduled for partner download on 2026-10-20. This current event is source 050-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 050-dataset-specification-and-audit-studio-operational-1. The supplied typed prior 050-prior-datasetuse-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "License L50 permits research analysis of dataset D50 but expressly forbids redistribution of source documents. Release candidate RC50 includes the raw documents and is scheduled for partner download on 2026-10-20."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "suppliedRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedSourceIds": [
+          "050-operational-detail-1-source-v2"
+        ],
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 050-dataset-specification-and-audit-studio-operational-1 against this factual event: License L50 permits research analysis of dataset D50 but expressly forbids redistribution of source documents. Release candidate RC50 includes the raw documents and is scheduled for partner download on 2026-10-20. Original §9 detail: A source license permits research but not redistribution: enforce the release boundary. Correct handling applies “enforce the release boundary.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "License L50 permits research analysis of dataset D50 but expressly forbids redistribution of source documents. Release candidate RC50 includes the raw documents and is scheduled for partner download on 2026-10-20.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A source license permits research but not redistribution: enforce the release boundary.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: License L50 permits research analysis of dataset D50 but expressly forbids redistribution of source documents. Release candidate RC50 includes the raw documents and is scheduled for partner download on 2026-10-20. It links source 050-operational-detail-1-source-v2 v2 with prior typed DatasetUse record 050-prior-datasetuse-detail-1-v1 v1 and keeps unresolved scope visible for L50, D50, RC50.",
+      "durable_state": "The proposal retains prior record 050-prior-datasetuse-detail-1-v1 v1 and versions only the affected state for L50, D50, RC50 against source 050-operational-detail-1-source-v2 v2; it applies “enforce the release boundary.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L50, D50, RC50 and the scope supported by source 050-operational-detail-1-source-v2 v2; it represents “enforce the release boundary.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-operational-2",
+    "root": "governDatasetEdition.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-2",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-2; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-2",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
+          {
+            "id": "050-operational-detail-2-source-v2",
+            "source": "Dataset specification and audit studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R050 Dataset steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R050 Dataset steward records: Near-duplicate source records N50-A and N50-B share the same underlying report hash and appear in train and test splits. Their surface text differs only by whitespace and a header date. This current event is source 050-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 050-dataset-specification-and-audit-studio-operational-2. The supplied typed prior 050-prior-datasetuse-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Near-duplicate source records N50-A and N50-B share the same underlying report hash and appear in train and test splits. Their surface text differs only by whitespace and a header date."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "suppliedRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "unclear",
+        "changedSourceIds": [
+          "050-operational-detail-2-source-v2"
+        ],
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 050-dataset-specification-and-audit-studio-operational-2 against this factual event: Near-duplicate source records N50-A and N50-B share the same underlying report hash and appear in train and test splits. Their surface text differs only by whitespace and a header date. Original §9 detail: Near-duplicate records cross train and test: group by underlying source before splitting. Correct handling applies “group by underlying source before splitting.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Near-duplicate source records N50-A and N50-B share the same underlying report hash and appear in train and test splits. Their surface text differs only by whitespace and a header date.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Near-duplicate records cross train and test: group by underlying source before splitting.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Near-duplicate source records N50-A and N50-B share the same underlying report hash and appear in train and test splits. Their surface text differs only by whitespace and a header date. It links source 050-operational-detail-2-source-v2 v2 with prior typed DatasetUse record 050-prior-datasetuse-detail-2-v1 v1 and keeps unresolved scope visible for N50-A, N50-B.",
+      "durable_state": "The proposal retains prior record 050-prior-datasetuse-detail-2-v1 v1 and versions only the affected state for N50-A, N50-B against source 050-operational-detail-2-source-v2 v2; it applies “group by underlying source before splitting.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to N50-A, N50-B and the scope supported by source 050-operational-detail-2-source-v2 v2; it represents “group by underlying source before splitting.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-operational-3",
+    "root": "governDatasetEdition.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-3",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-3; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-3",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
+          {
+            "id": "050-operational-detail-3-source-v2",
+            "source": "Dataset specification and audit studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R050 Dataset steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R050 Dataset steward records: Label “eligible” in task T50 depends on household income, but income is absent from 23% of the permitted samples. The label audit has no observable proxy approved by the data owner. This current event is source 050-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 050-dataset-specification-and-audit-studio-operational-3. The supplied typed prior 050-prior-datasetuse-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Label “eligible” in task T50 depends on household income, but income is absent from 23% of the permitted samples. The label audit has no observable proxy approved by the data owner."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "suppliedRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedSourceIds": [
+          "050-operational-detail-3-source-v2"
+        ],
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 050-dataset-specification-and-audit-studio-operational-3 against this factual event: Label “eligible” in task T50 depends on household income, but income is absent from 23% of the permitted samples. The label audit has no observable proxy approved by the data owner. Original §9 detail: A label requires information not present: revise the task or mark it unobservable. Correct handling applies “revise the task or mark it unobservable.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Label “eligible” in task T50 depends on household income, but income is absent from 23% of the permitted samples. The label audit has no observable proxy approved by the data owner.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A label requires information not present: revise the task or mark it unobservable.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Label “eligible” in task T50 depends on household income, but income is absent from 23% of the permitted samples. The label audit has no observable proxy approved by the data owner. It links source 050-operational-detail-3-source-v2 v2 with prior typed DatasetUse record 050-prior-datasetuse-detail-3-v1 v1 and keeps unresolved scope visible for T50.",
+      "durable_state": "The proposal retains prior record 050-prior-datasetuse-detail-3-v1 v1 and versions only the affected state for T50 against source 050-operational-detail-3-source-v2 v2; it applies “revise the task or mark it unobservable.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T50 and the scope supported by source 050-operational-detail-3-source-v2 v2; it represents “revise the task or mark it unobservable.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-operational-4",
+    "root": "governDatasetEdition.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-4",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-4; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-4",
+          "task": "train a service eligibility classifier",
+          "targetPopulation": "rural-language applicants in the intended service region",
+          "prohibitedUses": [
+            "credit scoring",
+            "law-enforcement screening"
+          ],
+          "requiredSlices": [
+            "rural-language coverage",
+            "consent purpose"
+          ]
+        },
+        "sourceEvents": [
+          {
+            "id": "050-operational-detail-4-source-v2",
+            "source": "Dataset specification and audit studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R050 Dataset steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R050 Dataset steward records: Coverage report C50 claims 100 independent examples; source ledger groups 64 of them into 8 copied templates with only names and dates changed. The mechanism inventory counts each copy separately. This current event is source 050-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 050-dataset-specification-and-audit-studio-operational-4. The supplied typed prior 050-prior-datasetuse-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Coverage report C50 claims 100 independent examples; source ledger groups 64 of them into 8 copied templates with only names and dates changed. The mechanism inventory counts each copy separately."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "suppliedRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedSourceIds": [
+          "050-operational-detail-4-source-v2"
+        ],
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 050-dataset-specification-and-audit-studio-operational-4 against this factual event: Coverage report C50 claims 100 independent examples; source ledger groups 64 of them into 8 copied templates with only names and dates changed. The mechanism inventory counts each copy separately. Original §9 detail: A coverage target is met through copied examples: count independent mechanisms and sources. Correct handling applies “count independent mechanisms and sources.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Coverage report C50 claims 100 independent examples; source ledger groups 64 of them into 8 copied templates with only names and dates changed. The mechanism inventory counts each copy separately.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A coverage target is met through copied examples: count independent mechanisms and sources.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Coverage report C50 claims 100 independent examples; source ledger groups 64 of them into 8 copied templates with only names and dates changed. The mechanism inventory counts each copy separately. It links source 050-operational-detail-4-source-v2 v2 with prior typed DatasetUse record 050-prior-datasetuse-detail-4-v1 v1 and keeps unresolved scope visible for C50.",
+      "durable_state": "The proposal retains prior record 050-prior-datasetuse-detail-4-v1 v1 and versions only the affected state for C50 against source 050-operational-detail-4-source-v2 v2; it applies “count independent mechanisms and sources.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C50 and the scope supported by source 050-operational-detail-4-source-v2 v2; it represents “count independent mechanisms and sources.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "050-dataset-specification-and-audit-studio-operational-5",
+    "root": "governDatasetEdition.nl",
+    "split_group": "050-dataset-specification-and-audit-studio",
+    "inputs": {
+      "session": {
+        "projectId": "050-dataset-specification-and-audit-studio-operational-5",
+        "instruction": "Review the Dataset specification and audit studio evidence for case 050-dataset-specification-and-audit-studio-operational-5; return a traceable proposal from the supplied records.",
+        "proposedUse": {
+          "id": "050-prior-datasetuse-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "050-dataset-specification-and-audit-studio-operational-5",
+          "task": "research release dataset D50-v4 after participant P50-19 consent withdrawal",
+          "targetPopulation": "released rows R50-19a and R50-19b in object version v4; known recipient deliveries DL50-301, DL50-322, DL50-337",
+          "prohibitedUses": [
+            "redistribute source documents",
+            "retain withdrawn-consent rows for future training release"
+          ],
+          "requiredSlices": [
+            "consent purpose by participant",
+            "release object version",
+            "downstream recipients and delivery receipts"
+          ]
+        },
+        "sourceEvents": [
+          {
+            "id": "050-operational-detail-5-source-v2",
+            "source": "Dataset specification and audit studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R050 Dataset steward; event version verified for this case",
+            "observedAt": "2026-10-08T10:15:00Z",
+            "text": "R050 Dataset steward records: Participant P50-19 withdrew consent on 2026-10-08 for use of source records in release D50-v4. Released rows R50-19a/R50-19b remain in object version v4; known recipients are internal training archive (receipt DL50-301), evaluator E50 (receipt DL50-322), and partner lab P50 (receipt DL50-337). Each recipient acknowledged the v4 delivery; no removal notice or receipt exists. This current event is source 050-operational-detail-5-source-v2 v2, observed 2026-10-08T10:15:00Z, for case 050-dataset-specification-and-audit-studio-operational-5. The supplied typed prior 050-prior-datasetuse-detail-5-v1 v1 is preserved for comparison. Typed record fields for this workflow are {\"prohibitedUses\": [\"redistribute source documents\", \"retain withdrawn-consent rows for future training release\"], \"requiredSlices\": [\"consent purpose by participant\", \"release object version\", \"downstream recipients and delivery receipts\"], \"targetPopulation\": \"released rows R50-19a and R50-19b in object version v4; known recipient deliveries DL50-301, DL50-322, DL50-337\", \"task\": \"research release dataset D50-v4 after participant P50-19 consent withdrawal\"}.",
+            "supports": [
+              "Participant P50-19 withdrew consent on 2026-10-08 for use of source records in release D50-v4. Released rows R50-19a/R50-19b remain in object version v4; known recipients are internal training archive (receipt DL50-301), evaluator E50 (receipt DL50-322), and partner lab P50 (receipt DL50-337). Each recipient acknowledged the v4 delivery; no removal notice or receipt exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "suppliedRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedSourceIds": [
+          "050-operational-detail-5-source-v2"
+        ],
+        "reviewer": "accountable reviewer"
+      },
+      "edition": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 050-dataset-specification-and-audit-studio-operational-5 against this factual event: Participant P50-19 withdrew consent on 2026-10-08 for use of source records in release D50-v4. Released rows R50-19a/R50-19b remain in object version v4; known recipients are internal training archive (receipt DL50-301), evaluator E50 (receipt DL50-322), and partner lab P50 (receipt DL50-337). Each recipient acknowledged the v4 delivery; no removal notice or receipt exists. Original §9 detail: Consent is withdrawn after release: maintain traceable removal and downstream notification obligations. Correct handling applies “maintain traceable removal and downstream notification obligations.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Participant P50-19 withdrew consent on 2026-10-08 for use of source records in release D50-v4. Released rows R50-19a/R50-19b remain in object version v4; known recipients are internal training archive (receipt DL50-301), evaluator E50 (receipt DL50-322), and partner lab P50 (receipt DL50-337). Each recipient acknowledged the v4 delivery; no removal notice or receipt exists.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Consent is withdrawn after release: maintain traceable removal and downstream notification obligations.",
+    "boundary_assertions": {
+      "view": "Dataset steward view shows P50-19 withdrawal date, rows R50-19a/R50-19b in D50-v4, and recipients DL50-301, DL50-322, DL50-337 with their acknowledgments.",
+      "durable_state": "Proposal versions the consent record and traces both released rows and all three recipient receipts so removal status can be followed without erasing delivery history.",
+      "effects": "Propose scoped removal/notification work for the three known recipients, tied to v4 receipts; do not claim downstream deletion or notification until receipts exist."
+    }
+  }
+]

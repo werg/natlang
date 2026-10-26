@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/design-brief-013-marketplace-dispute","version":"0.1.0","description":"Transaction-bound dispute evidence, conditional rule outcomes, privacy-aware disclosure and appeal scoping.","engines":{"natlang":">=0.1.0"}}

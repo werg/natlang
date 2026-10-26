@@ -1,0 +1,122 @@
+{
+  "schema": "natlang.application/1",
+  "id": "011",
+  "title": "Multi-issue service recovery desk",
+  "entrypoint": "recoverServiceCase.nl",
+  "interfaces": [
+    {
+      "name": "recoverServiceCase",
+      "path": "recoverServiceCase.nl",
+      "purpose": "Resolve linked service issues against purchase-date entitlements, joint remedy constraints, customer choice, idempotent operation receipts, and partial closure.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "service-recovery"
+    }
+  ],
+  "persistence": [
+    "ServiceIssue",
+    "EntitlementFinding",
+    "RemedyBundle",
+    "RecoveryAction",
+    "RecoveryClosure"
+  ],
+  "effects": [
+    "request customer choice before discretionary action",
+    "reserve scarce inventory before delivery promises",
+    "use unique operation IDs with receipt reconciliation",
+    "communicate partial closure without hiding outstanding obligations"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "decomposeCase",
+        "paths": [
+          "recoverServiceCase/decomposeServiceIssues.nl",
+          "recoverServiceCase/decomposeServiceIssues/reconstructIssueEpisodes.nl",
+          "runCase/decomposeCase/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "interpretEntitlements",
+        "paths": [
+          "recoverServiceCase/resolveIssueEntitlements.nl",
+          "recoverServiceCase/resolveIssueEntitlements/matchIssuePurchaseTerms.nl"
+        ]
+      },
+      {
+        "stage": "composeRecovery",
+        "paths": [
+          "recoverServiceCase/buildJointRecoveryBundles.nl",
+          "recoverServiceCase/buildJointRecoveryBundles/evaluateIssueRemedyCombinations.nl"
+        ]
+      },
+      {
+        "stage": "coordinateActions",
+        "paths": [
+          "recoverServiceCase/coordinateRecoveryOperations.nl",
+          "recoverServiceCase/coordinateRecoveryOperations/reconcileOperationReceipts.nl"
+        ]
+      },
+      {
+        "stage": "verifyClosure",
+        "paths": [
+          "recoverServiceCase/compareIssueClosure.nl",
+          "recoverServiceCase/compareIssueClosure/compareAgreedIssueOutcomes.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "recoverServiceCase/coordinateRecoveryOperations/reconcileOperationReceipts.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "recoverServiceCase/buildJointRecoveryBundles/evaluateIssueRemedyCombinations.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "recoverServiceCase/resolveIssueEntitlements/matchIssuePurchaseTerms.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "recoverServiceCase.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "recoverServiceCase/compareIssueClosure.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "recoverServiceCase.nl",
+    "recoverServiceCase/frameServiceRecovery.nl",
+    "recoverServiceCase/selectRecoveryPolicy.nl",
+    "recoverServiceCase/decomposeServiceIssues.nl",
+    "recoverServiceCase/decomposeServiceIssues/reconstructIssueEpisodes.nl",
+    "recoverServiceCase/resolveIssueEntitlements.nl",
+    "recoverServiceCase/resolveIssueEntitlements/matchIssuePurchaseTerms.nl",
+    "recoverServiceCase/buildJointRecoveryBundles.nl",
+    "recoverServiceCase/buildJointRecoveryBundles/evaluateIssueRemedyCombinations.nl",
+    "recoverServiceCase/coordinateRecoveryOperations.nl",
+    "recoverServiceCase/coordinateRecoveryOperations/reconcileOperationReceipts.nl",
+    "recoverServiceCase/compareIssueClosure.nl",
+    "recoverServiceCase/compareIssueClosure/compareAgreedIssueOutcomes.nl",
+    "runCase/decomposeCase/audit/qualify.nl",
+    "types.ts",
+    "recoverServiceCase/reconcileRecoveryCheckpoint.nl"
+  ]
+}

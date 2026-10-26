@@ -21,9 +21,9 @@ import type { NeuraleseStore } from '../native/neuralese-store.js';
 import { activeSystemPrompts, softenText, type SystemPromptBank } from '../native/system-prompts.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { neuraleseServerInfo, serves } from '../model/neuralese-info.js';
-import { requestNativeStateIds } from '../model/neuralese-server.js';
+import { requestNativeStateBindings, requestNativeStateIds } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
-import { graphNode, traceFor, blockInput } from '../native/graph.js';
+import { graphNode, traceFor, blockInput, producerScopeForTrace } from '../native/graph.js';
 import { archiveNativeState, restoreNativeInputs } from '../model/native-state-client.js';
 
 /** The type of a written view: the Neuralese instance of view's result. */
@@ -71,6 +71,7 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
         const failure=nativeProtocolFailure(turn.response);
         if(failure&&index!==result.source_turns.length-1)throw new Error('neuralese-view-source-integrity: sampled view continued after a failed turn');
         const imports = requestNativeStateIds(turn.messages);
+        const importBindings = requestNativeStateBindings(turn.messages);
         for (const id of imports) await archiveNativeState(client, id);
         for (const observation of receipt.prompt) if (observation.kind === 'native_state') {
           if (!observation.id) throw new Error('neuralese-view-source-integrity: sampled observation lacks its actual artifact ID');
@@ -83,7 +84,8 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
         }
         const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: failure?[]:['return_result'],
           temperature: 1, seed: null, source_kind: 'native-view', source_turn: turn },
-          imports.map(id => blockInput(id, 'native-state')));
+          importBindings.map(binding => blockInput(binding.id, binding.path, binding.source_occurrence,
+            producerScopeForTrace(trace))));
         for (const write of receipt.writes) {
           const artifact = await archiveNativeState(client, write.state_id);
           if (artifact.metadata.schema === 'neuralese.semantic-state/1') {

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { admitRow, coverage, referenceDriver, renderOpening, replayReference, verifyCases } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
+import { sourceReviewReason } from '../dist/teacher/source-review.js';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
 import { missingDataError } from './support/datasets.mjs';
 
@@ -35,7 +36,7 @@ test('reference child selection follows the current scoped FileHandle, not a car
   assert.equal(ambiguous.calls[0][1].status, 'failed', 'duplicate scoped bindings fail closed');
 });
 
-test('every synthetic curriculum family builds cases that verify', async t => {
+test('synthetic curriculum references verify or remain explicitly held for source review', async t => {
   // A family drawn from data this machine lacks is named, not verified; every other family still is.
   const records = [], missing = [];
   for (const [name, family] of synthetic) {
@@ -44,7 +45,16 @@ test('every synthetic curriculum family builds cases that verify', async t => {
   }
   if (missing.length) t.diagnostic(`not verified, data missing: ${missing.join('; ')}`);
   const results = await verifyCases(records, TOOLS_PROMPT);
-  assert.deepEqual(results.filter(item => !item.ok).map(item => `${item.id}: ${item.problems.join('; ')}`), []);
+  for (const [index, result] of results.entries()) {
+    const hold = sourceReviewReason(records[index]);
+    if (hold) {
+      assert.equal(result.ok, false, `${result.id}: held reference must not be admitted`);
+      assert.deepEqual(result.problems, [`reference not admitted: ${hold}`], result.id);
+    } else {
+      assert.equal(result.ok, true, `${result.id}: ${result.problems.join('; ')}`);
+    }
+  }
+  assert.equal(results.length, records.length);
   assert.equal(new Set(records.map(record => record.id)).size, records.length);
 });
 

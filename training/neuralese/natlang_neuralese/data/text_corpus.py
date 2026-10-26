@@ -1469,8 +1469,43 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
             candidates=[occ for occ in metadata.get("occurrences", [])
                 if occ.get("id")==writer_binding.get("occurrence_id") and occ.get("role")=="producer"
                 and occ.get("reference")==writer_binding.get("write_name")]
-            if len(candidates)!=1:raise ValueError("static native read derivation needs one exact producer occurrence")
-            writer_body=candidates[0].get("body")
+            if len(candidates)==1:
+                writer_body=candidates[0].get("body")
+            elif not metadata and writer_binding.get("source_kind")=="target-write-descriptor":
+                # Historical admitted records predate native occurrence
+                # sidecars. Bind their original typed `$write` descriptor by
+                # the exact target pointer plus the full source-record digest;
+                # never infer a producer from a matching body elsewhere.
+                pointer=writer_binding.get("source_pointer")
+                if not isinstance(pointer,str) or not pointer.startswith("/target/"):
+                    raise ValueError("historical native producer lacks its exact target pointer")
+                value=writer
+                parts=[part.replace("~1","/").replace("~0","~") for part in pointer.split("/")[1:]]
+                try:
+                    for part in parts:
+                        if part.endswith("<json>"):
+                            field=part[:-6]
+                            value=json.loads(value[field])
+                        else:
+                            value=value[int(part)] if isinstance(value,list) else value[part]
+                except (KeyError,IndexError,TypeError,ValueError,json.JSONDecodeError) as exc:
+                    raise ValueError("historical native producer pointer does not resolve") from exc
+                if (not isinstance(value,dict) or value.get("type") not in {"Neuralese<string>","Neuralese<unknown>"}
+                        or value.get("name")!=writer_binding.get("write_name")
+                        or not isinstance(value.get("source"),str)):
+                    raise ValueError("historical native producer pointer is not its exact typed write")
+                if value.get("type")=="Neuralese<unknown>":
+                    try: json.loads(value["source"])
+                    except json.JSONDecodeError as exc:
+                        raise ValueError("historical unknown producer source is not valid JSON") from exc
+                expected_occurrence="nso_"+_sha(_canonical({"record":writer.get("id"),
+                    "path":pointer,"write":writer_binding.get("write_name"),
+                    "sha256":item["payload_sha256"]}).encode())
+                if writer_binding.get("occurrence_id")!=expected_occurrence:
+                    raise ValueError("historical native producer occurrence identity differs")
+                writer_body=value["source"]
+            else:
+                raise ValueError("static native read derivation needs one exact producer occurrence")
             if not isinstance(writer_body,str) or _sha(writer_body.encode())!=item["payload_sha256"]:
                 raise ValueError("static native read derivation body differs from exact producer occurrence")
         if old.get("type")=="text" and isinstance(old.get("text"),str):
@@ -1625,7 +1660,7 @@ def native_gold_document(tokenizer, messages, target, tools, *, prompt_rendering
 
 
 def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full",
-                       return_offsets=False):
+                       return_offsets=False, producer_span=None, return_producer_span=False):
     """Render the exact serving prompt followed by the target assistant reply.
 
     The target boundary is the prompt's token length, not a longest-common-
@@ -1656,11 +1691,118 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
     if prompt.blocks:
         raise ValueError("ordinary gold text prompt contains unresolved neuralese blocks")
+    reply_target = target
+    producer_sentinel = None
+    producer_sentinel_close = None
+    rendered_producer_body = None
+    if producer_span is not None:
+        # Structured `Neuralese<unknown>` results are raw JSON values. A role
+        # span inserted as a quoted string would change that result's type.
+        # Render a unique valid string at the exact source-bound value path,
+        # then replace only the template-added quotes and sentinel with the
+        # raw JSON producer span. Removing the role markers recovers the exact
+        # object-valued assistant/tool target.
+        import copy
+        import json
+        import secrets
+        if (not isinstance(producer_span, Mapping) or producer_span.get('value_type') not in {'string', 'unknown', 'inline-string'}
+                or not isinstance(producer_span.get('body'), str)
+                or producer_span.get('payload_sha256') != _sha(producer_span['body'].encode('utf-8'))
+                or type(producer_span.get('call_index')) is not int
+                or not isinstance(producer_span.get('argument_path'), list)
+                or not producer_span['argument_path']):
+            raise ValueError('structured producer span binding is malformed')
+        try:
+            body_value = (json.loads(producer_span['body']) if producer_span['value_type'] == 'unknown'
+                          else producer_span['body'])
+            reply_target = copy.deepcopy(target)
+            call = reply_target['tool_calls'][producer_span['call_index']]
+            function = call.get('function', call)
+            arguments = json.loads(function['arguments'])
+            if producer_span['value_type'] == 'inline-string':
+                code = arguments.get('code')
+                start, stop = producer_span.get('source_start'), producer_span.get('source_end')
+                if (not isinstance(code, str) or type(start) is not int or type(stop) is not int
+                        or start < 0 or stop < start or code[start:stop] != producer_span['body']):
+                    raise ValueError('inline producer span differs from its exact validated code source')
+                # ``crisp_messages`` deliberately removes the validated
+                # neuralese_code sidecar before template rendering. The
+                # derivation receipt authenticates the original whole target;
+                # this renderer rechecks its retained code bytes and exact
+                # offsets against that bound sidecar digest.
+                if hashlib.sha256(code.encode('utf-8')).hexdigest() != producer_span.get('sidecar_code_sha256'):
+                    raise ValueError('inline producer code differs from the authenticated sidecar digest')
+                producer_sentinel = '__natlang_native_producer_open_' + secrets.token_hex(24) + '__'
+                producer_sentinel_close = '__natlang_native_producer_close_' + secrets.token_hex(24) + '__'
+                arguments['code'] = (code[:start] + producer_sentinel + producer_span['body']
+                                     + producer_sentinel_close + code[stop:])
+                function['arguments'] = json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))
+                current = producer_span['body']
+                parent = None
+                key = None
+            else:
+                parent = arguments
+                for part in producer_span['argument_path'][:-1]:
+                    parent = parent[int(part)] if isinstance(parent, list) and str(part).isdigit() else parent[part]
+                final = producer_span['argument_path'][-1]
+                key = int(final) if isinstance(parent, list) and str(final).isdigit() else final
+                current = parent[key]
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError('structured producer span does not resolve in the derived target') from exc
+        if current != body_value:
+            raise ValueError('structured producer target differs from its authenticated source JSON')
+        if producer_span['value_type'] != 'inline-string':
+            producer_sentinel = '__natlang_native_producer_' + secrets.token_hex(24) + '__'
+            parent[key] = producer_sentinel
+            function['arguments'] = json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))
     reply_runs = assistant_reply_segments(
         lambda turns, generation: apply_template(turns, tools, generation=generation),
-        target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
+        reply_target, specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
+    if producer_sentinel is not None:
+        from ..model.shared_state import ROLE_MARKERS
+        if producer_span['value_type'] == 'inline-string':
+            joined = ''.join(run for run, _ in reply_runs)
+            start = joined.find(producer_sentinel)
+            close_start = joined.find(producer_sentinel_close)
+            if (start < 0 or close_start < start + len(producer_sentinel)
+                    or joined.count(producer_sentinel) != 1
+                    or joined.count(producer_sentinel_close) != 1):
+                raise ValueError('inline producer sentinels are not unique in the rendered target')
+            def slice_runs(left, right):
+                result, cursor = [], 0
+                for run, escaped in reply_runs:
+                    run_stop = cursor + len(run)
+                    lo, hi = max(left, cursor), min(right, run_stop)
+                    if hi > lo:
+                        result.append((run[lo - cursor:hi - cursor], escaped))
+                    cursor = run_stop
+                return result
+            body_start = start + len(producer_sentinel)
+            body_stop = close_start
+            rendered_producer_body = joined[body_start:body_stop]
+            close_stop = close_start + len(producer_sentinel_close)
+            reply_runs = [*slice_runs(0, start), (ROLE_MARKERS[0], True),
+                          *slice_runs(body_start, body_stop), (ROLE_MARKERS[1], True),
+                          *slice_runs(close_stop, len(joined))]
+            reply_runs = [(run, escaped) for run, escaped in reply_runs if run]
+        else:
+            found = [(index, run.find(producer_sentinel), -1)
+                     for index, (run, _) in enumerate(reply_runs) if producer_sentinel in run]
+            if len(found) != 1:
+                raise ValueError('structured producer sentinel is not unique in rendered target')
+            index, start, _ = found[0]
+            run, escaped = reply_runs[index]
+            stop = start + len(producer_sentinel)
+            if (start == 0 or stop >= len(run) or run[start - 1] not in {'"', "'"}
+                    or run[stop] != run[start - 1]):
+                raise ValueError('structured producer sentinel is not one quoted rendered value')
+            marker_prefix = run[:start - 1] if producer_span['value_type'] == 'unknown' else run[:start]
+            marker_suffix = run[stop + 1:] if producer_span['value_type'] == 'unknown' else run[stop:]
+            marker_body = producer_span['body']
+            marker_parts = [(ROLE_MARKERS[0], True), (marker_body, escaped), (ROLE_MARKERS[1], True)]
+            reply_runs[index:index + 1] = [(marker_prefix, escaped), *marker_parts, (marker_suffix, escaped)]
 
     text, ids, offsets, character_cursor = [], [], [], 0
     special_spellings = set(tokenizer.all_special_tokens)
@@ -1699,7 +1841,11 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     if boundary >= len(ids):
         raise ValueError("gold assistant target adds no native token suffix")
     result = ("".join(text), ids, boundary)
-    return (*result, offsets) if return_offsets else result
+    if return_offsets:
+        result = (*result, offsets)
+    if return_producer_span:
+        return (*result, {'rendered_body': rendered_producer_body})
+    return result
 
 
 def native_gold_packet_context_only_messages(tokenizer, messages, target, tools, message_indices, *,
@@ -2009,10 +2155,15 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
         try:
+            producer_span = (derivation or {}).get('producer_span')
+            capture_rendered_span = (isinstance(producer_span, Mapping)
+                                     and producer_span.get('value_type') == 'inline-string')
             rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
-                prompt_rendering=prompt_rendering, return_offsets=include_token_offsets)
+                prompt_rendering=prompt_rendering, return_offsets=include_token_offsets,
+                producer_span=producer_span, return_producer_span=capture_rendered_span)
             text, token_ids, suffix_start = rendered[:3]
             token_offsets = rendered[3] if include_token_offsets else None
+            rendered_producer_body = rendered[-1].get('rendered_body') if capture_rendered_span else None
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -2032,6 +2183,12 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
         if transformation is not None:
             prepared[-1]["static_derivations"]=[transformation]
+        if capture_rendered_span:
+            if not isinstance(rendered_producer_body, str):
+                omitted.append({"id": rid, "reason": "inline_producer_rendered_span_missing"})
+                prepared.pop()
+                continue
+            prepared[-1]["producer_rendered_body"] = rendered_producer_body
         if include_token_offsets:
             if not isinstance(token_offsets, list) or len(token_offsets) != len(token_ids):
                 raise ValueError(f"native rendering did not return one character offset per token: {rid}")

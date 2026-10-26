@@ -1,0 +1,114 @@
+{
+  "schema": "natlang.application/1",
+  "id": "022",
+  "title": "Delivery-to-billing obligation reconciler",
+  "entrypoint": "prepareMilestoneInvoice.nl",
+  "interfaces": [
+    {
+      "name": "prepareMilestoneInvoice",
+      "path": "prepareMilestoneInvoice.nl",
+      "purpose": "Prepare phase-specific invoice entitlement from contractual clocks, actual customer acceptance and unconsumed billing capacity.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "obligation-book"
+    },
+    {
+      "name": "recordBillingOutcome",
+      "path": "recordBillingOutcome.nl",
+      "purpose": "Reconcile actual issue or confirmed void receipts without duplicating milestone consumption.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "obligation-book"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "prepareMilestoneInvoice.nl",
+    "prepareMilestoneInvoice/adjudicateAcceptance.nl",
+    "prepareMilestoneInvoice/adjudicateAcceptance/interpretCustomerAct.nl",
+    "prepareMilestoneInvoice/adjudicateAcceptance/testDeemedPrerequisites.nl",
+    "prepareMilestoneInvoice/adjudicateAcceptance/verifyAcceptanceAuthority.nl",
+    "prepareMilestoneInvoice/bindCustomerPacket.nl",
+    "prepareMilestoneInvoice/buildContractClocks.nl",
+    "prepareMilestoneInvoice/buildContractClocks/parseBillingConditions.nl",
+    "prepareMilestoneInvoice/buildContractClocks/placeEffectiveAmendments.nl",
+    "prepareMilestoneInvoice/computeUnconsumedEntitlement.nl",
+    "prepareMilestoneInvoice/mapDeliveryClaims.nl",
+    "prepareMilestoneInvoice/mapDeliveryClaims/resolveMilestoneAlias.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "recordBillingOutcome.nl",
+    "recordBillingOutcome/verifyInvoiceOutcome.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractConditions",
+        "paths": [
+          "prepareMilestoneInvoice/buildContractClocks/parseBillingConditions.nl"
+        ]
+      },
+      {
+        "stage": "mapDelivery",
+        "paths": [
+          "prepareMilestoneInvoice/mapDeliveryClaims/resolveMilestoneAlias.nl"
+        ]
+      },
+      {
+        "stage": "assessAcceptance",
+        "paths": [
+          "prepareMilestoneInvoice/adjudicateAcceptance/testDeemedPrerequisites.nl"
+        ]
+      },
+      {
+        "stage": "calculateBillability",
+        "paths": [
+          "prepareMilestoneInvoice/computeUnconsumedEntitlement.nl"
+        ]
+      },
+      {
+        "stage": "assemblePacket",
+        "paths": [
+          "prepareMilestoneInvoice/bindCustomerPacket.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "prepareMilestoneInvoice/adjudicateAcceptance/interpretCustomerAct.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "prepareMilestoneInvoice/mapDeliveryClaims/resolveMilestoneAlias.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "prepareMilestoneInvoice/adjudicateAcceptance/verifyAcceptanceAuthority.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "prepareMilestoneInvoice/buildContractClocks/placeEffectiveAmendments.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "recordBillingOutcome/verifyInvoiceOutcome.nl"
+        ]
+      }
+    ]
+  }
+}

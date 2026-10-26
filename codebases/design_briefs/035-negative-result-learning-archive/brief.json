@@ -1,0 +1,49 @@
+{
+  "application_id": "035",
+  "title": "Negative-result learning archive",
+  "source_relative_path": "applications/07-scientific-evidence-and-research-operations/035-negative-result-learning-archive.md",
+  "program_root": "codebases/design_briefs/035-negative-result-learning-archive",
+  "source_sha256": "5b9d07694ad108fd23e6d59bb0b8aae344a0b78db40e50952388eabfeaaee1ab",
+  "domain_id": "07",
+  "stages": [
+    {
+      "name": "reconstructAttempt",
+      "output_type": "ResearchAttempt",
+      "algorithm": "Read plans, execution logs, and researcher notes to reconstruct the attempted test. Separate intended from actual procedure and identify incomplete steps, measurement failures, or deviations that limit what the result can establish.",
+      "gate": "The archive records what actually happened, not only what was planned."
+    },
+    {
+      "name": "classifyFailure",
+      "output_type": "NegativeFinding",
+      "algorithm": "Determine whether evidence supports a negative result, an invalid measurement, an unfinished procedure, or genuine uncertainty. Preserve the distinction even when all cases were informally described as failures and avoid stronger conclusions than the attempt warrants.",
+      "gate": "A failed process cannot be treated as evidence against the hypothesis it never validly tested."
+    },
+    {
+      "name": "compareExplanations",
+      "output_type": "FailureExplanation",
+      "algorithm": "Construct competing explanations grounded in observed deviations and results. Separate demonstrated causes from plausible hypotheses, seek contradictory observations, and identify shared mechanisms across attempts without assuming all similar outcomes have one cause.",
+      "gate": "Each causal claim has evidence or an explicit hypothetical status."
+    },
+    {
+      "name": "designFollowups",
+      "output_type": "DiscriminatingExperiment",
+      "algorithm": "Propose bounded low-risk follow-ups that distinguish rival explanations with minimal changes. Specify what each outcome would mean before execution and avoid repeating the same invalid procedure or adding so many changes that the result becomes uninterpretable.",
+      "gate": "Follow-up has a discriminating prediction and preserves approved safety and resource constraints."
+    },
+    {
+      "name": "maintainLessons",
+      "output_type": "ResearchLesson",
+      "algorithm": "Publish a scoped lesson with conditions under which it applies and links to contradictory or superseding evidence. Update recommendations when new attempts arrive, preserving the historical knowledge state and uncertainty rather than rewriting failures into hindsight certainty.",
+      "gate": "Lessons do not generalize beyond tested conditions or erase negative evidence."
+    }
+  ],
+  "operational_details": [
+    "An experiment was abandoned before measurement: label it incomplete rather than negative.",
+    "A later success uses different conditions: narrow the earlier lesson instead of deleting it.",
+    "A researcher fears reputational exposure: support restricted attribution with authorized methodological access.",
+    "Several failures share one broken instrument: link the common process issue without multiplying scientific evidence.",
+    "A follow-up changes three variables: flag its weak discriminating power before execution."
+  ],
+  "representative_episode": "A failed computational result is traced to a data-loading error, while a separate valid negative result challenges the original mechanism.",
+  "independent_truth_basis": "Hidden attempted procedures, process validity, result truth, and discriminating follow-up predictions."
+}

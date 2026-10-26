@@ -1,0 +1,49 @@
+{
+  "application_id": "034",
+  "title": "Research resource and experiment rescue coordinator",
+  "source_relative_path": "applications/07-scientific-evidence-and-research-operations/034-research-resource-and-experiment-rescue-coordinator.md",
+  "program_root": "codebases/design_briefs/034-research-resource-and-experiment-rescue-coordinator",
+  "source_sha256": "9e887da7fab28aa895d2362c1a6448ab43a040d8d8a5cfef0423242eaa25871e",
+  "domain_id": "07",
+  "stages": [
+    {
+      "name": "interpretRequirements",
+      "output_type": "ExperimentRequirement",
+      "algorithm": "Read approved protocols and researcher requests to distinguish essential experimental conditions from convenient preferences. Identify sample timing, equipment capabilities, and required personnel without changing scientific procedures or inferring unapproved substitutions.",
+      "gate": "Essential conditions are source-backed and unknown compatibility remains blocked."
+    },
+    {
+      "name": "modelResources",
+      "output_type": "ResourceCapability",
+      "algorithm": "Reconcile calendars, instrument status, maintenance records, and operator qualifications. Distinguish booked availability from actual readiness and identify resources that appear interchangeable but differ in capability or validated use.",
+      "gate": "Exact capacity and qualification checks precede scheduling."
+    },
+    {
+      "name": "constructSchedule",
+      "output_type": "ExperimentSlot",
+      "algorithm": "Submit hard resource and timing constraints to an exact scheduler, then evaluate feasible schedules against supplied priorities and scientific dependencies. Keep optional preferences visible and explain unavoidable conflicts instead of silently dropping experiments.",
+      "gate": "No double booking, expired sample window, or missing required operator."
+    },
+    {
+      "name": "planRescue",
+      "output_type": "RescueOption",
+      "algorithm": "When a resource or sample becomes unavailable, generate alternatives such as resequencing, qualified substitution, or postponement. Explicitly state scientific deviations and seek investigator approval where the original protocol would no longer hold.",
+      "gate": "Recovery preserves essential conditions or records an approved protocol deviation."
+    },
+    {
+      "name": "coordinateReadiness",
+      "output_type": "ReadinessCheck",
+      "algorithm": "Collect readiness confirmations from resource owners and investigators, verify current status immediately before execution, and issue role-specific instructions. Preserve cancellations and rescheduling history so downstream analyses know which actual conditions applied.",
+      "gate": "A scheduled slot is not a go decision; all required readiness evidence must be current."
+    }
+  ],
+  "operational_details": [
+    "An instrument is available but calibration has expired: block readiness without deleting its booking.",
+    "A sample’s usable window shrinks: prioritize explicit protocol constraints rather than calendar convenience.",
+    "Two projects share an operator: schedule the person as a constrained resource.",
+    "A substitute instrument changes measurement behavior: require investigator review.",
+    "A cancellation occurs after preparation: record consumed materials and downstream consequences."
+  ],
+  "representative_episode": "A shared instrument fails while two studies have different sample windows; an alternative device is available but not equivalent for one measurement.",
+  "independent_truth_basis": "Hidden resource capabilities, exact schedules, sample windows, and approved deviation rules."
+}

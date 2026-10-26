@@ -1,0 +1,50 @@
+{
+  "application_id": "082",
+  "title": "Plain Language Transformation Studio",
+  "source_relative_path": "applications/17-localization-accessibility-and-cross-cultural-communication/082-plain-language-transformation-studio.md",
+  "source_sha256": "a332056cc42d9c86798938c3e2541e4fe6e755688ca76ac6d265e2c72f2f57b0",
+  "domain_id": "17",
+  "stages": [
+    {
+      "name": "recoverMeaning",
+      "output_type": "MeaningUnit",
+      "algorithm": "Parse the source into claims, duties, permissions, conditions, and exceptions before rewriting. Identify terms that require explanation and preserve uncertainty or scope; do not treat dense wording as permission to remove consequential distinctions.",
+      "gate": "All operative meaning units are represented with source locations."
+    },
+    {
+      "name": "modelReaderTasks",
+      "output_type": "ReaderTask",
+      "algorithm": "Interpret what the intended reader must understand or do using supplied audience guidance. Identify decision points and necessary background without stereotyping ability, and distinguish information that can be reorganized from information that cannot be omitted.",
+      "gate": "Reader tasks cover all consequential uses of the document."
+    },
+    {
+      "name": "rewriteStructure",
+      "output_type": "PlainLanguageDraft",
+      "algorithm": "Reorganize information around reader tasks, use clearer sentences, and introduce explanations or examples where they help. Preserve technical terms when necessary, label examples as illustrative, and avoid creating new rules through oversimplified summaries.",
+      "gate": "Rewrite preserves every material condition, exception, and uncertainty."
+    },
+    {
+      "name": "challengeComprehension",
+      "output_type": "ComprehensionProbe",
+      "algorithm": "Create realistic comprehension questions and boundary scenarios that test whether readers would act correctly. Include cases involving exceptions and negative requirements, then compare source and rewrite answers to detect semantic drift.",
+      "gate": "Source and rewrite imply the same consequential answers."
+    },
+    {
+      "name": "releaseAccessible",
+      "output_type": "PlainLanguageRelease",
+      "algorithm": "Reconcile reviewer feedback, maintain side-by-side source mapping, and publish the accessible edition with its scope and version. Revalidate affected meaning units after source changes and preserve access to authoritative wording where required.",
+      "gate": "Independent fidelity review passes; readability alone is not the acceptance criterion."
+    }
+  ],
+  "operational_details": [
+    "A summary removes a crucial unless clause: block release through a boundary-case test.",
+    "An example sounds like a new rule: label and revise it to preserve scope.",
+    "A technical term has no safe plain synonym: retain it with an explanation.",
+    "The source changes after review: invalidate only affected meaning units and approvals.",
+    "Readers use assistive technology: verify headings, reading order, and link descriptions."
+  ],
+  "scenario": {
+    "representative_episode": "A complex policy contains nested exceptions and a deadline rule; a shorter draft initially makes one conditional permission sound unconditional.",
+    "independent_truth": "Hidden operative meaning units, source-equivalent decision scenarios, and independently assessed comprehension."
+  }
+}

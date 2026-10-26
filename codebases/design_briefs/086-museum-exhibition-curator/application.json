@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "086",
+  "title": "Museum Exhibition Curator",
+  "entrypoint": "curateExhibition.nl",
+  "interfaces": [
+    {
+      "name": "curateExhibition",
+      "path": "curateExhibition.nl",
+      "purpose": "Build an evidence-backed exhibition argument and qualify every physical and digital projection against current constraints.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "museum-exhibition-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretCollection",
+        "paths": [
+          "curateExhibition/interpretObjectEvidence.nl",
+          "curateExhibition/verifyCuratorialEvidence.nl"
+        ]
+      },
+      {
+        "stage": "formNarratives",
+        "paths": [
+          "curateExhibition/reframeExhibitionArguments.nl",
+          "curateExhibition/reframeExhibitionArguments/traceArtifactSupport.nl"
+        ]
+      },
+      {
+        "stage": "designVisitorPaths",
+        "paths": [
+          "curateExhibition/designAccessibleVisitorPath.nl",
+          "curateExhibition/designAccessibleVisitorPath/testSkippedZoneContext.nl"
+        ]
+      },
+      {
+        "stage": "writeInterpretation",
+        "paths": [
+          "curateExhibition/writeQualifiedLabels.nl"
+        ]
+      },
+      {
+        "stage": "qualifyExhibition",
+        "paths": [
+          "curateExhibition/qualifyExhibitionRelease.nl",
+          "curateExhibition/qualifyExhibitionRelease/reconcilePlacementLimits.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "curateExhibition/reframeExhibitionArguments.nl",
+          "curateExhibition/reframeExhibitionArguments/traceArtifactSupport.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "curateExhibition/writeQualifiedLabels.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "curateExhibition/interpretObjectEvidence.nl",
+          "curateExhibition/writeQualifiedLabels.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "curateExhibition/qualifyExhibitionRelease.nl",
+          "curateExhibition/qualifyExhibitionRelease/reconcilePlacementLimits.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "curateExhibition/designAccessibleVisitorPath.nl",
+          "curateExhibition/designAccessibleVisitorPath/testSkippedZoneContext.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "curateExhibition.nl",
+    "curateExhibition/designAccessibleVisitorPath.nl",
+    "curateExhibition/designAccessibleVisitorPath/testSkippedZoneContext.nl",
+    "curateExhibition/interpretObjectEvidence.nl",
+    "curateExhibition/qualifyExhibitionRelease.nl",
+    "curateExhibition/qualifyExhibitionRelease/reconcilePlacementLimits.nl",
+    "curateExhibition/reframeExhibitionArguments.nl",
+    "curateExhibition/reframeExhibitionArguments/traceArtifactSupport.nl",
+    "curateExhibition/verifyCuratorialEvidence.nl",
+    "curateExhibition/writeQualifiedLabels.nl",
+    "types.ts"
+  ]
+}

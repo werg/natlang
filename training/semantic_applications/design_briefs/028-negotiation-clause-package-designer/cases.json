@@ -1,0 +1,1471 @@
+[
+  {
+    "id": "028-recoverPositions-supported",
+    "root": "runCase/recoverPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "NEG-28",
+          "issue": "Delivery and price",
+          "preferredOutcome": "2% price reduction",
+          "fallback": "One-week delivery extension",
+          "prohibitedConcession": "Warranty below two years",
+          "tenantId": "tenant-028",
+          "id": "NegotiationPosition-028",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-028",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-028"
+          ],
+          "retentionPolicyId": "retention-028"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementDraftId": "DRAFT-28",
+        "playbookId": "PLAYBOOK-28",
+        "stakeholderIds": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "negotiationOwnerId": "Nina Wu",
+        "mandateId": "AUTH-28",
+        "tenantId": "tenant-028",
+        "id": "NEGOTIATION-TERM28",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-028",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-028"
+        ],
+        "retentionPolicyId": "retention-028"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "028-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for recoverPositions: A proposed liability concession interacts with an indemnity exception and a changed definition of confidential information.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "028-recoverPositions-contradictory",
+    "root": "runCase/recoverPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "NEG-28",
+          "issue": "Delivery and price",
+          "preferredOutcome": "2% price reduction",
+          "fallback": "One-week delivery extension",
+          "prohibitedConcession": "Warranty may be reduced to one year",
+          "tenantId": "tenant-028",
+          "id": "NegotiationPosition-028",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-028",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-028"
+          ],
+          "retentionPolicyId": "retention-028"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementDraftId": "DRAFT-28",
+        "playbookId": "PLAYBOOK-28",
+        "stakeholderIds": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "negotiationOwnerId": "Nina Wu",
+        "mandateId": "AUTH-28",
+        "tenantId": "tenant-028",
+        "id": "NEGOTIATION-TERM28",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-028",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-028"
+        ],
+        "retentionPolicyId": "retention-028"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "028-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "AUTH-28 requires a minimum two-year warranty; the proposed position permits reducing the warranty to one year."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for recoverPositions: A proposed liability concession interacts with an indemnity exception and a changed definition of confidential information.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "028-recoverPositions-missing",
+    "root": "runCase/recoverPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "NEG-28",
+          "issue": "Delivery and price",
+          "preferredOutcome": "2% price reduction",
+          "fallback": "One-week delivery extension",
+          "prohibitedConcession": "Warranty below two years",
+          "tenantId": "tenant-028",
+          "id": "NegotiationPosition-028",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-028",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-028"
+          ],
+          "retentionPolicyId": "retention-028"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementDraftId": "DRAFT-28",
+        "playbookId": "PLAYBOOK-28",
+        "stakeholderIds": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "negotiationOwnerId": "Nina Wu",
+        "mandateId": "AUTH-28",
+        "tenantId": "tenant-028",
+        "id": "NEGOTIATION-TERM28",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-028",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-028"
+        ],
+        "retentionPolicyId": "retention-028"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "028-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The negotiator prefers a price concession but has no delegation memo or prohibited-term list."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for recoverPositions: A proposed liability concession interacts with an indemnity exception and a changed definition of confidential information.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "028-workflow-01",
+    "root": "designClausePackage.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-028-01",
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
+      },
+      "vault": {
+        "negotiations": [
+          {
+            "agreementDraftId": "DRAFT-28",
+            "playbookId": "PLAYBOOK-28",
+            "stakeholderIds": [
+              "Legal-28",
+              "Sales-28"
+            ],
+            "negotiationOwnerId": "Nina Wu",
+            "mandateId": "AUTH-28",
+            "tenantId": "tenant-028",
+            "id": "NEGOTIATION-TERM28",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-028",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-028"
+            ],
+            "retentionPolicyId": "retention-028"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-028",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A defined term changes globally: re-evaluate every consumer, not only the edited clause. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A defined term changes globally: re-evaluate every consumer, not only the edited clause. Use only the facts in caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—re-evaluate every consumer, not only the edited clause.—as a versioned proposal against caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (re-evaluate every consumer, not only the edited clause.) against caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A defined term changes globally: re-evaluate every consumer, not only the edited clause.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A defined term changes globally: re-evaluate every consumer, not only the edited clause.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A defined term changes globally: re-evaluate every consumer, not only the edited clause. Use only the facts in caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—re-evaluate every consumer, not only the edited clause.—as a versioned proposal against caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (re-evaluate every consumer, not only the edited clause.) against caseId=SYN-028-01, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "028-workflow-02",
+    "root": "designClausePackage.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-028-02",
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
+      },
+      "vault": {
+        "negotiations": [
+          {
+            "agreementDraftId": "DRAFT-28",
+            "playbookId": "PLAYBOOK-28",
+            "stakeholderIds": [
+              "Legal-28",
+              "Sales-28"
+            ],
+            "negotiationOwnerId": "Nina Wu",
+            "mandateId": "AUTH-28",
+            "tenantId": "tenant-028",
+            "id": "NEGOTIATION-TERM28",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-028",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-028"
+            ],
+            "retentionPolicyId": "retention-028"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-028",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Internal fallback notes are in comments: strip and verify them before external export. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Internal fallback notes are in comments: strip and verify them before external export. Use only the facts in caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—strip and verify them before external export.—as a versioned proposal against caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (strip and verify them before external export.) against caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "Internal fallback notes are in comments: strip and verify them before external export.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Internal fallback notes are in comments: strip and verify them before external export.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Internal fallback notes are in comments: strip and verify them before external export. Use only the facts in caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—strip and verify them before external export.—as a versioned proposal against caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (strip and verify them before external export.) against caseId=SYN-028-02, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "028-workflow-03",
+    "root": "designClausePackage.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-028-03",
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
+      },
+      "vault": {
+        "negotiations": [
+          {
+            "agreementDraftId": "DRAFT-28",
+            "playbookId": "PLAYBOOK-28",
+            "stakeholderIds": [
+              "Legal-28",
+              "Sales-28"
+            ],
+            "negotiationOwnerId": "Nina Wu",
+            "mandateId": "AUTH-28",
+            "tenantId": "tenant-028",
+            "id": "NEGOTIATION-TERM28",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-028",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-028"
+            ],
+            "retentionPolicyId": "retention-028"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-028",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A counterparty accepts one clause conditionally: preserve the condition in the package state. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A counterparty accepts one clause conditionally: preserve the condition in the package state. Use only the facts in caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve the condition in the package state.—as a versioned proposal against caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve the condition in the package state.) against caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A counterparty accepts one clause conditionally: preserve the condition in the package state.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A counterparty accepts one clause conditionally: preserve the condition in the package state.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A counterparty accepts one clause conditionally: preserve the condition in the package state. Use only the facts in caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—preserve the condition in the package state.—as a versioned proposal against caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve the condition in the package state.) against caseId=SYN-028-03, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "028-workflow-04",
+    "root": "designClausePackage.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-028-04",
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
+      },
+      "vault": {
+        "negotiations": [
+          {
+            "agreementDraftId": "DRAFT-28",
+            "playbookId": "PLAYBOOK-28",
+            "stakeholderIds": [
+              "Legal-28",
+              "Sales-28"
+            ],
+            "negotiationOwnerId": "Nina Wu",
+            "mandateId": "AUTH-28",
+            "tenantId": "tenant-028",
+            "id": "NEGOTIATION-TERM28",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-028",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-028"
+            ],
+            "retentionPolicyId": "retention-028"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-028",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An approver signs an earlier draft: reject release of the newer hash. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An approver signs an earlier draft: reject release of the newer hash. Use only the facts in caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reject release of the newer hash.—as a versioned proposal against caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reject release of the newer hash.) against caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An approver signs an earlier draft: reject release of the newer hash.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "An approver signs an earlier draft: reject release of the newer hash.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An approver signs an earlier draft: reject release of the newer hash. Use only the facts in caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—reject release of the newer hash.—as a versioned proposal against caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reject release of the newer hash.) against caseId=SYN-028-04, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "028-workflow-05",
+    "root": "designClausePackage.nl",
+    "split_group": "design-brief-app-028",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-028-05",
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
+      },
+      "vault": {
+        "negotiations": [
+          {
+            "agreementDraftId": "DRAFT-28",
+            "playbookId": "PLAYBOOK-28",
+            "stakeholderIds": [
+              "Legal-28",
+              "Sales-28"
+            ],
+            "negotiationOwnerId": "Nina Wu",
+            "mandateId": "AUTH-28",
+            "tenantId": "tenant-028",
+            "id": "NEGOTIATION-TERM28",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-028",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-028"
+            ],
+            "retentionPolicyId": "retention-028"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-028",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A compromise introduces an undefined term: block the draft before circulation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A compromise introduces an undefined term: block the draft before circulation. Use only the facts in caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—block the draft before circulation.—as a versioned proposal against caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (block the draft before circulation.) against caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A compromise introduces an undefined term: block the draft before circulation.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A compromise introduces an undefined term: block the draft before circulation.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A compromise introduces an undefined term: block the draft before circulation. Use only the facts in caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—block the draft before circulation.—as a versioned proposal against caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (block the draft before circulation.) against caseId=SYN-028-05, expectedVersion=v1, version=v1, id=NEGOTIATION-TERM28, version=1, id=E1, source=028-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

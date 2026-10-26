@@ -60,7 +60,7 @@ def test_command_arguments_preserve_literal_json(monkeypatch):
 
 @pytest.mark.parametrize('publish_fails_once', [False, True])
 @pytest.mark.parametrize('native_boundary',[True])
-def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposure(tmp_path, monkeypatch, publish_fails_once,native_boundary):
+def test_synthetic_seed_result_cannot_commit_rl_credit(tmp_path, monkeypatch, publish_fails_once,native_boundary):
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(4)))
     checkpoint = tmp_path / 'parent.pt'
@@ -101,14 +101,17 @@ def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposu
     if publish_fails_once:
         with pytest.raises(RuntimeError, match='publication'):
             production.run(config, rounds=1)
-    result = production.run(config, rounds=1)
-    assert result['round'] == 1
+    with pytest.raises(ValueError,match='seed SFT report|native training receipt'):
+        production.run(config, rounds=1)
     state = json.loads((out / 'state.json').read_text())
     assert calls == (['seed', 'publish', 'publish'] if publish_fails_once else ['seed', 'publish'])
-    assert state['round'] == 1 and state['collected_task_fraction'] == 0.
+    assert state['round'] == 0 and state['trained_rounds'] == 0 and state['collected_task_fraction'] == 0.
     assert state['trained_task_ids'] == []  # general SFT seed did not train these RL tasks
     assert state['trained_target_tokens'] == 80
     assert state['production_complete'] is False
+    assert state['phase']==('updating' if publish_fails_once else 'publishing')
+    assert 'active_update_round' in state
+    assert 'last_completed_update' not in state
     if native_boundary:
         assert state['last_learner_progress']['completed'] is False
         assert state['last_learner_progress']['mandatory_sft']['remaining_graph_visits']==999

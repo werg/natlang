@@ -1,0 +1,50 @@
+{
+  "application_id": "084",
+  "title": "Cross Cultural Training Adaptation Studio",
+  "source_relative_path": "applications/17-localization-accessibility-and-cross-cultural-communication/084-cross-cultural-training-adaptation-studio.md",
+  "source_sha256": "239d2e4093fd8d44f6a26a5540657cf0ef49b27679409e949c74f04f04a48231",
+  "domain_id": "17",
+  "stages": [
+    {
+      "name": "recoverLearningMechanism",
+      "output_type": "TrainingMechanism",
+      "algorithm": "Analyze the original training to identify the skill exercised by each scenario and the elements that merely provide context. Separate essential decision structure from names, settings, idioms, or assumptions that may be adapted without changing the learning objective.",
+      "gate": "Every scenario has an explicit instructional mechanism before adaptation."
+    },
+    {
+      "name": "assessContextFit",
+      "output_type": "ContextFitFinding",
+      "algorithm": "Compare scenario elements with supplied audience guidance and reviewer input. Identify unfamiliar references, inappropriate assumptions, or practical mismatches without inferring cultural traits from nationality, ethnicity, or other sensitive attributes.",
+      "gate": "Adaptation rationale is evidence-based and audience-specific, not stereotyped."
+    },
+    {
+      "name": "generateAlternatives",
+      "output_type": "AdaptedScenario",
+      "algorithm": "Invent alternative settings, examples, and interactions that remain plausible for the supplied context. Preserve the same relevant ambiguity, constraints, and skill demand, and avoid making the adapted task easier or changing the intended lesson unintentionally.",
+      "gate": "Instructional equivalence and contextual plausibility are separately reviewed."
+    },
+    {
+      "name": "replayLearning",
+      "output_type": "AdaptationTest",
+      "algorithm": "Compare original and adapted scenarios through representative correct, incorrect, and borderline responses. Detect shifts in difficulty or meaning, inspect whether examples imply unsupported norms, and revise only the elements responsible for the drift.",
+      "gate": "The same competency distinctions remain observable in both versions."
+    },
+    {
+      "name": "releaseTraining",
+      "output_type": "AdaptedTrainingRelease",
+      "algorithm": "Assemble the adapted program with facilitator notes, terminology, and documented limits of applicability. Obtain audience and instructional review, version the relationship to the source program, and avoid presenting one adaptation as universal for an entire culture.",
+      "gate": "Approved audience scope and preserved learning objectives are explicit."
+    }
+  ],
+  "operational_details": [
+    "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+    "A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope.",
+    "A scenario becomes easier after adaptation: restore the relevant decision complexity.",
+    "A local example could reinforce a stereotype: revise using supplied context rather than group generalization.",
+    "The source curriculum changes: revalidate affected adapted mechanisms."
+  ],
+  "scenario": {
+    "representative_episode": "A negotiation course uses unfamiliar institutional examples; the adaptation must preserve the same tradeoff and evidence-gathering skills in a different supplied setting.",
+    "independent_truth": "Hidden instructional mechanisms, supplied audience constraints, equivalent response classes, and independent contextual review."
+  }
+}

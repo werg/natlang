@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/design-brief-017-substitution-sourcing","version":"0.1.0","description":"Function-driven substitution evaluation.","engines":{"natlang":">=0.1.0"}}

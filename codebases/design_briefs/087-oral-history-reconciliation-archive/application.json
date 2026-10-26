@@ -1,0 +1,107 @@
+{
+  "schema": "natlang.application/1",
+  "id": "087",
+  "title": "Oral History Reconciliation Archive",
+  "entrypoint": "archiveOralHistory.nl",
+  "interfaces": [
+    {
+      "name": "archiveOralHistory",
+      "path": "archiveOralHistory.nl",
+      "purpose": "Reconcile speaker-attributed accounts under source-span consent and prepare a privacy-reviewed, traceable edition.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "oral-history-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "segmentAccounts",
+        "paths": [
+          "archiveOralHistory/segmentSpeakerAccounts.nl",
+          "archiveOralHistory/verifyAccountSpan.nl"
+        ]
+      },
+      {
+        "stage": "resolveReferences",
+        "paths": [
+          "archiveOralHistory/resolveMentionedReferences.nl"
+        ]
+      },
+      {
+        "stage": "reconcileEvents",
+        "paths": [
+          "archiveOralHistory/reconcileRecalledEvents.nl"
+        ]
+      },
+      {
+        "stage": "formFollowups",
+        "paths": [
+          "archiveOralHistory/formNonLeadingFollowups.nl"
+        ]
+      },
+      {
+        "stage": "publishArchive",
+        "paths": [
+          "archiveOralHistory/prepareConsentBoundEdition.nl",
+          "archiveOralHistory/prepareConsentBoundEdition/testCombinedDetailDisclosure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "archiveOralHistory/reconcileConsentState.nl",
+          "archiveOralHistory/applyScopedWithdrawal.nl",
+          "archiveOralHistory/applyScopedWithdrawal/invalidateSpanDerivatives.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "archiveOralHistory/reconcileRecalledEvents.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "archiveOralHistory/resolveMentionedReferences.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "archiveOralHistory/segmentSpeakerAccounts.nl",
+          "archiveOralHistory/reconcileRecalledEvents.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "archiveOralHistory/prepareConsentBoundEdition.nl",
+          "archiveOralHistory/prepareConsentBoundEdition/testCombinedDetailDisclosure.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "archiveOralHistory.nl",
+    "archiveOralHistory/applyScopedWithdrawal.nl",
+    "archiveOralHistory/applyScopedWithdrawal/invalidateSpanDerivatives.nl",
+    "archiveOralHistory/formNonLeadingFollowups.nl",
+    "archiveOralHistory/prepareConsentBoundEdition.nl",
+    "archiveOralHistory/prepareConsentBoundEdition/testCombinedDetailDisclosure.nl",
+    "archiveOralHistory/reconcileConsentState.nl",
+    "archiveOralHistory/reconcileRecalledEvents.nl",
+    "archiveOralHistory/resolveMentionedReferences.nl",
+    "archiveOralHistory/segmentSpeakerAccounts.nl",
+    "archiveOralHistory/verifyAccountSpan.nl",
+    "types.ts"
+  ]
+}

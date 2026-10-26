@@ -1,5 +1,15 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Luna generation resumed (owner, 2026-10-26)
+
+Start and supervise six parallel Luna data-generation workers. This explicit
+owner instruction supersedes the earlier prohibitions on Luna/external-teacher
+generation. Preserve each actor, runtime, source and split identity; verify full
+trajectories and convert/admit useful results into both native training recipes.
+Keep these workers separate from engineering helpers and retain protected held
+data. Local LFM and the authorized one-cloud-Mellum learner continue training.
+This does not restart the paused CoreWeave teacher or evaluators.
+
 ## Recovery and limited compute credit (owner, 2026-10-24)
 
 Remaining CoreWeave access is opaque: $500 is an upper bound and actual remaining
@@ -18,6 +28,10 @@ Local LFM full-state continuation and local whole-graph RL alternating with
 SFT/DPO are authorized (owner follow-up, 2026-10-24); cloud learners and generation
 remain paused pending their own resumption. Continue earned local progress rather
 than returning to the salvaged parent when rejoining the full production recipe.
+Owner follow-up (2026-10-25): resume local work after the workstation reboot and
+bring Mellum sandbox training back as quota allows. Use one cloud Mellum learner
+with recovery and usage monitoring; generation remains paused. The external drive
+is mounted again, but verify reads before relying on recovered paths.
 
 Filesystem snapshots are supplemental recovery. A quota cutoff can prevent
 restoring or reading them without another sandbox. The primary durable backup
@@ -191,10 +205,35 @@ this incident's snapshot recovery is implemented or qualified from offline tests
 Retain the latest verified recovery state and its active dependencies; prune a
 superseded snapshot/export only after its replacement is actually durable.
 
+Before uploading a checkpoint, persist an immutable export intent on the
+workstation with its actual step, exact SHA/size, source pin, runtime and owner.
+An upload can finish just before its sandbox disappears. Recover such an object
+with an independent complete GET/hash and verify its actual checkpoint metadata;
+never infer its step from a later learner log or the last drained parent. The
+2026-10-26 late object was step36054, while the last observed learner was36073.
+The19 unexported updates remain lost until independently recovered.
+
+Inspect assigned host RAM before restoration. An unconstrained one-GPU request
+returned a96GB GPU with only2Gi host RAM; it was closed without starting training.
+The current Mellum restore uses a measured96Gi minimum after128Gi capacity was
+rejected. GPU capacity alone does not establish host-memory capacity. Keep actual
+cgroup pressure and learner progress visible; a Running label or controller exec
+is not an optimizer update.
+
 Every supervised entry, including zero-success RL seed fallback, must use the
 shared exact-source resume and publication-owner mechanism. Otherwise useful
 updates can remain invisible to the durable exporter. Preserve optimizer, RNG
 and exposure; do not reinterpret an older exported parent as newer earned work.
+
+Same-ID workspace resets (engineering finding, 2026-10-26): a sandbox can remain
+Running while restarting with a new boot identity and an empty workspace. Monitor
+the expected boot/PID/start identity, actual source/control files and optimizer
+progress together; missing workspace metadata is an explicit unavailable state,
+not a reason to keep displaying an old progress reading. Restore the newest
+independently verified full state. A stale drained controller backup must not
+replay an older round over its newer descendant: acknowledge only actual bound
+completed reports/receipts, verify checkpoint ancestry, and reserve fresh work
+namespaces while preserving the remaining schedule and all earned obligations.
 
 ## Neuralese architecture replacement (owner, 2026-10-15)
 
@@ -247,6 +286,29 @@ supersede older projection/recursive graph-replay foundation rules for new work.
 
 Track implementation and cutover in
 `plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
+
+Complete producer targets (engineering finding, 2026-10-26): static pair
+conversion must preserve the original complete assistant/tool response and its
+declared result contract, placing producer markers only around the authenticated
+exported span. Replacing that response with the payload alone taught incomplete
+returns under unchanged typed prompts. Verify retained sibling fields, tool
+wrappers and every consumer import on real source trajectories with both model
+tokenizers. The affected converter family is quarantined until repaired sources
+are admitted; preserve original source data and held groups. Historical exposure
+to truncated targets does not qualify repaired communication foundations or VAE
+inputs. Earn and record fresh exposure to the corrected row bindings while
+preserving useful weights, optimizer/RNG and the original exposure history.
+
+Task contracts and reward validity (engineering finding, 2026-10-26): an exact
+historical next assistant message is an SFT label, not a valid execution reward
+when other continuations can be correct and the recorded answer is not visible.
+Use the authenticated task-source correction mechanism to quarantine these RL
+rows without altering retained rows or losing source/split evidence. Admit exact
+oracle-approved expected root stops with their actual invocation/action custody;
+do not discard a correct blocked root merely because it is not `done`, or excuse
+a failed child because its parent succeeded. Reference replay alone does not
+qualify an oracle: test meaningful wrong answers and unmet required effects or
+repairs too. Keyword/length constraints alone do not prove editing fidelity.
 
 Publication dependencies (engineering finding, 2026-10-20): newly admitted
 classification witnesses retain exact historical parser-policy dependencies.
@@ -368,6 +430,13 @@ comprehensive training on the entire evolving production recipe.
   is not the objective: base-relative KL/agreement are telemetry, never a stop
   or qualification barrier. Exact state and artifact identities support safe
   continuation and debugging; they are not a scientific-purity requirement.
+- **Qualify current foundations on an explicit shared-stage request.** Retain
+  genuine completed producer/consumer exposure and require fresh current-weight
+  qualification before cross-model work. Repeated synchronous zero-update
+  qualification must not replace full-source SGD between ordinary SFT/DPO/RL
+  continuations. Publish a genuine qualified zero-update boundary through the
+  exact normal mechanism without epoch, source-visit or optimizer-update credit;
+  then continue training. Preserve unfinished full-recipe obligations.
 - **Keep launch checks nonmutating and necessary** (engineering lesson, 2026-10-20).
   Run normal metadata/argument preflight once; let the real entry perform its
   required state, numerical and capacity checks before updates. Do not execute
@@ -645,6 +714,11 @@ afterwards. The rules below are consequences of this one.
   and synchronize bounded write windows, release clean cache when appropriate,
   and resume an interrupted copy only after validating its actual prefix. Verify
   full content before replacing a logical path; preserve source and live readers.
+- Do not add or remove hardlinks to source, manifest or index files while live
+  native readers validate or stream them. Link-count changes alter ctime even
+  when bytes remain unchanged and correctly invalidate strict reader checks.
+  Copy for live backup staging or drain the affected readers first; keep the
+  strict checks. Immutable checkpoint pinning has its own checked-stat protocol.
 - Restart transient ledger services through the ledger with a fresh unit name
   (engineering finding, 2026-10-22). A stopped transient unit may already have
   been collected, so `systemctl start` can fail even after a clean stop. Preserve

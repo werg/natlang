@@ -40,18 +40,76 @@ def create_adapter(engine, options, owner=None):
         return _create_adapter(engine, options, owner)
 
 
-def _create_adapter(engine, options, owner=None):
-    kind = options.get('kind', 'xs')
-    rank, seed = options.get('rank', 8), options.get('seed', 0)
-    if kind != 'xs' or type(rank) is not int or rank < 1 or type(seed) is not int:
-        raise ValueError('native modelLoRA requires kind xs, a positive rank and integer seed')
-    if options.get('native_identity') not in (None, engine.native_identity):
-        raise ValueError('native adapter creation is bound to another exact live model')
-    names = options.get('parameter_names')
+def _target_names(engine, names):
     available = target_parameters(engine.shared_model)
     if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
             or len(set(names)) != len(names) or any(name not in available for name in names)):
         raise ValueError('parameter_names must uniquely select actual named native layer matrices')
+    return available
+
+
+def create_canonical_basis(engine, options, owner=None):
+    """One maximum-rank basis per target; nested adapters slice its leading columns (§5.3)."""
+    with engine.native_execution_lock:
+        if execution_binding(engine):
+            raise ValueError('create native adapter bases from the unadapted live model')
+        max_rank, names = options.get('max_rank'), options.get('parameter_names')
+        if type(max_rank) is not int or max_rank < 1:
+            raise ValueError('canonical adapter basis requires a positive integer max_rank')
+        available = _target_names(engine, names)
+        spec = {'schema': SCHEMA, 'kind': 'canonical-basis', 'max_rank': max_rank,
+                'parameter_names': names, 'bases': 'weight-svd-sign-canonical-v2'}
+        tensors = {}
+        with torch.inference_mode(False), torch.no_grad():
+            for name in names:
+                weight = available[name]
+                if max_rank > min(weight.shape[-2:]):
+                    raise ValueError(f'canonical basis rank exceeds target matrix dimensions: {name}')
+                left, right = singular_bases(weight.detach().float(), max_rank)
+                tensors['left.'+name], tensors['right.'+name] = left.cpu(), right.cpu()
+        return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+            'adapter-basis', engine.native_identity, tensors, provenance={'adapter_spec': spec}), owner)
+
+
+def _create_adapter(engine, options, owner=None):
+    kind = options.get('kind', 'xs')
+    rank, seed = options.get('rank', 8), options.get('seed', 0)
+    if kind not in ('xs', 'free-lora') or type(rank) is not int or rank < 1 or type(seed) is not int:
+        raise ValueError('native modelLoRA requires kind xs or free-lora, a positive rank and integer seed')
+    if options.get('native_identity') not in (None, engine.native_identity):
+        raise ValueError('native adapter creation is bound to another exact live model')
+    names = options.get('parameter_names')
+    available = _target_names(engine, names)
+    if kind == 'free-lora':
+        # Free factors: (alpha/r) B A with B zero and seeded A, so the delta starts at zero and B gets gradients.
+        alpha = options.get('alpha', rank)
+        if type(alpha) not in (int, float) or not math.isfinite(alpha) or alpha <= 0:
+            raise ValueError('free-lora alpha must be positive and finite')
+        spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'seed': seed, 'alpha': float(alpha),
+                'parameter_names': names, 'bases': 'free-lora-v1'}
+        generator, factors = torch.Generator().manual_seed(seed), {}
+        for name in names:
+            *leading, rows, cols = available[name].shape
+            if rank > min(rows, cols):
+                raise ValueError(f'adapter rank exceeds target matrix dimensions: {name}')
+            factors['lora_A.'+name] = torch.randn((*leading, rank, cols), generator=generator, dtype=torch.float32) / math.sqrt(cols)
+            factors['lora_B.'+name] = torch.zeros((*leading, rows, rank), dtype=torch.float32)
+        return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+            'adapter-coefficients', engine.native_identity, factors, None, {'adapter_spec': spec}), owner)
+    if options.get('basis_id') is not None:
+        # A nested slice of one shared canonical basis: stack members then sum in that basis exactly.
+        record = engine.store.get_native_tensor_artifact(options['basis_id'])
+        basis_spec = (record.artifact.provenance or {}).get('adapter_spec') if record else None
+        if (record is None or record.artifact.kind != 'adapter-basis' or record.artifact.native_identity != engine.native_identity
+                or not isinstance(basis_spec, dict) or basis_spec.get('kind') != 'canonical-basis'):
+            raise ValueError('nested adapters require an exact canonical basis artifact of this live model')
+        if rank > basis_spec['max_rank'] or not set(names) <= set(basis_spec['parameter_names']):
+            raise ValueError('nested adapter rank/targets must fit its canonical basis')
+        spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'seed': seed, 'parameter_names': names,
+                'bases': 'nested-canonical-slice-v1', 'basis_spec': basis_spec}
+        coefficients = {name: torch.zeros((*available[name].shape[:-2], rank * rank), dtype=torch.float32) for name in names}
+        return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+            'adapter-coefficients', engine.native_identity, coefficients, record.id, {'adapter_spec': spec}), owner)
     spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'seed': seed,
             'parameter_names': names, 'bases': 'weight-svd-sign-canonical-v2'}
     tensors, coefficients = {}, {}
@@ -69,6 +127,12 @@ def _create_adapter(engine, options, owner=None):
     return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
         'adapter-coefficients', engine.native_identity, coefficients, basis.id,
         {'adapter_spec': spec}), owner)
+
+
+def adapter_tensor_keys(spec):
+    """Coefficient tensor names of a spec: one core per target, or B/A factors for free LoRA."""
+    names = spec['parameter_names']
+    return {prefix+name for name in names for prefix in ('lora_A.', 'lora_B.')} if spec['kind'] == 'free-lora' else set(names)
 
 
 def resolve_adapters(engine, entries, leaves=None):
@@ -93,42 +157,66 @@ def resolve_adapters(engine, entries, leaves=None):
         if record is None:
             raise ValueError(f'unknown native adapter {adapter_id}; restore its coefficients and basis first')
         adapter = record.artifact.validate()
-        basis_record = engine.store.get_native_tensor_artifact(adapter.source_artifact_id or '')
-        if basis_record is None:
-            raise ValueError('native adapter is missing its exact frozen basis artifact')
-        basis = basis_record.artifact.validate()
         spec = (adapter.provenance or {}).get('adapter_spec')
-        if (adapter.kind != 'adapter-coefficients' or basis.kind != 'adapter-basis'
-                or adapter.native_identity != engine.native_identity or basis.native_identity != engine.native_identity
-                or not isinstance(spec, dict) or spec != (basis.provenance or {}).get('adapter_spec')
-                or spec.get('schema') != SCHEMA or spec.get('bases') != 'weight-svd-sign-canonical-v2'):
+        if (adapter.kind != 'adapter-coefficients' or adapter.native_identity != engine.native_identity
+                or not isinstance(spec, dict) or spec.get('schema') != SCHEMA):
             raise ValueError('native adapter/basis must bind the exact live checkpoint, architecture and declared specification')
-        names, rank, kind = (spec.get(key) for key in ('parameter_names', 'rank', 'kind'))
+        names, rank, kind, method = (spec.get(key) for key in ('parameter_names', 'rank', 'kind', 'bases'))
+        free = kind == 'free-lora'
+        if free:
+            alpha = spec.get('alpha')
+            if (method != 'free-lora-v1' or adapter.source_artifact_id is not None
+                    or type(alpha) is not float or not math.isfinite(alpha) or alpha <= 0):
+                raise ValueError('free-lora adapters carry their own factors, a declared alpha and no basis')
+            basis_tensors = {}
+        else:
+            basis_record = engine.store.get_native_tensor_artifact(adapter.source_artifact_id or '')
+            if basis_record is None:
+                raise ValueError('native adapter is missing its exact frozen basis artifact')
+            basis = basis_record.artifact.validate()
+            nested = method == 'nested-canonical-slice-v1'
+            expected_spec = spec.get('basis_spec') if nested else spec
+            if (basis.kind != 'adapter-basis' or basis.native_identity != engine.native_identity
+                    or expected_spec != (basis.provenance or {}).get('adapter_spec')
+                    or method not in ('weight-svd-sign-canonical-v2', 'nested-canonical-slice-v1') or kind != 'xs'
+                    or (nested and (expected_spec.get('kind') != 'canonical-basis'
+                                    or expected_spec.get('bases') != 'weight-svd-sign-canonical-v2'))):
+                raise ValueError('native adapter/basis must bind the exact live checkpoint, architecture and declared specification')
         if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
-                or len(set(names)) != len(names) or set(adapter.tensors) != set(names)
-                or type(rank) is not int or rank < 1 or kind != 'xs'):
+                or len(set(names)) != len(names) or set(adapter.tensors) != adapter_tensor_keys(spec)
+                or type(rank) is not int or rank < 1 or kind not in ('xs', 'free-lora')):
             raise ValueError('invalid native adapter specification/inventory')
-        expected_basis = {prefix+name for name in names for prefix in ('left.', 'right.')}
-        if set(basis.tensors) != expected_basis:
-            raise ValueError('native adapter basis inventory differs from its specification')
+        if not free:
+            basis_names = expected_spec['parameter_names'] if nested else names
+            if nested and (not set(names) <= set(basis_names) or rank > expected_spec['max_rank']):
+                raise ValueError('nested adapter exceeds its canonical basis')
+            expected_basis = {prefix+name for name in basis_names for prefix in ('left.', 'right.')}
+            if set(basis.tensors) != expected_basis:
+                raise ValueError('native adapter basis inventory differs from its specification')
+            # Exact leading-slice views: nested members share one basis and sum in it.
+            basis_tensors = {prefix+name: basis.tensors[prefix+name][..., :rank] for name in names for prefix in ('left.', 'right.')}
         values = leaves.get(adapter_id, adapter.tensors) if leaves else adapter.tensors
         if isinstance(entry, dict) and entry.get('stop_gradient'):
             values = {name: value.detach() for name, value in values.items()}
-        if (any(value.dtype != torch.float32 for value in basis.tensors.values())
+        if (any(value.dtype != torch.float32 for value in basis_tensors.values())
                 or any(value.dtype != torch.float32 for value in values.values())):
             raise ValueError('native adapter bases and coefficient masters must be FP32')
-        if set(values) != set(names):
+        if set(values) != adapter_tensor_keys(spec):
             raise ValueError('native adapter coefficient inventory changed')
         for name in names:
             if name not in available:
                 raise ValueError(f'native adapter target is not a supported layer matrix: {name}')
             shape = available[name].shape
-            expected = (*shape[:-2], rank * rank)
-            if (rank > min(shape[-2:]) or tuple(values[name].shape) != expected
-                    or tuple(basis.tensors['left.'+name].shape) != (*shape[:-2], shape[-2], rank)
-                    or tuple(basis.tensors['right.'+name].shape) != (*shape[:-2], shape[-1], rank)):
+            if free:
+                ok = (tuple(values['lora_B.'+name].shape) == (*shape[:-1], rank)
+                      and tuple(values['lora_A.'+name].shape) == (*shape[:-2], rank, shape[-1]))
+            else:
+                ok = (tuple(values[name].shape) == (*shape[:-2], rank * rank)
+                      and tuple(basis_tensors['left.'+name].shape) == (*shape[:-2], shape[-2], rank)
+                      and tuple(basis_tensors['right.'+name].shape) == (*shape[:-2], shape[-1], rank))
+            if rank > min(shape[-2:]) or not ok:
                 raise ValueError(f'native adapter tensor geometry differs for {name}')
-        resolved.append((record.id, float(scale), spec, values, basis.tensors))
+        resolved.append((record.id, float(scale), spec, values, basis_tensors))
     return resolved
 
 
@@ -223,13 +311,20 @@ def _effective_replacements(parameters, resolved, gradient_precision):
     replacement = {}
     deltas_by_key = {}
     for _, scale, spec, coefficients, bases in resolved:
-        for name, coefficient in coefficients.items():
+        for name in spec['parameter_names']:
             weight = parameters[name]
-            left, right = (bases[prefix+name].to(device=weight.device, dtype=torch.float32)
-                           for prefix in ('left.', 'right.'))
-            core = coefficient.to(device=weight.device, dtype=torch.float32).reshape(
-                *coefficient.shape[:-1], spec['rank'], spec['rank'])
-            delta = ((left @ core) @ right.transpose(-2, -1)) * scale
+            if spec['kind'] == 'free-lora':
+                coefficient = (coefficients['lora_B.'+name], coefficients['lora_A.'+name])
+                factor_b, factor_a = (coefficients[prefix+name].to(device=weight.device, dtype=torch.float32)
+                                      for prefix in ('lora_B.', 'lora_A.'))
+                delta = (factor_b @ factor_a) * (spec['alpha'] / spec['rank'] * scale)
+            else:
+                coefficient = coefficients[name]
+                left, right = (bases[prefix+name].to(device=weight.device, dtype=torch.float32)
+                               for prefix in ('left.', 'right.'))
+                core = coefficient.to(device=weight.device, dtype=torch.float32).reshape(
+                    *coefficient.shape[:-1], spec['rank'], spec['rank'])
+                delta = ((left @ core) @ right.transpose(-2, -1)) * scale
             key = 'model.'+name
             deltas_by_key.setdefault(key, []).append((delta, coefficient))
             from ..common.native_higher_order import active_reference_arithmetic

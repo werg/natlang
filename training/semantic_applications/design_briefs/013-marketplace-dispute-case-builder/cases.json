@@ -1,0 +1,828 @@
+[
+  {
+    "id": "013-reconstructTimeline-supported",
+    "root": "runCase/reconstructTimeline/audit/qualify.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "DSP-13",
+          "actorId": "carrier-system",
+          "happenedAt": "2026-10-08T14:06:00Z",
+          "eventKind": "carrier-delivery-scan",
+          "assertedFact": "Parcel delivered",
+          "tenantId": "tenant-013",
+          "id": "DisputeEvent-013",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-013",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-013"
+          ],
+          "retentionPolicyId": "retention-013"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "buyerId": "B-13",
+        "sellerId": "S-13",
+        "transactionId": "T-13",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "reviewerId": "R-13",
+        "tenantId": "tenant-013",
+        "id": "DISPUTE-T13",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-013",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-013"
+        ],
+        "retentionPolicyId": "retention-013"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "013-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for reconstructTimeline: A buyer disputes an item description; the listing changed after purchase, delivery is confirmed, and condition evidence remains ambiguous.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "013-reconstructTimeline-contradictory",
+    "root": "runCase/reconstructTimeline/audit/qualify.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "DSP-13",
+          "actorId": "seller",
+          "happenedAt": "2026-10-08T14:06:00Z",
+          "eventKind": "carrier-delivery-scan",
+          "assertedFact": "Carrier scan confirms parcel delivery",
+          "tenantId": "tenant-013",
+          "id": "DisputeEvent-013",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-013",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-013"
+          ],
+          "retentionPolicyId": "retention-013"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "buyerId": "B-13",
+        "sellerId": "S-13",
+        "transactionId": "T-13",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "reviewerId": "R-13",
+        "tenantId": "tenant-013",
+        "id": "DISPUTE-T13",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-013",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-013"
+        ],
+        "retentionPolicyId": "retention-013"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "013-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The timeline merges a seller's unverified 'delivered' message with an independent carrier scan despite different event dates."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for reconstructTimeline: A buyer disputes an item description; the listing changed after purchase, delivery is confirmed, and condition evidence remains ambiguous.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "013-reconstructTimeline-missing",
+    "root": "runCase/reconstructTimeline/audit/qualify.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "DSP-13",
+          "actorId": "carrier-system",
+          "happenedAt": "2026-10-08T14:06:00Z",
+          "eventKind": "carrier-delivery-scan",
+          "assertedFact": "Parcel delivered",
+          "tenantId": "tenant-013",
+          "id": "DisputeEvent-013",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-013",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-013"
+          ],
+          "retentionPolicyId": "retention-013"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "buyerId": "B-13",
+        "sellerId": "S-13",
+        "transactionId": "T-13",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "reviewerId": "R-13",
+        "tenantId": "tenant-013",
+        "id": "DISPUTE-T13",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-013",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-013"
+        ],
+        "retentionPolicyId": "retention-013"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "013-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A dispute narrative says delivery happened but gives no event time or independent corroboration."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for reconstructTimeline: A buyer disputes an item description; the listing changed after purchase, delivery is confirmed, and condition evidence remains ambiguous.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "013-workflow-01",
+    "root": "adjudicateDispute.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-013-01",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
+        "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
+        "expectedVersion": "v1"
+      },
+      "records": {
+        "caseRecords": [
+          {
+            "buyerId": "B-13",
+            "sellerId": "S-13",
+            "transactionId": "T-13",
+            "disputedOutcome": "Whether listing edition v3 described the purchased item",
+            "reviewerId": "R-13",
+            "tenantId": "tenant-013",
+            "id": "DISPUTE-T13",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-013",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-013"
+            ],
+            "retentionPolicyId": "retention-013"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "013-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+              },
+              {
+                "id": "E2",
+                "source": "013-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Listing L-13 was edited Oct 7; purchase T-13 occurred Oct 4 and transaction archive retains listing edition v3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-013",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [
+          "E2"
+        ],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A seller edits the listing after purchase: bind review to the transaction-time edition. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A seller edits the listing after purchase: bind review to the transaction-time edition. Use only the facts in caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—bind review to the transaction-time edition.—as a versioned proposal against caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (bind review to the transaction-time edition.) against caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A seller edits the listing after purchase: bind review to the transaction-time edition.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A seller edits the listing after purchase: bind review to the transaction-time edition.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A seller edits the listing after purchase: bind review to the transaction-time edition. Use only the facts in caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—bind review to the transaction-time edition.—as a versioned proposal against caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (bind review to the transaction-time edition.) against caseId=SYN-013-01, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "013-workflow-02",
+    "root": "adjudicateDispute.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-013-02",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
+        "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
+        "expectedVersion": "v1"
+      },
+      "records": {
+        "caseRecords": [
+          {
+            "buyerId": "B-13",
+            "sellerId": "S-13",
+            "transactionId": "T-13",
+            "disputedOutcome": "Whether listing edition v3 described the purchased item",
+            "reviewerId": "R-13",
+            "tenantId": "tenant-013",
+            "id": "DISPUTE-T13",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-013",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-013"
+            ],
+            "retentionPolicyId": "retention-013"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "013-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+              },
+              {
+                "id": "E2",
+                "source": "013-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Upload U-13 exposes the buyer's street address; evidence hash remains in restricted case store with access limited to reviewer."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-013",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance. Use only the facts in caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—restrict it without deleting evidentiary provenance.—as a versioned proposal against caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (restrict it without deleting evidentiary provenance.) against caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance. Use only the facts in caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—restrict it without deleting evidentiary provenance.—as a versioned proposal against caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (restrict it without deleting evidentiary provenance.) against caseId=SYN-013-02, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "013-workflow-03",
+    "root": "adjudicateDispute.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-013-03",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
+        "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
+        "expectedVersion": "v1"
+      },
+      "records": {
+        "caseRecords": [
+          {
+            "buyerId": "B-13",
+            "sellerId": "S-13",
+            "transactionId": "T-13",
+            "disputedOutcome": "Whether listing edition v3 described the purchased item",
+            "reviewerId": "R-13",
+            "tenantId": "tenant-013",
+            "id": "DISPUTE-T13",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-013",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-013"
+            ],
+            "retentionPolicyId": "retention-013"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "013-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+              },
+              {
+                "id": "E2",
+                "source": "013-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Appeal deadline D-13 fell during platform outage Oct 9; outage policy extends the period by 24 hours and both parties received notices."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-013",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [
+          "E2"
+        ],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A deadline falls during a service outage: apply the configured extension rule and notify both parties. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A deadline falls during a service outage: apply the configured extension rule and notify both parties. Use only the facts in caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—apply the configured extension rule and notify both parties.—as a versioned proposal against caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (apply the configured extension rule and notify both parties.) against caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A deadline falls during a service outage: apply the configured extension rule and notify both parties.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A deadline falls during a service outage: apply the configured extension rule and notify both parties.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A deadline falls during a service outage: apply the configured extension rule and notify both parties. Use only the facts in caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—apply the configured extension rule and notify both parties.—as a versioned proposal against caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (apply the configured extension rule and notify both parties.) against caseId=SYN-013-03, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "013-workflow-04",
+    "root": "adjudicateDispute.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-013-04",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
+        "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
+        "expectedVersion": "v1"
+      },
+      "records": {
+        "caseRecords": [
+          {
+            "buyerId": "B-13",
+            "sellerId": "S-13",
+            "transactionId": "T-13",
+            "disputedOutcome": "Whether listing edition v3 described the purchased item",
+            "reviewerId": "R-13",
+            "tenantId": "tenant-013",
+            "id": "DISPUTE-T13",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-013",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-013"
+            ],
+            "retentionPolicyId": "retention-013"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "013-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+              },
+              {
+                "id": "E2",
+                "source": "013-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Ledger reversal PAY-13 posted externally for $92.00; case recommendation still proposes an additional $92 remedy."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-013",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy. Use only the facts in caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reconcile the ledger before recommending an additional remedy.—as a versioned proposal against caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reconcile the ledger before recommending an additional remedy.) against caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy. Use only the facts in caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—reconcile the ledger before recommending an additional remedy.—as a versioned proposal against caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reconcile the ledger before recommending an additional remedy.) against caseId=SYN-013-04, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "013-workflow-05",
+    "root": "adjudicateDispute.nl",
+    "split_group": "design-brief-app-013",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-013-05",
+        "parties": [
+          "B-13",
+          "S-13"
+        ],
+        "requestedBy": "case owner",
+        "disputedOutcome": "Whether listing edition v3 described the purchased item",
+        "transactionId": "T-13",
+        "requiredDisclosures": [],
+        "expectedVersion": "v1"
+      },
+      "records": {
+        "caseRecords": [
+          {
+            "buyerId": "B-13",
+            "sellerId": "S-13",
+            "transactionId": "T-13",
+            "disputedOutcome": "Whether listing edition v3 described the purchased item",
+            "reviewerId": "R-13",
+            "tenantId": "tenant-013",
+            "id": "DISPUTE-T13",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-013",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-013"
+            ],
+            "retentionPolicyId": "retention-013"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "013-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-08",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Carrier scan X-13 records parcel delivery at 14:06 on 2026-10-08; seller message separately asserts delivery, and the two sources have distinct identifiers."
+              },
+              {
+                "id": "E2",
+                "source": "013-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Appeal A-13 adds photo evidence E-13 about only the packaging damage finding; original decision v1 remains archived."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-013",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "transactionListingEditRefs": [],
+        "paymentReversalRefs": [],
+        "outageDeadlineRefs": [],
+        "publicAddressRefs": [],
+        "appealEvidenceRefs": [
+          "E2"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An appeal contains new evidence: reopen only affected findings and preserve the original decision. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An appeal contains new evidence: reopen only affected findings and preserve the original decision. Use only the facts in caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reopen only affected findings and preserve the original decision.—as a versioned proposal against caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reopen only affected findings and preserve the original decision.) against caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An appeal contains new evidence: reopen only affected findings and preserve the original decision.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "An appeal contains new evidence: reopen only affected findings and preserve the original decision.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An appeal contains new evidence: reopen only affected findings and preserve the original decision. Use only the facts in caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—reopen only affected findings and preserve the original decision.—as a versioned proposal against caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reopen only affected findings and preserve the original decision.) against caseId=SYN-013-05, expectedVersion=v1, version=v1, id=DISPUTE-T13, version=1, id=E1, source=013-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

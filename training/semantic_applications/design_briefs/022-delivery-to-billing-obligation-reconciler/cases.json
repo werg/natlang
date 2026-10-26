@@ -1,0 +1,772 @@
+[
+  {
+    "id": "022-extractConditions-supported",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "BILL-22",
+          "milestone": "Installation",
+          "trigger": "Signed customer acceptance of installation test",
+          "acceptanceRequired": true,
+          "amountRule": "Fixed milestone amount after acceptance",
+          "tenantId": "tenant-022",
+          "id": "BillingCondition-022",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-022",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-022"
+          ],
+          "retentionPolicyId": "retention-022"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementId": "AGR-22",
+        "customerId": "C-22",
+        "projectId": "P-22",
+        "billingPeriod": "2026-10",
+        "ownerId": "Owner-22",
+        "tenantId": "tenant-022",
+        "id": "BILLING-P22",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-022",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-022"
+        ],
+        "retentionPolicyId": "retention-022"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "022-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for extractConditions: A deliverable is sent on time, acknowledged by a coordinator, and partly accepted later by the authorized customer owner.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "022-extractConditions-contradictory",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "BILL-22",
+          "milestone": "Installation",
+          "trigger": "Shipment",
+          "acceptanceRequired": true,
+          "amountRule": "Fixed milestone amount after acceptance",
+          "tenantId": "tenant-022",
+          "id": "BillingCondition-022",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-022",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-022"
+          ],
+          "retentionPolicyId": "retention-022"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementId": "AGR-22",
+        "customerId": "C-22",
+        "projectId": "P-22",
+        "billingPeriod": "2026-10",
+        "ownerId": "Owner-22",
+        "tenantId": "tenant-022",
+        "id": "BILLING-P22",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-022",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-022"
+        ],
+        "retentionPolicyId": "retention-022"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "022-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The invoice draft bills at shipment, but the effective clause requires signed customer acceptance after installation."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for extractConditions: A deliverable is sent on time, acknowledged by a coordinator, and partly accepted later by the authorized customer owner.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "022-extractConditions-missing",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "BILL-22",
+          "milestone": "Installation",
+          "trigger": "Signed customer acceptance of installation test",
+          "acceptanceRequired": true,
+          "amountRule": "Fixed milestone amount after acceptance",
+          "tenantId": "tenant-022",
+          "id": "BillingCondition-022",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-022",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-022"
+          ],
+          "retentionPolicyId": "retention-022"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "agreementId": "AGR-22",
+        "customerId": "C-22",
+        "projectId": "P-22",
+        "billingPeriod": "2026-10",
+        "ownerId": "Owner-22",
+        "tenantId": "tenant-022",
+        "id": "BILLING-P22",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-022",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-022"
+        ],
+        "retentionPolicyId": "retention-022"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "022-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A project note says installation is done but has no acceptance receipt or effective clause reference."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for extractConditions: A deliverable is sent on time, acknowledged by a coordinator, and partly accepted later by the authorized customer owner.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "022-workflow-01",
+    "root": "prepareMilestoneInvoice.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "docket": {
+        "reviewId": "SYN-022-01",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
+          {
+            "agreementId": "AGR-22",
+            "customerId": "C-22",
+            "projectId": "P-22",
+            "billingPeriod": "2026-10",
+            "ownerId": "Owner-22",
+            "tenantId": "tenant-022",
+            "id": "BILLING-P22",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-022",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-022"
+            ],
+            "retentionPolicyId": "retention-022"
+          }
+        ],
+        "agreementSources": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "022-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+              },
+              {
+                "id": "E2",
+                "source": "022-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer signed acceptance for project phase 1 only; contract milestone schedule has three phases and phase 2 remains open."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "authorityRecords": [
+          {
+            "id": "POL-022",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedSchedules": [
+          "case-folder-2026"
+        ]
+      },
+      "book": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A customer accepts only one phase: allocate partial billing without marking the entire project complete. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A customer accepts only one phase: allocate partial billing without marking the entire project complete. Use only the facts in caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—allocate partial billing without marking the entire project complete.—as a versioned proposal against caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (allocate partial billing without marking the entire project complete.) against caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A customer accepts only one phase: allocate partial billing without marking the entire project complete.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A customer accepts only one phase: allocate partial billing without marking the entire project complete.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A customer accepts only one phase: allocate partial billing without marking the entire project complete. Use only the facts in caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—allocate partial billing without marking the entire project complete.—as a versioned proposal against caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (allocate partial billing without marking the entire project complete.) against caseId=SYN-022-01, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "022-workflow-02",
+    "root": "prepareMilestoneInvoice.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "docket": {
+        "reviewId": "SYN-022-02",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
+          {
+            "agreementId": "AGR-22",
+            "customerId": "C-22",
+            "projectId": "P-22",
+            "billingPeriod": "2026-10",
+            "ownerId": "Owner-22",
+            "tenantId": "tenant-022",
+            "id": "BILLING-P22",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-022",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-022"
+            ],
+            "retentionPolicyId": "retention-022"
+          }
+        ],
+        "agreementSources": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "022-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+              },
+              {
+                "id": "E2",
+                "source": "022-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Project tool renames milestone M-22 to 'deployment complete'; executed agreement retains milestone ID M-22."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "authorityRecords": [
+          {
+            "id": "POL-022",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedSchedules": [
+          "case-folder-2026"
+        ]
+      },
+      "book": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A milestone is renamed in project software: preserve the contract identity. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A milestone is renamed in project software: preserve the contract identity. Use only the facts in caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve the contract identity.—as a versioned proposal against caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve the contract identity.) against caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A milestone is renamed in project software: preserve the contract identity.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A milestone is renamed in project software: preserve the contract identity.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A milestone is renamed in project software: preserve the contract identity. Use only the facts in caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—preserve the contract identity.—as a versioned proposal against caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve the contract identity.) against caseId=SYN-022-02, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "022-workflow-03",
+    "root": "prepareMilestoneInvoice.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "docket": {
+        "reviewId": "SYN-022-03",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
+          {
+            "agreementId": "AGR-22",
+            "customerId": "C-22",
+            "projectId": "P-22",
+            "billingPeriod": "2026-10",
+            "ownerId": "Owner-22",
+            "tenantId": "tenant-022",
+            "id": "BILLING-P22",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-022",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-022"
+            ],
+            "retentionPolicyId": "retention-022"
+          }
+        ],
+        "agreementSources": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "022-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+              },
+              {
+                "id": "E2",
+                "source": "022-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Contact J-22 sent acceptance email but authority register marks J-22 as read-only observer."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "authorityRecords": [
+          {
+            "id": "POL-022",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedSchedules": [
+          "case-folder-2026"
+        ]
+      },
+      "book": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message. Use only the facts in caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—seek confirmation rather than discarding the message.—as a versioned proposal against caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (seek confirmation rather than discarding the message.) against caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message. Use only the facts in caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—seek confirmation rather than discarding the message.—as a versioned proposal against caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (seek confirmation rather than discarding the message.) against caseId=SYN-022-03, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "022-workflow-04",
+    "root": "prepareMilestoneInvoice.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "docket": {
+        "reviewId": "SYN-022-04",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
+          {
+            "agreementId": "AGR-22",
+            "customerId": "C-22",
+            "projectId": "P-22",
+            "billingPeriod": "2026-10",
+            "ownerId": "Owner-22",
+            "tenantId": "tenant-022",
+            "id": "BILLING-P22",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-022",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-022"
+            ],
+            "retentionPolicyId": "retention-022"
+          }
+        ],
+        "agreementSources": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "022-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+              },
+              {
+                "id": "E2",
+                "source": "022-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-22 sets $120/hour for work after Nov 1; approved hours before Nov 1 use the prior $100/hour schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "authorityRecords": [
+          {
+            "id": "POL-022",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedSchedules": [
+          "case-folder-2026"
+        ]
+      },
+      "book": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An amendment changes future rates: retain prior earned amounts under their effective schedule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An amendment changes future rates: retain prior earned amounts under their effective schedule. Use only the facts in caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain prior earned amounts under their effective schedule.—as a versioned proposal against caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain prior earned amounts under their effective schedule.) against caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An amendment changes future rates: retain prior earned amounts under their effective schedule.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "An amendment changes future rates: retain prior earned amounts under their effective schedule.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An amendment changes future rates: retain prior earned amounts under their effective schedule. Use only the facts in caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—retain prior earned amounts under their effective schedule.—as a versioned proposal against caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain prior earned amounts under their effective schedule.) against caseId=SYN-022-04, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "022-workflow-05",
+    "root": "prepareMilestoneInvoice.nl",
+    "split_group": "design-brief-app-022",
+    "inputs": {
+      "docket": {
+        "reviewId": "SYN-022-05",
+        "instruction": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "projectScope": "one named case",
+        "billingOwner": "case owner",
+        "expectedVersion": "v1",
+        "contractVersion": "v1",
+        "projects": [
+          {
+            "agreementId": "AGR-22",
+            "customerId": "C-22",
+            "projectId": "P-22",
+            "billingPeriod": "2026-10",
+            "ownerId": "Owner-22",
+            "tenantId": "tenant-022",
+            "id": "BILLING-P22",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-022",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-022"
+            ],
+            "retentionPolicyId": "retention-022"
+          }
+        ],
+        "agreementSources": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "022-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Milestone M-22 is billable only after customer acceptance of the signed installation test; clause C-22 is effective for project P-22 from October 1."
+              },
+              {
+                "id": "E2",
+                "source": "022-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice VOID-22 status is 'requested'; accounting ledger has no authoritative void receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "authorityRecords": [
+          {
+            "id": "POL-022",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedSchedules": [
+          "case-folder-2026"
+        ]
+      },
+      "book": null
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An invoice is voided: release consumed billing capacity only after authoritative confirmation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An invoice is voided: release consumed billing capacity only after authoritative confirmation. Use only the facts in caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—release consumed billing capacity only after authoritative confirmation.—as a versioned proposal against caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (release consumed billing capacity only after authoritative confirmation.) against caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An invoice is voided: release consumed billing capacity only after authoritative confirmation.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "An invoice is voided: release consumed billing capacity only after authoritative confirmation.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An invoice is voided: release consumed billing capacity only after authoritative confirmation. Use only the facts in caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—release consumed billing capacity only after authoritative confirmation.—as a versioned proposal against caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (release consumed billing capacity only after authoritative confirmation.) against caseId=SYN-022-05, expectedVersion=v1, version=v1, ownerId=Owner-22, id=BILLING-P22, version=1, id=E1, source=022-source-1, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

@@ -1,14 +1,19 @@
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { activeNativeAdapters } from '../native/model-recording.js';
+import { perRequestLora } from './lora-scales.js';
+import { stackServingName } from '../adaptation/weights/binding.js';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
-import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
+import { openAICompatibleModelTurn, serverContextWindow, type OpenAICompatibleOptions } from './openai-compatible.js';
+import { neuraleseServerModelTurn } from './neuralese-server.js';
+import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
@@ -22,6 +27,11 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
+  /** A native reference server's artifact store, for uploading tuned artifacts and states; undefined otherwise. */
+  nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
+  /** Requests carry native content parts (native-state imports); wrappers must keep this marker. */
+  readonly neuralese?: boolean;
+  vllmStacks?(names: Iterable<string>): void;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
   turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
@@ -34,7 +44,12 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** The slot sizing of a managed local server once it has started (null otherwise). */
   slotPlan(): SlotPlan | null };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
-  (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
+  (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  /** Tuned weight adapters (GGUF LoRA exports of the active release) to load at server start, keyed by artifact ID.
+   * Each request then applies only its own call's stack through per-request `lora` scales. */
+  loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
+  /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
+  rlCapture?: boolean };
 
 export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
   const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
@@ -61,6 +76,32 @@ async function fileHash(path: string): Promise<string> {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest('hex');
+}
+
+/**
+ * The sha256 of the base GGUF the managed server runs: the pinned default's declared hash, or the configured file's
+ * content hash (cached beside it by size and mtime). Tuned GGUF adapters must bind exactly this file.
+ */
+export async function managedModelSha256(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (!environment.NATLANG_MODEL_PATH) return DEFAULT_LOCAL_MODEL.sha256;
+  const path = resolve(environment.NATLANG_MODEL_PATH), stat = statSync(path);
+  const cache = join(defaultNatlangCacheDirectory(environment), 'model-hashes', createHash('sha256').update(path).digest('hex').slice(0, 24));
+  const stamp = `${stat.size}:${stat.mtimeMs}`;
+  try { const [seen, hash] = readFileSync(cache, 'utf8').split('\n'); if (seen === stamp && hash && /^[0-9a-f]{64}$/.test(hash)) return hash; } catch { /* not cached */ }
+  const hash = await fileHash(path);
+  mkdirSync(dirname(cache), { recursive: true }); writeFileSync(cache, `${stamp}\n${hash}`);
+  return hash;
+}
+
+const perSequenceLora = new Map<string, boolean>();
+/** Whether a llama-server binary batches different per-request LoRA stacks (`--lora-per-sequence`). */
+function supportsPerSequenceLora(executable: string): boolean {
+  let known = perSequenceLora.get(executable);
+  if (known === undefined) {
+    const help = spawnSync(executable, ['--help'], { encoding: 'utf8', timeout: 20000 });
+    perSequenceLora.set(executable, known = `${help.stdout ?? ''}${help.stderr ?? ''}`.includes('--lora-per-sequence'));
+  }
+  return known;
 }
 
 async function verifiedDefault(path: string): Promise<boolean> {
@@ -157,8 +198,28 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // server's concurrency is its slot count unless configured, and is set once the server has started.
   const scheduler = choice.kind === 'pi-provider' ? undefined : schedulerForSettings(choice);
   let plan: SlotPlan | null = null;
-  const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
-    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint });
+  // Loaded tuned adapters: artifact ID -> llama-server adapter index (fixed for the server's lifetime).
+  const loraIndex = new Map<string, number>();
+  const tunedRequest = () => perRequestLora(loraIndex, 'the managed model server');
+  // A native reference server: one driver whose requests carry the exact native adapter stack and state parts.
+  let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
+  const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
+    headers: external!.headers, apiKey: environment[external!.apiKeyEnv], owner: randomUUID(),
+    request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true } : external!.request });
+  // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
+  const vllmLoaded = new Set<string>();
+  const vllmTunedRequest = () => {
+    const active = activeNativeAdapters();
+    if (!active.length) return undefined;
+    const name = stackServingName(active);
+    if (!vllmLoaded.has(name)) throw new Error(`weights-unavailable: stack ${name} is not loaded by the vLLM server; rerun natlang tune or restart`);
+    return { x_natlang_model_override: name };
+  };
+  const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
+    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
+    ...(choice.kind === 'managed-local' ? { tunedRequest } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
+  const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
+    { contextWindow: () => serverContextWindow(options) }) : openai(options);
   let unscored: string | null = null;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
@@ -190,6 +251,14 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         '-c', String(plan.totalContext), '-ngl',
         String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
         '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
+      loraIndex.clear();
+      const adapters = runtimeOptions.loraAdapters?.() ?? [];
+      if (adapters.length) {
+        // Loaded off; each request sets its own stack's scales. A server with per-sequence scales (the llama.cpp
+        // fork) also batches requests whose stacks differ; others serialize them.
+        args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(prerequisites.executable) ? ['--lora-per-sequence'] : []));
+        for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
+      }
       error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });
@@ -249,6 +318,11 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
     scheduler,
+    /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
+    nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
+    neuralese: !!external?.neuraleseServer,
+    /** Record stacks the vLLM server has loaded (by serving name). */
+    vllmStacks(names: Iterable<string>) { for (const name of names) vllmLoaded.add(name); },
     slotPlan() { return plan; },
     async close() {
       closed = true;

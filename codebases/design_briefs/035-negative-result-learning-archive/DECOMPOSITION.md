@@ -1,0 +1,11 @@
+# Negative-result learning archive
+
+`negativeResultDossier.nl` reconstructs evidence before it interprets an outcome. Its first subgraph aligns registered protocol steps with timestamped execution events and validates the full measurement chain. Only completed attempts with a valid instrument/data path can be classified as negative evidence. The inference gate keeps incomplete, invalid-measurement, and uncertain cases as separate typed outcomes.
+
+The causal view connects one demonstrated process defect to all affected attempts without counting it as repeated scientific evidence. Untested mechanisms remain plausible rivals. Follow-up design declares rival-specific predictions before execution and blocks unsafe or unapproved variants. Lesson revision versions the knowledge state and conditions applicability on the actual protocol and valid measurement context. Attribution restrictions affect the general view while authorized method reviewers retain scoped access.
+
+Five exact gate roots retain their original typed input and finite verdict, relocated to `negativeResultDossier/{attempt,inference,causes,followups,lessons}/audit/qualify.nl`. Case inputs, observed records, and expected verdicts are preserved; only root paths change.
+
+`reconcileFollowupExecution.nl` accepts the independent run receipt against the registered prediction reference. It compares the observed result to both forecasts under actual conditions, carries invalid and incomplete runs without directional inference, and opens lesson review only for a valid discriminating result. The archive never rewrites previous lessons from one follow-up.
+
+The unreferenced inference, cause, follow-up, and lesson qualification leaves were removed from the packaged source. Their original invariants remain owned by `adjudicateInferenceValidity.nl` (completion, measurement integrity, and registered-prediction comparison), `compareRivalMechanisms.nl` (demonstrated causes versus plausible rivals), `designDiscriminatingFollowups.nl` (predeclared predictions and safe bounds), and `reviseScopedLessons.nl` (tested-condition scope and append-only history). The `attempt/audit/qualify.nl` root remains because the unchanged exact gate cases invoke it.

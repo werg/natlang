@@ -1,0 +1,112 @@
+{
+  "schema": "natlang.application/1",
+  "id": "018",
+  "title": "Supplier incident coordinator",
+  "entrypoint": "coordinateSupplierIncident.nl",
+  "interfaces": [
+    {
+      "name": "coordinateSupplierIncident",
+      "path": "coordinateSupplierIncident.nl",
+      "purpose": "Cluster supplier incident reports by supported mechanism, trace exact lot/order exposure, contain only evidenced stock, test corrective claims against rivals, and reopen recurring causal failures.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "supplier-incident"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "linkReports",
+        "paths": [
+          "incidentDesk/clusterIncidents.nl"
+        ]
+      },
+      {
+        "stage": "assessExposure",
+        "paths": [
+          "incidentDesk/traceIncidentExposure.nl"
+        ]
+      },
+      {
+        "stage": "planContainment",
+        "paths": [
+          "incidentDesk/planIncidentContainment.nl"
+        ]
+      },
+      {
+        "stage": "interpretCorrection",
+        "paths": [
+          "incidentDesk/testSupplierCorrection.nl"
+        ]
+      },
+      {
+        "stage": "verifyClosure",
+        "paths": [
+          "incidentDesk/reviewIncidentClosure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "incidentDesk/resolveLotAliases.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "incidentDesk/traceIncidentExposure/partitionSplitStock.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "incidentDesk/escalateMissedResponse.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "incidentDesk/reopenCausalRecurrence.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "incidentDesk/amendCorrectedNotice.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "source-backed incident clusters, lot lineage, split allocations, correction and notice history",
+    "writes": "incident proposal only; no hold or notice dispatch claimed"
+  },
+  "effects": [
+    "lot-specific containment proposal",
+    "supplier response escalation",
+    "reviewed customer notice amendment"
+  ],
+  "source_files": [
+    "coordinateSupplierIncident.nl",
+    "incidentDesk/amendCorrectedNotice.nl",
+    "incidentDesk/clusterIncidents.nl",
+    "incidentDesk/escalateMissedResponse.nl",
+    "incidentDesk/frameIncident.nl",
+    "incidentDesk/planIncidentContainment.nl",
+    "incidentDesk/reopenCausalRecurrence.nl",
+    "incidentDesk/resolveLotAliases.nl",
+    "incidentDesk/reviewIncidentClosure.nl",
+    "incidentDesk/selectIncidentAuthority.nl",
+    "incidentDesk/testSupplierCorrection.nl",
+    "incidentDesk/traceIncidentExposure.nl",
+    "incidentDesk/traceIncidentExposure/partitionSplitStock.nl",
+    "natlang.json",
+    "qualification/linkReports.nl",
+    "types.ts",
+    "coordinateSupplierIncident/reconcileIncidentCheckpoint.nl"
+  ]
+}

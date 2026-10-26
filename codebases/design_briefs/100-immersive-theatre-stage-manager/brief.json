@@ -1,0 +1,50 @@
+{
+  "application_id": "100",
+  "title": "Immersive Theatre Stage Manager",
+  "source_relative_path": "applications/20-games-live-events-and-interactive-experiences/100-immersive-theatre-stage-manager.md",
+  "source_sha256": "5178fac921e07a15752e1798f54e9ad49a78485babd6f1786011a851cb99b965",
+  "domain_id": "20",
+  "stages": [
+    {
+      "name": "modelDramaturgy",
+      "output_type": "TheatreScene",
+      "algorithm": "Read the script and production notes to identify scene goals, knowledge reveals, dependencies, and branching choices. Distinguish fixed dramatic obligations from improvisable material and preserve what each character and audience group can know at that point.",
+      "gate": "Scene transitions respect knowledge and narrative prerequisites."
+    },
+    {
+      "name": "modelProduction",
+      "output_type": "TheatreConstraint",
+      "algorithm": "Reconcile cast availability, venue constraints, props, accessibility arrangements, and participant boundaries. Identify scenes requiring qualified stage control or specific resources, and keep physical-safety instructions outside improvisational model authority.",
+      "gate": "Required resources and consent conditions are explicit and current."
+    },
+    {
+      "name": "selectSceneVariants",
+      "output_type": "SceneVariant",
+      "algorithm": "Select or generate approved-style variants that fit audience choices and current resources. Preserve the dramatic beat, character knowledge, and consent boundaries; avoid replacing a missing prop with an unsafe physical action or unsupported audience involvement.",
+      "gate": "Variant remains narratively coherent and operationally permitted."
+    },
+    {
+      "name": "coordinatePerformance",
+      "output_type": "TheatreCuePlan",
+      "algorithm": "Build an exact cue and movement plan using approved production constraints, then provide role-specific briefings. Confirm critical acknowledgments, preserve stage-manager control, and distinguish a proposed cue from an executed cue in the live state.",
+      "gate": "No conflicting resource use, impossible timing, or unauthorized safety-critical cue."
+    },
+    {
+      "name": "recoverContinuity",
+      "output_type": "TheatreRecovery",
+      "algorithm": "When cast, props, or audience paths change, propose bounded in-character recovery material and feasible scene adjustments. Preserve revealed facts and participant boundaries, obtain stage-manager approval, and log the actual path for subsequent scenes and post-show reset.",
+      "gate": "Recovery preserves safety, consent, timing feasibility, and narrative continuity."
+    }
+  ],
+  "operational_details": [
+    "An audience member declines participation: switch to an equivalent nonparticipatory path without pressure.",
+    "A cast member becomes unavailable: select a prequalified variant or obtain approval for a bounded rewrite.",
+    "A prop fails mid-scene: use an approved narrative recovery, never an improvised hazardous mechanism.",
+    "Two audience groups learn different facts: maintain separate knowledge state for later scenes.",
+    "A stop signal is given: halt relevant activity immediately under the production’s safety protocol."
+  ],
+  "scenario": {
+    "representative_episode": "A branching performance loses a cast member and a key prop while two audience groups have learned different secrets and one participant opts out.",
+    "independent_truth": "Exact scene and resource graph, character and audience knowledge, consent states, cue timing, and theatrical quality review."
+  }
+}

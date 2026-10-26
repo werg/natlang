@@ -1,0 +1,857 @@
+[
+  {
+    "id": "087-first-gate-pass",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
+    "split_group": "world-087-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+        "candidateIds": [
+          "087-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "087-first-e1",
+            "source": "primary case record ORAL-87",
+            "version": "v1",
+            "text": "Primary domain record for case ORAL-87 states: caseId=\"ORAL-87\"; speakerId=\"SPK-87\"; eventDescription=\"Speaker recalls leaving harbor in a winter storm with two siblings.\"; rememberedTime=\"Late winter, likely 1978; year uncertain.\"; certaintyLanguage=\"“I think it was February after the mill closed.”\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "087-case-record",
+          "caseId": "ORAL-87",
+          "sourceRefs": [
+            "087-first-e1"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryAccount",
+          "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "speakerId": "SPK-87",
+          "eventDescription": "Speaker recalls leaving harbor in a winter storm with two siblings.",
+          "rememberedTime": "Late winter, likely 1978; year uncertain.",
+          "certaintyLanguage": "“I think it was February after the mill closed.”"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "087-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "087-first-gate-fail",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
+    "split_group": "world-087-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+        "candidateIds": [
+          "087-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "087-first-e1",
+            "source": "primary case record ORAL-87",
+            "version": "v1",
+            "text": "Primary domain record for case ORAL-87 states: caseId=\"ORAL-87\"; speakerId=\"SPK-87\"; eventDescription=\"Speaker recalls leaving harbor in a winter storm with two siblings.\"; rememberedTime=\"Late winter, likely 1978; year uncertain.\"; certaintyLanguage=\"“I think it was February after the mill closed.”\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "087-case-record",
+          "caseId": "ORAL-87",
+          "sourceRefs": [
+            "087-first-e1"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryAccount",
+          "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "speakerId": "SPK-87",
+          "eventDescription": "Speaker recalls leaving harbor in a winter storm with two siblings.",
+          "rememberedTime": "February 1978, exact date confirmed.",
+          "certaintyLanguage": "“I think it was February after the mill closed.”"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "087-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "087-first-gate-needs-review",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
+    "split_group": "world-087-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+        "candidateIds": [
+          "087-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "087-first-e1",
+            "source": "primary case record ORAL-87",
+            "version": "v1",
+            "text": "Primary domain record for case ORAL-87 states: caseId=\"ORAL-87\"; speakerId=\"SPK-87\"; eventDescription=\"Speaker recalls leaving harbor in a winter storm with two siblings.\"; certaintyLanguage=\"“I think it was February after the mill closed.”\". No current value is present for rememberedTime.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "rememberedTime"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "087-case-record",
+          "sourceRefs": [
+            "087-first-e1"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryAccount",
+          "subject": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "eventDescription": "Speaker recalls leaving harbor in a winter storm with two siblings.",
+          "certaintyLanguage": "“I think it was February after the mill closed.”",
+          "caseId": "ORAL-87",
+          "speakerId": "SPK-87"
+        },
+        "missingFields": [
+          "rememberedTime"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "087-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "087-workflow-1",
+    "root": "archiveOralHistory.nl",
+    "split_group": "world-087-workflow-1",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "087-workflow-1-record",
+          "caseId": "087-workflow-1",
+          "sourceRefs": [
+            "087-event-1"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryProject",
+          "subject": "Nickname “Red” appears in interview SPK-87-A and SPK-87-B. The consented identity index lists three possible people, and the speakers do not supply enough family or place context to choose one.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "087-event-1",
+            "sourceVersion": "v1"
+          },
+          "interviewIds": [
+            "INT-87",
+            "INT-88"
+          ],
+          "researchScope": "Harbor departures after the mill closure; preserve memory uncertainty.",
+          "archivistId": "ARCH-7",
+          "consentRegisterId": "CONSENT-87",
+          "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-1-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
+        }
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Oral History Reconciliation Archive",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: Two speakers use different dates for one event: preserve both with context. Use observation Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date. as source of truth. Preserve both source-linked recollections and their uncertainty without choosing an exact date; the view should show the discrepancy and its context, the durable proposal should retain both accounts, and any effect remains pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Two speakers use different dates for one event: preserve both with context.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 087-workflow-1-record must show both date recollections and uncertainty in observation 087-event-1 (v1): Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date. Apply detail Two speakers use different dates for one event: preserve both with context. without inventing a resolved date.",
+      "durable_state": "Durable-state proposal must retain typed OralHistoryProject record 087-workflow-1-record, source 087-event-1 version v1, and both approximate dates from the observed accounts: Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date. Carry detail Two speakers use different dates for one event: preserve both with context. into the proposed record; do not claim persistence.",
+      "effects": "Effect ledger may propose no date correction from 087-event-1 on these facts; any interview follow-up must be an unexecuted proposal preserving both accounts: Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date. Apply detail Two speakers use different dates for one event: preserve both with context.; do not claim contact, publication, or other effect without host authorization and receipt."
+    }
+  },
+  {
+    "id": "087-workflow-2",
+    "root": "archiveOralHistory.nl",
+    "split_group": "world-087-workflow-2",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "087-workflow-2-record",
+          "caseId": "087-workflow-2",
+          "sourceRefs": [
+            "087-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryProject",
+          "subject": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "087-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "interviewIds": [
+            "INT-87",
+            "INT-88"
+          ],
+          "researchScope": "Harbor departures after the mill closure; preserve memory uncertainty.",
+          "archivistId": "ARCH-7",
+          "consentRegisterId": "CONSENT-87",
+          "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-2-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
+        }
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Oral History Reconciliation Archive",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material. Use observation Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote. as the source of truth. The proposal should preserve source-linked record 087-workflow-2-record and make a recipient-facing distinction grounded in 087-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 087-workflow-2-record must accurately preserve observation 087-wf-2-source (v1): Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote. Apply brief requirement A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed OralHistoryProject record 087-workflow-2-record and its source link to 087-wf-2-source version v1, with a disposition matching this observed state: Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote. Carry requirement A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 087-workflow-2-record based on 087-wf-2-source (v1) and observation Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote. Apply requirement A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "087-workflow-3",
+    "root": "archiveOralHistory.nl",
+    "split_group": "world-087-workflow-3",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "087-workflow-3-record",
+          "caseId": "087-workflow-3",
+          "sourceRefs": [
+            "087-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryProject",
+          "subject": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "087-wf-3-source",
+            "sourceVersion": "v3"
+          },
+          "interviewIds": [
+            "INT-87",
+            "INT-88"
+          ],
+          "researchScope": "Harbor departures after the mill closure; preserve memory uncertainty.",
+          "archivistId": "ARCH-7",
+          "consentRegisterId": "CONSENT-87",
+          "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-3-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
+        }
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Oral History Reconciliation Archive",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A nickname refers to several people: retain candidate identities. Independently assess the ambiguous-nickname use case. Preserve Rosa Bell, Rafael Ortiz, and Rowan Ellis as candidates for “Red”; do not select one from occupation, kinship, or contextual guesswork. The view and durable proposal must preserve the unresolved identity and evidence links. Any further identification is an unexecuted research proposal pending source evidence and host authorization. Use the supplied evidence as the source of truth, preserve record 087-workflow-3-record and source 087-wf-3-source version v3, and keep persistence and external effects at the host boundary."
+    },
+    "scenario": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A nickname refers to several people: retain candidate identities.",
+    "boundary_assertions": {
+      "view": "View names the nickname “Red” and all three candidates (Rosa Bell, Rafael Ortiz, Rowan Ellis), explains that the available sources do not identify which person carried the lantern, and does not assert a match.",
+      "durable_state": "Proposed archive state retains the transcript passage, index v3, and three candidate identity links as unresolved; no candidate is merged or selected.",
+      "effects": "Effect ledger may propose checking additional consented audio or identity records. It must not publish an attribution or merge records without supporting evidence and authorization."
+    }
+  },
+  {
+    "id": "087-workflow-4",
+    "root": "archiveOralHistory.nl",
+    "split_group": "world-087-workflow-4",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "087-workflow-4-record",
+          "caseId": "087-workflow-4",
+          "sourceRefs": [
+            "087-event-4"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryProject",
+          "subject": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "087-event-4",
+            "sourceVersion": "v1"
+          },
+          "interviewIds": [
+            "INT-87",
+            "INT-88"
+          ],
+          "researchScope": "Harbor departures after the mill closure; preserve memory uncertainty.",
+          "archivistId": "ARCH-7",
+          "consentRegisterId": "CONSENT-87",
+          "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-4-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
+        }
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Oral History Reconciliation Archive",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A transcript correction changes attribution: re-evaluate dependent narratives. Use observation At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2. as the source of truth. The proposal should preserve source-linked record 087-workflow-4-record and make a recipient-facing distinction grounded in 087-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A transcript correction changes attribution: re-evaluate dependent narratives.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 087-workflow-4-record must accurately preserve observation 087-event-4 (v1): At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2. Apply brief requirement A transcript correction changes attribution: re-evaluate dependent narratives. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed OralHistoryProject record 087-workflow-4-record and its source link to 087-event-4 version v1, with a disposition matching this observed state: At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2. Carry requirement A transcript correction changes attribution: re-evaluate dependent narratives. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 087-workflow-4-record based on 087-event-4 (v1) and observation At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2. Apply requirement A transcript correction changes attribution: re-evaluate dependent narratives. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "087-workflow-5",
+    "root": "archiveOralHistory.nl",
+    "split_group": "world-087-workflow-5",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "087-workflow-5-record",
+          "caseId": "087-workflow-5",
+          "sourceRefs": [
+            "087-event-5"
+          ],
+          "state": "draft",
+          "kind": "OralHistoryProject",
+          "subject": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+          "status": "candidate",
+          "evidenceIds": [
+            "087-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "087-event-5",
+            "sourceVersion": "v1"
+          },
+          "interviewIds": [
+            "INT-87",
+            "INT-88"
+          ],
+          "researchScope": "Harbor departures after the mill closure; preserve memory uncertainty.",
+          "archivistId": "ARCH-7",
+          "consentRegisterId": "CONSENT-87",
+          "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-5-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
+        }
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Oral History Reconciliation Archive",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly. Use observation Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail. as the source of truth. The proposal should preserve source-linked record 087-workflow-5-record and make a recipient-facing distinction grounded in 087-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 087-workflow-5-record must accurately preserve observation 087-event-5 (v1): Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail. Apply brief requirement A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed OralHistoryProject record 087-workflow-5-record and its source link to 087-event-5 version v1, with a disposition matching this observed state: Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail. Carry requirement A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 087-workflow-5-record based on 087-event-5 (v1) and observation Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail. Apply requirement A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,90 @@
+{
+  "application_id": "063",
+  "title": "Building handover dossier compiler",
+  "source_relative_path": "applications/13-construction-property-and-facilities/063-building-handover-dossier-compiler.md",
+  "source_sha256": "33500c97e0c67e0998ec85805f3c28899858191aa6158e3689f07db0d169d0fc",
+  "domain_id": "13",
+  "stages": [
+    {
+      "name": "recoverRequirements",
+      "output_type": "HandoverRequirement",
+      "algorithm": "Read the supplied handover specification, asset schedules, and contractual requirements to identify required documents, tests, training, and approvals. Separate documentary requirements from technical sign-off and preserve conditions specific to asset classes or building areas.",
+      "gate": "Every required handover item has an explicit source and acceptance condition."
+    },
+    {
+      "name": "resolveAssets",
+      "output_type": "AssetIdentity",
+      "algorithm": "Reconcile asset tags, drawing labels, manuals, and contractor naming conventions. Distinguish identical models at different locations, preserve serial and revision data, and flag ambiguous identity before attaching a certificate or manual to the wrong asset.",
+      "gate": "Evidence attaches to the correct asset instance and revision."
+    },
+    {
+      "name": "matchArtifacts",
+      "output_type": "HandoverEvidence",
+      "algorithm": "Compare submitted manuals, inspection records, certificates, and training logs with the actual requirement. Distinguish a blank form from completed evidence and a generic manual from the installed configuration; retain missing signatures or scope mismatches.",
+      "gate": "Artifact presence alone does not satisfy substantive evidence requirements."
+    },
+    {
+      "name": "planClosure",
+      "output_type": "HandoverClosureTask",
+      "algorithm": "Group gaps into actionable requests for contractors, inspectors, or facilities staff. Prioritize dependencies affecting safe or practical use under supplied rules, and preserve accepted temporary arrangements with owners and expiry rather than hiding them as complete.",
+      "gate": "Every mandatory gap has an accountable closure path or explicit escalation."
+    },
+    {
+      "name": "assembleDossier",
+      "output_type": "HandoverDossier",
+      "algorithm": "Produce a navigable asset-linked dossier and a separate outstanding-obligations register. Verify search, links, file integrity, and recipient access, then record documentary acceptance independently from any qualified technical approval or occupancy decision.",
+      "gate": "No claim of technical readiness based solely on a complete document bundle."
+    }
+  ],
+  "operational_details": [
+    "A manual covers several variants: mark the installed variant and relevant sections.",
+    "A certificate names the wrong asset: block matching despite a familiar model number.",
+    "A contractor portal link will expire: archive permitted deliverables with durable hashes.",
+    "Facilities staff cannot open a file format: provide an approved accessible export.",
+    "A temporary arrangement expires after handover: transfer the follow-up obligation explicitly."
+  ],
+  "domain_records": {
+    "BuildingHandover": [
+      "projectId: ID",
+      "buildingId: ID",
+      "assetIds: ID[]",
+      "handoverOwnerId: ID",
+      "targetDate: LocalDate"
+    ],
+    "HandoverRequirement": [
+      "caseId: ID",
+      "assetClass: string",
+      "requiredArtifact: string",
+      "acceptanceRole: string",
+      "completionCondition: string"
+    ],
+    "AssetIdentity": [
+      "caseId: ID",
+      "assetId: ID",
+      "aliases: string[]",
+      "location: string",
+      "equipmentRevision: string"
+    ],
+    "HandoverEvidence": [
+      "caseId: ID",
+      "requirementId: ID",
+      "assetId: ID",
+      "artifactIds: ID[]",
+      "sufficiency: string"
+    ],
+    "HandoverClosureTask": [
+      "caseId: ID",
+      "requirementIds: ID[]",
+      "ownerId: ID",
+      "missingEvidence: string",
+      "dueAt: DateTime"
+    ],
+    "HandoverDossier": [
+      "caseId: ID",
+      "assetIds: ID[]",
+      "evidenceIds: ID[]",
+      "outstandingIds: ID[]",
+      "acceptanceRefs: Ref[]"
+    ]
+  }
+}

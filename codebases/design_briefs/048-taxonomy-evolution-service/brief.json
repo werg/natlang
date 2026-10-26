@@ -1,0 +1,89 @@
+{
+  "application_id": "048",
+  "title": "Taxonomy evolution service",
+  "source_relative_path": "applications/10-data-stewardship-and-semantic-analysis/048-taxonomy-evolution-service.md",
+  "source_sha256": "35e57664c70448ace4570a48a7f473d7bdff73a28715e376e88bbabaaa714b5f",
+  "domain_id": "10",
+  "stages": [
+    {
+      "name": "assessFit",
+      "output_type": "CategoryFit",
+      "algorithm": "Compare incoming records with category definitions and examples, not names alone. Distinguish a genuinely new concept from a poorly worded existing category, and retain ambiguous membership where the taxonomy permits multiple dimensions.",
+      "gate": "Classification uses the current definition version and preserves uncertainty."
+    },
+    {
+      "name": "diagnoseStructure",
+      "output_type": "TaxonomyDefect",
+      "algorithm": "Analyze repeated fit problems to identify structural defects. Separate insufficient annotation guidance from real conceptual change, inspect negative examples, and avoid proliferating categories for every rare wording variant.",
+      "gate": "Proposed structural changes are supported by multiple informative examples or a decisive new requirement."
+    },
+    {
+      "name": "designCategoryRevision",
+      "output_type": "CategoryRevision",
+      "algorithm": "Draft revised definitions, inclusion and exclusion rules, and parent-child relationships. Preserve stable category IDs where meaning remains stable, create new identities when meaning changes, and explicitly map split or merged historical categories.",
+      "gate": "No cycle, contradictory boundary, or silent reuse of an ID for a different concept."
+    },
+    {
+      "name": "simulateReclassification",
+      "output_type": "TaxonomyImpact",
+      "algorithm": "Reclassify only potentially affected records under baseline and candidate definitions, compare changes, and inspect boundary cases. Build explicit bridges for historical reporting and retain cases that cannot be mapped uniquely after a split.",
+      "gate": "Exact changed-record set and no fabricated historical precision."
+    },
+    {
+      "name": "promoteTaxonomy",
+      "output_type": "TaxonomyRelease",
+      "algorithm": "Present impact, examples, and reporting consequences to the steward, then publish a versioned release and migration plan. Notify dependent systems, invalidate only relevant classification caches, and preserve old definitions for historical queries.",
+      "gate": "Approved definitions, migration scope, and dependent consumer compatibility are verified."
+    }
+  ],
+  "operational_details": [
+    "A category is renamed without semantic change: retain its ID and avoid unnecessary reclassification.",
+    "A split cannot be reconstructed historically: report a coarser comparable series.",
+    "A downstream system accepts only one label: expose incompatibility with a new multi-label rule.",
+    "A rare concept is important despite low frequency: allow evidence-based exceptions to frequency heuristics.",
+    "Two stewards edit related branches: detect semantic boundary conflicts before merging."
+  ],
+  "domain_records": {
+    "TaxonomyChange": [
+      "taxonomyId: ID",
+      "incomingCollectionId: ID",
+      "stewardId: ID",
+      "intendedUse: string",
+      "baselineVersion: string"
+    ],
+    "CategoryFit": [
+      "caseId: ID",
+      "recordId: ID",
+      "candidateCategoryIds: ID[]",
+      "fit: 'clear'|'overlap'|'none'|'uncertain'",
+      "boundaryIssue: string"
+    ],
+    "TaxonomyDefect": [
+      "caseId: ID",
+      "categoryIds: ID[]",
+      "kind: 'split'|'merge'|'rename'|'boundary'|'new'",
+      "evidenceIds: ID[]"
+    ],
+    "CategoryRevision": [
+      "caseId: ID",
+      "affectedIds: ID[]",
+      "newDefinitions: string[]",
+      "relationMap: string",
+      "preservedDistinctions: string[]"
+    ],
+    "TaxonomyImpact": [
+      "caseId: ID",
+      "revisionId: ID",
+      "changedRecordIds: ID[]",
+      "historicalBridge: string",
+      "unresolvedIds: ID[]"
+    ],
+    "TaxonomyRelease": [
+      "caseId: ID",
+      "revisionId: ID",
+      "approvalRefs: Ref[]",
+      "migrationTaskIds: ID[]",
+      "rollbackVersion: string"
+    ]
+  }
+}

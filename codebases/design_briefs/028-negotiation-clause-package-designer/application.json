@@ -1,0 +1,117 @@
+{
+  "schema": "natlang.application/1",
+  "id": "028",
+  "title": "Negotiation clause package designer",
+  "entrypoint": "designClausePackage.nl",
+  "interfaces": [
+    {
+      "name": "designClausePackage",
+      "path": "designClausePackage.nl",
+      "purpose": "Develop coherent clause alternatives from party positions and clause dependencies, preserving conditional acceptance and exact-draft approval.",
+      "stateParameter": "vault",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "clause-package"
+    }
+  ],
+  "persistence": [
+    "NegotiationPosition",
+    "ClauseDependency",
+    "ClausePackage",
+    "RedlineFinding",
+    "ClauseOffer"
+  ],
+  "effects": [
+    "expose only comment-stripped external clause draft",
+    "require approver signature on exact current hash before offer"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverPositions",
+        "paths": [
+          "clauseWorkbench/recoverIssueMandates.nl"
+        ]
+      },
+      {
+        "stage": "mapClauseInteractions",
+        "paths": [
+          "clauseWorkbench/mapClauseGraph.nl"
+        ]
+      },
+      {
+        "stage": "generatePackages",
+        "paths": [
+          "clauseWorkbench/composeTradeoffPackages.nl"
+        ]
+      },
+      {
+        "stage": "reconcileRedlines",
+        "paths": [
+          "clauseWorkbench/readRedlineConsequences.nl"
+        ]
+      },
+      {
+        "stage": "prepareOffer",
+        "paths": [
+          "clauseWorkbench/prepareExternalOffer.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "clauseDesk/expandGlobalTermImpact.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "clauseDesk/stripInternalComments.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "clauseDesk/preserveConditionalAcceptance.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "clauseDesk/bindApprovalToHash.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "clauseDesk/rejectUndefinedTerm.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "types.ts",
+    "designClausePackage.nl",
+    "clauseWorkbench/recoverIssueMandates.nl",
+    "clauseWorkbench/mapClauseGraph.nl",
+    "clauseWorkbench/composeTradeoffPackages.nl",
+    "clauseWorkbench/readRedlineConsequences.nl",
+    "clauseWorkbench/prepareExternalOffer.nl",
+    "clauseDesk/expandGlobalTermImpact.nl",
+    "clauseDesk/stripInternalComments.nl",
+    "clauseDesk/preserveConditionalAcceptance.nl",
+    "clauseDesk/bindApprovalToHash.nl",
+    "clauseDesk/rejectUndefinedTerm.nl",
+    "runCase/recoverPositions/audit/qualify.nl",
+    "clauseDesk/frameNegotiation.nl",
+    "designClausePackage/reconcileClausePackage.nl",
+    "clauseWorkbench/composeTradeoffPackages/composeOneWholePackage.nl"
+  ]
+}

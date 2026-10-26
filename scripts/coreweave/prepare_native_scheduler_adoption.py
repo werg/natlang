@@ -14,7 +14,7 @@ import sys
 REPOSITORY=Path(os.environ.get('NATLANG_REPO',Path(__file__).resolve().parents[2])).resolve()
 sys.path[:0]=[str(REPOSITORY/'training/neuralese'),str(REPOSITORY/'scripts/coreweave')]
 from natlang_neuralese.common.jsonio import write_json_durable
-from natlang_neuralese.common.hashing import sha256_hex
+from natlang_neuralese.common.hashing import sha256_hex,canonical_json_sha256_hex
 from natlang_neuralese.train.native_deployment import binding, prepare_role_scheduler
 from natlang_neuralese.rl import native_role_release as roles
 from natlang_neuralese.train.recipe import resolve_recipe_data,effective_stage_parameters
@@ -111,6 +111,144 @@ def check_foundation_task_policy(row,curriculum):
                        ('reference_successes','reference_provenance','cases','prompt_rendering'))
                 or actual['packet']['sha256']!=selected['packet']['sha256']):
             raise ValueError('normal foundation recipe must adopt its selected actual task reference: '+row['model'])
+
+
+def materialize_current_task_policy(curriculum_path,plan_refs,config_paths,consumer,out,
+                                    task_packets=None,recipe_paths=None):
+    """Bind semantic task checks and policy cadence to the two current owners.
+
+    The paired graph curriculum remains authoritative for phases, optimizer
+    routing, data, held rows and adaptive refresh. Only task-eval declarations
+    are copied from each actual current trainer config. The whole-graph policy
+    schedule is the existing native-deployment default, recorded explicitly.
+    """
+    if set(plan_refs)!=set(config_paths) or set(plan_refs)!={'lfm','mellum'} or consumer not in plan_refs:
+        raise ValueError('semantic task materialization requires both current owners and its consumer')
+    curriculum_ref=binding(curriculum_path)
+    value=read(curriculum_ref)
+    if value.get('schema')!='natlang.native-semantic-training/1':
+        raise ValueError('task materialization needs the current paired semantic curriculum')
+    models={}
+    task_policies={};task_packets=task_packets or {}
+    recipe_paths=recipe_paths or {}
+    if not isinstance(task_packets,dict)or set(task_packets)-{'lfm','mellum'}:
+        raise ValueError('task packet relocation map names an unknown model role')
+    if not isinstance(recipe_paths,dict)or set(recipe_paths)-{'lfm','mellum'}:
+        raise ValueError('recipe relocation map names an unknown model role')
+    for role in ('lfm','mellum'):
+        plan_ref=plan_refs[role];plan=read(plan_ref)
+        owned,exchange=roles.ownership(plan)
+        if exchange is None or exchange.get('role')!=role or len(owned)!=1:
+            raise ValueError('task materialization needs the exact current single-owner role plan')
+        participant=next(row for row in plan['models'] if row['model'] in owned)
+        model_id=participant.get('handoff_requirement',{}).get('model_id')
+        if not isinstance(model_id,str) or not model_id:
+            raise ValueError('current role plan omitted its exact participant identity')
+        config_ref=binding(config_paths[role]);config=read(config_ref)
+        parameters=config.get('trainer_parameters') or {}
+        # Local-cycle owners may carry the active task policy in the
+        # continuation/seed parameter block while the resident trainer block
+        # records only the original learner defaults. Preserve the policy the
+        # source owner actually launches; do not synthesize cases or floors.
+        seed_parameters=config.get('seed_trainer_parameters') or {}
+        declaration=(parameters.get('task_eval') or config.get('task_eval')
+            or seed_parameters.get('task_eval'))
+        recipe_evidence=None
+        if not declaration:
+            recipe_decl=parameters.get('recipe_binding') or seed_parameters.get('recipe_binding')
+            if not isinstance(recipe_decl,dict):
+                raise ValueError('current '+role+' config omitted the task policy and exact recipe binding')
+            recipe_path=recipe_paths.get(role)
+            if recipe_path is None:
+                if Path(recipe_decl['path']).is_file():recipe_path=recipe_decl['path']
+                else:raise ValueError('current '+role+' frozen recipe bytes need an explicit staged path')
+            actual_recipe=binding(recipe_path)
+            if actual_recipe['sha256']!=recipe_decl['sha256']:
+                raise ValueError('current '+role+' staged recipe differs from its exact config binding')
+            recipe=json.loads(Path(actual_recipe['path']).read_bytes())
+            stage_id=(config.get('production_stage') or parameters.get('stage_id')
+                or seed_parameters.get('stage_id'))
+            stages=[stage for stage in recipe.get('stages',[])if stage.get('id')==stage_id
+                and stage.get('kind')=='native_state_sft']
+            if len(stages)!=1:
+                raise ValueError('current '+role+' recipe omitted its exact active native-state stage')
+            declaration=effective_stage_parameters(stages[0],[],recipe).get('task_eval')
+            if not declaration:
+                raise ValueError('current '+role+' native-state recipe stage omitted task evaluation')
+            recipe_evidence={'declared':recipe_decl,'local':actual_recipe}
+        if not declaration:
+            raise ValueError('current '+role+' config omitted its actual task-eval policy')
+        from natlang_neuralese.eval.task_cadence import parse_task_eval
+        selected=parse_task_eval(copy.deepcopy(declaration))
+        # A measured reference is useful when the current owner has one. Some
+        # legitimate recovery configs declare only an absolute min_successes
+        # floor; preserve that exact policy and leave the reference unmeasured.
+        # The evaluator keeps such runs ineligible for reference-based task
+        # qualification, so this never manufactures a capability baseline.
+        explicit_min=declaration.get('min_successes')
+        explicit_floor=(type(explicit_min)is int and explicit_min>=0)
+        if selected.get('reference_successes') is None and not explicit_floor:
+            raise ValueError('current '+role+' task policy has neither a measured reference nor an explicit minimum-success floor')
+        packet=selected['packet'];packet_evidence={'declared':copy.deepcopy(packet)}
+        relocation=task_packets.get(role)
+        if relocation is not None:
+            if (not isinstance(relocation,dict)or set(relocation)-{'source','local','target'}
+                    or not {'source','local'}<=set(relocation)
+                    or relocation['source']!=packet):
+                raise ValueError('current '+role+' task packet relocation changed its declared source binding')
+            actual=binding(relocation['local']['path'],relocation['local'])
+            if actual['sha256']!=packet['sha256']:
+                raise ValueError('current '+role+' relocated task packet differs from its exact declared SHA')
+            packet_evidence['relocation']={'source':relocation['source'],'local':actual}
+            if 'target'in relocation:
+                target=relocation['target']
+                if not isinstance(target,str)or not Path(target).is_absolute()or '..'in Path(target).parts:
+                    raise ValueError('task packet consumer target must be an exact absolute path')
+                selected['packet']={**selected['packet'],'path':target}
+                packet_evidence['relocation']['target']=target
+        else:
+            checked=binding(packet['path'],packet)
+            if any(checked.get(key)!=packet.get(key)for key in ('path','sha256')):
+                raise ValueError('current '+role+' task packet binding changed')
+            packet_evidence['actual']=checked
+        models[model_id]={'task_eval':selected}
+        task_policies[role]={'plan':plan_ref,'config':config_ref,'participant':model_id,
+            'task_eval':selected,'task_eval_sha256':canonical_json_sha256_hex(selected),
+            'task_packet':packet_evidence,**({'recipe':recipe_evidence}if recipe_evidence else {})}
+    if len(models)!=2:
+        raise ValueError('current role plans do not name two distinct semantic participants')
+    value['models']={**(value.get('models')or{}),**models}
+    value['task_eval']=copy.deepcopy(models[task_policies[consumer]['participant']]['task_eval'])
+    if not value.get('policy_schedule'):
+        refresh=value.get('adaptive_refresh')or{}
+        updates=refresh.get('updates_per_phase')
+        if type(updates)is not int or updates<=0:
+            raise ValueError('paired curriculum omitted its existing positive adaptive policy quantum')
+        value['policy_schedule']={'id':'policy','epochs':1,'every_semantic_updates':1,
+            'updates_per_refresh':updates}
+    else:
+        updates=(value.get('adaptive_refresh')or{}).get('updates_per_phase')
+        if updates is not None and value['policy_schedule'].get('updates_per_refresh')!=updates:
+            raise ValueError('existing policy cadence conflicts with the paired curriculum refresh quantum')
+    value['operator_bindings']={'schema':'natlang.native-semantic-current-policy-bindings/1',
+        'base_curriculum':curriculum_ref,'consumer':consumer,'current_roles':task_policies,
+        'policy_schedule_source':'native-deployment-default-v1'}
+    from natlang_neuralese.train.native_semantic_stage import validate_config
+    validate_config(value)
+    out=Path(out).resolve()
+    if out.exists():raise FileExistsError('semantic policy materialization needs a new immutable namespace')
+    out.mkdir(parents=True)
+    target=out/'curriculum.json';write_json_durable(target,value)
+    return emit(out/'prepared.json',{'schema':'natlang.native-current-semantic-policy/1',
+        'curriculum':binding(target),'inputs':{'base_curriculum':curriculum_ref,
+            'plans':{key:binding(plan_refs[key]['path'],plan_refs[key])for key in plan_refs},
+            'configs':{key:binding(config_paths[key])for key in config_paths}},
+        'consumer':consumer,'task_eval_sources':task_policies,
+        'policy_schedule':value['policy_schedule'],'owner_changes':0,'readiness_granted':False,
+        'staged_task_packets':[{'role':role,'source':proof['task_packet']['relocation']['local'],
+            'target':proof['task_packet']['relocation']['target']}
+            for role,proof in task_policies.items()if 'target'in proof['task_packet'].get('relocation',{})],
+        'activated':False})
 
 
 def prepare(spec_path,out):
@@ -257,12 +395,19 @@ def stage_host_relay(io,sid,ready_reference,composition,out,python):
         raise ValueError('host relay source differs from the reconciled controller package')
     relay=json.loads(_read_bound(io,sid,ready['relay']))
     transport=copy.deepcopy(io.config)
-    if set(transport['sandboxes'])!=set(relay['provider']['sandboxes']):
+    if set(transport['sandboxes'])!=set(relay['provider']['sandboxes']) or (
+            ('local_source_host'in transport)!=('local_source_host'in relay['provider'])):
         raise ValueError('host relay transport substituted existing source-host resources')
     for source,resource in transport['sandboxes'].items():
         # The existing preparer adds the freshly authenticated role controls.
         # Resource identity, runtime, environment and ferry remain exact.
         resource['role_controls']=relay['provider']['sandboxes'][source]['role_controls']
+    if 'local_source_host'in transport:
+        local_id=transport['local_source_host']['source_host_id']
+        expected=relay['provider']['local_source_host']
+        if local_id!=expected['source_host_id']:
+            raise ValueError('host relay substituted its actual local source owner')
+        transport['local_source_host']['role_controls']=expected['role_controls']
     if (sid!=relay['provider']['coordinator_id'] or sid not in io.config['sandboxes']
             or relay['provider']!=transport):
         raise ValueError('host relay transport/provider differs from its actual consumer')
@@ -281,6 +426,16 @@ def stage_host_relay(io,sid,ready_reference,composition,out,python):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);commands=parser.add_subparsers(dest='mode',required=True)
+    policy=commands.add_parser('materialize-current-policy',
+        help='derive exact joint task checks from both actual current trainer configs')
+    policy.add_argument('--curriculum',type=Path,required=True)
+    policy.add_argument('--lfm-plan',type=Path,required=True);policy.add_argument('--mellum-plan',type=Path,required=True)
+    policy.add_argument('--lfm-config',type=Path,required=True);policy.add_argument('--mellum-config',type=Path,required=True)
+    policy.add_argument('--consumer',choices=('lfm','mellum'),required=True)
+    policy.add_argument('--task-packet-relocations',type=Path,
+        help='optional exact role-> {source:{path,sha256}, local:{path,sha256}} map for cloud packet custody')
+    policy.add_argument('--lfm-recipe',type=Path,help='staged exact LFM recipe when task eval is not in its config')
+    policy.add_argument('--mellum-recipe',type=Path,help='staged exact Mellum recipe when task eval is not in its config')
     prep=commands.add_parser('prepare');prep.add_argument('--spec',type=Path,required=True)
     check=commands.add_parser('reconcile');check.add_argument('--prepared',type=Path,required=True);check.add_argument('--published',type=Path,required=True)
     host=commands.add_parser('stage-host-relay')
@@ -288,7 +443,15 @@ def main():
     host.add_argument('--source-host',required=True);host.add_argument('--python',required=True)
     for command in (prep,check,host):command.add_argument('--out',type=Path,required=True)
     args=parser.parse_args()
-    if args.mode=='stage-host-relay':
+    if args.mode=='materialize-current-policy':
+        plans={role:binding(getattr(args,role+'_plan')) for role in ('lfm','mellum')}
+        configs={role:str(getattr(args,role+'_config').resolve(strict=True)) for role in ('lfm','mellum')}
+        relocations=json.loads(args.task_packet_relocations.read_bytes()) if args.task_packet_relocations else None
+        recipes={role:str(getattr(args,role+'_recipe'))for role in ('lfm','mellum')
+            if getattr(args,role+'_recipe') is not None}
+        result=materialize_current_task_policy(args.curriculum,plans,configs,args.consumer,args.out,
+            relocations,recipes)
+    elif args.mode=='stage-host-relay':
         from provider_worker import SDKIO, cwctl
         cwctl.load_env_file();cwctl.require_key()
         result=stage_host_relay(SDKIO(json.loads(args.provider.read_bytes())),args.source_host,

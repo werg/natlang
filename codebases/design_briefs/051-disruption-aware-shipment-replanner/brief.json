@@ -1,0 +1,90 @@
+{
+  "application_id": "051",
+  "title": "Disruption-aware shipment replanner",
+  "source_relative_path": "applications/11-logistics-redistribution-and-circular-economy/051-disruption-aware-shipment-replanner.md",
+  "source_sha256": "7ca56c30d09b6e9b13f35f240507c94ec3130965c04e216044693eeb95e95be7",
+  "domain_id": "11",
+  "stages": [
+    {
+      "name": "interpretDisruption",
+      "output_type": "DisruptionImpact",
+      "algorithm": "Read carrier notices and operational reports to determine what is unavailable, for how long, and with what certainty. Distinguish a delayed service from a closed route and preserve exceptions that may allow some shipment classes to continue.",
+      "gate": "Scope is evidence-backed and uncertain reopening times are not treated as confirmed capacity."
+    },
+    {
+      "name": "recoverPromises",
+      "output_type": "ShippingCommitment",
+      "algorithm": "Reconcile order terms, customer messages, and product constraints to identify what must be preserved. Separate contractual deadlines from preferences, recognize dependencies such as installation appointments, and avoid ranking customers by unstated commercial assumptions.",
+      "gate": "Every priority follows the supplied policy and actual commitment evidence."
+    },
+    {
+      "name": "constructAlternatives",
+      "output_type": "ShippingAlternative",
+      "algorithm": "Generate permitted rerouting, split-shipment, consolidation, or substitution options. Explain which commitments each option preserves or changes, and exclude alternatives violating handling requirements or relying on unverified carrier capacity.",
+      "gate": "Essential constraints remain intact; changed promises require explicit customer or owner approval."
+    },
+    {
+      "name": "allocateCapacity",
+      "output_type": "ShippingAllocation",
+      "algorithm": "Submit candidate plans to exact capacity and timing services, then compare feasible allocations under supplied priorities. Reserve selected capacity before promising it, retain unfulfilled demand explicitly, and detect conflicts across shipments sharing scarce resources.",
+      "gate": "Capacity conservation, route feasibility, and exact cost limits pass."
+    },
+    {
+      "name": "coordinateRecovery",
+      "output_type": "ShippingRecovery",
+      "algorithm": "Sequence approved bookings and communications, reconcile carrier acknowledgments, and track actual shipment progress against revised promises. Replan only affected legs when new events arrive and explain residual uncertainty rather than claiming recovery after booking alone.",
+      "gate": "Actual carrier state and customer-approved commitments agree before closure."
+    }
+  ],
+  "operational_details": [
+    "A carrier accepts a booking but later rejects the item class: retain a recovery task and retract unsupported promises.",
+    "A shipment has several delivery deadlines: preserve each dependent appointment.",
+    "A route reopens partially: re-evaluate only eligible shipment classes.",
+    "Two planners reserve the same capacity: use transactional reservation and fencing.",
+    "A customer cannot accept split delivery: keep that preference as a hard constraint once confirmed."
+  ],
+  "domain_records": {
+    "ShipmentDisruption": [
+      "shipmentIds: ID[]",
+      "disruptionDescription: string",
+      "coordinatorId: ID",
+      "planningWindow: string",
+      "priorityPolicyId: ID"
+    ],
+    "DisruptionImpact": [
+      "caseId: ID",
+      "routeIds: ID[]",
+      "affectedWindow: string",
+      "unavailableCapabilities: string[]",
+      "uncertainty: string"
+    ],
+    "ShippingCommitment": [
+      "caseId: ID",
+      "shipmentId: ID",
+      "promisedOutcome: string",
+      "deadline: DateTime",
+      "essentialConditions: string[]"
+    ],
+    "ShippingAlternative": [
+      "caseId: ID",
+      "shipmentIds: ID[]",
+      "routeIds: ID[]",
+      "substitutions: string[]",
+      "changedPromises: string[]"
+    ],
+    "ShippingAllocation": [
+      "caseId: ID",
+      "alternativeIds: ID[]",
+      "reservedCapacityIds: ID[]",
+      "totalCost: Money",
+      "unresolvedDemand: string"
+    ],
+    "ShippingRecovery": [
+      "caseId: ID",
+      "allocationId: ID",
+      "communicationIds: ID[]",
+      "carrierReceiptIds: ID[]",
+      "remainingRisk: string"
+    ]
+  }
+}

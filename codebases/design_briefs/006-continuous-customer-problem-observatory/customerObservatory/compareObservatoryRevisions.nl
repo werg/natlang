@@ -1,0 +1,5 @@
+---
+args: { prior: ObservatoryCheckpoint | null, request: CustomerObservatoryRequest, frame: ObservatoryFrame, episodes: EpisodeRegister, identities: IdentityVersionLedger, incidents: IncidentDedupLedger, concepts: StableProblemMap, trends: ComparableTrendSet | null, consent: ConsentDerivativePlan }
+returns: ObservatoryInvalidation
+---
+Compare this run with the case-matched checkpoint by source version and domain identity. Consent withdrawals revoke attributable quotations and every restricted derivative that consumed them, but preserve non-attributable incident evidence. A changed identity mapping reopens only affected customer denominators and incident links. A changed outage grouping or concept boundary invalidates only trend receipts and investigations that depend on those keys. Preserve exact trend windows whose population, channel, exposure, query and concept versions still match. For a null prior, mark no earlier derivative as revoked; list currently missing deletion receipts and version ambiguity as unresolved.

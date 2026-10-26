@@ -1,6 +1,7 @@
 """Carried measurements retain their old runtime and reject changed numerics."""
 import copy
 import json
+import math
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -63,6 +64,82 @@ def fixture(tmp_path, monkeypatch):
         p = tmp_path / 'request.json'; p.write_text(json.dumps({'schema': 'natlang.gradient-metadata-equivalence-request/1', **refs}))
         return _binding(p)
     return old, new, package, inventory, roles, identity, parser, current, docs, request
+
+
+@pytest.mark.parametrize('shape,dtype', [((512,), torch.float32), ((2, 3), torch.bfloat16), ((0,), torch.float32)])
+def test_exact_zero_gradient_metrics_preserve_complete_result(shape, dtype):
+    actual = torch.zeros(shape, dtype=dtype)
+    expected = torch.zeros_like(actual)
+    result = gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4)
+    assert result == {
+        'passed': True, 'finite': True, 'max_abs': 0.0, 'shape': list(shape),
+        'dtype': str(dtype), 'relative_l2': 0.0, 'cosine': 1.0,
+        'reference_l2': 0.0, 'actual_l2': 0.0, 'mismatched_elements': 0,
+        'elements': actual.numel(), 'atol': 1e-5, 'rtol': 1e-4,
+    }
+
+
+def test_zero_fast_path_does_not_cover_nonzero_mismatch_or_tiny_values():
+    mismatch = gradient_metrics(torch.tensor([1.0, 0.0]), torch.tensor([0.0, 1.0]),
+                               atol=0.0, rtol=0.0)
+    assert mismatch['finite'] and mismatch['mismatched_elements'] == 2
+    assert mismatch['relative_l2'] > 0.0 and mismatch['cosine'] == 0.0
+
+    tiny = torch.tensor([torch.finfo(torch.float32).tiny], dtype=torch.float32)
+    result = gradient_metrics(tiny, tiny.clone(), atol=0.0, rtol=0.0)
+    assert result['reference_l2'] > 0.0 and result['actual_l2'] > 0.0
+    # The existing float32 product underflows in the cosine denominator for
+    # this exact nonzero case. Do not reinterpret it as the all-zero shortcut.
+    assert not result['passed'] and result['finite'] and result['max_abs'] == 0.0
+    assert result['cosine'] == 0.0
+
+
+def test_zero_fast_path_keeps_nonfinite_values_on_existing_metric_path():
+    result = gradient_metrics(torch.tensor([float('nan'), 0.0]), torch.zeros(2),
+                              atol=1e-5, rtol=1e-4)
+    assert not result['passed'] and not result['finite']
+
+
+def test_large_zero_scan_rejects_tiny_nonzero_and_nonfinite_counterparts():
+    zeros = torch.zeros(512)
+    tiny = torch.zeros_like(zeros)
+    tiny[0] = torch.finfo(torch.float32).tiny
+    tiny_result = gradient_metrics(zeros, tiny, atol=0.0, rtol=0.0)
+    assert not tiny_result['passed'] and tiny_result['finite']
+    assert tiny_result['reference_l2'] > 0.0 and tiny_result['cosine'] == 0.0
+
+    nonfinite = torch.zeros_like(zeros)
+    nonfinite[0] = float('nan')
+    nonfinite_result = gradient_metrics(zeros, nonfinite, atol=1e-5, rtol=1e-4)
+    assert not nonfinite_result['passed'] and not nonfinite_result['finite']
+
+
+@pytest.mark.parametrize('shape', [(512,), (0,)])
+@pytest.mark.parametrize('atol,rtol', [
+    (-1.0, 1e-4), (float('nan'), 1e-4), (1e-5, -1.0), (1e-5, float('nan')),
+])
+def test_zero_fast_path_preserves_invalid_tolerance_gates(shape, atol, rtol):
+    zeros = torch.zeros(shape)
+    result = gradient_metrics(zeros, zeros.clone(), atol=atol, rtol=rtol)
+    assert result['finite']
+    assert result['elements'] == zeros.numel()
+    if atol < 0 and zeros.numel():
+        assert not result['passed'] and result['mismatched_elements'] == zeros.numel()
+    elif math.isnan(atol) or (atol < 0 and not zeros.numel()):
+        # Preserve the legacy outcome: an unused atol gate on an empty input,
+        # or a NaN atol comparison against zero, does not reject this pair.
+        assert result['passed'] and result['mismatched_elements'] == 0
+    else:
+        assert not result['passed'] and result['mismatched_elements'] == 0
+
+
+@pytest.mark.parametrize('actual,expected', [
+    (torch.zeros(2), torch.zeros(3)),
+    (torch.zeros(2, dtype=torch.float32), torch.zeros(2, dtype=torch.float64)),
+])
+def test_zero_fast_path_keeps_geometry_and_dtype_rejection(actual, expected):
+    assert gradient_metrics(actual, expected, atol=1e-5, rtol=1e-4) == {
+        'passed': False, 'reason': 'gradient geometry or dtype differs'}
 
 
 def test_carried_proof_preserves_original_runtime_and_report(tmp_path, monkeypatch):

@@ -1,0 +1,5 @@
+---
+args: { request: GrantCycleRequest; conditions: GrantConditionSet; periods: PeriodAllocationResult; periodCheck: PeriodConservationResult; evidence: EvidencePage[]; shared: SharedActivityResult }
+returns: GrantAllocationResult
+---
+Use only periodCheck.verifiedSlices; withhold every expense listed in periodCheck.withheldExpenseIds and preserve its blockers. For each remaining slice, match source evidence for payee, service dates, activity and currency to a currently effective allowed-use condition. Keep the original amount and basis reference attached to every period share. Apply shared-activity funding ratios only where the share records establish distinct amounts and combined funding does not exceed the underlying eligible cost; absent an exact supported amount, withhold that expense. Return eligible allocations, the exact verified slices, all withheld expense IDs, periodCheck.blockers, and unresolved basis requirements. A narrative match cannot repair a failed integer conservation check.

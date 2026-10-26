@@ -270,10 +270,21 @@ def _role_local_released(config):
 
 def ready_participants(config):
     if config.get('raw_rl_bootstrap'):
-        from ..rl.native_raw_rounds import raw_out,validate_release
         raw_plan_path=_bound(config['raw_rl_bootstrap'])
         raw_plan=json.loads(raw_plan_path.read_text())
         from ..rl import native_role_release as roles
+        if raw_plan.get('local_cycle_source'):
+            try:released=roles.validate_local_cycle_release(raw_plan_path,
+                snapshot=bool(raw_plan.get('snapshot_preparation')))
+            except (ValueError,OSError,KeyError)as error:
+                return [],[{'reason':'local-cycle source-host role handoff needs repair: '+str(error),
+                    'repair_required':True}]
+            if released is None:
+                return [],[{'model_id':item['model_id'],
+                    'reason':'local-cycle source owner has not published the exact current qualified boundary'}
+                    for item in config['participants']]
+            return [released[key]for key in sorted(released)],[ ]
+        from ..rl.native_raw_rounds import raw_out,validate_release
         if roles.ownership(raw_plan)[1]is not None:
             try:
                 if raw_plan.get('snapshot_preparation'):
@@ -358,6 +369,8 @@ def snapshot_successor(config,out):
         'workdir':config.get('workdir'),'out':str(Path(out)/'joint')}
     reference=roles.post_vae_request(plan,{'path':str(completion.resolve()),
         'sha256':sha256_file_hex_cached(completion)},controller)
+    handoff=json.loads(_bound(reference).read_text())
+    full=roles._evidence(handoff['joint_curriculum'])
     _,exchange=roles.ownership(plan)
     write_json_durable(Path(exchange['directory'])/'post-vae-handoff.json',reference)
     # The relay now arms both real owners. Historical preparation is not a

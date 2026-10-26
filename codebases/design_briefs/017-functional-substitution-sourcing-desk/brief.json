@@ -1,0 +1,49 @@
+{
+  "application_id": "017",
+  "title": "Functional substitution sourcing desk",
+  "source_relative_path": "applications/04-procurement-and-supplier-management/017-functional-substitution-sourcing-desk.md",
+  "program_root": "codebases/design_briefs/017-functional-substitution-sourcing-desk",
+  "source_sha256": "d60a408104eb75e0bb1f1bda2b4d9df9818a63a7c4e04fac3c440be3b4916eef",
+  "domain_id": "04",
+  "stages": [
+    {
+      "name": "recoverFunction",
+      "output_type": "FunctionalRequirement",
+      "algorithm": "Interpret why the original item is used, including interfaces, operating environment, and failure consequences. Separate critical properties from historical purchasing habits, and ask the requester to confirm distinctions that determine compatibility or safety.",
+      "gate": "Every essential property has a use-based rationale; unknown critical properties block qualification."
+    },
+    {
+      "name": "generateCandidates",
+      "output_type": "SubstituteCandidate",
+      "algorithm": "Search catalogs and supplier descriptions for equivalent functions, including alternative mechanisms where permitted. Explain how each candidate would serve the use, identify required adaptations, and avoid treating a familiar name or matching dimension as sufficient.",
+      "gate": "Candidate generation cannot relax essential constraints or invent supplier specifications."
+    },
+    {
+      "name": "assessCompatibility",
+      "output_type": "CompatibilityFinding",
+      "algorithm": "Compare every essential requirement against documented candidate evidence and approved conversion rules. Check interacting properties and interface tolerances; preserve unknowns explicitly and reject candidates whose apparent equivalence depends on an unsupported assumption.",
+      "gate": "All essential properties pass independently; one critical failure disqualifies the candidate."
+    },
+    {
+      "name": "requestQualification",
+      "output_type": "QualificationTask",
+      "algorithm": "Design the smallest supplier clarification, sample inspection, or approved test that resolves a decisive unknown. Specify pass criteria before results arrive and distinguish documentary clarification from testing requiring technical specialists.",
+      "gate": "Test authority and acceptance criteria are explicit; no improvised hazardous test procedure."
+    },
+    {
+      "name": "packageSubstitution",
+      "output_type": "SubstitutionPacket",
+      "algorithm": "Compare qualified alternatives on verified cost, lead time, and operational consequences. Present the recommended substitution with adaptations and residual uncertainty, obtain technical and commercial approval, and record which uses the approval does not cover.",
+      "gate": "Approval is scoped to intended use, lot or revision where relevant, and current evidence."
+    }
+  ],
+  "operational_details": [
+    "A supplier silently changes a revision: invalidate compatibility findings tied to the old revision.",
+    "Units differ across catalogs: use exact conversions and preserve original values.",
+    "A sample passes but production lots vary: require the approved lot-level acceptance rule.",
+    "A cheaper candidate needs an adapter: include adapter cost, lead time, and interface risk.",
+    "A substitution is approved for one machine: prevent its approval from propagating to unrelated uses."
+  ],
+  "representative_episode": "A discontinued gasket has several dimensional matches, but one lacks chemical-resistance evidence and another requires a different mounting interface.",
+  "independent_truth_basis": "Hidden functional requirements, candidate properties and interactions, allowed tests, and exact qualification outcomes."
+}

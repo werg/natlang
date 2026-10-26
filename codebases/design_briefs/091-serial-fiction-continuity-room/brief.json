@@ -1,0 +1,50 @@
+{
+  "application_id": "091",
+  "title": "Serial Fiction Continuity Room",
+  "source_relative_path": "applications/19-publishing-and-creative-production/091-serial-fiction-continuity-room.md",
+  "source_sha256": "f4113fa692d5f21e34fd25e533db59c9c7164d32d118f6a50f9148a73250c429",
+  "domain_id": "19",
+  "stages": [
+    {
+      "name": "recoverCanon",
+      "output_type": "CanonFact",
+      "algorithm": "Extract events, relationships, world rules, and character knowledge from approved manuscripts and notes. Distinguish established canon from plans, unreliable narration, and character beliefs; preserve conflicting drafts without silently promoting one to truth.",
+      "gate": "Every canon fact has source and status, including belief versus world fact."
+    },
+    {
+      "name": "trackArcs",
+      "output_type": "StoryObligation",
+      "algorithm": "Identify unresolved setups, character goals, relationship changes, and narrative promises across installments. Distinguish intentional mystery from accidental omission, and preserve motivations that constrain plausible future actions without treating characters as mechanically fixed.",
+      "gate": "Arc claims are grounded in the actual text or approved author intent."
+    },
+    {
+      "name": "assessProposals",
+      "output_type": "StoryProposalFinding",
+      "algorithm": "Evaluate proposed twists or scenes against chronology, knowledge, motivations, and world rules. Separate genuine contradiction from a reveal that reinterprets prior evidence, and identify what earlier material would need revision to support the new direction.",
+      "gate": "No unexplained violation of established knowledge or chronology."
+    },
+    {
+      "name": "generateRepairs",
+      "output_type": "StoryRevision",
+      "algorithm": "Generate distinct repairs such as changing the new scene, seeding earlier evidence, or revising an approved premise through explicit editorial choice. Preserve voice and emotional intent, and explain narrative tradeoffs rather than selecting the easiest continuity patch.",
+      "gate": "Repairs satisfy hard canon constraints unless a reviewed canon change is explicitly proposed."
+    },
+    {
+      "name": "verifyEdition",
+      "output_type": "StoryEdition",
+      "algorithm": "Re-run continuity checks over affected scenes and downstream knowledge states, inspect arc payoffs, and assemble a coherent editorial diff. Record approved canon changes and preserve prior editions so future work uses the correct story-world state.",
+      "gate": "Global continuity and approved narrative constraints pass; creative quality receives separate editorial review."
+    }
+  ],
+  "operational_details": [
+    "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+    "An unreliable narrator states a falsehood: preserve it as narration, not canon.",
+    "A late twist changes earlier scenes: show the full seeding and revision footprint.",
+    "A minor character returns after many installments: retrieve their established voice and history.",
+    "A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan."
+  ],
+  "scenario": {
+    "representative_episode": "A new twist requires a character to know a secret they have not learned, while an earlier unreliable narration offers a possible but incomplete setup.",
+    "independent_truth": "Generated fictional canon, exact chronology and knowledge states, arc obligations, and blinded editorial preference judgments."
+  }
+}

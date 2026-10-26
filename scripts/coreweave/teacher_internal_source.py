@@ -28,6 +28,37 @@ _FROZEN_OPERATOR_BINDINGS = {
 }
 _REMOTE_CANDIDATE_SCAN_CODE_SHA256 = 'fb21932f0e670c0e8574ddaeb51364e3e84302d1f20e1419fc8e621f81d7b6d2'
 
+def verified_zero_positive_source(proof: dict) -> dict | None:
+    """Account for a fully verified boundary whose outcomes were all rejected."""
+    if proof.get('rows') != 0:
+        return None
+    source = proof.get('source') or {}
+    rejected = proof.get('rejected_outputs')
+    selected = proof.get('selected_outputs')
+    if (proof.get('schema') != 'natlang.teacher-live-tranche-canonical-source-verification/1'
+            or proof.get('status') != 'passed' or proof.get('training_admission') is not False
+            or type(proof.get('rows')) is not int or source.get('rows') != 0
+            or source.get('bytes') != 0 or proof.get('teacher_action_turns') != 0
+            or type(selected) is not int or selected < 1
+            or not isinstance(rejected, list) or len(rejected) != selected):
+        raise ValueError('zero-positive source lacks complete rejected-outcome accounting')
+    identifiers = set()
+    for row in rejected:
+        identifier = row.get('source_output')
+        sha = row.get('sha256')
+        if (not isinstance(identifier, str) or not identifier or identifier in identifiers
+                or not isinstance(row.get('reason'), str) or not row['reason']
+                or not isinstance(sha, str) or len(sha) != 64
+                or any(char not in '0123456789abcdef' for char in sha)):
+            raise ValueError('zero-positive source has invalid or repeated rejected outcomes')
+        identifiers.add(identifier)
+    actual = file_binding(source.get('path', ''))
+    if any(actual.get(key) != source.get(key) for key in ('path', 'sha256', 'bytes')):
+        raise ValueError('zero-positive source bytes differ from their full-source proof')
+    return {'status': 'verified-zero-positive-source', 'source': actual,
+            'rejected_outputs': selected, 'training_admission': False, 'training_exposure': False}
+
+
 def _exact_ref(path: Path, expected_sha256: str) -> dict:
     ref = file_binding(path)
     if ref['sha256'] != expected_sha256:
@@ -349,14 +380,16 @@ def run(*, original_settings: Path, original_settings_sha256: str,
         if file_binding(path) != reference:
             raise ValueError('source operator closure changed during execution')
     proof = read_bound(file_binding(ctx.admission(spool) / 'canonical-source-verification.json'))
+    zero_positive = verified_zero_positive_source(proof)
     if (proof.get('schema') != 'natlang.teacher-live-tranche-canonical-source-verification/1'
             or proof.get('status') != 'passed' or proof.get('training_admission') is not False
-            or proof.get('rows', 0) < 1):
+            or (proof.get('rows', 0) < 1 and zero_positive is None)):
         raise ValueError('internal source phase did not establish exact positive full-trajectory verification')
     result = {'schema': 'natlang.teacher-internal-source-result/1',
         'execution': file_binding(execution_path), 'source_proof': file_binding(ctx.admission(spool) / 'canonical-source-verification.json'),
         'ready_packet_relocation': ready_relocation_ref,
         'source': proof['source'], 'batch': batch, 'tranche': number,
+        'source_disposition': 'verified-zero-positive-source' if zero_positive else 'positive-source',
         'training_admission': False, 'training_exposure': False,
         'prefix_debt': 'retained-as-deferred-custody; not exported, admitted, or skipped'}
     result_path = workdir / 'source-result.json'

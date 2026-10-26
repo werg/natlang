@@ -1,0 +1,91 @@
+{
+  "application_id": "056",
+  "title": "Quality escape investigator",
+  "source_relative_path": "applications/12-manufacturing-maintenance-and-industrial-quality/056-quality-escape-investigator.md",
+  "source_sha256": "2de8b1a4b9096d2d1233a92b7492b15bb2e5adeb0fb530a6ce625159de966af9",
+  "domain_id": "12",
+  "stages": [
+    {
+      "name": "normalizeDefects",
+      "output_type": "DefectObservation",
+      "algorithm": "Reconcile customer reports, operator notes, and inspection descriptions into comparable observed defects. Preserve measurement conditions and terminology differences, distinguish symptoms from suspected causes, and retain reports that may describe a different mechanism.",
+      "gate": "Every defect observation remains tied to its original inspection context."
+    },
+    {
+      "name": "traceExposure",
+      "output_type": "QualityExposure",
+      "algorithm": "Traverse exact lot, material, and process lineage to identify confirmed and precautionary exposure. Interpret process changes and rework histories, and avoid narrowing the scope merely because records are missing for some potentially affected units.",
+      "gate": "Traceability is complete or the uncertainty is explicitly included in containment scope."
+    },
+    {
+      "name": "compareCauses",
+      "output_type": "QualityHypothesis",
+      "algorithm": "Construct competing explanations from process history and defect patterns. Separate correlation with a shift, supplier, or operator from demonstrated cause, and formulate approved tests that could distinguish the mechanisms without unsafe experimentation.",
+      "gate": "Causal claims remain provisional until supported by discriminating evidence."
+    },
+    {
+      "name": "planCorrection",
+      "output_type": "QualityActionPlan",
+      "algorithm": "Select approved containment and corrective actions, assign qualified owners, and specify verification criteria before implementation. Distinguish immediate correction of defective units from prevention of recurrence and preserve unaffected production where evidence supports it.",
+      "gate": "Actions respect authority, safety prerequisites, and explicit release conditions."
+    },
+    {
+      "name": "verifyEffectiveness",
+      "output_type": "QualityClosure",
+      "algorithm": "Compare implementation evidence and subsequent production observations with the predicted corrective effect. Detect recurrence and unintended consequences, retain unresolved exposure, and require qualified approval before lifting holds or closing the investigation.",
+      "gate": "Closure requires verified effectiveness, not only completed action checkboxes."
+    }
+  ],
+  "operational_details": [
+    "A lot was reworked under a different process: preserve both histories in exposure tracing.",
+    "Inspection methods changed: avoid treating changed detection rates as changed defect rates.",
+    "An operator is named in a report: do not infer blame from correlation.",
+    "A hold is lifted for only part of a lot: maintain unit-level release scope.",
+    "A defect recurs after closure: reopen the causal claim and effectiveness test."
+  ],
+  "domain_records": {
+    "QualityInvestigation": [
+      "productIds: ID[]",
+      "lotIds: ID[]",
+      "reportedDefect: string",
+      "qualityOwnerId: ID",
+      "investigationScope: string"
+    ],
+    "DefectObservation": [
+      "caseId: ID",
+      "productId: ID",
+      "lotId: ID",
+      "symptom: string",
+      "observedAt: DateTime",
+      "inspectionContext: string"
+    ],
+    "QualityExposure": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "affectedLotIds: ID[]",
+      "downstreamItemIds: ID[]",
+      "uncertainBoundary: string"
+    ],
+    "QualityHypothesis": [
+      "caseId: ID",
+      "mechanism: string",
+      "supportingRefs: Ref[]",
+      "contradictingRefs: Ref[]",
+      "discriminatingTest: string"
+    ],
+    "QualityActionPlan": [
+      "caseId: ID",
+      "hypothesisIds: ID[]",
+      "containmentTasks: ID[]",
+      "correctiveTasks: ID[]",
+      "releaseCriteria: string[]"
+    ],
+    "QualityClosure": [
+      "caseId: ID",
+      "actionIds: ID[]",
+      "verificationRefs: Ref[]",
+      "residualRisk: string",
+      "monitoringRule: string"
+    ]
+  }
+}

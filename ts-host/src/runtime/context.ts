@@ -6,6 +6,7 @@
  * slot that compiled code restores after every `await` (see `bindAwait`).
  */
 import type { NatlangTask } from './runtime.js';
+import type { ResolvedWeightStack } from '../adaptation/weights/binding.js';
 import type { FileHandle, Folder, FolderHandle } from '../native/scoped-fs.js';
 
 /** Root/named calls start at zero; five nested ad hoc calls may be active below them. */
@@ -47,6 +48,12 @@ export type Frame = Readonly<{
   services?: Readonly<Record<string, object>>;
   /** Skill files bound to this invocation; inline `nl` children inherit this exact scope. */
   skillFiles?: Readonly<Record<string, string | Uint8Array>>;
+  /** The lexical weight stack of the invocation that created this frame, resolved from the callee's binding
+   * (tuning/binding.ts). Each call replaces it; it is never inherited by a callee. */
+  weights?: ResolvedWeightStack;
+  /** The exact instruction and disclosed skill texts of that invocation, filled when its node is prepared; tuning
+   * records them so training can put each binding's soft state at their positions (plan §3.3). */
+  invocationTexts?: { instructions?: string; skills?: Readonly<Record<string, string>> };
 }>;
 
 /** One active call of an authored TypeScript function, linked to the calls active above it. */

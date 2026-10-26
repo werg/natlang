@@ -27,6 +27,8 @@ import { runTiered, type TierAttempt } from '../calls/tiers.js';
 import { specializerOutput } from '../calls/compilations.js';
 import type { DefinitionIdentity } from '../calls/types.js';
 import { loadSkills, memorySkillSource } from '../skills/registry.js';
+import { weightBindingFor, untunedStack, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
+import { nativeStateSentinel } from '../native/neuralese.js';
 import { readSkillDocument, renderScopeDeclarations, renderSkillListing, scopeBindings } from '../skills/disclosure.js';
 
 export type { CaptureCell };
@@ -423,10 +425,14 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   definition = { ...definition, codebase: view.tree(definition.codebase as Record<string, import('./loader.js').ItemRecord>) };
   const owner = definition.programId ?? (descriptor ? view.program?.id : frame.programOwner);
   const eligibleGuidance = !!owner && (owner === view.program?.id || !!view.program?.guidanceScope.importedPrograms.includes(owner));
-  const adaptationProvenance = view.program ? { ...view.provenance(definition.id, owner),
+  // The callee's own lexical weight stack replaces the caller's (plans/HIERARCHICAL_LORA_TUNING.md §6).
+  const weights = weightBindingFor(task.weights, owner)?.resolve(definition.id, descriptor?.key, definition.contextId ?? null);
+  const adaptationProvenance = view.program || weights ? { ...(view.program ? view.provenance(definition.id, owner) : {}),
+    ...(weights ? { weights: { release: weights.release, binding: weights.binding, status: weights.status, identity: weights.identity,
+      requested: weights.requested, effective: weights.effective, skipped: weights.skipped, ...(weights.reason ? { reason: weights.reason } : {}) } } : {}),
     effectiveInstructionHash: hexDigest(options.instructions ?? definition.body), originalInstructionHash: descriptor?.baselineHash ?? null,
-    guidanceComponent: eligibleGuidance ? view.program.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
-    guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : undefined;
+    guidanceComponent: eligibleGuidance ? view.program?.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
+    ...(view.program ? { guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : {}) } : undefined;
   const adHoc = !!(options.manifest?.inline || options.manifest?.delegate) && options.manifest?.adHoc !== false;
   const fileRoot = !adHoc && definition.source?.endsWith('.nl');
   const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
@@ -565,6 +571,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
   const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
     signal: frame.signal, abort: frame.abort,
     ...(invocationSkillFiles ? { skillFiles: invocationSkillFiles } : {}),
+    ...(weights ? { weights } : {}), invocationTexts: {},
     ...(frame.scopedHandleReplacements ? { scopedHandleReplacements: frame.scopedHandleReplacements } : {}),
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model(definition.model);
@@ -646,18 +653,38 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         revision: model.revision ?? null } : undefined, dialect: readerDialect(task.runtime.options.neuralese),
         rewrites: task.runtime.options.rewrites?.enabledRules() ?? [], rootContext: frame.parentCallId ? undefined : definition.contextId,
         seeds: { policy: task.runtime.options.seed ?? null } }),
-      ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}),
+      ...(definition.source ? { definition_source: definition.source } : {}),
+      ...(weights ? { weight_stack: { release: weights.release, binding: weights.binding, identity: weights.identity, status: weights.status,
+        effective: weights.effective.map(({ id, scale }) => ({ id, scale })) } } : {}), ...(options.manifest ?? {}),
       ...(options.manifest?.inline_instruction_site ? { inline_instruction_site: {
         ...(options.manifest.inline_instruction_site as Record<string, unknown>),
         realized_instruction: options.instructions ?? definition.body } } : {}) } });
   let outcome = 'failed', detail = '';
   let hostValue: unknown, hasValue = false;
-  registerTrace(callId, runtime.trace);
+  registerTrace(callId, runtime.trace, runtime.episodeBudget);
   capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);
     const node = await prepareDefinitionNode(definition, normalizedInputs,
       { ...options, dialects: dialectBinding(task.runtime.options.neuralese) });
+    Object.assign(childFrame.invocationTexts!, { instructions: node.body, ...(node.skills ? { skills: { ...node.skills.documents } } : {}) });
+    if (weights?.soft) {
+      // Tuned instruction/skill states replace exactly the texts they were trained on; a changed text runs untuned.
+      const soft = weights.soft, changed: string[] = [];
+      if (soft.instructions && hexDigest(node.body) !== soft.instructions.textSha256) changed.push('instructions');
+      for (const [target, use] of Object.entries(soft.skills))
+        if (node.skills?.documents[target] === undefined || hexDigest(node.skills.documents[target]!) !== use.textSha256) changed.push(target);
+      if (changed.length) {
+        const fallback = untunedStack(weights, `soft state texts changed since tuning (${changed.join(', ')}); this call runs untuned`);
+        (childFrame as { weights?: ResolvedWeightStack }).weights = fallback;
+        if (adaptationProvenance) (adaptationProvenance as Record<string, unknown>).weights = { ...fallback };
+        runtime.trace.emit('weight_stack', { call_id: callId, release: fallback.release, binding: fallback.binding, identity: fallback.identity,
+          status: fallback.status, reason: fallback.reason, effective: [] });
+      } else {
+        if (soft.instructions) node.body = nativeStateSentinel(soft.instructions.state);
+        for (const [target, use] of Object.entries(soft.skills)) node.skills!.documents[target] = nativeStateSentinel(use.state);
+      }
+    }
     if (handoff) node.handoff = handoff;
     if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
     if (extraTransactions.length) node.extraTransactions = extraTransactions;

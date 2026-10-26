@@ -1,0 +1,112 @@
+{
+  "schema": "natlang.application/1",
+  "id": "003",
+  "title": "Handover continuity manager",
+  "entrypoint": "planDepartureHandover.nl",
+  "interfaces": [
+    {
+      "name": "planDepartureHandover",
+      "path": "planDepartureHandover.nl",
+      "purpose": "Maintain a departure portfolio of promises, recovery dependencies, accepted ownership slices and immediate continuity.",
+      "stateParameter": "portfolio",
+      "stateResultPath": [
+        "portfolio"
+      ],
+      "stateKey": "handover-portfolio"
+    },
+    {
+      "name": "recordSuccessorAcceptance",
+      "path": "recordSuccessorAcceptance.nl",
+      "purpose": "Partition an exact successor acknowledgment into accepted and still-unowned obligation scope.",
+      "stateParameter": "portfolio",
+      "stateResultPath": [
+        "portfolio"
+      ],
+      "stateKey": "handover-portfolio"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "planDepartureHandover.nl",
+    "planDepartureHandover/determineAccessCapture.nl",
+    "planDepartureHandover/discoverContinuityPrerequisites.nl",
+    "planDepartureHandover/discoverContinuityPrerequisites/traceBlockedHandoff.nl",
+    "planDepartureHandover/matchOutcomeAcceptance.nl",
+    "planDepartureHandover/offerSuccessorSlices.nl",
+    "planDepartureHandover/prepareCustomerIntroductions.nl",
+    "planDepartureHandover/reconstructPromiseEpisodes.nl",
+    "planDepartureHandover/reconstructPromiseEpisodes/classifyPromiseAct.nl",
+    "planDepartureHandover/reviewImmediateContinuity.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "recordSuccessorAcceptance.nl",
+    "recordSuccessorAcceptance/partitionAcknowledgedScope.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverCommitments",
+        "paths": [
+          "planDepartureHandover/reconstructPromiseEpisodes/classifyPromiseAct.nl"
+        ]
+      },
+      {
+        "stage": "reconstructStatus",
+        "paths": [
+          "planDepartureHandover/matchOutcomeAcceptance.nl"
+        ]
+      },
+      {
+        "stage": "mapDependencies",
+        "paths": [
+          "planDepartureHandover/discoverContinuityPrerequisites/traceBlockedHandoff.nl"
+        ]
+      },
+      {
+        "stage": "allocateOwnership",
+        "paths": [
+          "recordSuccessorAcceptance/partitionAcknowledgedScope.nl"
+        ]
+      },
+      {
+        "stage": "verifyContinuity",
+        "paths": [
+          "planDepartureHandover/reviewImmediateContinuity.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planDepartureHandover/determineAccessCapture.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "recordSuccessorAcceptance/partitionAcknowledgedScope.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planDepartureHandover/prepareCustomerIntroductions.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planDepartureHandover/reconstructPromiseEpisodes.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planDepartureHandover/determineAccessCapture.nl"
+        ]
+      }
+    ]
+  }
+}

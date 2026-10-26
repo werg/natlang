@@ -40,6 +40,8 @@ export interface TurnRecorder {
   linkNativeTurn?(id:string,graphTurn:string):void;
   recordGraphNode?(event:Record<string,unknown>):void;
   nativeStateWriter?(id:string):string|undefined;
+  /** Exact in-episode native writer nodes, including nested/child invocation traces. */
+  nativeStateWriters?(id:string):readonly string[];
 }
 
 let source: () => TurnRecorder | undefined = () => undefined;
@@ -59,8 +61,27 @@ export function setNativeAdapterSource(next: () => readonly NativeAdapterBinding
 /** Install where active stored native-state context comes from. */
 export function setNativeStateSource(next: () => readonly NativeStateBinding[] | undefined): void { nativeStateSource = next; }
 
-/** Native coefficient actors active in the current asynchronous context. */
-export function activeNativeAdapters(): readonly NativeAdapterBinding[] { return nativeAdapterSource() ?? []; }
+let lexicalAdapterSource: () => readonly NativeAdapterBinding[] | undefined = () => undefined;
+let lexicalSoftStateSource: () => readonly string[] | undefined = () => undefined;
+
+/** Install where the current invocation's tuned soft instruction/skill state IDs come from (the runtime does this). */
+export function setLexicalSoftStateSource(next: () => readonly string[] | undefined): void { lexicalSoftStateSource = next; }
+
+/** Soft states the current invocation consumes: written by the exact base and read by its tuned stack, so their
+ * consumption is the explicit same-base adapter-state exchange (plan §3.3). */
+export function activeSoftStates(): readonly string[] { return lexicalSoftStateSource() ?? []; }
+
+/** Install where the current invocation's lexical (tuned) weight stack comes from (the runtime does this). */
+export function setLexicalNativeAdapterSource(next: () => readonly NativeAdapterBinding[] | undefined): void { lexicalAdapterSource = next; }
+
+/**
+ * Native coefficient actors active in the current asynchronous context: the invocation's lexical stack resolved from
+ * its own binding, then explicit `withNativeAdapters` scopes in nesting order (plans/HIERARCHICAL_LORA_TUNING.md §6).
+ */
+export function activeNativeAdapters(): readonly NativeAdapterBinding[] {
+  const lexical = lexicalAdapterSource(), explicit = nativeAdapterSource();
+  return lexical?.length ? explicit?.length ? [...lexical, ...explicit] : lexical : explicit ?? [];
+}
 
 /** Stored positional state active in the current asynchronous context. */
 export function activeNativeStates(): readonly NativeStateBinding[] { return nativeStateSource() ?? []; }
@@ -85,11 +106,18 @@ export class ModelTurnRecorder implements TurnRecorder {
       else this.graphNodes.set(event.node,structuredClone(event));
     }
   }
+  nativeStateWriters(id:string):readonly string[]{
+    const writers=[...this.graphNodes.values()].filter(event=>event.kind==='block_write'&&event.block===id);
+    const nodes=writers.map(event=>event.node).filter((node):node is string=>typeof node==='string');
+    if(nodes.some(node=>this.graphConflicts.has(node)))throw Object.assign(
+      new Error(`neuralese-native-grad-invalid: native state ${id} has a conflicting in-trajectory writer occurrence`),
+      {code:'neuralese-native-grad-invalid'});
+    return nodes;
+  }
   nativeStateWriter(id:string):string|undefined{
-    const writers=[...this.graphNodes.values()].filter(event=>event.kind==='block_write'&&event.block===id&&
-      (event.format==='native-state'||event.native===true));
+    const writers=this.nativeStateWriters(id);
     if(writers.length>1)throw Object.assign(new Error(`neuralese-native-grad-invalid: native state ${id} has multiple possible in-trajectory producers`),{code:'neuralese-native-grad-invalid'});
-    return typeof writers[0]?.node==='string'?writers[0].node:undefined;
+    return writers[0];
   }
   linkNativeTurn(id:string,graphTurn:string):void{
     if(!this.turns.some(turn=>turn.native?.id===id))throw Object.assign(new Error('neuralese-native-grad-invalid: native graph link has no exact recorded model turn'),{code:'neuralese-native-grad-invalid'});
@@ -150,7 +178,13 @@ export function nativeCaptureGraphBinding(name:string,capture:Record<string,unkn
       (segment.source_occurrence===undefined||source(event)===segment.source_occurrence));
     if(!candidates.length||new Set(candidates.map(source)).size!==1)fail('native input has ambiguous or changed source occurrence');
     const event=candidates[0]!;reads.splice(reads.indexOf(event),1);
-    return {index,id:String(segment.id),source_state_id:String(segment.id),node:String(event.node),source:source(event),
+    const occurrenceSource=source(event);
+    if(occurrenceSource!=='external'){
+      const writer=nodes.get(occurrenceSource);
+      if(writer?.kind!=='block_write'||writer.block!==segment.id)
+        fail('native read references a writer occurrence absent from the exact episode graph');
+    }
+    return {index,id:String(segment.id),source_state_id:String(segment.id),node:String(event.node),source:occurrenceSource,
       ...(segment.stop_gradient===true?{stop_gradient:true}:{})};
   });
   const count=(items:string[])=>{const counts=new Map<string,number>();for(const id of items)counts.set(id,(counts.get(id)??0)+1);return counts;};

@@ -1,0 +1,103 @@
+{
+  "schema": "natlang.application/1",
+  "id": "065",
+  "title": "Adaptive reuse feasibility studio",
+  "entrypoint": "evaluateReuseOptions.nl",
+  "interfaces": [
+    {
+      "name": "evaluateReuseOptions",
+      "path": "evaluateReuseOptions.nl",
+      "purpose": "Reconcile current survey facts with retained historic drawings, recheck constraints when use changes, gate structural assumptions, expose enabling-work omissions, and test temporary public circulation by phase.",
+      "stateParameter": "dossier",
+      "stateInputPath": ["state"],
+      "stateResultPath": ["state"],
+      "stateKey": "adaptive-reuse-feasibility-history"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverSiteFacts",
+        "paths": [
+          "evaluateReuseOptions/reconcileSurveyWithHistoricPlans.nl"
+        ]
+      },
+      {
+        "stage": "interpretGoals",
+        "paths": [
+          "evaluateReuseOptions/recheckConstraintsForCurrentUse.nl"
+        ]
+      },
+      {
+        "stage": "generateConcepts",
+        "paths": [
+          "evaluateReuseOptions/gateStructuralAssumptions.nl"
+        ]
+      },
+      {
+        "stage": "planInvestigations",
+        "paths": [
+          "evaluateReuseOptions/gateStructuralAssumptions.nl"
+        ]
+      },
+      {
+        "stage": "compareFeasibility",
+        "paths": [
+          "evaluateReuseOptions/auditEnablingWorks.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "evaluateReuseOptions/reconcileSurveyWithHistoricPlans.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "evaluateReuseOptions/gateStructuralAssumptions.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "evaluateReuseOptions/recheckConstraintsForCurrentUse.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "evaluateReuseOptions/auditEnablingWorks.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "evaluateReuseOptions/validatePhasedPublicRoutes.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "source-versioned site facts, constraints, concepts and phased access conditions",
+    "writes": "feasibility review proposal only"
+  },
+  "effects": [
+    "qualified structural investigation",
+    "enabling-works scope review",
+    "temporary access plan"
+  ],
+  "source_files": [
+    "evaluateReuseOptions.nl",
+    "evaluateReuseOptions/auditEnablingWorks.nl",
+    "evaluateReuseOptions/gateStructuralAssumptions.nl",
+    "evaluateReuseOptions/gateStructuralAssumptions/createQualifiedStructuralInvestigations.nl",
+    "evaluateReuseOptions/recheckConstraintsForCurrentUse.nl",
+    "evaluateReuseOptions/reconcileSurveyWithHistoricPlans.nl",
+    "evaluateReuseOptions/validatePhasedPublicRoutes.nl",
+    "qualification/recoverSiteFacts.nl",
+    "types.ts"
+  ]
+}

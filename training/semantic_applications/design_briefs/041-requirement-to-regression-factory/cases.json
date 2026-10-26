@@ -1,0 +1,607 @@
+[
+  {
+    "id": "041-requirement-to-regression-factory-gate-supported",
+    "root": "qualification/recoverBehavior.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "draft": {
+        "values": {
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears",
+          "caseId": "case-41"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "forbiddenOutcome",
+            "evidenceIds": [
+              "041-requirement-to-regression-factory-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "requirement R-17 and incident reproduction",
+        "evidence": [
+          {
+            "id": "041-requirement-to-regression-factory-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Regression reproduction R41 drops the second of two equal-timestamp events after the merge. Case case-41; current first-stage record values: {\"action\": \"merge events using the new sorter\", \"expectedOutcome\": \"both events remain in stable source order\", \"forbiddenOutcome\": \"second equal-time event disappears\", \"precondition\": \"two events carry the same timestamp\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "A useful regression must exercise the equal-time boundary and assert both events remain ordered."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "forbiddenOutcome",
+          "value": "second equal-time event disappears",
+          "evidenceIds": [
+            "041-requirement-to-regression-factory-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "requirement R-17 and incident reproduction: R-17 requires stable order for events with equal timestamps. Incident I-041 drops the second equal-time event after a merge; the existing regression test uses distinct timestamps only. Apply the first-stage gate to the record and source versions; A useful regression must exercise the equal-time boundary and assert both events remain ordered.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "041-requirement-to-regression-factory-gate-contradictory",
+    "root": "qualification/recoverBehavior.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "draft": {
+        "values": {
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "the second equal-timestamp event is discarded",
+          "forbiddenOutcome": "second equal-time event disappears",
+          "caseId": "case-41"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "forbiddenOutcome",
+            "evidenceIds": [
+              "041-requirement-to-regression-factory-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "requirement R-17 and incident reproduction",
+        "evidence": [
+          {
+            "id": "041-requirement-to-regression-factory-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Regression reproduction R41 drops the second of two equal-timestamp events after the merge. Case case-41; current first-stage record values: {\"action\": \"merge events using the new sorter\", \"expectedOutcome\": \"both events remain in stable source order\", \"forbiddenOutcome\": \"second equal-time event disappears\", \"precondition\": \"two events carry the same timestamp\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "A useful regression must exercise the equal-time boundary and assert both events remain ordered."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "expectedOutcome",
+          "value": "the second equal-timestamp event is discarded",
+          "evidenceIds": [
+            "041-requirement-to-regression-factory-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "requirement R-17 and incident reproduction: R-17 requires stable order for events with equal timestamps. Incident I-041 drops the second equal-time event after a merge; the existing regression test uses distinct timestamps only. Apply the first-stage gate to the record and source versions; A useful regression must exercise the equal-time boundary and assert both events remain ordered.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "041-requirement-to-regression-factory-gate-missing",
+    "root": "qualification/recoverBehavior.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-41"
+        },
+        "missingFields": [
+          "forbiddenOutcome"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes forbiddenOutcome?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "requirement R-17 and incident reproduction",
+        "evidence": [],
+        "missing": [
+          "forbiddenOutcome"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "A useful regression must exercise the equal-time boundary and assert both events remain ordered."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "requirement R-17 and incident reproduction: R-17 requires stable order for events with equal timestamps. Incident I-041 drops the second equal-time event after a merge; the existing regression test uses distinct timestamps only. Apply the first-stage gate to the record and source versions; A useful regression must exercise the equal-time boundary and assert both events remain ordered.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "041-requirement-to-regression-factory-operational-1",
+    "root": "compileRegressionPlan.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "factory": {
+        "projectId": "041-requirement-to-regression-factory-operational-1",
+        "requirementNotes": [
+          {
+            "id": "041-operational-detail-1-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings. This current event is source 041-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 041-requirement-to-regression-factory-operational-1. The supplied typed prior 041-prior-behavioralrequirement-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "041-operational-detail-1-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings. This current event is source 041-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 041-requirement-to-regression-factory-operational-1. The supplied typed prior 041-prior-behavioralrequirement-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "approvedInterpretations": [],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "041-operational-detail-1-source-v2"
+        ],
+        "currentRequirement": {
+          "id": "041-prior-behavioralrequirement-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "041-requirement-to-regression-factory-operational-1",
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears"
+        },
+        "targetRevision": "v2",
+        "sandboxProfile": "not-provided",
+        "credentialScope": "not-provided",
+        "fixtureProvenance": [
+          "041-operational-detail-1-source-v2"
+        ],
+        "requiredSeededDefects": [],
+        "priorRuns": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 041-requirement-to-regression-factory-operational-1 against this factual event: Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings. Original §9 detail: A flaky test fails only under load: preserve timing evidence and avoid hiding it through unlimited retries. Correct handling applies “preserve timing evidence and avoid hiding it through unlimited retries.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A flaky test fails only under load: preserve timing evidence and avoid hiding it through unlimited retries.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Load test T41 passes 9 of 10 runs at low volume but fails 4 of 20 runs at 900 requests per second. Failure traces show p95 latency between 1.8 and 2.4 seconds; the test runner is configured for one retry and retains per-run timings. It links source 041-operational-detail-1-source-v2 v2 with prior typed BehavioralRequirement record 041-prior-behavioralrequirement-detail-1-v1 v1 and keeps unresolved scope visible for T41.",
+      "durable_state": "The proposal retains prior record 041-prior-behavioralrequirement-detail-1-v1 v1 and versions only the affected state for T41 against source 041-operational-detail-1-source-v2 v2; it applies “preserve timing evidence and avoid hiding it through unlimited retries.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T41 and the scope supported by source 041-operational-detail-1-source-v2 v2; it represents “preserve timing evidence and avoid hiding it through unlimited retries.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "041-requirement-to-regression-factory-operational-2",
+    "root": "compileRegressionPlan.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "factory": {
+        "projectId": "041-requirement-to-regression-factory-operational-2",
+        "requirementNotes": [
+          {
+            "id": "041-operational-detail-2-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint. This current event is source 041-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 041-requirement-to-regression-factory-operational-2. The supplied typed prior 041-prior-behavioralrequirement-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "041-operational-detail-2-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint. This current event is source 041-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 041-requirement-to-regression-factory-operational-2. The supplied typed prior 041-prior-behavioralrequirement-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "approvedInterpretations": [],
+        "authorityStatus": "unclear",
+        "changedRequirementIds": [
+          "041-operational-detail-2-source-v2"
+        ],
+        "currentRequirement": {
+          "id": "041-prior-behavioralrequirement-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "041-requirement-to-regression-factory-operational-2",
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears"
+        },
+        "targetRevision": "v2",
+        "sandboxProfile": "not-provided",
+        "credentialScope": "not-provided",
+        "fixtureProvenance": [
+          "041-operational-detail-2-source-v2"
+        ],
+        "requiredSeededDefects": [],
+        "priorRuns": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 041-requirement-to-regression-factory-operational-2 against this factual event: Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint. Original §9 detail: A requirement changes after a test is approved: invalidate affected assertions explicitly. Correct handling applies “invalidate affected assertions explicitly.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A requirement changes after a test is approved: invalidate affected assertions explicitly.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Requirement R17 version 2 was approved against assertion A17-4 for sorting equal-timestamp events. Change notice R17-v3 now requires stable source order for ties; test report T41 still binds to the v2 requirement fingerprint. It links source 041-operational-detail-2-source-v2 v2 with prior typed BehavioralRequirement record 041-prior-behavioralrequirement-detail-2-v1 v1 and keeps unresolved scope visible for R17, A17-4, R17-v3, T41.",
+      "durable_state": "The proposal retains prior record 041-prior-behavioralrequirement-detail-2-v1 v1 and versions only the affected state for R17, A17-4, R17-v3, T41 against source 041-operational-detail-2-source-v2 v2; it applies “invalidate affected assertions explicitly.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R17, A17-4, R17-v3, T41 and the scope supported by source 041-operational-detail-2-source-v2 v2; it represents “invalidate affected assertions explicitly.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "041-requirement-to-regression-factory-operational-3",
+    "root": "compileRegressionPlan.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "factory": {
+        "projectId": "041-requirement-to-regression-factory-operational-3",
+        "requirementNotes": [
+          {
+            "id": "041-operational-detail-3-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log. This current event is source 041-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 041-requirement-to-regression-factory-operational-3. The supplied typed prior 041-prior-behavioralrequirement-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "041-operational-detail-3-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log. This current event is source 041-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 041-requirement-to-regression-factory-operational-3. The supplied typed prior 041-prior-behavioralrequirement-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "approvedInterpretations": [],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "041-operational-detail-3-source-v2"
+        ],
+        "currentRequirement": {
+          "id": "041-prior-behavioralrequirement-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "041-requirement-to-regression-factory-operational-3",
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears"
+        },
+        "targetRevision": "v2",
+        "sandboxProfile": "not-provided",
+        "credentialScope": "not-provided",
+        "fixtureProvenance": [
+          "041-operational-detail-3-source-v2"
+        ],
+        "requiredSeededDefects": [],
+        "priorRuns": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 041-requirement-to-regression-factory-operational-3 against this factual event: Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log. Original §9 detail: A test uses production credentials: block execution before sandbox launch. Correct handling applies “block execution before sandbox launch.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A test uses production credentials: block execution before sandbox launch.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Sandbox job J41 requests credential alias `prod-db-readwrite` in its environment before test discovery. The credential broker marks that alias production-scoped; no sandbox has been created and no secret value appears in the log. It links source 041-operational-detail-3-source-v2 v2 with prior typed BehavioralRequirement record 041-prior-behavioralrequirement-detail-3-v1 v1 and keeps unresolved scope visible for J41.",
+      "durable_state": "The proposal retains prior record 041-prior-behavioralrequirement-detail-3-v1 v1 and versions only the affected state for J41 against source 041-operational-detail-3-source-v2 v2; it applies “block execution before sandbox launch.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to J41 and the scope supported by source 041-operational-detail-3-source-v2 v2; it represents “block execution before sandbox launch.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "041-requirement-to-regression-factory-operational-4",
+    "root": "compileRegressionPlan.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "factory": {
+        "projectId": "041-requirement-to-regression-factory-operational-4",
+        "requirementNotes": [
+          {
+            "id": "041-operational-detail-4-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records. This current event is source 041-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 041-requirement-to-regression-factory-operational-4. The supplied typed prior 041-prior-behavioralrequirement-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "041-operational-detail-4-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records. This current event is source 041-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 041-requirement-to-regression-factory-operational-4. The supplied typed prior 041-prior-behavioralrequirement-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "approvedInterpretations": [],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "041-operational-detail-4-source-v2"
+        ],
+        "currentRequirement": {
+          "id": "041-prior-behavioralrequirement-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "041-requirement-to-regression-factory-operational-4",
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears"
+        },
+        "targetRevision": "v2",
+        "sandboxProfile": "not-provided",
+        "credentialScope": "not-provided",
+        "fixtureProvenance": [
+          "041-operational-detail-4-source-v2"
+        ],
+        "requiredSeededDefects": [],
+        "priorRuns": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 041-requirement-to-regression-factory-operational-4 against this factual event: Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records. Original §9 detail: A generated fixture contains personal data: replace it with approved synthetic records. Correct handling applies “replace it with approved synthetic records.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A generated fixture contains personal data: replace it with approved synthetic records.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Generated fixture F41 contains a real-looking email and phone number copied from an unredacted support ticket; the fixture provenance points to case PII-41. Approved synthetic generator SG41 can create equivalent schema-valid records. It links source 041-operational-detail-4-source-v2 v2 with prior typed BehavioralRequirement record 041-prior-behavioralrequirement-detail-4-v1 v1 and keeps unresolved scope visible for F41, PII-41, SG41.",
+      "durable_state": "The proposal retains prior record 041-prior-behavioralrequirement-detail-4-v1 v1 and versions only the affected state for F41, PII-41, SG41 against source 041-operational-detail-4-source-v2 v2; it applies “replace it with approved synthetic records.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to F41, PII-41, SG41 and the scope supported by source 041-operational-detail-4-source-v2 v2; it represents “replace it with approved synthetic records.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "041-requirement-to-regression-factory-operational-5",
+    "root": "compileRegressionPlan.nl",
+    "split_group": "041-requirement-to-regression-factory",
+    "inputs": {
+      "factory": {
+        "projectId": "041-requirement-to-regression-factory-operational-5",
+        "requirementNotes": [
+          {
+            "id": "041-operational-detail-5-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID. This current event is source 041-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 041-requirement-to-regression-factory-operational-5. The supplied typed prior 041-prior-behavioralrequirement-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "sourceEvidence": [
+          {
+            "id": "041-operational-detail-5-source-v2",
+            "source": "Requirement-to-regression factory operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R041 Requirement-to-regression steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R041 Requirement-to-regression steward records: Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID. This current event is source 041-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 041-requirement-to-regression-factory-operational-5. The supplied typed prior 041-prior-behavioralrequirement-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "approvedInterpretations": [],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "041-operational-detail-5-source-v2"
+        ],
+        "currentRequirement": {
+          "id": "041-prior-behavioralrequirement-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "041-requirement-to-regression-factory-operational-5",
+          "precondition": "two events carry the same timestamp",
+          "action": "merge events using the new sorter",
+          "expectedOutcome": "both events remain in stable source order",
+          "forbiddenOutcome": "second equal-time event disappears"
+        },
+        "targetRevision": "v2",
+        "sandboxProfile": "not-provided",
+        "credentialScope": "not-provided",
+        "fixtureProvenance": [
+          "041-operational-detail-5-source-v2"
+        ],
+        "requiredSeededDefects": [],
+        "priorRuns": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 041-requirement-to-regression-factory-operational-5 against this factual event: Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID. Original §9 detail: A patch makes tests pass by deleting an assertion: require independent coverage review. Correct handling applies “require independent coverage review.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A patch makes tests pass by deleting an assertion: require independent coverage review.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Patch P41 makes the suite green by deleting assertion A41-9, which checks the second equal-timestamp event. The branch coverage report has no independent reviewer and the assertion has no replacement test ID. It links source 041-operational-detail-5-source-v2 v2 with prior typed BehavioralRequirement record 041-prior-behavioralrequirement-detail-5-v1 v1 and keeps unresolved scope visible for P41, A41-9.",
+      "durable_state": "The proposal retains prior record 041-prior-behavioralrequirement-detail-5-v1 v1 and versions only the affected state for P41, A41-9 against source 041-operational-detail-5-source-v2 v2; it applies “require independent coverage review.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P41, A41-9 and the scope supported by source 041-operational-detail-5-source-v2 v2; it represents “require independent coverage review.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

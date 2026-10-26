@@ -1,0 +1,9 @@
+# 068 — Citizen-science observation curator
+
+## Distinct algorithm: preserve an observation as a provenance envelope, then branch its derivatives
+
+The curator treats a submission as a fixed original envelope plus competing interpretations and privacy-filtered derivatives. It never rewrites the observer's words, time, method, or location reference. Normalization yields a typed observation while preserving uncertain timezone and spatial precision. Taxonomic or terminology resolution retains a candidate set when descriptions do not discriminate. Duplicate review builds a graph of submissions and events using observer, time, location precision, media hashes, and narrative context; several photographs of one event attach as media, while separate witnesses remain independent corroboration.
+
+Publication is a branching projection, not a destructive edit: restricted provenance stays bound to the original observation; public location precision is separately generalized by the collection policy. An expert correction appends a new interpretation version, invalidates only derivative summaries that depend on that interpretation, and records affected analysis IDs. Rare reports are routed for verification rather than discarded as outliers. Follow-up questions ask for the observation that distinguishes plausible candidates and must not direct observers into unsafe field activity.
+
+The resumable curator state contains original submission IDs and hashes, interpretation history, duplicate-edge decisions, questions and answers, expert corrections, and disclosure-policy version. An interrupted run resumes from the last accepted event; it does not reparse a changed source as if it were the original. Exact geospatial generalization and timestamp offset conversion require host services or explicit sources; language interprets meaning and frames review.

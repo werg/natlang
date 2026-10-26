@@ -88,10 +88,18 @@ def publish_pending(config,state,*,stop=None):
     from .native_refresh import refresh
     source=state['pending_semantic_source'];directory=Path(state['pending_semantic_round_dir'])
     curriculum=policy_curriculum(config['semantic_refresh_config'],[source],directory/'policy-curriculum.json')
-    deployment=refresh(adapter=_bound(source['adapter']),updates={},config=curriculum,
+    prior_adapter=_bound(source['adapter'])
+    deployment=refresh(adapter=prior_adapter,updates={},config=curriculum,
         out=directory/'semantic-refresh',device=config.get('refresh_device','cuda'),stop=stop)
     accept_policy_deployment(config,state,deployment)
-    state.update(checkpoint=deployment['checkpoint']['path'],semantic_adapter=deployment['semantic_adapter']['path'])
+    deployment_path=directory/'semantic-refresh'/'deployment.json'
+    if not deployment_path.is_file():
+        raise ValueError('semantic policy refresh omitted its durable deployment receipt')
+    state.update(checkpoint=deployment['checkpoint']['path'],semantic_adapter=deployment['semantic_adapter']['path'],
+        semantic_deployment={'path':str(deployment_path.resolve()),'sha256':sha256_file_hex_cached(deployment_path)},
+        semantic_deployment_parent_adapter_sha256=sha256_file_hex_cached(prior_adapter))
+    from .production import invalidate_checkpoint_readiness
+    invalidate_checkpoint_readiness(state,deployment['checkpoint'],reason='qualified-shared-semantic-publication')
     if config.get('after_update'):
         from .production import run_command,RunControl
         values={**config,'out':str(directory),'checkpoint':state['checkpoint'],

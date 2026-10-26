@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "059",
+  "title": "Engineering change impact manager",
+  "entrypoint": "planConfigurationChange.nl",
+  "interfaces": [
+    {
+      "name": "planConfigurationChange",
+      "path": "planConfigurationChange.nl",
+      "purpose": "Partition effect by approved configuration, disposition coexisting revisions, preserve grandfathered units, and fence partial retrofits until exact verification."
+    },
+    {
+      "name": "reconcileUnitRetrofit",
+      "path": "reconcileUnitRetrofit.nl",
+      "purpose": "Reconcile per-unit installation, verification, mixed-configuration, and reversal receipts against approved target revision and work steps.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "engineering-retrofit-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretChange",
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "stage": "resolveApplicability",
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "stage": "traceDependencies",
+        "paths": [
+          "planConfigurationChange/propagateAffectedInterfaces.nl"
+        ]
+      },
+      {
+        "stage": "planImplementation",
+        "paths": [
+          "planConfigurationChange/dispositionRevisionStock.nl"
+        ]
+      },
+      {
+        "stage": "verifyConfiguration",
+        "paths": [
+          "planConfigurationChange/reconcileUnitRetrofitStates.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planConfigurationChange/dispositionRevisionStock.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planConfigurationChange/propagateAffectedInterfaces.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planConfigurationChange/reconcileUnitRetrofitStates.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "unit-scoped configuration and verified retrofit step histories",
+    "history": "mixed and unknown units remain fenced; verified rollback restores only that unit\u2019s evidenced baseline",
+    "promotion": "target configuration requires every approved per-unit step and target revision verification"
+  },
+  "effects": [
+    "supplier stock disposition request",
+    "configuration verification tasks"
+  ],
+  "source_files": [
+    "planConfigurationChange.nl",
+    "planConfigurationChange/dispositionRevisionStock.nl",
+    "planConfigurationChange/dispositionRevisionStock/assignRevisionUseByConfiguration.nl",
+    "planConfigurationChange/dispositionRevisionStock/classifyShippedObsoleteRevisions.nl",
+    "planConfigurationChange/partitionByApprovedConfiguration.nl",
+    "planConfigurationChange/partitionByApprovedConfiguration/closeConfigurationDependencySet.nl",
+    "planConfigurationChange/partitionByApprovedConfiguration/identifyDirectlyChangedConfigurations.nl",
+    "planConfigurationChange/propagateAffectedInterfaces.nl",
+    "planConfigurationChange/reconcileUnitRetrofitStates.nl",
+    "qualification/interpretChange.nl",
+    "reconcileUnitRetrofit.nl",
+    "reconcileUnitRetrofit/assessUnitTransition.nl",
+    "types.ts"
+  ]
+}

@@ -40,7 +40,7 @@ def actual_shared(tmp_path, *, history_policy=None):
                 # transport its profile without changing the source identity.
                 bind_history_reasoning(entry.tokenizer, policy=history_policy, require_declared=True)
                 entry.config['history_reasoning_policy'] = history_policy
-        optimizer, _ = make_native_optimizer(entry.model, lr=.001, in_backward=False)
+        optimizer, _ = make_native_optimizer(entry.model, lr=.001, weight_decay=0., in_backward=False)
         roles = entry.model.marker_ids
         plan = compile_graph([Invocation('answer', (4, roles[0], 5, roles[1], 6), producing=((2, 3),))])
         result = entry.model(plan)
@@ -52,6 +52,12 @@ def actual_shared(tmp_path, *, history_policy=None):
         reference=native_recipe_binding(recipe,('a' if name=='lfm' else 'b')*64)
         trained[name] = SemanticParticipant(entry.model, entry.tokenizer, entry.config,
             channel.bindings[name], optimizer, sft_progress={'stage': {'exposure_counts': {'earned': 3}}}, global_step=7,recipe_binding=reference)
+        trained[name].optimizer_options={'lr':.001,'weight_decay':0.,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None}
+        trained[name].fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
+        trained[name].optimizer_state_storage='device'
+        trained[name].source_rng=torch.get_rng_state().clone()
+        trained[name].snapshot_ancestors=[]
     optimizer = torch.optim.AdamW(channel.vae.parameters(), lr=.001)
     sum(value.square().mean() for value in channel.vae.parameters()).backward()
     optimizer.step(); optimizer.zero_grad(set_to_none=True)
@@ -379,11 +385,11 @@ def test_legacy_recipe_backfill_uses_real_readiness_and_original_stage_source_po
     from natlang_neuralese.data.native_sources import NativeGraphSource
     policy,participants,_,_,_=actual_shared(tmp_path)
     entry=participants['lfm']
-    # Actual old-style model+optimizer state has no recipe metadata. Readiness
-    # carries exact bound protocol evidence; this test does not claim that its
-    # synthetic exposure/runtime receipt fields qualify real production models.
+    # Actual old-style model+optimizer state has no recipe metadata, but still
+    # binds the optimizer settings that own its moments. Readiness carries the
+    # recipe recovery evidence; this fixture does not claim production readiness.
     training=progress();training.update(schema=TRAINING_SCHEMA,optimizer=entry.optimizer.state_dict(),fp8=None,
-        options={'stage_id':'graph','epochs':1})
+        options={'stage_id':'graph','epochs':1},identity={'optimizer_options':copy.deepcopy(entry.optimizer_options)})
     training['sft_progress']={'graph':copy.deepcopy(training)}
     parent=tmp_path/'legacy.pt'
     torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':entry.config,**model_state(entry.model),

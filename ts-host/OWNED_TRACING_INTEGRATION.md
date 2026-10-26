@@ -1,5 +1,10 @@
 # Opt-in owned JavaScript tracing evaluator wiring (Node)
 
+This document describes the bounded native reference adapter. The asynchronous
+selected-model integration, its supported native resources, module lifecycle,
+event ingress and recovery contract are documented in
+[SELECTED_SEMANTIC_INTEGRATION.md](SELECTED_SEMANTIC_INTEGRATION.md).
+
 Natlang's Node entry point now exports `installOwnedTracingEnvironment(factory)`.
 The installer replaces **both** evaluator seams:
 

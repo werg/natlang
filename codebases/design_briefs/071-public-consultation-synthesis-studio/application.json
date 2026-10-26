@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "071",
+  "title": "Public Consultation Synthesis Studio",
+  "entrypoint": "synthesizeConsultation.nl",
+  "interfaces": [
+    {
+      "name": "synthesizeConsultation",
+      "path": "synthesizeConsultation.nl",
+      "purpose": "Trace consultation arguments to themes and options while reporting participant counts separately from campaign templates.",
+      "stateParameter": "docket",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "consultation-synthesis-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractArguments",
+        "paths": [
+          "synthesizeConsultation/extractScopedArguments.nl",
+          "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl"
+        ]
+      },
+      {
+        "stage": "linkCampaigns",
+        "paths": [
+          "synthesizeConsultation/analyzeCampaignRelations.nl",
+          "synthesizeConsultation/analyzeCampaignRelations/compareSubmissionText.nl"
+        ]
+      },
+      {
+        "stage": "mapPositions",
+        "paths": [
+          "synthesizeConsultation/mapConsultationThemes.nl",
+          "synthesizeConsultation/mapConsultationThemes/qualifyThemeRelations.nl"
+        ]
+      },
+      {
+        "stage": "formResponses",
+        "paths": [
+          "synthesizeConsultation/draftPublicResponses.nl"
+        ]
+      },
+      {
+        "stage": "verifySynthesis",
+        "paths": [
+          "synthesizeConsultation/auditAndFreezeSynthesis.nl",
+          "synthesizeConsultation/auditAndFreezeSynthesis/traceArgumentCoverage.nl",
+          "synthesizeConsultation/auditAndFreezeSynthesis/reconcileParticipationDenominators.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "synthesizeConsultation/analyzeCampaignRelations.nl",
+          "synthesizeConsultation/analyzeCampaignRelations/compareSubmissionText.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "synthesizeConsultation/extractScopedArguments.nl",
+          "synthesizeConsultation/mapConsultationThemes.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "synthesizeConsultation/auditAndFreezeSynthesis.nl",
+          "synthesizeConsultation/auditAndFreezeSynthesis/traceArgumentCoverage.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "synthesizeConsultation/extractScopedArguments.nl",
+          "synthesizeConsultation/auditAndFreezeSynthesis.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "synthesizeConsultation/auditAndFreezeSynthesis.nl",
+          "synthesizeConsultation/auditAndFreezeSynthesis/traceArgumentCoverage.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "synthesizeConsultation.nl",
+    "synthesizeConsultation/analyzeCampaignRelations.nl",
+    "synthesizeConsultation/analyzeCampaignRelations/compareSubmissionText.nl",
+    "synthesizeConsultation/auditAndFreezeSynthesis.nl",
+    "synthesizeConsultation/auditAndFreezeSynthesis/reconcileParticipationDenominators.nl",
+    "synthesizeConsultation/auditAndFreezeSynthesis/traceArgumentCoverage.nl",
+    "synthesizeConsultation/draftPublicResponses.nl",
+    "synthesizeConsultation/extractScopedArguments.nl",
+    "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
+    "synthesizeConsultation/mapConsultationThemes.nl",
+    "synthesizeConsultation/mapConsultationThemes/qualifyThemeRelations.nl",
+    "types.ts"
+  ]
+}

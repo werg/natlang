@@ -1,0 +1,50 @@
+{
+  "application_id": "078",
+  "title": "Appointment Preparation Service",
+  "source_relative_path": "applications/16-healthcare-administration-and-care-logistics/078-appointment-preparation-service.md",
+  "source_sha256": "d798596c1a4210359d7a6f3ce4af675986e5a62258fb9be16a4468cf6ad6421d",
+  "domain_id": "16",
+  "stages": [
+    {
+      "name": "recoverInstructions",
+      "output_type": "PreparationRequirement",
+      "algorithm": "Parse the approved instruction set into actions, timing, exceptions, and contact routes. Preserve clinical wording where transformation could change meaning, and identify ambiguity for staff resolution rather than interpreting medical instructions independently.",
+      "gate": "Every consequential instruction and exception remains traceable to the approved source."
+    },
+    {
+      "name": "interpretCircumstances",
+      "output_type": "PreparationContext",
+      "algorithm": "Read the patient’s stated practical circumstances and communication preferences without inferring diagnoses or capability. Identify logistical barriers and questions requiring staff attention, and verify authority before involving a representative.",
+      "gate": "Context uses volunteered facts and does not change the clinical plan."
+    },
+    {
+      "name": "composeChecklist",
+      "output_type": "PreparationChecklist",
+      "algorithm": "Produce an accessible checklist using approved terminology and exact timing services. Adapt layout, language level, or format while preserving all clinical conditions; separate logistical suggestions from clinician instructions and flag unresolved questions visibly.",
+      "gate": "Semantic fidelity to approved instructions passes independent review."
+    },
+    {
+      "name": "routeQuestions",
+      "output_type": "PreparationQuestion",
+      "algorithm": "Form focused questions for the appropriate staff when instructions conflict with practical circumstances or remain unclear. Track authoritative responses, avoid answering medical questions from general model knowledge, and update the checklist only from approved clarification.",
+      "gate": "Clinical clarification comes from an authorized source."
+    },
+    {
+      "name": "trackAcknowledgment",
+      "output_type": "PreparationStatus",
+      "algorithm": "Record receipt, acknowledgment, and reported completion distinctly, respecting contact preferences and quiet periods. Escalate unresolved administrative barriers under supplied procedures without assuming acknowledgment proves comprehension or medical readiness.",
+      "gate": "No false readiness claim and no unapproved clinical recommendation."
+    }
+  ],
+  "operational_details": [
+    "An appointment time changes: recompute exact relative timings and reissue the affected checklist.",
+    "A translated phrase changes an exception: block release pending fidelity review.",
+    "A patient reports conflicting instructions: route to staff rather than choosing one.",
+    "A representative receives messages: verify current consent and scope.",
+    "A message is undelivered: use approved fallback contact rather than assuming receipt."
+  ],
+  "scenario": {
+    "representative_episode": "A patient receives a rescheduled appointment and needs an accessible format, while one preparation instruction conflicts with a previously received note.",
+    "independent_truth": "Synthetic approved instruction sets, exact relative timing, patient-stated logistics, consent, and authoritative clarification events."
+  }
+}

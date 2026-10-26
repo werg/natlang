@@ -1,0 +1,90 @@
+{
+  "application_id": "040",
+  "title": "Learning portfolio evidence assessor",
+  "source_relative_path": "applications/08-education-assessment-and-professional-learning/040-learning-portfolio-evidence-assessor.md",
+  "source_sha256": "c4e01da118e9a0d487804ef3b8c078a02d1127079286299ebe3a4de29797d3d0",
+  "domain_id": "08",
+  "stages": [
+    {
+      "name": "indexEvidence",
+      "output_type": "PortfolioEvidence",
+      "algorithm": "Read artifacts, reflections, and supervisor comments to identify observable work and its context. Separate the learner’s own contribution from group output, distinguish direct evidence from self-report, and preserve uncertainty about authorship or assistance.",
+      "gate": "Evidence type and authorship status are explicit."
+    },
+    {
+      "name": "mapCompetencies",
+      "output_type": "CompetencyMapping",
+      "algorithm": "Compare evidence with the actual competency definition and performance level. Recognize alternative demonstrations, avoid matching by keywords alone, and identify which facets are supported versus merely mentioned in a reflection.",
+      "gate": "Every mapping names the demonstrated behavior and source location."
+    },
+    {
+      "name": "assessSufficiency",
+      "output_type": "CompetencyFinding",
+      "algorithm": "Evaluate breadth, recency, independence, and consistency under the supplied assessment standard. Prevent double-counting one artifact as multiple independent demonstrations and preserve contradictory evidence rather than averaging it away.",
+      "gate": "Sufficiency follows the approved standard and does not rely on unsupported confidence."
+    },
+    {
+      "name": "formNextTasks",
+      "output_type": "EvidenceTask",
+      "algorithm": "Design the smallest authentic task that fills a consequential evidence gap. Tailor context and resources to the learner while preserving the competency, and specify what would count as success before the new work is submitted.",
+      "gate": "Task directly addresses the missing facet and is feasible under stated constraints."
+    },
+    {
+      "name": "prepareAssessment",
+      "output_type": "PortfolioDisposition",
+      "algorithm": "Assemble a reviewable recommendation with evidence, gaps, and proposed next work. Allow the learner to correct factual attribution, preserve assessor disagreements, and record the authorized decision separately from the program’s recommendation.",
+      "gate": "High-stakes outcomes require accountable assessor approval and an appeal path."
+    }
+  ],
+  "operational_details": [
+    "A group project lacks contribution records: request an individual demonstration rather than assuming equal authorship.",
+    "Evidence is old but relevant: apply the supplied recency rule rather than an invented cutoff.",
+    "A supervisor comment conflicts with the artifact: preserve both and request clarification.",
+    "An accommodation changes the form of evidence: assess the same competency through an approved alternative.",
+    "A learner appeals an attribution error: version the finding and reassess affected competencies."
+  ],
+  "domain_records": {
+    "PortfolioReview": [
+      "learnerId: ID",
+      "competencyFrameworkId: ID",
+      "artifactIds: ID[]",
+      "assessorId: ID",
+      "reviewPurpose: string"
+    ],
+    "PortfolioEvidence": [
+      "caseId: ID",
+      "artifactId: ID",
+      "contribution: string",
+      "context: string",
+      "authorshipStatus: string"
+    ],
+    "CompetencyMapping": [
+      "caseId: ID",
+      "evidenceId: ID",
+      "competencyId: ID",
+      "demonstratedFacet: string",
+      "missingFacet: string"
+    ],
+    "CompetencyFinding": [
+      "caseId: ID",
+      "competencyId: ID",
+      "evidenceIds: ID[]",
+      "sufficiency: 'met'|'partial'|'insufficient'",
+      "limitation: string"
+    ],
+    "EvidenceTask": [
+      "caseId: ID",
+      "competencyId: ID",
+      "task: string",
+      "requiredDemonstration: string",
+      "acceptanceCriteria: string[]"
+    ],
+    "PortfolioDisposition": [
+      "caseId: ID",
+      "findingIds: ID[]",
+      "assessorNotes: string",
+      "nextTaskIds: ID[]",
+      "approvalRef: Ref"
+    ]
+  }
+}

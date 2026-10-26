@@ -1,0 +1,556 @@
+[
+  {
+    "id": "058-maintenance-planning-and-handover-system-gate-supported",
+    "root": "qualification/interpretObservations.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ],
+          "caseId": "case-58"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "operatingContext",
+            "evidenceIds": [
+              "058-maintenance-planning-and-handover-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "maintenance manual and shift observations",
+        "evidence": [
+          {
+            "id": "058-maintenance-planning-and-handover-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P58 vibration note was made after 40 minutes at operating temperature; manual asks for cold-start measurement. Case case-58; current first-stage record values: {\"assetId\": \"pump-P58\", \"operatingContext\": \"night-shift note was recorded after 40 minutes at operating temperature\", \"priorWorkRefs\": [\"maintenance-note-58-night\"], \"symptom\": \"vibration during cold start\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "operatingContext",
+          "value": "night-shift note was recorded after 40 minutes at operating temperature",
+          "evidenceIds": [
+            "058-maintenance-planning-and-handover-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "maintenance manual and shift observations: Pump P-58 vibrates during cold start. Manual M-58 calls for recording startup temperature; the night note records vibration after 40 minutes at operating temperature. Apply the first-stage gate to the record and source versions; Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-gate-contradictory",
+    "root": "qualification/interpretObservations.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "cold-start vibration was measured at startup",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ],
+          "caseId": "case-58"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "operatingContext",
+            "evidenceIds": [
+              "058-maintenance-planning-and-handover-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "maintenance manual and shift observations",
+        "evidence": [
+          {
+            "id": "058-maintenance-planning-and-handover-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P58 vibration note was made after 40 minutes at operating temperature; manual asks for cold-start measurement. Case case-58; current first-stage record values: {\"assetId\": \"pump-P58\", \"operatingContext\": \"night-shift note was recorded after 40 minutes at operating temperature\", \"priorWorkRefs\": [\"maintenance-note-58-night\"], \"symptom\": \"vibration during cold start\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "operatingContext",
+          "value": "cold-start vibration was measured at startup",
+          "evidenceIds": [
+            "058-maintenance-planning-and-handover-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "maintenance manual and shift observations: Pump P-58 vibrates during cold start. Manual M-58 calls for recording startup temperature; the night note records vibration after 40 minutes at operating temperature. Apply the first-stage gate to the record and source versions; Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-gate-missing",
+    "root": "qualification/interpretObservations.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-58"
+        },
+        "missingFields": [
+          "operatingContext"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes operatingContext?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "maintenance manual and shift observations",
+        "evidence": [],
+        "missing": [
+          "operatingContext"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "maintenance manual and shift observations: Pump P-58 vibrates during cold start. Manual M-58 calls for recording startup temperature; the night note records vibration after 40 minutes at operating temperature. Apply the first-stage gate to the record and source versions; Keep the observation timing discrepancy and do not treat it as the manual’s cold-start measurement.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-operational-1",
+    "root": "prepareMaintenanceHandover.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "shiftCase": {
+        "caseId": "058-maintenance-planning-and-handover-system-operational-1",
+        "assetIdentity": {
+          "officialIds": [],
+          "aliases": [],
+          "locationRefs": [],
+          "verifiedRef": null
+        },
+        "reportedObservations": [],
+        "plannedTasks": [],
+        "completionReports": [],
+        "partChanges": [],
+        "isolation": null,
+        "faultHistory": [],
+        "incomingShift": "",
+        "outgoingShift": "",
+        "procedures": [],
+        "evidence": [
+          {
+            "id": "058-operational-detail-1-source-v2",
+            "source": "Maintenance planning and handover system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R058 Maintenance steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R058 Maintenance steward records: Technician T58 marks work order W58-3 “done” at 15:20, but the required post-maintenance vibration check field is blank and no verifier receipt is attached. The pump is not released in the asset system. This current event is source 058-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 058-maintenance-planning-and-handover-system-operational-1. The supplied typed prior 058-prior-assetobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Technician T58 marks work order W58-3 “done” at 15:20, but the required post-maintenance vibration check field is blank and no verifier receipt is attached. The pump is not released in the asset system."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorObservation": {
+          "id": "058-prior-assetobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "058-maintenance-planning-and-handover-system-operational-1",
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 058-maintenance-planning-and-handover-system-operational-1 against this factual event: Technician T58 marks work order W58-3 “done” at 15:20, but the required post-maintenance vibration check field is blank and no verifier receipt is attached. The pump is not released in the asset system. Original §9 detail: A technician reports done but the verification is missing: keep the task incomplete. Correct handling applies “keep the task incomplete.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Technician T58 marks work order W58-3 “done” at 15:20, but the required post-maintenance vibration check field is blank and no verifier receipt is attached. The pump is not released in the asset system.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A technician reports done but the verification is missing: keep the task incomplete.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Technician T58 marks work order W58-3 “done” at 15:20, but the required post-maintenance vibration check field is blank and no verifier receipt is attached. The pump is not released in the asset system. It links source 058-operational-detail-1-source-v2 v2 with prior typed AssetObservation record 058-prior-assetobservation-detail-1-v1 v1 and keeps unresolved scope visible for T58, W58-3.",
+      "durable_state": "The proposal retains prior record 058-prior-assetobservation-detail-1-v1 v1 and versions only the affected state for T58, W58-3 against source 058-operational-detail-1-source-v2 v2; it applies “keep the task incomplete.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T58, W58-3 and the scope supported by source 058-operational-detail-1-source-v2 v2; it represents “keep the task incomplete.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-operational-2",
+    "root": "prepareMaintenanceHandover.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "shiftCase": {
+        "caseId": "058-maintenance-planning-and-handover-system-operational-2",
+        "assetIdentity": {
+          "officialIds": [],
+          "aliases": [],
+          "locationRefs": [],
+          "verifiedRef": null
+        },
+        "reportedObservations": [],
+        "plannedTasks": [],
+        "completionReports": [],
+        "partChanges": [],
+        "isolation": null,
+        "faultHistory": [],
+        "incomingShift": "",
+        "outgoingShift": "",
+        "procedures": [],
+        "evidence": [
+          {
+            "id": "058-operational-detail-2-source-v2",
+            "source": "Maintenance planning and handover system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R058 Maintenance steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R058 Maintenance steward records: Spare part SP58 revision C is proposed for pump P58 revision D. Compatibility table lists revision B only; supplier note says C has a changed seal material, with no engineering approval attached. This current event is source 058-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 058-maintenance-planning-and-handover-system-operational-2. The supplied typed prior 058-prior-assetobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Spare part SP58 revision C is proposed for pump P58 revision D. Compatibility table lists revision B only; supplier note says C has a changed seal material, with no engineering approval attached."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorObservation": {
+          "id": "058-prior-assetobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "058-maintenance-planning-and-handover-system-operational-2",
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 058-maintenance-planning-and-handover-system-operational-2 against this factual event: Spare part SP58 revision C is proposed for pump P58 revision D. Compatibility table lists revision B only; supplier note says C has a changed seal material, with no engineering approval attached. Original §9 detail: A spare part has a different revision: require compatibility review before installation. Correct handling applies “require compatibility review before installation.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Spare part SP58 revision C is proposed for pump P58 revision D. Compatibility table lists revision B only; supplier note says C has a changed seal material, with no engineering approval attached.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A spare part has a different revision: require compatibility review before installation.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Spare part SP58 revision C is proposed for pump P58 revision D. Compatibility table lists revision B only; supplier note says C has a changed seal material, with no engineering approval attached. It links source 058-operational-detail-2-source-v2 v2 with prior typed AssetObservation record 058-prior-assetobservation-detail-2-v1 v1 and keeps unresolved scope visible for SP58, P58.",
+      "durable_state": "The proposal retains prior record 058-prior-assetobservation-detail-2-v1 v1 and versions only the affected state for SP58, P58 against source 058-operational-detail-2-source-v2 v2; it applies “require compatibility review before installation.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to SP58, P58 and the scope supported by source 058-operational-detail-2-source-v2 v2; it represents “require compatibility review before installation.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-operational-3",
+    "root": "prepareMaintenanceHandover.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "shiftCase": {
+        "caseId": "058-maintenance-planning-and-handover-system-operational-3",
+        "assetIdentity": {
+          "officialIds": [],
+          "aliases": [],
+          "locationRefs": [],
+          "verifiedRef": null
+        },
+        "reportedObservations": [],
+        "plannedTasks": [],
+        "completionReports": [],
+        "partChanges": [],
+        "isolation": null,
+        "faultHistory": [],
+        "incomingShift": "",
+        "outgoingShift": "",
+        "procedures": [],
+        "evidence": [
+          {
+            "id": "058-operational-detail-3-source-v2",
+            "source": "Maintenance planning and handover system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R058 Maintenance steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R058 Maintenance steward records: Night shift ends while pump P58 remains isolated under lock L58-4. Isolation log records closed breaker B58 and zero-energy test at 21:10; the handover page has no assigned owner for the morning verification. This current event is source 058-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 058-maintenance-planning-and-handover-system-operational-3. The supplied typed prior 058-prior-assetobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Night shift ends while pump P58 remains isolated under lock L58-4. Isolation log records closed breaker B58 and zero-energy test at 21:10; the handover page has no assigned owner for the morning verification."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorObservation": {
+          "id": "058-prior-assetobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "058-maintenance-planning-and-handover-system-operational-3",
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 058-maintenance-planning-and-handover-system-operational-3 against this factual event: Night shift ends while pump P58 remains isolated under lock L58-4. Isolation log records closed breaker B58 and zero-energy test at 21:10; the handover page has no assigned owner for the morning verification. Original §9 detail: A shift ends during isolation: carry the exact state and required checks into handover. Correct handling applies “carry the exact state and required checks into handover.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Night shift ends while pump P58 remains isolated under lock L58-4. Isolation log records closed breaker B58 and zero-energy test at 21:10; the handover page has no assigned owner for the morning verification.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A shift ends during isolation: carry the exact state and required checks into handover.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Night shift ends while pump P58 remains isolated under lock L58-4. Isolation log records closed breaker B58 and zero-energy test at 21:10; the handover page has no assigned owner for the morning verification. It links source 058-operational-detail-3-source-v2 v2 with prior typed AssetObservation record 058-prior-assetobservation-detail-3-v1 v1 and keeps unresolved scope visible for P58, L58-4, B58.",
+      "durable_state": "The proposal retains prior record 058-prior-assetobservation-detail-3-v1 v1 and versions only the affected state for P58, L58-4, B58 against source 058-operational-detail-3-source-v2 v2; it applies “carry the exact state and required checks into handover.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P58, L58-4, B58 and the scope supported by source 058-operational-detail-3-source-v2 v2; it represents “carry the exact state and required checks into handover.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-operational-4",
+    "root": "prepareMaintenanceHandover.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "shiftCase": {
+        "caseId": "058-maintenance-planning-and-handover-system-operational-4",
+        "assetIdentity": {
+          "officialIds": [],
+          "aliases": [],
+          "locationRefs": [],
+          "verifiedRef": null
+        },
+        "reportedObservations": [],
+        "plannedTasks": [],
+        "completionReports": [],
+        "partChanges": [],
+        "isolation": null,
+        "faultHistory": [],
+        "incomingShift": "",
+        "outgoingShift": "",
+        "procedures": [],
+        "evidence": [
+          {
+            "id": "058-operational-detail-4-source-v2",
+            "source": "Maintenance planning and handover system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R058 Maintenance steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R058 Maintenance steward records: Pump P58’s high-vibration alarm disappeared after lubrication for 40 minutes, then returned on the next warm run. Fault history contains four similar events since August; monitoring plan MP58 was approved for 72 hours. This current event is source 058-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 058-maintenance-planning-and-handover-system-operational-4. The supplied typed prior 058-prior-assetobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Pump P58’s high-vibration alarm disappeared after lubrication for 40 minutes, then returned on the next warm run. Fault history contains four similar events since August; monitoring plan MP58 was approved for 72 hours."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorObservation": {
+          "id": "058-prior-assetobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "058-maintenance-planning-and-handover-system-operational-4",
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 058-maintenance-planning-and-handover-system-operational-4 against this factual event: Pump P58’s high-vibration alarm disappeared after lubrication for 40 minutes, then returned on the next warm run. Fault history contains four similar events since August; monitoring plan MP58 was approved for 72 hours. Original §9 detail: A recurring fault disappears temporarily: retain its history and approved monitoring requirement. Correct handling applies “retain its history and approved monitoring requirement.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Pump P58’s high-vibration alarm disappeared after lubrication for 40 minutes, then returned on the next warm run. Fault history contains four similar events since August; monitoring plan MP58 was approved for 72 hours.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A recurring fault disappears temporarily: retain its history and approved monitoring requirement.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Pump P58’s high-vibration alarm disappeared after lubrication for 40 minutes, then returned on the next warm run. Fault history contains four similar events since August; monitoring plan MP58 was approved for 72 hours. It links source 058-operational-detail-4-source-v2 v2 with prior typed AssetObservation record 058-prior-assetobservation-detail-4-v1 v1 and keeps unresolved scope visible for P58, MP58.",
+      "durable_state": "The proposal retains prior record 058-prior-assetobservation-detail-4-v1 v1 and versions only the affected state for P58, MP58 against source 058-operational-detail-4-source-v2 v2; it applies “retain its history and approved monitoring requirement.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P58, MP58 and the scope supported by source 058-operational-detail-4-source-v2 v2; it represents “retain its history and approved monitoring requirement.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "058-maintenance-planning-and-handover-system-operational-5",
+    "root": "prepareMaintenanceHandover.nl",
+    "split_group": "058-maintenance-planning-and-handover-system",
+    "inputs": {
+      "shiftCase": {
+        "caseId": "058-maintenance-planning-and-handover-system-operational-5",
+        "assetIdentity": {
+          "officialIds": [],
+          "aliases": [],
+          "locationRefs": [],
+          "verifiedRef": null
+        },
+        "reportedObservations": [],
+        "plannedTasks": [],
+        "completionReports": [],
+        "partChanges": [],
+        "isolation": null,
+        "faultHistory": [],
+        "incomingShift": "",
+        "outgoingShift": "",
+        "procedures": [],
+        "evidence": [
+          {
+            "id": "058-operational-detail-5-source-v2",
+            "source": "Maintenance planning and handover system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R058 Maintenance steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R058 Maintenance steward records: Work request W58-9 lists asset `P-5801`; plant register has both pump P58-01 and compressor P58-10 with similar labels. Dispatch ticket has no photo or location confirmation. This current event is source 058-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 058-maintenance-planning-and-handover-system-operational-5. The supplied typed prior 058-prior-assetobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Work request W58-9 lists asset `P-5801`; plant register has both pump P58-01 and compressor P58-10 with similar labels. Dispatch ticket has no photo or location confirmation."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorObservation": {
+          "id": "058-prior-assetobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "058-maintenance-planning-and-handover-system-operational-5",
+          "assetId": "pump-P58",
+          "symptom": "vibration during cold start",
+          "operatingContext": "night-shift note was recorded after 40 minutes at operating temperature",
+          "priorWorkRefs": [
+            "maintenance-note-58-night"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 058-maintenance-planning-and-handover-system-operational-5 against this factual event: Work request W58-9 lists asset `P-5801`; plant register has both pump P58-01 and compressor P58-10 with similar labels. Dispatch ticket has no photo or location confirmation. Original §9 detail: An asset identifier is ambiguous: verify identity before dispatching work. Correct handling applies “verify identity before dispatching work.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Work request W58-9 lists asset `P-5801`; plant register has both pump P58-01 and compressor P58-10 with similar labels. Dispatch ticket has no photo or location confirmation.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "An asset identifier is ambiguous: verify identity before dispatching work.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Work request W58-9 lists asset `P-5801`; plant register has both pump P58-01 and compressor P58-10 with similar labels. Dispatch ticket has no photo or location confirmation. It links source 058-operational-detail-5-source-v2 v2 with prior typed AssetObservation record 058-prior-assetobservation-detail-5-v1 v1 and keeps unresolved scope visible for W58-9, P-5801, P58-01, P58-10.",
+      "durable_state": "The proposal retains prior record 058-prior-assetobservation-detail-5-v1 v1 and versions only the affected state for W58-9, P-5801, P58-01, P58-10 against source 058-operational-detail-5-source-v2 v2; it applies “verify identity before dispatching work.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to W58-9, P-5801, P58-01, P58-10 and the scope supported by source 058-operational-detail-5-source-v2 v2; it represents “verify identity before dispatching work.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

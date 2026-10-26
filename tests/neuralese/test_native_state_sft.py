@@ -789,12 +789,82 @@ def test_rotating_held_cadence_preserves_whole_long_graphs_and_final_coverage(tm
         selected=list(rows);seen.append(selected)
         return {'loss':1.,'examples':len(selected),'forward_tokens':sum(entries[i]['forward_tokens'] for i in selected)}
     monkeypatch.setattr(trainer,'_evaluate',evaluate)
-    args=SimpleNamespace(held_eval_tokens=8,held_eval_graphs=0,checkpoint_layers=False,chunk_tokens=32)
+    args=SimpleNamespace(held_eval_tokens=8,held_eval_graphs=0,held_final_policy='full',checkpoint_layers=False,chunk_tokens=32)
     _,coverage=trainer._evaluate_cadence(None,Source(),args=args)
     result,coverage=trainer._evaluate_cadence(None,Source(),args=args,coverage=coverage)
     assert result['scope']=='cadence-subset' and coverage['cursor']==3
     result,coverage=trainer._evaluate_cadence(None,Source(),args=args,coverage=coverage,final=True)
     assert result['scope']=='full' and seen[-1]==[0,1,2,3] and coverage['cursor']==0
+
+
+@pytest.mark.parametrize('mode,expected',[('budgeted',1),('full',3)])
+def test_actual_stage_end_respects_explicit_held_budget_or_full_request(tmp_path,mode,expected):
+    import json,torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    base=tmp_path/'base';_tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl'
+    train.write_text(json.dumps(dict(graph('train'),tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    held.write_text(''.join(json.dumps(dict(graph('held'+str(i)),split='test',tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n'for i in range(3)))
+    out=tmp_path/'out'
+    assert trainer.main(['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs','1',
+        '--forward-atol','0.0001','--gradient-atol','0.00001','--stage-id','bounded-test','--held-eval-graphs','1','--held-final-policy',mode,'--out',str(out)])==0
+    saved=torch.load(out/'checkpoint.pt',weights_only=False)
+    assert saved['training']['exposure_counts']=={'train':1}
+    metrics=saved['training']['metrics']
+    assert metrics['held']['examples']==expected
+    assert metrics['held']['scope']==('full'if mode=='full'else'cadence-subset')
+    assert metrics['held_coverage']['graph_visits']==expected
+    report=json.loads((out/'report.json').read_text())
+    assert report['active_stage_complete']is True
+    assert report['completed']is (mode=='full')
+    assert report['active_stage_completion']['full_held_qualification_complete']is (mode=='full')
+    from natlang_neuralese.train.native_operation_report import active_stage_handoff
+    from natlang_neuralese.rl.production import qualified_seed_boundary
+    checkpoint={'sha256':report['checkpoint_sha256']}
+    assert active_stage_handoff(report,checkpoint,stage_id=report['active_stage_completion']['stage_id'])
+    assert qualified_seed_boundary({'native_state':True},'seed',report,out/'checkpoint.pt')
+
+
+@pytest.mark.parametrize('stop_before_first',[False,True])
+def test_actual_stop_during_full_held_sweep_preserves_update_and_only_observed_coverage(tmp_path,monkeypatch,stop_before_first):
+    import json,torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.data import native_graph
+    base=tmp_path/'base';_tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    train=tmp_path/'train.jsonl';held=tmp_path/'held.jsonl';out=tmp_path/'out'
+    train.write_text(json.dumps(dict(graph('train'),tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    held.write_text(''.join(json.dumps(dict(graph('held'+str(i)),split='test',tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n'for i in range(3)))
+    policies=[];due=trainer.CheckpointPolicy.due;loss=native_graph.graph_loss
+    def observe(policy,step,**kwargs):policies.append(policy);return due(policy,step,**kwargs)
+    def stop_after_first(model,example,**kwargs):
+        value=loss(model,example,**kwargs)
+        if example.split=='test':policies[-1].stop.request()
+        return value
+    monkeypatch.setattr(trainer.CheckpointPolicy,'due',observe)
+    monkeypatch.setattr(native_graph,'graph_loss',stop_after_first)
+    if stop_before_first:
+        original=trainer._evaluate_cadence
+        def stop_before(*args,**kwargs):
+            policies[-1].stop.request()
+            return original(*args,**kwargs)
+        monkeypatch.setattr(trainer,'_evaluate_cadence',stop_before)
+    assert trainer.main(['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(train),'--held-native-graphs',str(held),'--epochs','1',
+        '--held-final-policy','full','--out',str(out)])==0
+    saved=torch.load(out/'checkpoint.pt',weights_only=False)
+    assert saved['training']['exposure_counts']=={'train':1}and saved['training']['optimizer']and saved['training']['rng']
+    metrics=saved['training']['metrics']
+    expected=0 if stop_before_first else 1
+    assert metrics['held']['operationally_interrupted']and metrics['held']['examples']==expected
+    assert metrics['held']['scope']=='cadence-subset'and metrics['held_coverage']['graph_visits']==expected
+    assert json.loads((out/'native-runtime-certificate.json').read_text())['deferred']
 
 
 def test_unbound_historical_index_is_revalidated_before_admission(tmp_path, monkeypatch):

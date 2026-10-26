@@ -1,0 +1,106 @@
+{
+  "schema": "natlang.application/1",
+  "id": "074",
+  "title": "Volunteer Deployment Coordinator",
+  "entrypoint": "deployVolunteerMission.nl",
+  "interfaces": [
+    {
+      "name": "deployVolunteerMission",
+      "path": "deployVolunteerMission.nl",
+      "purpose": "Build and revise mission assignments by required skill coverage, verified qualifications, consent, supervision and privacy.",
+      "stateParameter": "mission",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "volunteer-mission-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretMission",
+        "paths": [
+          "deployVolunteerMission/interpretMissionRequirements.nl",
+          "deployVolunteerMission/verifyMissionRequirement.nl"
+        ]
+      },
+      {
+        "stage": "interpretProfiles",
+        "paths": [
+          "deployVolunteerMission/refreshVolunteerCapabilities.nl",
+          "deployVolunteerMission/refreshVolunteerCapabilities/qualifyAtMissionWindow.nl"
+        ]
+      },
+      {
+        "stage": "constructTeams",
+        "paths": [
+          "deployVolunteerMission/constructCapabilityTeam.nl",
+          "deployVolunteerMission/constructCapabilityTeam/measureRequirementCoverage.nl"
+        ]
+      },
+      {
+        "stage": "prepareBriefings",
+        "paths": [
+          "deployVolunteerMission/projectRoleBriefings.nl"
+        ]
+      },
+      {
+        "stage": "replanAssignments",
+        "paths": [
+          "deployVolunteerMission/replanMissionAssignments.nl",
+          "deployVolunteerMission/replanMissionAssignments/checkAffectedAssignments.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "deployVolunteerMission/replanMissionAssignments.nl",
+          "deployVolunteerMission/replanMissionAssignments/checkAffectedAssignments.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "deployVolunteerMission/refreshVolunteerCapabilities.nl",
+          "deployVolunteerMission/refreshVolunteerCapabilities/qualifyAtMissionWindow.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "deployVolunteerMission/constructCapabilityTeam.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "deployVolunteerMission/projectRoleBriefings.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "deployVolunteerMission/constructCapabilityTeam/measureRequirementCoverage.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "deployVolunteerMission.nl",
+    "deployVolunteerMission/constructCapabilityTeam.nl",
+    "deployVolunteerMission/constructCapabilityTeam/measureRequirementCoverage.nl",
+    "deployVolunteerMission/interpretMissionRequirements.nl",
+    "deployVolunteerMission/projectRoleBriefings.nl",
+    "deployVolunteerMission/refreshVolunteerCapabilities.nl",
+    "deployVolunteerMission/refreshVolunteerCapabilities/qualifyAtMissionWindow.nl",
+    "deployVolunteerMission/replanMissionAssignments.nl",
+    "deployVolunteerMission/replanMissionAssignments/checkAffectedAssignments.nl",
+    "deployVolunteerMission/verifyMissionRequirement.nl",
+    "types.ts"
+  ]
+}

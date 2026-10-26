@@ -1,0 +1,103 @@
+{
+  "schema": "natlang.application/1",
+  "id": "050",
+  "title": "Dataset specification and audit studio",
+  "entrypoint": "governDatasetEdition.nl",
+  "interfaces": [
+    {
+      "name": "governDatasetEdition",
+      "path": "governDatasetEdition.nl",
+      "purpose": "Govern a use-specific dataset edition through observable labels, source-family independence, audience permissions, split closure and consent withdrawal.",
+      "stateParameter": "edition",
+      "stateResultPath": [
+        "edition"
+      ]
+    }
+  ],
+  "source_files": [
+    "governDatasetEdition.nl",
+    "governDatasetEdition/accountIndependentCoverage.nl",
+    "governDatasetEdition/adjudicateRecordUse.nl",
+    "governDatasetEdition/adjudicateRecordUse/distinguishPermissionScope.nl",
+    "governDatasetEdition/buildSourceFamilies.nl",
+    "governDatasetEdition/buildSourceFamilies/distinguishIndependentMechanism.nl",
+    "governDatasetEdition/establishObservableLabels.nl",
+    "governDatasetEdition/establishObservableLabels/specifyAnnotationBoundary.nl",
+    "governDatasetEdition/establishObservableLabels/testLabelObservability.nl",
+    "governDatasetEdition/freezePermittedEdition.nl",
+    "governDatasetEdition/freezePermittedEdition/verifyWorldSplitClosure.nl",
+    "governDatasetEdition/interpretDatasetUse.nl",
+    "governDatasetEdition/traceConsentWithdrawal.nl",
+    "governDatasetEdition/traceConsentWithdrawal/traceReleasedDescendants.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "defineUseContract",
+        "paths": [
+          "governDatasetEdition/interpretDatasetUse.nl"
+        ]
+      },
+      {
+        "stage": "writeAnnotationSpec",
+        "paths": [
+          "governDatasetEdition/establishObservableLabels/testLabelObservability.nl"
+        ]
+      },
+      {
+        "stage": "auditCandidates",
+        "paths": [
+          "governDatasetEdition/adjudicateRecordUse/distinguishPermissionScope.nl"
+        ]
+      },
+      {
+        "stage": "measureCoverage",
+        "paths": [
+          "governDatasetEdition/accountIndependentCoverage.nl"
+        ]
+      },
+      {
+        "stage": "commissionAndRelease",
+        "paths": [
+          "governDatasetEdition/freezePermittedEdition/verifyWorldSplitClosure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "governDatasetEdition/adjudicateRecordUse/distinguishPermissionScope.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "governDatasetEdition/freezePermittedEdition/verifyWorldSplitClosure.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "governDatasetEdition/establishObservableLabels/testLabelObservability.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "governDatasetEdition/buildSourceFamilies/distinguishIndependentMechanism.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "governDatasetEdition/traceConsentWithdrawal/traceReleasedDescendants.nl"
+        ]
+      }
+    ]
+  }
+}

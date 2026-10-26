@@ -29,6 +29,9 @@ import { analyzeFusion, prepareFusion } from '../fusion/prepare.js';
 import { formatFusionReport } from '../fusion/report.js';
 import { parseFusionSettings, type FusionSettings } from '../fusion/settings.js';
 import { parseAdaptation } from '../adaptation/schema.js';
+import { currentRelease } from '../adaptation/weights/release.js';
+import { tunedServing, type TunedServing } from './weights.js';
+import type { ProgramDescriptor } from '../adaptation/types.js';
 import { executorIdentityForChoice } from '../model/config.js';
 import { invokeDefinition } from '../runtime/kernel.js';
 import { resolveFrame } from '../runtime/runtime.js';
@@ -177,7 +180,7 @@ type Parsed = { words: string[]; options: Map<string, string | true>; rest: stri
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
   const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
-    '--lines', '--jsonl', '--filter', '--no-adaptation', '--fusion']);
+    '--lines', '--jsonl', '--filter', '--no-adaptation', '--no-weights', '--fusion']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -279,9 +282,17 @@ function modelSelection(parsed: Parsed): LoadedModelConfiguration {
   return loadModelConfiguration(option(parsed, '--profile'), overrides);
 }
 
-function modelSession(choice: ResolvedModelChoice, assumeYes = false) {
+function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapters?: () => readonly { id: string; path: string }[]) {
   return createResolvedModelSession(choice, process.env, process.stderr,
-  { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes) });
+  { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes), ...(loraAdapters ? { loraAdapters } : {}) });
+}
+
+/** A tuned program root's release, unless --no-weights. Prints why tuned weights are not served, when they are not. */
+async function discoverWeights(parsed: Parsed, root: string, program: ProgramDescriptor | undefined, choice: ResolvedModelChoice): Promise<TunedServing> {
+  if (parsed.options.has('--no-weights')) return {};
+  const serving = await tunedServing(root, program, choice);
+  if (serving.notice) process.stderr.write(serving.notice + '\n');
+  return serving;
 }
 
 function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Pick<NatlangRuntimeOptions, 'model' | 'seed'> {
@@ -438,18 +449,22 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
     join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
   const { choice } = modelSelection(parsed);
-  const model = modelSession(choice, parsed.options.has('--yes'));
-  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() });
   const executorIdentity = executorIdentityForChoice(choice);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const program = inventory.manifest.adaptation!;
+  const tuned = await discoverWeights(parsed, spec.root, program, choice);
+  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
+  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
+    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
+      ...(model.neuralese ? { neuralese: true as const } : {}) });
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
   // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
   const refinements = manifest.refinements;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
+    ...(tuned.weights ? { weights: tuned.weights } : {}),
     programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {
     // Fused hand-offs (plans/FUSED_PIPELINES.md): off unless natlang.json says otherwise.
@@ -478,7 +493,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
 
 async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
   acceptOptions(parsed, ['--target', '--export', '--profile', '--provider', '--model', '--workspace', '--state', '--traces', '--store',
-    '--plain', '--no-color', '--yes', '--adaptation', '--no-adaptation']);
+    '--plain', '--no-color', '--yes', '--adaptation', '--no-adaptation', '--no-weights']);
   const path = resolve(value);
   if (existsSync(path) && statSync(path).isFile() && /\.(?:m?ts|m?js)$/.test(path)) {
     const root = projectRoot(path);
@@ -533,21 +548,29 @@ async function fusionForCheck(parsed: Parsed, project: string) {
 
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
   const { choice } = modelSelection(parsed);
-  const model = modelSession(choice, parsed.options.has('--yes'));
   const trace = option(parsed, '--trace');
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = option(parsed, '--adaptation') ? parseAdaptation(readFileSync(resolve(option(parsed, '--adaptation')!), 'utf8')) : null;
-  const inventory = artifact ? buildProject({ project: process.cwd(), programId: artifact.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
+  // A tuned project is identified from the working directory, without flags.
+  const tunedRoot = !parsed.options.has('--no-weights') && currentRelease(process.cwd()) ? process.cwd() : undefined;
+  const inventory = artifact || tunedRoot ? buildProject({ project: process.cwd(), programId: artifact?.program.id ?? currentRelease(process.cwd())?.manifest.program.id,
+    emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
   if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const program = inventory?.manifest.adaptation;
+  const tuned = tunedRoot ? await discoverWeights(parsed, tunedRoot, program, choice) : {};
+  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow() })), program, adaptation, executorIdentity,
-    ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
+    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
+      ...(model.neuralese ? { neuralese: true as const } : {}) })), program, adaptation, executorIdentity,
+    ...(tuned.weights ? { weights: tuned.weights } : {}), ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }
   finally { runtime.close(); await model.close(); }
 }
+
+const tunedProject = (parsed: Parsed) => !parsed.options.has('--no-weights') && !!currentRelease(process.cwd());
 
 function commandCallable(name: string, adaptationRoot?: string): ((...args: unknown[]) => Promise<unknown>) &
   { [key: symbol]: { definition: { params: { name: string }[]; subtype: string } } } {
@@ -594,12 +617,12 @@ const pipelineValue = (value: unknown) =>
   value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 async function callCommand(parsed: Parsed, name: string): Promise<number> {
-  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl', '--adaptation', '--no-adaptation']);
+  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl', '--adaptation', '--no-adaptation', '--no-weights']);
   noTrailingArguments(parsed);
   if (parsed.options.has('--lines') && parsed.options.has('--jsonl')) throw new Error('--lines and --jsonl are mutually exclusive');
   if (option(parsed, '--inputs') && (parsed.options.has('--lines') || parsed.options.has('--jsonl')))
     throw new Error('--inputs cannot be combined with --lines or --jsonl');
-  const fn = commandCallable(name, option(parsed, '--adaptation') ? process.cwd() : undefined), params = fn[Symbol.for('natlang.callable')]!.definition.params;
+  const fn = commandCallable(name, option(parsed, '--adaptation') || tunedProject(parsed) ? process.cwd() : undefined), params = fn[Symbol.for('natlang.callable')]!.definition.params;
   if (fn[Symbol.for('natlang.callable')]!.definition.subtype === 'directory-reducer')
     throw new Error(`${name} is a directory reducer; use natlang apply`);
   const inputsPath = option(parsed, '--inputs');
@@ -615,8 +638,8 @@ async function callCommand(parsed: Parsed, name: string): Promise<number> {
 }
 
 async function applyCommand(parsed: Parsed, name: string, directory: string): Promise<number> {
-  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes', '--adaptation', '--no-adaptation']); noTrailingArguments(parsed);
-  const fn = commandCallable(name, option(parsed, '--adaptation') ? process.cwd() : undefined), definition = fn[Symbol.for('natlang.callable')]!.definition;
+  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes', '--adaptation', '--no-adaptation', '--no-weights']); noTrailingArguments(parsed);
+  const fn = commandCallable(name, option(parsed, '--adaptation') || tunedProject(parsed) ? process.cwd() : undefined), definition = fn[Symbol.for('natlang.callable')]!.definition;
   if (definition.subtype !== 'directory-reducer') throw new Error(`${name} is not a directory reducer`);
   if (definition.params.length) throw new Error(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
   const path = resolve(directory), folder = openFolder(path, 'write');
@@ -750,6 +773,7 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv[0] === 'improve') return (await import('./improvement.js')).improvementCommand(argv.slice(1));
   if (['adapt', 'eval', 'optimize'].includes(argv[0] ?? '')) return (await import('./adaptation.js')).adaptationCommand(argv);
+  if (argv[0] === 'tune') return (await import('./tune.js')).tuneCommand(argv.slice(1));
   if (argv[0] === 'traces') return (await import('./calls.js')).tracesCommand(argv.slice(1));
   if (argv[0] === 'compilations') return (await import('./calls.js')).compilationsCommand(argv.slice(1));
   if (argv[0] === 'specialize') return main((await import('./calls.js')).specializeArguments(argv.slice(1)));

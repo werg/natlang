@@ -1,0 +1,118 @@
+# Tuner: decomposition, part by part
+
+Status: decomposition for [plans/HIERARCHICAL_LORA_TUNING.md](../../plans/HIERARCHICAL_LORA_TUNING.md), written
+before implementation (owner rule: DECOMPOSITION.md first, review after the fact in `plans/OWNER_REVIEW.md`).
+The tuner turns an ordinary natlang program into a tuned release that the normal `natlang run`/`call`/SDK path
+uses without any author-visible adapter handling.
+
+Decisions: **fn** (its own natural-language function), **inline** (one instruction of another function),
+**implicit**, **crisp** (exact helper), **service** (outside world), **host** (CLI/plumbing), **pluggable**
+(one interface, crisp and natural-language implementations, setting selects; `ts-host/src/runtime/pluggable.ts`).
+
+## Policy and mechanism
+
+- **Natural language decides.** Which root inputs to synthesize, which authorized teacher to route a call to,
+  how to read a teacher disagreement, which families/subtree roots/removals to propose, which rank change to try,
+  and how to explain a build or activation failure to the author.
+- **Crisp measures, verifies and commits.** Splits, replay, typed/oracle verification, autodiff and optimizers,
+  tensor algebra and export, ablation execution and cost arithmetic, dependency hashes, lexical binding resolution,
+  cache identities and the atomic release pointer. A model cannot be asked for these.
+- **Existing mechanisms are extended, not duplicated.** Program inventory: `ProgramDescriptor`
+  (`ts-host/src/adaptation/inventory.ts`). Per-task pinning: `ProgramView` on `NatlangTask`. Weight actors:
+  `nnt1` coefficient artifacts (`training/neuralese/natlang_neuralese/model/native_adapters.py`), whose
+  `resolve_adapters` already composes an ordered stack with scales. Explicit experiment scopes:
+  `withNativeAdapters` (`ts-host/src/neuralese/learning.ts`). Model dispatch: `activeNativeAdapters()` in
+  `ts-host/src/native/model-recording.ts`. Hashing: `ts-host/src/adaptation/identity.ts` and
+  `natlang_neuralese/common/hashing.py`. Splits: `rl/memetic_batch.py`.
+- **State model.** A build is decide-then-commit: snapshot the program, data and settings; policies decide;
+  crisp stages verify; `publishRelease` commits one immutable release and swaps the active pointer atomically.
+  Derived values form a DAG with acyclic keys: source/data/config → trained artifacts → stack exports → release.
+
+## Parts
+
+### Discovery and binding (runtime, TypeScript)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Program inventory (named lambdas, inline sites, guidance) | crisp | existing `describeProgram` | Already the compiler's exact component list with stable keys and contract hashes. |
+| Lexical scope tree over bound definitions | crisp | `compileScopeTree` in `ts-host/src/adaptation/weights/scopes.ts` | Deterministic structure: program root, folder per directory/`natlang.d/`, lambda per component; author tree roots and pins are inputs. Exact, not a judgment. |
+| Binding manifest `natlang.adapters.json` | crisp | `ts-host/src/adaptation/weights/manifest.ts` | Versioned data contract: bindings, scope ancestry, nodes, families/gates, fallback, receipts. Validation is exact. |
+| Per-call stack resolution | crisp | `WeightBinding.resolve` in `ts-host/src/adaptation/weights/binding.ts` | Resolved from the callee's definition/component, never the caller chain; replaces the lexical stack and appends explicit `withNativeAdapters` scopes. Must be exact and identical in Node and browser, so it rides on `Frame`, not AsyncLocalStorage. |
+| Requested/effective identity, skipped artifacts, fallback | crisp | same | Dependency-consistent fallback is a rule over the manifest's declared fallback chain, not a judgment. |
+| Release record, activation, rollback | crisp | `ts-host/src/adaptation/weights/release.ts` | Exact durability: immutable release directories, atomic pointer rename, previous coherent release retained. |
+| Automatic discovery in `run`/`call`/SDK | host | `ts-host/src/cli/main.ts`, `createNatlangRuntime` option `weights` | Plumbing: the loader finds the active release beside the program; no flags. |
+| Status `untuned/tuning/ready/stale/degraded` and author-facing reason | crisp state + fn explanation | `explainTuneStatus.nl` (pluggable, crisp default) | The state is computed exactly; the sentence for the author about what to do next is natural language. |
+
+### Data (`natlang tune` collection stage)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Split roots by source/world component before expansion | crisp | extend `rl/memetic_batch.py` selector | Leakage prevention must be exact and global. |
+| Propose synthetic root inputs from training-only signatures/examples | fn | `proposeRootInputs.nl` | Writing plausible inputs is a judgment about meaning. Inner arguments are never invented. |
+| Whole-program execution with a teacher, capture of inner calls | crisp + service | existing runtime trace/graph capture; teacher via configured services | Exact capture of what ran; the teacher is an outside service. |
+| Replayable worlds | crisp | existing journaled services (`frame.services`) | Side effects must not repeat. |
+| Route a program's collection to an authorized teacher | pluggable | `routeTeacher` in `ts-host/src/tune/teachers.ts` (crisp default: measured quality/cost frontier with minimum quality; NL `routeTeacher.nl`, unmeasured, see `plans/MODEL_FACING_CHANGES.md`); measurement by `calibrateTeachers` | Hot policy; the crisp default is the measured frontier rule, the NL implementation can weigh call descriptions. Only owner-authorized actors are eligible (crisp filter). |
+| Interpret disagreement among samples | fn | `diagnoseDisagreement.nl` | Reading why answers differ is a judgment; the evidence fields stay separate and crisp. |
+| Evidence fields (oracle/enclosing/type/agreement/judge) | crisp | `evidence` record in data schema | Separate exact facts; no collapsed "verified" flag. |
+| On-policy repair of a student prefix | service + crisp | teacher continuation + reverification | The teacher writes; crisp reverifies the continuation and downstream result. |
+
+### Training (`natlang_neuralese/tune/`)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Basis, parameterizations, stack algebra, export | crisp | `tune/bases.py`, `parameterization.py`, `stack.py`, `export.py` | Exact mathematics. |
+| Joint objective and per-binding path routing | crisp | `tune/objective.py` + shared native trainer | Autodiff and loss normalization. |
+| Family gates and amplitude convention | crisp | `tune/gates.py` | Exact projection and norms. |
+| Discover family candidates | crisp | `natlang_neuralese/tune/families.py discover` (gauge-invariant effective-delta cosines, threshold clusters across programs, author tags from `tune.families.json`) | Exact arithmetic over release artifacts on one base. |
+| Propose families | pluggable | `proposeFamilies` in `ts-host/src/tune/families.ts`; crisp default = tags + clusters, NL `proposeFamilies.nl` (unmeasured, see `plans/MODEL_FACING_CHANGES.md`) | Grouping candidates by meaning is a judgment; an answer may only name discovered members. |
+| Fit and publish a family version | crisp | `families.py fit` (joint trainer, one shared node, private residuals absent, balanced programs, fixed amplitude) + per-base store | Autodiff and exact normalization; publication is an immutable record. |
+| Refit members and accept | crisp | `runFamilies` → `trainRelease` with frozen family + gates, paired development comparison, envelope rule | Measurement and an exact acceptance rule. |
+| Propose placement removals, subtree roots, rank changes | pluggable | `runPlacement({ propose, treeRoots })` in `ts-host/src/tune/placement.ts`; crisp default `deepestFirst`, NL `proposePlacement.nl` to be measured live before adoption | Choosing what to try next from ablation evidence is policy. Execution, refit and paired measurement are crisp. |
+| Accept a placement candidate | crisp | quality-envelope rule in the manifest | The rule (lowest measured cost within the declared success envelope) is exact once measured. |
+| Rank/penalty sweep scheduling | host | `ts-host/src/tune/sweep.ts` (resumable journal, development-only selection) | Operational; structural arms map onto recipe ranks. |
+| Paired evaluation and reports | crisp | `ts-host/src/tune/evaluate.ts`, `stats.ts` (component-clustered bootstrap), `report.ts` | Exact measurement and arithmetic. |
+| Distillation into each base | crisp + existing recipe | shared production SFT recipe admission | Uses the existing admission/exposure mechanism. |
+
+### SFT and RL (plan §5.1a)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Alternate SFT and RL rounds | crisp schedule from the recipe; NL `proposeSchedule.nl` later over development measurements | tune recipe | Exact once declared; choosing the next round from evidence is policy. |
+| Roll out training roots with the student | crisp | runtime with native recording on the native server | Exact capture of sampled tokens and actors. |
+| Reward | crisp | root oracle / declared local checks | Verifiers are exact; no judge-as-reward without calibration. |
+| Advantages, clipped policy loss | crisp | `rl/rollout_math.py`, `rl/policy_math.py`, `rl/native_replay.py` | Shared math with the production RL. |
+
+### Soft instructions and soft skills (plan §3.3)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Which bindings and skills get soft state | crisp default (all bindings with model turns on a native-state backend) + fn `proposeSoftState.nl` later | tune plan | Whether soft state pays off is measured; the default is exact and the NL proposal is policy over measurements. |
+| Initialize a state from text | crisp | native writer (`memetic_program.write_state` path / engine writer) | Exact model computation with recorded actor, text and tokenizer. |
+| Consume a state in place of text | crisp | kernel substitutes the instruction body / skill text with its state sentinel; driver materializes the state part | Exact substitution; no judgment. |
+| Tune a state | crisp | trainer external-state rows + `optimize_state` | Autodiff and the shared optimizer. |
+| Re-initialize on base change | crisp | invalidation matrix | Rule over identities. |
+
+### Serving
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Native reference per-call actor binding | crisp | existing `run_native` with ordered stack | Already exact. |
+| vLLM / llama.cpp fork / wllama loading, routing and batching | service + crisp | backend adapters under `ts-host/src/model/` (per-request LoRA scales shared in `lora-scales.ts`), `ts-host/src/browser/tuned-release.ts` and the patched wllama in `ts-host/vendor/wllama` | Outside-world integration; parity is verified crisply. |
+| Capability matrix | crisp | generated from parity tests | Facts, not claims. |
+
+### Lifecycle
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Build keys and reverse dependencies | crisp | `ts-host/src/adaptation/weights/keys.ts` | Exact hashing; semantic digests exclude generated adapters to avoid cycles. |
+| Invalidation from an edit | crisp | invalidation matrix in `keys.ts` | Rules over the dependency graph. |
+| Resumable jobs and watch coalescing | host | `tune` command job directory | Plumbing with compare-before-publish. |
+| Report | crisp facts + fn summary | `tune --report` + `summarizeTuneReport.nl` | Numbers are exact; the author-facing summary is natural language. |
+
+## Open questions
+
+1. Whether `routeTeacher` needs the NL implementation before measured calibration data exists. Until then the
+   crisp frontier rule runs and the NL variant is measured live (about 48 samples) before adoption.
+2. Inline site IDs today are `site:<label>` or `exact:<definitionId>`; the plan requires structural matching on
+   edits with migration maps. Until that exists, an unlabeled inline site whose definition ID changes gets a new
+   binding (never another site's adapter).

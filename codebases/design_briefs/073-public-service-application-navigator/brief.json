@@ -1,0 +1,50 @@
+{
+  "application_id": "073",
+  "title": "Public Service Application Navigator",
+  "source_relative_path": "applications/15-civic-participation-and-community-operations/073-public-service-application-navigator.md",
+  "source_sha256": "536de2d7cf6f64aa4ec5b8a5a1084458253a72bb0097fba8823c7f04c40f09a4",
+  "domain_id": "15",
+  "stages": [
+    {
+      "name": "interpretSituation",
+      "output_type": "ServiceSituation",
+      "algorithm": "Read the person’s stated situation and supplied documents to identify needs and established facts. Avoid inferring sensitive characteristics, distinguish missing information from ineligibility, and route urgent concerns according to approved service procedures.",
+      "gate": "Only volunteered or authorized evidence informs the situation model."
+    },
+    {
+      "name": "identifyPathways",
+      "output_type": "ServicePathway",
+      "algorithm": "Compare known facts with supplied service descriptions and conditions to identify potentially relevant routes. Preserve multiple plausible pathways, explain uncertainty, and avoid presenting a preliminary match as an official eligibility decision.",
+      "gate": "Every pathway follows current supplied rules and clearly states unresolved conditions."
+    },
+    {
+      "name": "chooseQuestions",
+      "output_type": "NavigationQuestion",
+      "algorithm": "Select the next question by how much it resolves relevant pathway uncertainty while minimizing burden and sensitivity. Reuse authorized existing evidence, explain why the information is needed, and allow the person to decline or report that it is unknown.",
+      "gate": "No unnecessary collection or repeated request for already available evidence."
+    },
+    {
+      "name": "assembleApplications",
+      "output_type": "ApplicationTask",
+      "algorithm": "Convert chosen pathways into document, form, appointment, and submission tasks. Check consistency across forms, preserve the applicant’s own statements, and request review for uncertain answers rather than fabricating details to make a form complete.",
+      "gate": "Application content is evidence-backed and explicitly confirmed by the applicant where required."
+    },
+    {
+      "name": "trackOutcomes",
+      "output_type": "ServiceApplicationStatus",
+      "algorithm": "Record actual submission and agency responses, distinguish receipt from acceptance or eligibility, and formulate next actions for missing evidence or appeal information under supplied procedures. Preserve the agency’s authority and the applicant’s choices.",
+      "gate": "No claim of benefit approval without authoritative confirmation."
+    }
+  ],
+  "operational_details": [
+    "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+    "A service rule changes mid-application: revalidate the affected pathway and explain the change.",
+    "A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer.",
+    "A submission receipt is delayed: reconcile status before resubmitting.",
+    "A helper acts for the applicant: verify delegated consent and restrict access accordingly."
+  ],
+  "scenario": {
+    "representative_episode": "An applicant may fit two services, lacks one usual document, and receives a request for additional evidence after submitting the first application.",
+    "independent_truth": "Fictional service rules, known applicant facts, alternative evidence paths, and exact agency response states."
+  }
+}

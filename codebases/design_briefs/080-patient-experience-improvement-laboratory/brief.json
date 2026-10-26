@@ -1,0 +1,50 @@
+{
+  "application_id": "080",
+  "title": "Patient Experience Improvement Laboratory",
+  "source_relative_path": "applications/16-healthcare-administration-and-care-logistics/080-patient-experience-improvement-laboratory.md",
+  "source_sha256": "4ee0691410c635293de18dba16e0266de43c8ae178fe036c1cafb9f740b12ac5",
+  "domain_id": "16",
+  "stages": [
+    {
+      "name": "extractExperiences",
+      "output_type": "ExperienceEpisode",
+      "algorithm": "Process surveys, complaints, and calls to identify administrative experiences and their context. Separate access or communication issues from clinical conclusions, preserve mixed experiences, and avoid inferring diagnoses or treatment quality from administrative feedback.",
+      "gate": "Findings stay within observed administrative experience."
+    },
+    {
+      "name": "linkJourneyEvents",
+      "output_type": "JourneyLink",
+      "algorithm": "Relate feedback to appointment, contact, and referral events using authorized identifiers and time windows. Distinguish repeated reports of one episode from independent experiences, and preserve uncertain linkage rather than exposing unrelated patient records.",
+      "gate": "Patient isolation and evidence-backed episode linkage."
+    },
+    {
+      "name": "formMechanisms",
+      "output_type": "ServiceMechanism",
+      "algorithm": "Identify plausible administrative mechanisms such as unclear instructions or failed callbacks. Seek contradictory cases and alternative explanations, distinguish correlation from causality, and define evidence needed to test the mechanism without making clinical claims.",
+      "gate": "Mechanisms remain appropriately qualified and source-supported."
+    },
+    {
+      "name": "designImprovements",
+      "output_type": "ServiceExperiment",
+      "algorithm": "Propose bounded communication or workflow improvements within approved service authority. Define measurable administrative outcomes, guard against shifting burden to another team, and specify how results would support adoption, revision, or abandonment.",
+      "gate": "Experiment does not alter clinical care and has an independent outcome measure."
+    },
+    {
+      "name": "reviewResults",
+      "output_type": "ExperienceOutcome",
+      "algorithm": "Reconcile computed administrative metrics with follow-up feedback and implementation evidence. Check changed denominators, observation channels, and minority experiences, then recommend next actions without claiming clinical benefit beyond the study’s scope.",
+      "gate": "Reported improvements match exact measures and preserve limits and counterevidence."
+    }
+  ],
+  "operational_details": [
+    "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+    "Call volume falls because a channel closes: do not report that as improved access.",
+    "A small group faces severe barriers: preserve its experience despite aggregate improvement.",
+    "Feedback consent is withdrawn: remove attributable material and reassess derivatives.",
+    "An experiment shifts work to another team: measure the downstream burden before adoption."
+  ],
+  "scenario": {
+    "representative_episode": "A service reports fewer complaints after changing its phone system, but callback failures and survey-channel changes may explain the apparent improvement.",
+    "independent_truth": "Synthetic administrative journeys, true process mechanisms, exact contact metrics, consent boundaries, and experiment outcomes."
+  }
+}

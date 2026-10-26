@@ -1,0 +1,5032 @@
+{
+  "schema": "natlang.design-brief-architecture-review/1",
+  "release": "design-briefs-100-distinct-applications-20261026-v2",
+  "evidence": "Source potential-call topology and public contracts, not observed calls, measured model behavior, or a proof of semantic uniqueness.",
+  "applications": 100,
+  "public_operations": 155,
+  "comparison_policy": "A shared structural fingerprint is a review prompt, not a failure or a diversity score. Distinct names and fingerprints cannot establish independent semantic approaches.",
+  "repeated_source_topologies": [
+    [
+      "011",
+      "012"
+    ],
+    [
+      "014",
+      "015",
+      "016",
+      "019"
+    ],
+    [
+      "018",
+      "026",
+      "027",
+      "028"
+    ],
+    [
+      "024",
+      "031",
+      "033"
+    ],
+    [
+      "025",
+      "029",
+      "032"
+    ],
+    [
+      "040",
+      "097"
+    ],
+    [
+      "044",
+      "048"
+    ],
+    [
+      "045",
+      "049"
+    ],
+    [
+      "047",
+      "052"
+    ],
+    [
+      "065",
+      "084"
+    ],
+    [
+      "068",
+      "069",
+      "071",
+      "088"
+    ],
+    [
+      "072",
+      "073",
+      "076",
+      "079",
+      "089"
+    ],
+    [
+      "074",
+      "075",
+      "077",
+      "085",
+      "086"
+    ],
+    [
+      "078",
+      "090"
+    ],
+    [
+      "083",
+      "095"
+    ],
+    [
+      "087",
+      "091"
+    ],
+    [
+      "093",
+      "094"
+    ]
+  ],
+  "reused_helper_names": [
+    {
+      "name": "qualifyOriginal.nl",
+      "applications": [
+        "001",
+        "002",
+        "003",
+        "004",
+        "005",
+        "020",
+        "021",
+        "022",
+        "023",
+        "050",
+        "051",
+        "052",
+        "053",
+        "080",
+        "081",
+        "082",
+        "083"
+      ]
+    },
+    {
+      "name": "qualify.nl",
+      "applications": [
+        "006",
+        "007",
+        "008",
+        "009",
+        "010",
+        "011",
+        "012",
+        "013",
+        "014",
+        "015",
+        "016",
+        "024",
+        "025",
+        "026",
+        "027",
+        "028",
+        "029",
+        "030",
+        "031",
+        "032",
+        "033",
+        "034",
+        "035",
+        "036",
+        "090",
+        "091",
+        "092",
+        "093",
+        "094",
+        "095",
+        "096",
+        "097",
+        "098",
+        "099",
+        "100"
+      ]
+    },
+    {
+      "name": "frameNegotiation.nl",
+      "applications": [
+        "010",
+        "028"
+      ]
+    },
+    {
+      "name": "recoverRequirements.nl",
+      "applications": [
+        "060",
+        "063"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "application_id": "001",
+      "title": "Decision-dependency ledger",
+      "source_sha256": "7bbdc6081041f1e8ef9ba5db9b1481f58f356385417d10d864347e01d87c728f",
+      "interface_sha256": "6d8e6eb6e71503518c983e3a495f19069c96655b0a871304f277c843af8c9202",
+      "public_operations": [
+        {
+          "name": "reopenDecisionLedger",
+          "path": "reopenDecisionLedger.nl",
+          "purpose": "Reopen only supported changed premise regions and route exact versioned questions to accountable owners."
+        },
+        {
+          "name": "resolveLedgerQuestion",
+          "path": "resolveLedgerQuestion.nl",
+          "purpose": "Record a signed owner response against its exact pending question and current decision revisions."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reopenDecisionLedger.nl",
+          "depth": 2
+        },
+        {
+          "path": "resolveLedgerQuestion.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reopenDecisionLedger",
+          "state_key": "decision-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        },
+        {
+          "operation": "resolveLedgerQuestion",
+          "state_key": "decision-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12787,
+        "type_declarations": 7681,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e4c5d7c16e3c7bcf412a44521c9c167b60f47580f5855d8bdbda93715c07fb62",
+      "decomposition": "codebases/design_briefs/001-decision-dependency-ledger/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "002",
+      "title": "Contradiction-aware knowledge publisher",
+      "source_sha256": "65d18dafe44f27045736fad47937915cc8b9fe2146df5c1cb7c837d5d8247f78",
+      "interface_sha256": "830b0c80d10d82848a0616be0d6ebf7a7e82c88cc0481a8697cba1e6ffde8802",
+      "public_operations": [
+        {
+          "name": "prepareClaimRelease",
+          "path": "prepareClaimRelease.nl",
+          "purpose": "Build and independently verify exact page edits from qualified claim neighborhoods and scoped publication authority."
+        },
+        {
+          "name": "reconcilePagePublication",
+          "path": "reconcilePagePublication.nl",
+          "purpose": "Reconcile page-specific publish receipts and preserve partial-failure repair work."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "prepareClaimRelease.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcilePagePublication.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "prepareClaimRelease",
+          "state_key": "claim-release",
+          "input": [
+            "state"
+          ],
+          "output": [
+            "state"
+          ]
+        },
+        {
+          "operation": "reconcilePagePublication",
+          "state_key": "claim-release",
+          "input": [
+            "state"
+          ],
+          "output": [
+            "state"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12662,
+        "type_declarations": 7540,
+        "typescript_mechanisms": 804
+      },
+      "source_topology_fingerprint": "d408b09fb1399759ecb0ad543b879a5303d2a8badebaf2d4e4ccc7bbfb80149a",
+      "decomposition": "codebases/design_briefs/002-contradiction-aware-knowledge-publisher/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "003",
+      "title": "Handover continuity manager",
+      "source_sha256": "e58b1d03825b11f4293bbc94d311555ac859efad579e9952fb5f93096ae36c55",
+      "interface_sha256": "755607b4430b76096814712d1c0b29863b4e5f8d85484b54b873d97ad76082b7",
+      "public_operations": [
+        {
+          "name": "planDepartureHandover",
+          "path": "planDepartureHandover.nl",
+          "purpose": "Maintain a departure portfolio of promises, recovery dependencies, accepted ownership slices and immediate continuity."
+        },
+        {
+          "name": "recordSuccessorAcceptance",
+          "path": "recordSuccessorAcceptance.nl",
+          "purpose": "Partition an exact successor acknowledgment into accepted and still-unowned obligation scope."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planDepartureHandover.nl",
+          "depth": 2
+        },
+        {
+          "path": "recordSuccessorAcceptance.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "planDepartureHandover",
+          "state_key": "handover-portfolio",
+          "input": [
+            "portfolio"
+          ],
+          "output": [
+            "portfolio"
+          ]
+        },
+        {
+          "operation": "recordSuccessorAcceptance",
+          "state_key": "handover-portfolio",
+          "input": [
+            "portfolio"
+          ],
+          "output": [
+            "portfolio"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12852,
+        "type_declarations": 7350,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "25fc30dfc85825442d5a4c98dbc6fb8526527c3a08b7874bfd2f3163c0d56305",
+      "decomposition": "codebases/design_briefs/003-handover-continuity-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "004",
+      "title": "Organizational knowledge integration workbench",
+      "source_sha256": "f901efcde141fdc56ee760a252a5f6d31941ab5d641d1f6ebcabcf5b11ee6efc",
+      "interface_sha256": "294f1e119f30b310543d1582b1b7d96483a6033b85fc96bd0d48713dd2c228bd",
+      "public_operations": [
+        {
+          "name": "planConceptIntegration",
+          "path": "planConceptIntegration.nl",
+          "purpose": "Test operational meanings in both directions and assemble reversible organizational integration waves with explicit responsibility boundaries."
+        },
+        {
+          "name": "rescheduleIntegrationCutover",
+          "path": "rescheduleIntegrationCutover.nl",
+          "purpose": "Move authorized execution dates while preserving effective decisions and completed wave history."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "planConceptIntegration.nl",
+          "depth": 3
+        },
+        {
+          "path": "rescheduleIntegrationCutover.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "planConceptIntegration",
+          "state_key": "integration-atlas",
+          "input": [
+            "atlas"
+          ],
+          "output": [
+            "atlas"
+          ]
+        },
+        {
+          "operation": "rescheduleIntegrationCutover",
+          "state_key": "integration-atlas",
+          "input": [
+            "atlas"
+          ],
+          "output": [
+            "atlas"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11001,
+        "type_declarations": 7471,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "63035309c21f2a0265093048230c11b11fd8cb4631b39b66be8b1658deb41713",
+      "decomposition": "codebases/design_briefs/004-organizational-knowledge-integration-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "005",
+      "title": "Exception and precedent steward",
+      "source_sha256": "56bcc202f3627915e28340d86498a7a25aa4cdbf0f29b4b62c673354cf10709b",
+      "interface_sha256": "00c6c7d266ac329fb30ec23f5aca4eb83e112b7ab60919d4f870da34a6eae1f2",
+      "public_operations": [
+        {
+          "name": "hearExceptionRequest",
+          "path": "hearExceptionRequest.nl",
+          "purpose": "Hear a bounded exception through rationale, disanalogy, decisive facts and current authority while retaining revocable historical precedent."
+        },
+        {
+          "name": "reviewWaiverRevocation",
+          "path": "reviewWaiverRevocation.nl",
+          "purpose": "Apply an authorized effective revocation to future reliance while preserving prior valid actions and pending notification receipts."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "hearExceptionRequest.nl",
+          "depth": 2
+        },
+        {
+          "path": "reviewWaiverRevocation.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "hearExceptionRequest",
+          "state_key": "waiver-register",
+          "input": [
+            "register"
+          ],
+          "output": [
+            "register"
+          ]
+        },
+        {
+          "operation": "reviewWaiverRevocation",
+          "state_key": "waiver-register",
+          "input": [
+            "register"
+          ],
+          "output": [
+            "register"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11482,
+        "type_declarations": 7370,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "b8e8cb46db042df10528f2ec8f408e0abd5637a37db2bfb267983b40f552d865",
+      "decomposition": "codebases/design_briefs/005-exception-and-precedent-steward/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "006",
+      "title": "Continuous customer-problem observatory",
+      "source_sha256": "e7e922540ec74e61931c31cff66f2d206d1f4a98b5e5a5960e53178cd7d9e788",
+      "interface_sha256": "2139eb824ff10fbeffd0b4e1fd08b627b262967aafc2ffb3433ea3e727f320cb",
+      "public_operations": [
+        {
+          "name": "observeCustomerProblems",
+          "path": "observeCustomerProblems.nl",
+          "purpose": "Turn the supplied customer problem evidence, privacy changes, identity history and exposure frames into a deduplicated, comparable, provenance-preserving observatory proposal."
+        }
+      ],
+      "native_functions": 17,
+      "potential_edges": 15,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "observeCustomerProblems.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "observeCustomerProblems",
+          "state_key": "customer-observatory",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 14280,
+        "type_declarations": 8637,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "4bf8ce631fc8ee1a7fde0367e8489ea17e816f2f4374dfe39d2d22a1e4d66dbb",
+      "decomposition": "codebases/design_briefs/006-continuous-customer-problem-observatory/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "007",
+      "title": "Qualitative research studio",
+      "source_sha256": "d262881b00dc8f43e8a277167100a1c374e9291ffbae3f2bf82a05447a7864ac",
+      "interface_sha256": "d3e75901364a502368ea2e7b1f89842218775f4f51ce8ace708a7cf8c5678a23",
+      "public_operations": [
+        {
+          "name": "studyAnalysis",
+          "path": "studyAnalysis.nl",
+          "purpose": "Plan and analyze a bounded qualitative study with decision contrasts, a frozen sample, versioned code boundaries, independent-coder review, counterevidence, and quotation privacy."
+        }
+      ],
+      "native_functions": 21,
+      "potential_edges": 19,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "studyAnalysis.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "studyAnalysis",
+          "state_key": "qualitative-study",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 15662,
+        "type_declarations": 8842,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c35ad2aaca9961225a565f92b3bcd7bd28bcc87373b5c48a5b4d07e5709890e7",
+      "decomposition": "codebases/design_briefs/007-qualitative-research-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "008",
+      "title": "Product opportunity portfolio manager",
+      "source_sha256": "d2e73d280d9e4d363af85a9d2b8b2f139e40c5fb9e087db893cd90bdfd4bec85",
+      "interface_sha256": "3289890137138f5f3a50f3f3c30f9e9680975d02544d47aaaa902fd6465a06c2",
+      "public_operations": [
+        {
+          "name": "planPortfolio",
+          "path": "planPortfolio.nl",
+          "purpose": "Translate evidence-backed outcomes into distinct mechanisms, shared dependency packages, learning tests, and an explicit solver-receipt review state."
+        }
+      ],
+      "native_functions": 17,
+      "potential_edges": 15,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "planPortfolio.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "planPortfolio",
+          "state_key": "opportunity-portfolio",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 15005,
+        "type_declarations": 9187,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "abd878b73f6ef9486e2385fe259c23b2049dffc7c67c9c11e45566b6aca73d48",
+      "decomposition": "codebases/design_briefs/008-product-opportunity-portfolio-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "009",
+      "title": "Experiment interpretation workbench",
+      "source_sha256": "4d0b5f5b0fa37ee9c124ee1f41cea14b70cf6f22361569e31300b44ce48b3fe8",
+      "interface_sha256": "1baa5698ae704b34ee46acad475a04553ef551d530df0c761f2218b35a570482",
+      "public_operations": [
+        {
+          "name": "interpretExperiment",
+          "path": "interpretExperiment.nl",
+          "purpose": "Assess approved experiment outputs against effective design history, measurement comparability, estimands, counterexperience, and follow-up evidence."
+        }
+      ],
+      "native_functions": 22,
+      "potential_edges": 20,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "interpretExperiment.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "interpretExperiment",
+          "state_key": "experiment-review",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 16626,
+        "type_declarations": 9191,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "37354ad2931e96574063322b2b42c9a25db203babb25f5ac462009b8e9d55fad",
+      "decomposition": "codebases/design_briefs/009-experiment-interpretation-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "010",
+      "title": "Requirements negotiation workspace",
+      "source_sha256": "2ccf7ee3490e575278f8c7791b9f20526eccd2ebd6ab8e66172f42053cb20d55",
+      "interface_sha256": "44ce373aac01507c0c2b1ec7536644c3b2ed1715c283b82c168fd0a03931e0d3",
+      "public_operations": [
+        {
+          "name": "negotiateRequirements",
+          "path": "negotiateRequirements.nl",
+          "purpose": "Reconcile stakeholder outcomes and constraints into a phased, source-linked specification with explicit pending agreements and replayed acceptance cases."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "negotiateRequirements.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "negotiateRequirements",
+          "state_key": "requirements-negotiation",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12099,
+        "type_declarations": 10779,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "fafda4ac09d294ead0ac4fa99aea7c3763d6c77a95b4ad31e12850f9d5971859",
+      "decomposition": "codebases/design_briefs/010-requirements-negotiation-workspace/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "011",
+      "title": "Multi-issue service recovery desk",
+      "source_sha256": "550676ae4a4d6ac665229fa8fe89e0384fffa80ebd4132f877261489295bcaff",
+      "interface_sha256": "26b26595b1e446460828b1190d669697b616c3033800cb0a12da3b2d2a8f9b56",
+      "public_operations": [
+        {
+          "name": "recoverServiceCase",
+          "path": "recoverServiceCase.nl",
+          "purpose": "Resolve linked service issues against purchase-date entitlements, joint remedy constraints, customer choice, idempotent operation receipts, and partial closure."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "recoverServiceCase.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "recoverServiceCase",
+          "state_key": "service-recovery",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11388,
+        "type_declarations": 10405,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "eb8fb7bf5f0c4d58bbc29cdee71004e58da89bba22a1b951eb49684af477b1f1",
+      "decomposition": "codebases/design_briefs/011-multi-issue-service-recovery-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "012",
+      "title": "Returns, repair, and resale orchestrator",
+      "source_sha256": "7a585475bed221c0bacf406b1198be0039487fe7f8727c66440e7b478156bc4a",
+      "interface_sha256": "e5a14c100b3843a8ef593ca56aab0201af34ac1db4fa706a5ab1930c3fc54c2f",
+      "public_operations": [
+        {
+          "name": "manageDeviceReturn",
+          "path": "manageDeviceReturn.nl",
+          "purpose": "Route a specific returned device through evidence-based condition assessment, purchase-date entitlement, safe repair, serial-verified custody, data erasure, and truthful resale disclosure."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "manageDeviceReturn.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "manageDeviceReturn",
+          "state_key": "device-lifecycle",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12455,
+        "type_declarations": 11147,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "eb8fb7bf5f0c4d58bbc29cdee71004e58da89bba22a1b951eb49684af477b1f1",
+      "decomposition": "codebases/design_briefs/012-returns-repair-and-resale-orchestrator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "013",
+      "title": "Marketplace dispute case builder",
+      "source_sha256": "ba7fba438a57ee8a982b06226eb172787661f2598f7c8173482040fcb7f0f552",
+      "interface_sha256": "58698e4d72c20531741c728e86756d07f94c052cbebbbb1ef3f2710ce3f3c65d",
+      "public_operations": [
+        {
+          "name": "marketplaceDispute",
+          "path": "adjudicateDispute.nl",
+          "purpose": "Prepare a transaction-bound, balanced dispute recommendation with conditional outcomes, protected evidence provenance, and a scoped appeal record."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "adjudicateDispute.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "marketplaceDispute",
+          "state_key": "marketplace-dispute",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8440,
+        "type_declarations": 6831,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "fad3108acbc768d0422e022798d224cf4108283b3fe37a9c896ce72e1c749236",
+      "decomposition": "codebases/design_briefs/013-marketplace-dispute-case-builder/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "014",
+      "title": "Complex customer onboarding director",
+      "source_sha256": "9c0086424494a633d5ab7acc3960cf26fa65a2b8abeda7967bbc20972da8da44",
+      "interface_sha256": "29078cc87e2bf41c4f94e46fcb4bb370e04d4a3a0b9b4ac4f01d946e4cf9ae14",
+      "public_operations": [
+        {
+          "name": "directOnboarding",
+          "path": "directOnboarding.nl",
+          "purpose": "Convert customer onboarding goals into approved outcomes, verified environment constraints, an executable task graph, measured progress, and controlled replanning."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "directOnboarding.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "directOnboarding",
+          "state_key": "customer-onboarding",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12565,
+        "type_declarations": 6301,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "43226bbbb821f23dd068fb9fe9beab691c86fe02d36f5f4472c71e4a87fdb6fa",
+      "decomposition": "codebases/design_briefs/014-complex-customer-onboarding-director/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "015",
+      "title": "Subscription change and exit coordinator",
+      "source_sha256": "b8e61dabd671ff74a8aa168d1c9beebab5b167dc7212bcdab31868d39d0b9eb1",
+      "interface_sha256": "c7c4a0737fc5ef8ce39cd588fb82033034f0c7f2a2de6856569c9b7dfffc3a79",
+      "public_operations": [
+        {
+          "name": "coordinatedExit",
+          "path": "coordinatedExit.nl",
+          "purpose": "Explain and reconcile a precise subscription exit or change, including entitlements, cutoff dates, linked services, consent, refunds, and shared-workspace authority."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinatedExit.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinatedExit",
+          "state_key": "subscription-exit",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11590,
+        "type_declarations": 5565,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "43226bbbb821f23dd068fb9fe9beab691c86fe02d36f5f4472c71e4a87fdb6fa",
+      "decomposition": "codebases/design_briefs/015-subscription-change-and-exit-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "016",
+      "title": "Tender response factory",
+      "source_sha256": "02e3cd1e8cee48898e86a6ce9dfc63784de22a41ce999b16139cf5cfb25867f2",
+      "interface_sha256": "e65c28b839d398474d7285603731d2faa5c85bc4a567786dcd05ad23c7a2a413",
+      "public_operations": [
+        {
+          "name": "assembleTenderResponse",
+          "path": "assembleTenderResponse.nl",
+          "purpose": "Prepare a supported, internally consistent tender response and a hash-bound review bundle for authorized submission."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "assembleTenderResponse.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "assembleTenderResponse",
+          "state_key": "tender-response",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11997,
+        "type_declarations": 6025,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "43226bbbb821f23dd068fb9fe9beab691c86fe02d36f5f4472c71e4a87fdb6fa",
+      "decomposition": "codebases/design_briefs/016-tender-response-factory/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "017",
+      "title": "Functional substitution sourcing desk",
+      "source_sha256": "49b0e06ec1f25c01bc239afbebea695149cb41dd3fcfa1de3ebebb7271ffcb36",
+      "interface_sha256": "fb937b52d440277c059fc20d9dbfa65006949325164c4e229a2cdce0109b48e9",
+      "public_operations": [
+        {
+          "name": "evaluateSubstitute",
+          "path": "evaluateSubstitute.nl",
+          "purpose": "Evaluate functional substitutions through revision-bound evidence, exact unit comparison, lot acceptance, adapter total cost, and machine-specific approval."
+        }
+      ],
+      "native_functions": 17,
+      "potential_edges": 15,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "evaluateSubstitute.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "evaluateSubstitute",
+          "state_key": "substitution-sourcing",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11871,
+        "type_declarations": 10011,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "4da7ad5923d9a343961e2fe0141ebf3862e78611021675e22df18ba124c39fd0",
+      "decomposition": "codebases/design_briefs/017-functional-substitution-sourcing-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "018",
+      "title": "Supplier incident coordinator",
+      "source_sha256": "6d5390c8172e13e1085299fd4fda33532c80e606f329599fbd5c22de776f1be1",
+      "interface_sha256": "5f19c83661978b8e09ad68051ac529930d3712cfff9b6e2049f93d65ebb4cc64",
+      "public_operations": [
+        {
+          "name": "coordinateSupplierIncident",
+          "path": "coordinateSupplierIncident.nl",
+          "purpose": "Cluster supplier incident reports by supported mechanism, trace exact lot/order exposure, contain only evidenced stock, test corrective claims against rivals, and reopen recurring causal failures."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateSupplierIncident.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateSupplierIncident",
+          "state_key": "supplier-incident",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10049,
+        "type_declarations": 9475,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "a7fcfeee3377e9b5421d2a15713394113a099ea2d8358fcc21876c7707748b4e",
+      "decomposition": "codebases/design_briefs/018-supplier-incident-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "019",
+      "title": "Contract-to-purchasing conformance desk",
+      "source_sha256": "2b35538bfee86aab2637a79bb1d1be5a20efe59cb81d8627d6cc0fa6812bbbf6",
+      "interface_sha256": "c6733bc23aa31e00ddc19cbf9528324c17ccdf27de32463f469fc7646a83d146",
+      "public_operations": [
+        {
+          "name": "reviewProcurement",
+          "path": "reviewProcurement.nl",
+          "purpose": "Route line-item purchases through entity-scoped agreement coverage, bundle terms, cumulative commitment thresholds, current catalog revisions, and expiry checks."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reviewProcurement.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reviewProcurement",
+          "state_key": "procurement-review",
+          "input": [
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11149,
+        "type_declarations": 9468,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "43226bbbb821f23dd068fb9fe9beab691c86fe02d36f5f4472c71e4a87fdb6fa",
+      "decomposition": "codebases/design_briefs/019-contract-to-purchasing-conformance-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "020",
+      "title": "Multi-party sourcing negotiator",
+      "source_sha256": "ef1ff3ba9b9c213637adb21fa56f9f746447bf4c98ad6ac41d032c75e3ebe7a9",
+      "interface_sha256": "8fc1e1f3bb85a1c75f02b9fd74532e72d52d85dd0d957f769e80ad6c58cf638e",
+      "public_operations": [
+        {
+          "name": "negotiateSupplyRound",
+          "path": "negotiateSupplyRound.nl",
+          "purpose": "Advance a confidential multi-supplier negotiation while preserving conditional packages, mandate changes and actual acceptance receipts."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "negotiateSupplyRound.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "negotiateSupplyRound",
+          "state_key": "supplier-negotiation-book",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12909,
+        "type_declarations": 7284,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e8223992b42691a8b73a96f4e40a4175182ce6e3339caf0b5fa0fdf8c45c1ea1",
+      "decomposition": "codebases/design_briefs/020-multi-party-sourcing-negotiator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "021",
+      "title": "Accounts-payable exception resolver",
+      "source_sha256": "04ef5201625a25065de485975637b17fed3cce643c891689a60f9c17aa14bc0f",
+      "interface_sha256": "452fc985a2d4124346bf954f36cdd2e78cc83b1e9b0013723d1682b04811b8a7",
+      "public_operations": [
+        {
+          "name": "resolvePayableExposure",
+          "path": "resolvePayableExposure.nl",
+          "purpose": "Resolve invoice exposure into separately supported and held balances with shared receipt reservations and independent payment authority."
+        },
+        {
+          "name": "reconcilePaymentReceipt",
+          "path": "reconcilePaymentReceipt.nl",
+          "purpose": "Reconcile an existing processor operation with actual posting receipts before changing payable or receipt balances."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "resolvePayableExposure.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcilePaymentReceipt.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "resolvePayableExposure",
+          "state_key": "payable-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        },
+        {
+          "operation": "reconcilePaymentReceipt",
+          "state_key": "payable-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 14026,
+        "type_declarations": 7219,
+        "typescript_mechanisms": 242
+      },
+      "source_topology_fingerprint": "d12109559a8fcc6cb8012fa0ff47ed4122ab7406569995ba82ba618f3a4c7a42",
+      "decomposition": "codebases/design_briefs/021-accounts-payable-exception-resolver/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "022",
+      "title": "Delivery-to-billing obligation reconciler",
+      "source_sha256": "b81550fb1b05bd0b7c51d9a6c38a9dd87faace149b9388c86dfbec97090ec611",
+      "interface_sha256": "c5caba0ae89d7770004b0dcf353fc8274f71b0496fb9c494e72ed1bfb2044478",
+      "public_operations": [
+        {
+          "name": "prepareMilestoneInvoice",
+          "path": "prepareMilestoneInvoice.nl",
+          "purpose": "Prepare phase-specific invoice entitlement from contractual clocks, actual customer acceptance and unconsumed billing capacity."
+        },
+        {
+          "name": "recordBillingOutcome",
+          "path": "recordBillingOutcome.nl",
+          "purpose": "Reconcile actual issue or confirmed void receipts without duplicating milestone consumption."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "prepareMilestoneInvoice.nl",
+          "depth": 2
+        },
+        {
+          "path": "recordBillingOutcome.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "prepareMilestoneInvoice",
+          "state_key": "obligation-book",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        },
+        {
+          "operation": "recordBillingOutcome",
+          "state_key": "obligation-book",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12337,
+        "type_declarations": 6994,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "6a6f5c2583118850b7a5299aec90aadf4976d54730fe978b152d5fc47b8e6a2e",
+      "decomposition": "codebases/design_briefs/022-delivery-to-billing-obligation-reconciler/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "023",
+      "title": "Expense policy casework system",
+      "source_sha256": "f91b8a9088093508e14e1e9f3919b6001db667e00378875ba2b079ab24bf98fd",
+      "interface_sha256": "35776b229222f9f5ce9639fd6594a247ebae4542adc2c90b8291759d29786726",
+      "public_operations": [
+        {
+          "name": "adjudicateExpenseAppeal",
+          "path": "adjudicateExpenseAppeal.nl",
+          "purpose": "Resolve a receipt-level claim or appeal under its effective policy while preserving the original claim and preventing duplicate reimbursement."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "adjudicateExpenseAppeal.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "adjudicateExpenseAppeal",
+          "state_key": "expense-appeal-case",
+          "input": [
+            "caseFile"
+          ],
+          "output": [
+            "caseFile"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11004,
+        "type_declarations": 6884,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "956ff11bf82c5af309a3c1a96ae04056d67628ed727e88047283fb614491f6d0",
+      "decomposition": "codebases/design_briefs/023-expense-policy-casework-system/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "024",
+      "title": "Financial close workpaper coordinator",
+      "source_sha256": "8f2ffefe3f2dc35a124831ca5cc7f2b158d7b00730c874047153eec0bdd218f9",
+      "interface_sha256": "3d62c95e9bf131e9271b6cc809064e2f08e32cc95592e50fc7a59171152df5b2",
+      "public_operations": [
+        {
+          "name": "coordinateClose",
+          "path": "coordinateClose.nl",
+          "purpose": "Prepare close workpapers from exact source versions, reconcile unexplained differences, commission evidence and preserve independent current signoff."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateClose.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateClose",
+          "state_key": "financial-close",
+          "input": [
+            "books",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10351,
+        "type_declarations": 6547,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c681a96e098b1a2cccdbf0013c7e6f6c70b791eee51d0900037dddb5554c6032",
+      "decomposition": "codebases/design_briefs/024-financial-close-workpaper-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "025",
+      "title": "Grant spending and reporting manager",
+      "source_sha256": "5025cd24f1f8c0340832c9866356ec77146639dadee9e407ff7ffff407848d1c",
+      "interface_sha256": "3e23d41525bea4a4540b54130fbe758501a3934f8c3a17c994c1f4915a52407b",
+      "public_operations": [
+        {
+          "name": "coordinateGrantReport",
+          "path": "coordinateGrantReport.nl",
+          "purpose": "Reconcile grant-specific conditions, costs, activity evidence, reporting claims and submission receipts."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateGrantReport.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateGrantReport",
+          "state_key": "grant-reporting",
+          "input": [
+            "ledger",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13727,
+        "type_declarations": 7275,
+        "typescript_mechanisms": 2990
+      },
+      "source_topology_fingerprint": "91a74a5d1a03cb713fc75609a1b390fac011a7555b00b1dcf9add91647bcc3e2",
+      "decomposition": "codebases/design_briefs/025-grant-spending-and-reporting-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "026",
+      "title": "Contract obligation workbench",
+      "source_sha256": "569e6eefbeab5963c397bd1704ab206c41bf592ace1386ed99d7356fbb5bef73",
+      "interface_sha256": "08e5bed0cf8a1cfa550d55f83398acde3f3e790f50c052cc442a6c0e1df50f5c",
+      "public_operations": [
+        {
+          "name": "analyzeContract",
+          "path": "analyzeContract.nl",
+          "purpose": "Map versioned contract clauses into actor, trigger, deadline, performance and evidence of discharge without flattening dispute or confidentiality."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "analyzeContract.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "analyzeContract",
+          "state_key": "contract-obligations",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11641,
+        "type_declarations": 6580,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "a7fcfeee3377e9b5421d2a15713394113a099ea2d8358fcc21876c7707748b4e",
+      "decomposition": "codebases/design_briefs/026-contract-obligation-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "027",
+      "title": "Amendment impact engine",
+      "source_sha256": "db6e940935693fac889cca1c75bc411abee60ab3e63c1899ca31cb840ad734fa",
+      "interface_sha256": "6c139801c6b9e34bf09236a3212c1c269728e0d45c099850052af040761ae069",
+      "public_operations": [
+        {
+          "name": "reviewAmendment",
+          "path": "reviewAmendment.nl",
+          "purpose": "Map amendments onto an executed contract baseline, determine effective scope, trace dependent work, and gate revision release."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reviewAmendment.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reviewAmendment",
+          "state_key": "amendment-impact",
+          "input": [
+            "executed",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11963,
+        "type_declarations": 6584,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "a7fcfeee3377e9b5421d2a15713394113a099ea2d8358fcc21876c7707748b4e",
+      "decomposition": "codebases/design_briefs/027-amendment-impact-engine/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "028",
+      "title": "Negotiation clause package designer",
+      "source_sha256": "6d6b6bb46808626b9faf451f3ffdc9e865d61dd5219477a205c9e4e0297dd7e7",
+      "interface_sha256": "dee23384220db170e0989cad9a4f877f3f3f49314ade2d7a615c77da4a95f675",
+      "public_operations": [
+        {
+          "name": "designClausePackage",
+          "path": "designClausePackage.nl",
+          "purpose": "Develop coherent clause alternatives from party positions and clause dependencies, preserving conditional acceptance and exact-draft approval."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "designClausePackage.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "designClausePackage",
+          "state_key": "clause-package",
+          "input": [
+            "vault",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11460,
+        "type_declarations": 6261,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "a7fcfeee3377e9b5421d2a15713394113a099ea2d8358fcc21876c7707748b4e",
+      "decomposition": "codebases/design_briefs/028-negotiation-clause-package-designer/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "029",
+      "title": "Policy change simulator",
+      "source_sha256": "92de1d6b885302b4adf06b785f6a7705054fcc95a03b373d4e5dc55e5b3db4fe",
+      "interface_sha256": "9c91d228260c37fd431ab87344b4b575a5997b74a626552d4cefed7ac73d4dee",
+      "public_operations": [
+        {
+          "name": "simulatePolicyChange",
+          "path": "simulatePolicyChange.nl",
+          "purpose": "Compare exact policy replay artifacts across a frozen case cohort; preserve indeterminate cases, cohort changes and rare safeguard regressions."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "simulatePolicyChange.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "simulatePolicyChange",
+          "state_key": "policy-simulation",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10016,
+        "type_declarations": 7709,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "91a74a5d1a03cb713fc75609a1b390fac011a7555b00b1dcf9add91647bcc3e2",
+      "decomposition": "codebases/design_briefs/029-policy-change-simulator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "030",
+      "title": "Disclosure and redaction review workspace",
+      "source_sha256": "8abe1502ce5f825b1f1a939ebfec2247995e0da20e70be24ca09f95d7ea7c8d0",
+      "interface_sha256": "fd7928b66671cca820b01cd691978b48b72e82febaf5aa335a41e7c7678dbf0a",
+      "public_operations": [
+        {
+          "name": "prepareDisclosure",
+          "path": "prepareDisclosure.nl",
+          "purpose": "Construct purpose-limited disclosure artifacts with verified redaction, hidden-text sanitation, recipient authorization and source-span audit mapping."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "prepareDisclosure.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "prepareDisclosure",
+          "state_key": "disclosure-review",
+          "input": [
+            "evidence",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12718,
+        "type_declarations": 7276,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "4206c6e96262f88c53468ad42db4468f607031af04a729db1284c33eccbead29",
+      "decomposition": "codebases/design_briefs/030-disclosure-and-redaction-review-workspace/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "031",
+      "title": "Living evidence map",
+      "source_sha256": "1253936f09ee8b7b8af7ab662699bb0cedd500b15eea6fe86b702f74654cb8de",
+      "interface_sha256": "ce343494c382836914c981744fc179cb30a5203e98a37fd83856d848dedecbd6",
+      "public_operations": [
+        {
+          "name": "buildEvidenceMap",
+          "path": "buildEvidenceMap.nl",
+          "purpose": "Maintain a versioned review map linking eligibility decisions, study report lineage, measured outcomes, claims, corrections and re-screening."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "buildEvidenceMap.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "buildEvidenceMap",
+          "state_key": "living-evidence-map",
+          "input": [
+            "corpus",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10311,
+        "type_declarations": 6728,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c681a96e098b1a2cccdbf0013c7e6f6c70b791eee51d0900037dddb5554c6032",
+      "decomposition": "codebases/design_briefs/031-living-evidence-map/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "032",
+      "title": "Cross-study measurement harmonizer",
+      "source_sha256": "02426b4d6b07dc4c797a0512f958bc389ec3adef4e45ea2b2d03fb13a783eaf2",
+      "interface_sha256": "fd5a508eadc028898f6da448d7f07cc30762b96a33d92072b2c947769b877c57",
+      "public_operations": [
+        {
+          "name": "harmonizeMeasures",
+          "path": "harmonizeMeasures.nl",
+          "purpose": "Build a comparable study slice only from source-compatible constructs, explicit missingness semantics, exact row-version transforms, and audited sensitivity."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "harmonizeMeasures.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "harmonizeMeasures",
+          "state_key": "measurement-harmonization",
+          "input": [
+            "corpus",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11126,
+        "type_declarations": 6726,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "91a74a5d1a03cb713fc75609a1b390fac011a7555b00b1dcf9add91647bcc3e2",
+      "decomposition": "codebases/design_briefs/032-cross-study-measurement-harmonizer/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "033",
+      "title": "Replication planning workbench",
+      "source_sha256": "9cc4e389a0141726e02c2985c423fd954dbcbcb2be24efa036e0e9318b25239c",
+      "interface_sha256": "c8fa6417527fb354d87a38e34fb7268bd02dcdad0b71598022e1f3e74bc8b355",
+      "public_operations": [
+        {
+          "name": "planReplication",
+          "path": "planReplication.nl",
+          "purpose": "Recover a versioned method, resolve dependencies, pin data and seeds, compile only executable tasks, and compare exact complete run receipts."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planReplication.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "planReplication",
+          "state_key": "replication-workbench",
+          "input": [
+            "evidence",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9810,
+        "type_declarations": 6964,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c681a96e098b1a2cccdbf0013c7e6f6c70b791eee51d0900037dddb5554c6032",
+      "decomposition": "codebases/design_briefs/033-replication-planning-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "034",
+      "title": "Research resource and experiment rescue coordinator",
+      "source_sha256": "de547298103305e296c6a9108278e34916cc7d02a5772e6a92fbd09065739643",
+      "interface_sha256": "622be4eb36df296f110ff72a1b7f47a4dff529971273a54d36e2b9153638fab7",
+      "public_operations": [
+        {
+          "name": "coordinateResearchWindow",
+          "path": "coordinateResearchWindow.nl",
+          "purpose": "Build a protocol-bound resource assignment, rescue branch, readiness decision, and consumption ledger."
+        },
+        {
+          "name": "parseProtocolConstraints",
+          "path": "coordinateResearchWindow/parseProtocolConstraints.nl",
+          "purpose": "Separate approved experimental conditions from researcher preferences."
+        },
+        {
+          "name": "reconcileResourceCalendar",
+          "path": "coordinateResearchWindow/reconcileResourceCalendar.nl",
+          "purpose": "Check capability, calibration, booking, maintenance, and operator qualification."
+        },
+        {
+          "name": "solveWindowAssignments",
+          "path": "coordinateResearchWindow/solveWindowAssignments.nl",
+          "purpose": "Search finite instrument and operator windows without relaxing hard constraints."
+        },
+        {
+          "name": "proposeResearchRescue",
+          "path": "coordinateResearchWindow/proposeResearchRescue.nl",
+          "purpose": "Compare resequencing, qualified substitutes, and postponement with explicit deviation review."
+        },
+        {
+          "name": "reconcileConsumedMaterials",
+          "path": "coordinateResearchWindow/reconcileConsumedMaterials.nl",
+          "purpose": "Retain preparation consumption and identify explicitly dependent experiments."
+        },
+        {
+          "name": "recheckDayOfReadiness",
+          "path": "coordinateResearchWindow/recheckDayOfReadiness.nl",
+          "purpose": "Revalidate current facts immediately before execution while preserving bookings."
+        },
+        {
+          "name": "reconcileResearchReservation",
+          "path": "reconcileResearchReservation.nl",
+          "purpose": "Reconcile exact external booking, rejection, unknown, and cancellation receipts against the proposed experiment windows."
+        }
+      ],
+      "native_functions": 36,
+      "potential_edges": 33,
+      "unreferenced": [],
+      "max_potential_native_depth": 6,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateResearchWindow.nl",
+          "depth": 6
+        },
+        {
+          "path": "coordinateResearchWindow/parseProtocolConstraints.nl",
+          "depth": 1
+        },
+        {
+          "path": "coordinateResearchWindow/reconcileResourceCalendar.nl",
+          "depth": 1
+        },
+        {
+          "path": "coordinateResearchWindow/solveWindowAssignments.nl",
+          "depth": 5
+        },
+        {
+          "path": "coordinateResearchWindow/proposeResearchRescue.nl",
+          "depth": 1
+        },
+        {
+          "path": "coordinateResearchWindow/reconcileConsumedMaterials.nl",
+          "depth": 1
+        },
+        {
+          "path": "coordinateResearchWindow/recheckDayOfReadiness.nl",
+          "depth": 1
+        },
+        {
+          "path": "reconcileResearchReservation.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileResearchReservation",
+          "state_key": "research-reservation-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 24926,
+        "type_declarations": 10538,
+        "typescript_mechanisms": 511
+      },
+      "source_topology_fingerprint": "8f051ee519654eccb5e27eb7224395b149915645183e9523a31c7389cfd29175",
+      "decomposition": "codebases/design_briefs/034-research-resource-and-experiment-rescue-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "035",
+      "title": "Negative-result learning archive",
+      "source_sha256": "f52d01dd96b1be781553afb04e11c6cb9fba874b5ee7025b98d14d268be45c50",
+      "interface_sha256": "4868fe2205d60801b972167299c78329b161e4b1432ea806b20422d434bb7b7d",
+      "public_operations": [
+        {
+          "name": "negativeResultDossier",
+          "path": "negativeResultDossier.nl",
+          "purpose": "Reconstruct attempts, gate inference, compare rival causes, design pre-registered follow-ups, and revise scoped lessons."
+        },
+        {
+          "name": "reconstructAttemptHistories",
+          "path": "negativeResultDossier/reconstructAttemptHistories.nl",
+          "purpose": "Align intended and actually executed procedures with the complete measurement chain."
+        },
+        {
+          "name": "adjudicateInferenceValidity",
+          "path": "negativeResultDossier/adjudicateInferenceValidity.nl",
+          "purpose": "Keep valid negative, invalid, incomplete, and uncertain outcomes epistemically distinct."
+        },
+        {
+          "name": "compareRivalMechanisms",
+          "path": "negativeResultDossier/compareRivalMechanisms.nl",
+          "purpose": "Keep demonstrated causes and plausible alternatives linked to supporting and contrary observations."
+        },
+        {
+          "name": "designDiscriminatingFollowups",
+          "path": "negativeResultDossier/designDiscriminatingFollowups.nl",
+          "purpose": "Declare rival-specific outcome predictions and enforce safe, authorized bounds."
+        },
+        {
+          "name": "reviseScopedLessons",
+          "path": "negativeResultDossier/reviseScopedLessons.nl",
+          "purpose": "Version lessons by tested conditions and preserve contradictory and superseding evidence."
+        },
+        {
+          "name": "reconcileFollowupExecution",
+          "path": "reconcileFollowupExecution.nl",
+          "purpose": "Classify and preserve actual preregistered follow-up outcomes, including invalid, incomplete, unknown, and contradictory runs."
+        }
+      ],
+      "native_functions": 26,
+      "potential_edges": 23,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "negativeResultDossier.nl",
+          "depth": 2
+        },
+        {
+          "path": "negativeResultDossier/reconstructAttemptHistories.nl",
+          "depth": 1
+        },
+        {
+          "path": "negativeResultDossier/adjudicateInferenceValidity.nl",
+          "depth": 1
+        },
+        {
+          "path": "negativeResultDossier/compareRivalMechanisms.nl",
+          "depth": 1
+        },
+        {
+          "path": "negativeResultDossier/designDiscriminatingFollowups.nl",
+          "depth": 1
+        },
+        {
+          "path": "negativeResultDossier/reviseScopedLessons.nl",
+          "depth": 1
+        },
+        {
+          "path": "reconcileFollowupExecution.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileFollowupExecution",
+          "state_key": "negative-result-followup-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 14645,
+        "type_declarations": 6755,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "629bb924b88b8d0cab059195667c3638c0407f9f1ebddeb546f3b476ba6cba99",
+      "decomposition": "codebases/design_briefs/035-negative-result-learning-archive/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "036",
+      "title": "Misconception repair studio",
+      "source_sha256": "5d3a53db0de35d61193378745e21fa3c8533f90fafa03fcd318ec3e6ca521698",
+      "interface_sha256": "82f13866f34ada4b5009b3ea22831c048fd65d8c068a96efe4106d1626d4e579",
+      "public_operations": [
+        {
+          "name": "learningRepairSession",
+          "path": "learningRepairSession.nl",
+          "purpose": "Run a safe diagnosis, repair, transfer, checkpoint, and bounded-handoff session."
+        },
+        {
+          "name": "assessTaskBeforeDiagnosis",
+          "path": "learningRepairSession/assessTaskBeforeDiagnosis.nl",
+          "purpose": "Resolve prompt, answer-space, accessibility, and prerequisite validity before learner inference."
+        },
+        {
+          "name": "interpretLearnerEvidence",
+          "path": "learningRepairSession/interpretLearnerEvidence.nl",
+          "purpose": "Record observed work and classify its error type without identity-based diagnosis."
+        },
+        {
+          "name": "testCompetingExplanations",
+          "path": "learningRepairSession/testCompetingExplanations.nl",
+          "purpose": "Retain rival hypotheses and choose neutral distinguishing questions."
+        },
+        {
+          "name": "buildUnbiasedProbe",
+          "path": "learningRepairSession/buildUnbiasedProbe.nl",
+          "purpose": "Generate and verify an accessible one-feature diagnostic with hidden labels."
+        },
+        {
+          "name": "preserveCompetencyAcrossAccommodation",
+          "path": "learningRepairSession/preserveCompetencyAcrossAccommodation.nl",
+          "purpose": "Change presentation while auditing the target competency and answer-space invariants."
+        },
+        {
+          "name": "planContrastiveRepair",
+          "path": "learningRepairSession/planContrastiveRepair.nl",
+          "purpose": "Provide checked explanations and bounded fading practice."
+        },
+        {
+          "name": "assessNovelUnassistedTransfer",
+          "path": "learningRepairSession/assessNovelUnassistedTransfer.nl",
+          "purpose": "Separate novel independent transfer from rehearsed or hinted success."
+        }
+      ],
+      "native_functions": 31,
+      "potential_edges": 29,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "learningRepairSession.nl",
+          "depth": 2
+        },
+        {
+          "path": "learningRepairSession/assessTaskBeforeDiagnosis.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/interpretLearnerEvidence.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/testCompetingExplanations.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/buildUnbiasedProbe.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/preserveCompetencyAcrossAccommodation.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/planContrastiveRepair.nl",
+          "depth": 1
+        },
+        {
+          "path": "learningRepairSession/assessNovelUnassistedTransfer.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "learningRepairSession",
+          "state_key": "learningRepairSession",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 15100,
+        "type_declarations": 4626,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "ff25f0643f183212343658ef78864489258fa372908239f7b7ddcc2616411828",
+      "decomposition": "codebases/design_briefs/036-misconception-repair-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "037",
+      "title": "Assessment production and moderation system",
+      "source_sha256": "a295b53f94005db4c67b747b9f115221d7eee84503a9886643410d8e60a7de42",
+      "interface_sha256": "2e5543844feefbc5343ea1e8bd90fb6caf54d9f7c3180f44eda35ded7a10025c",
+      "public_operations": [
+        {
+          "name": "freezeAssessmentEdition",
+          "path": "freezeAssessmentEdition.nl",
+          "purpose": "Develop and independently challenge a versioned assessment edition, with release and regrade decisions kept pending review."
+        },
+        {
+          "name": "reconcileAppealEvidence",
+          "path": "freezeAssessmentEdition/reconcileAppealEvidence.nl",
+          "purpose": "Trace one learner response against the exact frozen rubric and route unfamiliar valid reasoning to semantic moderation."
+        },
+        {
+          "name": "reconcileAssessmentRelease",
+          "path": "reconcileAssessmentRelease.nl",
+          "purpose": "Freeze or retire an assessment edition only against a current compiler plan and actual authorized moderator receipt, preserving historical response and appeal records."
+        }
+      ],
+      "native_functions": 24,
+      "potential_edges": 20,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "freezeAssessmentEdition.nl",
+          "depth": 2
+        },
+        {
+          "path": "freezeAssessmentEdition/reconcileAppealEvidence.nl",
+          "depth": 1
+        },
+        {
+          "path": "reconcileAssessmentRelease.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileAssessmentRelease",
+          "state_key": "assessment-edition-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 15774,
+        "type_declarations": 7333,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "ee73d476ea896fc7f5df32177e061232c77517ef94fb59676b6d990040423cac",
+      "decomposition": "codebases/design_briefs/037-assessment-production-and-moderation-system/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "038",
+      "title": "Project-based learning director",
+      "source_sha256": "0166a05dcce41189698c766df064a72f112c3060251c1324ac4426d31df18c09",
+      "interface_sha256": "440bf303790d943c4d3d4f345d3c6ce8a3f78951fe16c2ecc74e97b4c8dc059b",
+      "public_operations": [
+        {
+          "name": "directProjectCycle",
+          "path": "directProjectCycle.nl",
+          "purpose": "Map required goals to learner-owned demonstrations, sequence a feasible project, adapt support without substitution, and rehearse late changes."
+        }
+      ],
+      "native_functions": 20,
+      "potential_edges": 18,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "directProjectCycle.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "directProjectCycle",
+          "state_key": "project-learning-checkpoint",
+          "input": [
+            "project",
+            "prior"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11563,
+        "type_declarations": 6620,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "b8d03e40a883b37a12bb1878356ea9d52ac8d30d9c698c284dba78710544f6b8",
+      "decomposition": "codebases/design_briefs/038-project-based-learning-director/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "039",
+      "title": "Apprenticeship practice simulator",
+      "source_sha256": "3a187dc35f5324509779d2a09e9e9a66cf1b4cc82fac7bed40aee4f2f4d709fd",
+      "interface_sha256": "7c0fbcbc8231439ab6fdfb0b91578422597688fff57762bc7c04c902805741ff",
+      "public_operations": [
+        {
+          "name": "simulateApprenticeshipTurn",
+          "path": "simulateApprenticeshipTurn.nl",
+          "purpose": "Interpret one learner turn and advance a bounded, resumable training simulation."
+        },
+        {
+          "name": "compareObservedProcedure",
+          "path": "simulateApprenticeshipTurn/compareObservedProcedure.nl",
+          "purpose": "Debrief actual recorded actions against procedure obligations while separating process from outcome luck."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "simulateApprenticeshipTurn.nl",
+          "depth": 3
+        },
+        {
+          "path": "simulateApprenticeshipTurn/compareObservedProcedure.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "simulateApprenticeshipTurn",
+          "state_key": "apprenticeship-simulation-session",
+          "input": [
+            "turn",
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13086,
+        "type_declarations": 7353,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "f6d66d5504ec85ec07afd8a331231e8efa6a6dfb739c87043923dedff8be22b0",
+      "decomposition": "codebases/design_briefs/039-apprenticeship-practice-simulator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "040",
+      "title": "Learning portfolio evidence assessor",
+      "source_sha256": "a3deb8013331cf99729fd25fe5eb9a0d3f4a00208f8ed1c58db9bb3e8613fd8a",
+      "interface_sha256": "f8bcf497ea61fcb41423ae254a9e8217d65bf98c2310150f9a92a93489741183",
+      "public_operations": [
+        {
+          "name": "reviewLearnerPortfolio",
+          "path": "reviewLearnerPortfolio.nl",
+          "purpose": "Assess an evidence portfolio against a versioned competency standard and prepare an assessor-bound recommendation."
+        },
+        {
+          "name": "rehearAttributionCorrection",
+          "path": "reviewLearnerPortfolio/rehearAttributionCorrection.nl",
+          "purpose": "Reassess only the competency mappings changed by a learner's versioned attribution appeal."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reviewLearnerPortfolio.nl",
+          "depth": 2
+        },
+        {
+          "path": "reviewLearnerPortfolio/rehearAttributionCorrection.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reviewLearnerPortfolio",
+          "state_key": "learner-portfolio-assessment-ledger",
+          "input": [
+            "portfolio",
+            "assessmentState"
+          ],
+          "output": [
+            "assessmentState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6585,
+        "type_declarations": 5710,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "fc4959d291b589ada30c702b111f6a7d4fceab8887c6dfc1c929b0f5d174a634",
+      "decomposition": "codebases/design_briefs/040-learning-portfolio-evidence-assessor/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "041",
+      "title": "Requirement-to-regression factory",
+      "source_sha256": "ee74eb67a63e5a58c3ceb1fc3e803a3c58eed46a27642e70fa79f5e5b9782286",
+      "interface_sha256": "4264553897c2bcc4a3779fa41f3d9bdeb71c02f550da5ce5f076a7176dfec197",
+      "public_operations": [
+        {
+          "name": "compileRegressionPlan",
+          "path": "compileRegressionPlan.nl",
+          "purpose": "Compile a traceable regression proposal from requirements, independent oracles, isolated execution constraints, and seeded-defect qualification."
+        },
+        {
+          "name": "reconcileRegressionExecution",
+          "path": "reconcileRegressionExecution.nl",
+          "purpose": "Record actual test-run outcomes against exact suite/source revisions and separate product defects from oracle, fixture, harness, environment, and flaky execution."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "compileRegressionPlan.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileRegressionExecution.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileRegressionExecution",
+          "state_key": "regression-execution-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9024,
+        "type_declarations": 6117,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "cf86eecdc7aba851aaee6f0a9201f19dff70f68a7364286ed12a9e3112dc44f3",
+      "decomposition": "codebases/design_briefs/041-requirement-to-regression-factory/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "042",
+      "title": "Release compatibility coordinator",
+      "source_sha256": "2833beef003318da7907d4a76d5e1d5e3ce16bd4c6f9cf4587f3316d60318410",
+      "interface_sha256": "44305f1b128a2e03425edd8a2249360f8813561fe234f2a81214cd8fd779c69c",
+      "public_operations": [
+        {
+          "name": "coordinateReleaseTransition",
+          "path": "coordinateReleaseTransition.nl",
+          "purpose": "Evaluate behavioral compatibility per consumer, pair replays, stage migration, and reconcile rollback and communications against exact revisions."
+        },
+        {
+          "name": "reconcileReleaseWave",
+          "path": "reconcileReleaseWave.nl",
+          "purpose": "Advance, hold, and roll back one migration wave from actual consumer acceptance, replay, and candidate-write rollback evidence."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateReleaseTransition.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileReleaseWave.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileReleaseWave",
+          "state_key": "release-rollout-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10690,
+        "type_declarations": 6323,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "040b3b658e7375f542dc3855ce8b2e8ce0aa66de6b8bd3e967bc496533a5258b",
+      "decomposition": "codebases/design_briefs/042-release-compatibility-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "043",
+      "title": "Incident recovery orchestrator",
+      "source_sha256": "0aa3a3080e274509cae46c1e85a500f78509cf829c9f586e0f56536b6484e482",
+      "interface_sha256": "2965efb6c05cedd212ca9abd8788216c4c7afb8f666bf18e009c0c163d88b988",
+      "public_operations": [
+        {
+          "name": "recoverIncident",
+          "path": "recoverIncident.nl",
+          "purpose": "Scope observed user impact, maintain provisional causes, bound diagnostics, sequence authorized runbooks, and verify user outcomes."
+        },
+        {
+          "name": "reconcileIncidentActionReceipt",
+          "path": "reconcileIncidentActionReceipt.nl",
+          "purpose": "Reconcile actual runbook command execution, renewed commander authority, preconditions, and postcondition evidence before retry or closure."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "recoverIncident.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileIncidentActionReceipt.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileIncidentActionReceipt",
+          "state_key": "incident-recovery-action-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10162,
+        "type_declarations": 6564,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "7b544d5b7be5bd424a679a1d43e978a6ea1e189f0ee441516ccb30c0ec908a6f",
+      "decomposition": "codebases/design_briefs/043-incident-recovery-orchestrator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "044",
+      "title": "Documentation-behavior synchronizer",
+      "source_sha256": "4ff8ab8f2d5ae94036bea813af5b65f0d8225ee173340acd8d33098562988907",
+      "interface_sha256": "72729f6bf8b9ae1543826bdc51b97bc41f26ac5d6a9d4fba418cb36c5376ca37",
+      "public_operations": [
+        {
+          "name": "synchronizeDocumentationEdition",
+          "path": "synchronizeDocumentationEdition.nl",
+          "purpose": "Reconcile versioned documentation promises with authoritative behavior and prepare a same-release, revalidated documentation bundle."
+        },
+        {
+          "name": "reconcileDocumentationPublication",
+          "path": "reconcileDocumentationPublication.nl",
+          "purpose": "Reconcile actual page edit and publication receipts against reviewed patch bases, target release, secret scan, and concurrent edits."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "synchronizeDocumentationEdition.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileDocumentationPublication.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileDocumentationPublication",
+          "state_key": "documentation-edition-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8334,
+        "type_declarations": 5917,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "b724a32c2c009cf27b996f87437cec74d29a5debe107685cb3961defeb80e948",
+      "decomposition": "codebases/design_briefs/044-documentation-behavior-synchronizer/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "045",
+      "title": "Technical debt campaign planner",
+      "source_sha256": "786469330d463a2e6aeeb69d94718332b2daec7dbd19677f2ed61418df0ad285",
+      "interface_sha256": "677ed60f750cf775d26e28295fe39a6a9807964806d2844ac7ecfd6d8de58d48",
+      "public_operations": [
+        {
+          "name": "planDebtCampaign",
+          "path": "planDebtCampaign.nl",
+          "purpose": "Convert observed workflow friction into bounded, dependency-aware improvement waves and verify results against preserved exposure."
+        },
+        {
+          "name": "reconcileDebtOutcome",
+          "path": "reconcileDebtOutcome.nl",
+          "purpose": "Record actual before/after operational measurements against the same workflow denominator, metric and observation window."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planDebtCampaign.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileDebtOutcome.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileDebtOutcome",
+          "state_key": "technical-debt-outcome-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7313,
+        "type_declarations": 5900,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "7e9ce06f14a298247439bf96434a0db6752ec8fcba34d665e89c9205abea945b",
+      "decomposition": "codebases/design_briefs/045-technical-debt-campaign-planner/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "046",
+      "title": "Semantic analysis work-order compiler",
+      "source_sha256": "aa8492973124dd3bcbf288093fc1517ae2c97ad04ff65af1bca2100c6b5b2408",
+      "interface_sha256": "a0443cdbf89760ee7c73bf248dc0658e643393d0a73c2f97b433a4e3dfc8f886",
+      "public_operations": [
+        {
+          "name": "compileAnalysisWorkOrder",
+          "path": "compileAnalysisWorkOrder.nl",
+          "purpose": "Compile a semantics-first typed analysis graph that respects access policy and declared row grain."
+        },
+        {
+          "name": "reconcileAnalysisMaterialization",
+          "path": "reconcileAnalysisMaterialization.nl",
+          "purpose": "Reconcile actual result rows, schema snapshot, graph grain, rubric lineage, and requester disclosure before publishing an analysis artifact."
+        }
+      ],
+      "native_functions": 16,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "compileAnalysisWorkOrder.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileAnalysisMaterialization.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileAnalysisMaterialization",
+          "state_key": "semantic-analysis-run-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11637,
+        "type_declarations": 7344,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "4c1e6928021cd9c1a756ec3a7c6934752826a79563bb2d22847cd4c488c795bf",
+      "decomposition": "codebases/design_briefs/046-semantic-analysis-work-order-compiler/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "047",
+      "title": "Domain data migration workshop",
+      "source_sha256": "66ac49e4362fb22f89dedc8cb5cd449373e718fa662ba2b99ab506768d693817",
+      "interface_sha256": "99093214667b5a8ac444bcbb2d22abab5d977fd5cf035115bac32050b4fa3112",
+      "public_operations": [
+        {
+          "name": "rehearseDomainMigration",
+          "path": "rehearseDomainMigration.nl",
+          "purpose": "Recover field meanings, declare mapping losses, rehearse record conservation, and hold cutover on exact deltas and mapping versions."
+        },
+        {
+          "name": "reconcileMigrationCutover",
+          "path": "reconcileMigrationCutover.nl",
+          "purpose": "Advance, hold, or roll back a migration target version from actual applied-record and target-write receipts."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "rehearseDomainMigration.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileMigrationCutover.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileMigrationCutover",
+          "state_key": "domain-migration-cutover-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8947,
+        "type_declarations": 5912,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "30cd1c11376a0ecfe51526fc11666a6c9ca54fff039ffaa15d9fb591f4c6aa48",
+      "decomposition": "codebases/design_briefs/047-domain-data-migration-workshop/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "048",
+      "title": "Taxonomy evolution service",
+      "source_sha256": "ef90f88e540b15306f7f5468e9b1e7836c1c7abfc03df8679a57b0e1fefa51ac",
+      "interface_sha256": "03d2b04db5b9c5b87116b16db72fc90573e87ed4daa568330e83f929fde2a75f",
+      "public_operations": [
+        {
+          "name": "evolveTaxonomyVersion",
+          "path": "evolveTaxonomyVersion.nl",
+          "purpose": "Evaluate category fit under pinned definitions, propose evidence-supported structural revisions, replay affected records, and qualify promotion against consumers."
+        },
+        {
+          "name": "reconcileTaxonomyPromotion",
+          "path": "reconcileTaxonomyPromotion.nl",
+          "purpose": "Apply versioned publication, affected-record replay and consumer acknowledgement receipts while retaining historical taxonomy definitions."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "evolveTaxonomyVersion.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileTaxonomyPromotion.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileTaxonomyPromotion",
+          "state_key": "taxonomy-release-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8730,
+        "type_declarations": 5979,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "b724a32c2c009cf27b996f87437cec74d29a5debe107685cb3961defeb80e948",
+      "decomposition": "codebases/design_briefs/048-taxonomy-evolution-service/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "049",
+      "title": "Cross-collection entity resolution workbench",
+      "source_sha256": "97bb62e2d54d8af144e7278eb18e3dfd9c5e1e043d527a6f68f6b5ada6258de1",
+      "interface_sha256": "5229cab705e7ce56472c364fd7cc763971a7b2976af945633f0b6b4963e66497",
+      "public_operations": [
+        {
+          "name": "resolveCrossCollectionIdentities",
+          "path": "resolveCrossCollectionIdentities.nl",
+          "purpose": "Generate access-bound candidates, judge identity with positive and cannot-link evidence, reconcile constrained clusters, and prepare reversible canonical identity revisions."
+        },
+        {
+          "name": "reconcileIdentityCorrection",
+          "path": "reconcileIdentityCorrection.nl",
+          "purpose": "Reconcile actual apply, partial, unknown, and rollback receipts against a versioned identity graph and downstream consumer acknowledgements."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "resolveCrossCollectionIdentities.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileIdentityCorrection.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileIdentityCorrection",
+          "state_key": "cross-collection-identity-graph",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7789,
+        "type_declarations": 5527,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "7e9ce06f14a298247439bf96434a0db6752ec8fcba34d665e89c9205abea945b",
+      "decomposition": "codebases/design_briefs/049-cross-collection-entity-resolution-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "050",
+      "title": "Dataset specification and audit studio",
+      "source_sha256": "5905c01eabf833dfa725415618fb3f3ca89f6526d40adba0c83fa4a660c7f262",
+      "interface_sha256": "8d6bc68b4d75dafe44155265ca720104329deeb0b0acdfc8994491d83b0fab72",
+      "public_operations": [
+        {
+          "name": "governDatasetEdition",
+          "path": "governDatasetEdition.nl",
+          "purpose": "Govern a use-specific dataset edition through observable labels, source-family independence, audience permissions, split closure and consent withdrawal."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "governDatasetEdition.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "governDatasetEdition",
+          "state_key": "governDatasetEdition",
+          "input": [
+            "edition"
+          ],
+          "output": [
+            "edition"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11750,
+        "type_declarations": 5253,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "7c4d51bd5ffd3de7aef0da2af1a8ac61dc15064a162b6f4f493316545bf38766",
+      "decomposition": "codebases/design_briefs/050-dataset-specification-and-audit-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "051",
+      "title": "Disruption-aware shipment replanner",
+      "source_sha256": "4eee9283331e90d24438c73eb5c1d6cc31f628179c3ff5872baa9e9a5acfdda8",
+      "interface_sha256": "2d7385220ad6b0118877113cb558db295e9989bb6f3589fe64200a883b842d05",
+      "public_operations": [
+        {
+          "name": "replanShipmentLegs",
+          "path": "replanShipmentLegs.nl",
+          "purpose": "Repair only affected transport legs while preserving handling requirements, separate customer appointments and exact scarce-capacity operation receipts."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "replanShipmentLegs.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "replanShipmentLegs",
+          "state_key": "replanShipmentLegs",
+          "input": [
+            "dispatchBook"
+          ],
+          "output": [
+            "dispatchBook"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8904,
+        "type_declarations": 4994,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "f8feda0e14b892cca5188b1dc5f64c731f372dd3610db5e1210013faa4099944",
+      "decomposition": "codebases/design_briefs/051-disruption-aware-shipment-replanner/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "052",
+      "title": "Warehouse exception controller",
+      "source_sha256": "65b8e11e687d07a8e8a94aa3b6553abbd7229c25e9fd5883ef18dc16387af938",
+      "interface_sha256": "e94388e274822914ee2b17529a9f8860a6e5db1827234a61ba281dca958a8e19",
+      "public_operations": [
+        {
+          "name": "reconcileWarehouseJournal",
+          "path": "reconcileWarehouseJournal.nl",
+          "purpose": "Reconcile signed device observation sequences, physical stock identity and independently verified exception work without inventing inventory."
+        },
+        {
+          "name": "reconcileInventoryReceipt",
+          "path": "reconcileInventoryReceipt.nl",
+          "purpose": "Apply actual movement and adjustment receipts once after lot-level conservation checks."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reconcileWarehouseJournal.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileInventoryReceipt.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileWarehouseJournal",
+          "state_key": "warehouse-journal",
+          "input": [
+            "journal"
+          ],
+          "output": [
+            "journal"
+          ]
+        },
+        {
+          "operation": "reconcileInventoryReceipt",
+          "state_key": "warehouse-journal",
+          "input": [
+            "journal"
+          ],
+          "output": [
+            "journal"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10651,
+        "type_declarations": 5873,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "30cd1c11376a0ecfe51526fc11666a6c9ca54fff039ffaa15d9fb591f4c6aa48",
+      "decomposition": "codebases/design_briefs/052-warehouse-exception-controller/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "053",
+      "title": "Industrial surplus exchange",
+      "source_sha256": "529343e5878fd39f2ad26ea0dcf339dce97e5b876166332d3ee6f8208c40cfd6",
+      "interface_sha256": "19e0768f2e01af865698a1267df90f7e02cbae4ec51d591531f1ead102cf5914",
+      "public_operations": [
+        {
+          "name": "assembleReuseExchange",
+          "path": "assembleReuseExchange.nl",
+          "purpose": "Develop and qualify functional reuse concepts, coordinate dependent transfers, and reconcile actual partial acceptance and residual material."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "assembleReuseExchange.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "assembleReuseExchange",
+          "state_key": "assembleReuseExchange",
+          "input": [
+            "exchange"
+          ],
+          "output": [
+            "exchange"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9091,
+        "type_declarations": 5201,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "070cc41e85b9e7448677dbcfdf2e172d6be7f431b661467622017d923b5e37d8",
+      "decomposition": "codebases/design_briefs/053-industrial-surplus-exchange/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "054",
+      "title": "Donation redistribution coordinator",
+      "source_sha256": "b9d4ba1034c1d792d1d4f868b8422fb7daa0a11b217c637e80db717fd0c0780f",
+      "interface_sha256": "17a28a060af58a762b91390690d860474b2ba41d4d590b3e3ca43a855eef64cb",
+      "public_operations": [
+        {
+          "name": "coordinateDonationRound",
+          "path": "coordinateDonationRound.nl",
+          "purpose": "Qualify confirmed donations, fit complete bundles to recipient-stated constraints, allocate under supplied fairness rules, and plan consented delivery."
+        },
+        {
+          "name": "reconcileDonationFulfillment",
+          "path": "reconcileDonationFulfillment.nl",
+          "purpose": "Reconcile reserved, collected, delivered, accepted, declined, returned, unknown, and quarantined donation inventory from actual stock and consent receipts."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateDonationRound.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileDonationFulfillment.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileDonationFulfillment",
+          "state_key": "donation-fulfillment-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9663,
+        "type_declarations": 6932,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "12d4d7b519b5c6d035637d115a754e244dd81dcdd9d4aadf5090680b8c16de9b",
+      "decomposition": "codebases/design_briefs/054-donation-redistribution-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "055",
+      "title": "Repair cooperative dispatcher",
+      "source_sha256": "008929b4730e6253a1dd273ba572aee62c73dbbdb130e87080440d776334face",
+      "interface_sha256": "eb4a3cbd660eafaaf0764f7e1089d6290e76de80839eb46af7920e1b8b27ddc8",
+      "public_operations": [
+        {
+          "name": "dispatchRepairCase",
+          "path": "dispatchRepairCase.nl",
+          "purpose": "Separate reported symptoms from causes, route hazardous checks, qualify consensual repair assignments, and capture recurrence-aware outcomes."
+        }
+      ],
+      "native_functions": 14,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "dispatchRepairCase.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "dispatchRepairCase",
+          "state_key": "cooperative-repair-case-ledger",
+          "input": [
+            "repair",
+            "priorState"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7793,
+        "type_declarations": 6067,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "d69aed1536536420f648f778409d2f674553707981931c846a9474b6817a0278",
+      "decomposition": "codebases/design_briefs/055-repair-cooperative-dispatcher/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "056",
+      "title": "Quality escape investigator",
+      "source_sha256": "50e9c603dddeff0814486c84e44dd7d574118892af3d12f6e373b7650bad6702",
+      "interface_sha256": "54d577198d9ce06e4c9f3b9ab18e363f31546ece5e0f596c3d508072d3b8e0b0",
+      "public_operations": [
+        {
+          "name": "investigateQualityEscape",
+          "path": "investigateQualityEscape.nl",
+          "purpose": "Trace escaped defects through preserved rework genealogy, compare inspection regimes, scope containment by unit, and reopen recurrence failures."
+        },
+        {
+          "name": "reconcileQualityDisposition",
+          "path": "reconcileQualityDisposition.nl",
+          "purpose": "Record actual lot/unit hold, release, partial and unknown physical disposition receipts against containment and effectiveness evidence."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "investigateQualityEscape.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileQualityDisposition.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileQualityDisposition",
+          "state_key": "quality-escape-disposition-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8535,
+        "type_declarations": 6246,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "409b72b26e1fc5c654765165d115047dc86ec46cfd37f9ed291459c02b1c59ab",
+      "decomposition": "codebases/design_briefs/056-quality-escape-investigator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "057",
+      "title": "Work instruction adaptation studio",
+      "source_sha256": "7a7ba4dbc3343ad46ab30a23c88280f0c19a6ff9864220a45dbf12d4682597f4",
+      "interface_sha256": "46efaf39b133c4c3d6db1cca3ecaa1da4fe07029d5d7e2eda4fe40e5c5bbf2b3",
+      "public_operations": [
+        {
+          "name": "adaptWorkInstruction",
+          "path": "adaptWorkInstruction.nl",
+          "purpose": "Adapt an approved procedure while resolving equipment aliases, preserving warning semantics, replaying interruptions, and withdrawing superseded floor copies."
+        },
+        {
+          "name": "reconcileFloorCopyWithdrawal",
+          "path": "reconcileFloorCopyWithdrawal.nl",
+          "purpose": "Reconcile actual physical retrieval, failed searches, and replacement postings for controlled floor instruction copies."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 12,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "adaptWorkInstruction.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileFloorCopyWithdrawal.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileFloorCopyWithdrawal",
+          "state_key": "work-instruction-floor-copy-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9114,
+        "type_declarations": 5978,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "75f12bb064bb7719c7348e63d66bda53647c02963f93710b9fd560116d6ebdf9",
+      "decomposition": "codebases/design_briefs/057-work-instruction-adaptation-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "058",
+      "title": "Maintenance planning and handover system",
+      "source_sha256": "77bbc73165d49583d61760807afc48f85a79ee870e09a78f4d27a6e444088c0b",
+      "interface_sha256": "de705b421573f7640e09ffd528b2fb85be41c4d2023463f38a042170828b5104",
+      "public_operations": [
+        {
+          "name": "prepareMaintenanceHandover",
+          "path": "prepareMaintenanceHandover.nl",
+          "purpose": "Resolve official asset identity, sequence approved maintenance prerequisites, retain unverified work, and transfer live isolation and recurrence watch between shifts."
+        },
+        {
+          "name": "reconcileMaintenanceExecution",
+          "path": "reconcileMaintenanceExecution.nl",
+          "purpose": "Reconcile exact maintenance task and live-isolation handover receipts while retaining unverified work and lock state."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "prepareMaintenanceHandover.nl",
+          "depth": 1
+        },
+        {
+          "path": "reconcileMaintenanceExecution.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileMaintenanceExecution",
+          "state_key": "maintenance-execution-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8722,
+        "type_declarations": 5735,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "a2ccffd949fcfc60086dd9fdd3567ab96fb7b1253921f9ca8bc7ea08d23e78f1",
+      "decomposition": "codebases/design_briefs/058-maintenance-planning-and-handover-system/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "059",
+      "title": "Engineering change impact manager",
+      "source_sha256": "5778adc1be130f6b23887b0a56944bec9f0c2d91b055907be2c1122f7f253c56",
+      "interface_sha256": "ad3d1c8006e5bd536a06e8b1a2bc25df4cbc44851485aca7cb6aa68b98821a87",
+      "public_operations": [
+        {
+          "name": "planConfigurationChange",
+          "path": "planConfigurationChange.nl",
+          "purpose": "Partition effect by approved configuration, disposition coexisting revisions, preserve grandfathered units, and fence partial retrofits until exact verification."
+        },
+        {
+          "name": "reconcileUnitRetrofit",
+          "path": "reconcileUnitRetrofit.nl",
+          "purpose": "Reconcile per-unit installation, verification, mixed-configuration, and reversal receipts against approved target revision and work steps."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planConfigurationChange.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileUnitRetrofit.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileUnitRetrofit",
+          "state_key": "engineering-retrofit-ledger",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8946,
+        "type_declarations": 6100,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e2edf0c896a8ef6f7a59787710d5275f034deac3f504653ec69d97056bdf56ed",
+      "decomposition": "codebases/design_briefs/059-engineering-change-impact-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "060",
+      "title": "Custom fabrication quoting desk",
+      "source_sha256": "9e6688686c756410da4ab97b81046a586a67cac9e89054a0904bcf41659cf5e2",
+      "interface_sha256": "44b3d8314f1c11ecf5243968b91eea78495784bb4efbb6af83e7d1c67b7a459f",
+      "public_operations": [
+        {
+          "name": "composeFabricationQuote",
+          "path": "composeFabricationQuote.nl",
+          "purpose": "Build a provisional fabrication quote from verified dimensions, accepted finish references, certified shop capability, and current material pricing."
+        },
+        {
+          "name": "reconcileFabricationQuoteResponse",
+          "path": "reconcileFabricationQuoteResponse.nl",
+          "purpose": "Reconcile customer acceptance, decline, or scope-change evidence against the exact issued quote revision and persist replay-safe commercial decision state."
+        },
+        {
+          "name": "recordFabricationQuoteIssue",
+          "path": "recordFabricationQuoteIssue.nl",
+          "purpose": "Persist an exact rendered and approved commercial quote revision without implying customer acceptance or production authorization."
+        }
+      ],
+      "native_functions": 17,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "composeFabricationQuote.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileFabricationQuoteResponse.nl",
+          "depth": 1
+        },
+        {
+          "path": "recordFabricationQuoteIssue.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileFabricationQuoteResponse",
+          "state_key": "fabrication-quote-decisions",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        },
+        {
+          "operation": "recordFabricationQuoteIssue",
+          "state_key": "fabrication-quote-decisions",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13324,
+        "type_declarations": 8193,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "771c7444c0be6d9b23631913d12645e2781f00539eb8a0c1c0f8a67be39765d2",
+      "decomposition": "codebases/design_briefs/060-custom-fabrication-quoting-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "061",
+      "title": "Change-order impact coordinator",
+      "source_sha256": "f06c70123040b1c60dc10146ec5618603bafeaeb81de952d8532b4fa4544b7af",
+      "interface_sha256": "bc35fac70cf4195268503b42a623c1ade2e6ca4c0353b5479f400abe8b09ec43",
+      "public_operations": [
+        {
+          "name": "assembleChangeOrder",
+          "path": "assembleChangeOrder.nl",
+          "purpose": "Separate instruction authority from actual events, isolate drawing scope, traverse explicit dependencies, analyze available float, and prevent duplicate change-cost attribution."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "assembleChangeOrder.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "assembleChangeOrder",
+          "state_key": "change-order-edition-ledger",
+          "input": [
+            "dossier",
+            "state"
+          ],
+          "output": [
+            "state"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 11963,
+        "type_declarations": 6773,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "82af82421794a89cf906564cb52588aed4380e6fa4f810adb33ff0868f29ffac",
+      "decomposition": "codebases/design_briefs/061-change-order-impact-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "062",
+      "title": "Tender scope gap resolver",
+      "source_sha256": "383ac42be4de2bbe42cff5f90819805793b891e33d30039f69cd31925df0d75a",
+      "interface_sha256": "53aac03e4edbf968010e6cf213d0dcd6496f1195f31c4248453f3f86db06dd01",
+      "public_operations": [
+        {
+          "name": "resolveTenderScope",
+          "path": "resolveTenderScope.nl",
+          "purpose": "Compare bidder coverage by current revision, preserve allowances as uncertain, assign unresolved trade seams, apply clarifications with invalidation, and expose commissioning omissions."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "resolveTenderScope.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "resolveTenderScope",
+          "state_key": "tender-addendum-lineage",
+          "input": [
+            "tender",
+            "comparisonState"
+          ],
+          "output": [
+            "comparisonState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6169,
+        "type_declarations": 5556,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "20df80d7b5ed02c7f38698c44cff90d172cd7b298821dbc50f970a5d659db4c7",
+      "decomposition": "codebases/design_briefs/062-tender-scope-gap-resolver/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "063",
+      "title": "Building handover dossier compiler",
+      "source_sha256": "126e4e97eb4bf71a61d3897ffe487de107ae4ad3e1981ac8a3681d97c198045f",
+      "interface_sha256": "b92cfb5b21c198ac3129bbd341f9789aac74919c9e360683a9c9b214d96047a1",
+      "public_operations": [
+        {
+          "name": "compileBuildingDossier",
+          "path": "compileBuildingDossier.nl",
+          "purpose": "Compile variant-specific manuals, exact-asset certificates, permitted durable archives, accessible exports, and expiring temporary obligations into a reviewable handover package."
+        },
+        {
+          "name": "reconcileHandoverAcceptance",
+          "path": "reconcileHandoverAcceptance.nl",
+          "purpose": "Record authorized recipient acceptance by exact dossier edition and required deliverable, retaining partial acceptance and stated exceptions."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "compileBuildingDossier.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileHandoverAcceptance.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileHandoverAcceptance",
+          "state_key": "building-handover-acceptance",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12820,
+        "type_declarations": 6049,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "b1c1d348b83c1d1815d96d3f9a9f489483c03272f1be15c8617e55387d3dc1a2",
+      "decomposition": "codebases/design_briefs/063-building-handover-dossier-compiler/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "064",
+      "title": "Facility complaint-to-work-order system",
+      "source_sha256": "948b5a741afffedc6ac5bb66dff7c41f87192189f234953cadb29296b02ac68a",
+      "interface_sha256": "b76a8dbeda7a483599af51e4c44daae961c38c77e0c95175744ebfaf96ced238",
+      "public_operations": [
+        {
+          "name": "triageFacilityIssue",
+          "path": "triageFacilityIssue.nl",
+          "purpose": "Preserve official facility location identity, link recurring mechanisms, schedule condition-specific consented visits, and compose privacy-limited occupant updates."
+        },
+        {
+          "name": "reconcileFacilityVisitReceipt",
+          "path": "reconcileFacilityVisitReceipt.nl",
+          "purpose": "Record access, cancellation, partial work, technical verification, and recurrence evidence as replay-safe visit history."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "triageFacilityIssue.nl",
+          "depth": 2
+        },
+        {
+          "path": "reconcileFacilityVisitReceipt.nl",
+          "depth": 1
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileFacilityVisitReceipt",
+          "state_key": "facility-visit-ledger",
+          "input": [
+            "ledger"
+          ],
+          "output": [
+            "ledger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12443,
+        "type_declarations": 6283,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "f34df650d4257d5baa126d5fc6b4a94a9244b52f28f44b1571b7b8acade6ef8e",
+      "decomposition": "codebases/design_briefs/064-facility-complaint-to-work-order-system/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "065",
+      "title": "Adaptive reuse feasibility studio",
+      "source_sha256": "38c7208e4acae1f845ce7fc181596e51e11f7e932c6f4d75aae9f5ff9f5538a3",
+      "interface_sha256": "e58d1ed7a9049fd2e72eec09dd0fa82bb660fba4dd45a6ec6161c8530c12ccf9",
+      "public_operations": [
+        {
+          "name": "evaluateReuseOptions",
+          "path": "evaluateReuseOptions.nl",
+          "purpose": "Reconcile current survey facts with retained historic drawings, recheck constraints when use changes, gate structural assumptions, expose enabling-work omissions, and test temporary public circulation by phase."
+        }
+      ],
+      "native_functions": 8,
+      "potential_edges": 6,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "evaluateReuseOptions.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "evaluateReuseOptions",
+          "state_key": "adaptive-reuse-feasibility-history",
+          "input": [
+            "dossier",
+            "state"
+          ],
+          "output": [
+            "state"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 5202,
+        "type_declarations": 6099,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "3d1dc74cdd4d0b2c5d57ab3bcbd219b50e25fffbbe2a22a160186d7ddedb343f",
+      "decomposition": "codebases/design_briefs/065-adaptive-reuse-feasibility-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "066",
+      "title": "Habitat restoration planner",
+      "source_sha256": "88259942e7401d1df274f6e7448a2a8109748bdbf7b79cb0d28828f1bc62b146",
+      "interface_sha256": "6f7290d57e766023e53f97c735a7cbe20a65021c6a3df00a953fef966609cb55",
+      "public_operations": [
+        {
+          "name": "planHabitatStewardship",
+          "path": "planHabitatStewardship.nl",
+          "purpose": "Restrict sensitive species locations, compare seasonal surveys only under supported methods, record sampling effort, stop expired-permission field tasks, and escalate adverse intervention effects to qualified experts."
+        },
+        {
+          "name": "reconcileHabitatFieldOutcome",
+          "path": "reconcileHabitatFieldOutcome.nl",
+          "purpose": "Record intervention receipts against current permission, suspend affected work on adverse ecological effects, and preserve unresolved or incomplete field outcomes."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planHabitatStewardship.nl",
+          "depth": 1
+        },
+        {
+          "path": "reconcileHabitatFieldOutcome.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileHabitatFieldOutcome",
+          "state_key": "habitat-stewardship-action-book",
+          "input": [
+            "book"
+          ],
+          "output": [
+            "book"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8179,
+        "type_declarations": 6566,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "3bbbb3064ee482114d04f1b2e33ce7b49f47b6c26bf6a280fe3dede01425f0e2",
+      "decomposition": "codebases/design_briefs/066-habitat-restoration-planner/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "067",
+      "title": "Agricultural cooperative harvest coordinator",
+      "source_sha256": "e727db6fc628cdac1362bee4af7164abbfb4e0ab9e4be82d7d3c08ba8d95e3f4",
+      "interface_sha256": "ca2599704746bf5a9d1d9f0007f9d0d95fb98fc7bb1e05c3aa49be6a25b7b346",
+      "public_operations": [
+        {
+          "name": "coordinateHarvest",
+          "path": "coordinateHarvest.nl",
+          "purpose": "Revise one perishable harvest allocation against current lot, customer and physical movement evidence."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateHarvest.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateHarvest",
+          "state_key": "cooperative-harvest-checkpoint",
+          "input": [
+            "desk",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 12914,
+        "type_declarations": 5958,
+        "typescript_mechanisms": 5410
+      },
+      "source_topology_fingerprint": "cba2e35f30b0ac1bb75ac5b1dd150f244c89e262a9b633f355021c743d23b3ce",
+      "decomposition": "codebases/design_briefs/067-agricultural-cooperative-harvest-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "068",
+      "title": "Citizen-science observation curator",
+      "source_sha256": "0525339a5ebd426802ba3e1442e44a25231ad6384ce700c1b946c3919f026300",
+      "interface_sha256": "dd60bc3a4e6abdf70a21c770dc09740f622b5279b57631f451fb3090c6cef5d4",
+      "public_operations": [
+        {
+          "name": "curateObservations",
+          "path": "curateObservations.nl",
+          "purpose": "Curate a submission batch while retaining raw observer provenance, identity ambiguity and privacy-limited public derivatives."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "curateObservations.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "curateObservations",
+          "state_key": "observation-curation-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9860,
+        "type_declarations": 5098,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e3be9996207e8e099b7064075623ec1e5291492a1d2c5dececbce831247a5258",
+      "decomposition": "codebases/design_briefs/068-citizen-science-observation-curator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "069",
+      "title": "Environmental reporting evidence assembler",
+      "source_sha256": "0c0b8364bd10fb90622c42dcce62d6f65e854bae911488e18d5bffc388df8c2f",
+      "interface_sha256": "4f5a8b64331e305eab0b2a9d2d3e6c81f8ea1dcc66184f04e82360d6f37a30f5",
+      "public_operations": [
+        {
+          "name": "assembleEnvironmentalReport",
+          "path": "assembleEnvironmentalReport.nl",
+          "purpose": "Assemble an immutable evidence-backed report edition with boundary-scoped measures, reconciled attribution and qualified claims."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "assembleEnvironmentalReport.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "assembleEnvironmentalReport",
+          "state_key": "environmental-reporting-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8414,
+        "type_declarations": 4489,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e3be9996207e8e099b7064075623ec1e5291492a1d2c5dececbce831247a5258",
+      "decomposition": "codebases/design_briefs/069-environmental-reporting-evidence-assembler/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "070",
+      "title": "Community garden steward",
+      "source_sha256": "11c1ec54a93755621ee8d9678509f4ba3f86e437d5e76e9a09829d2e2ee661d2",
+      "interface_sha256": "fa506049b714228312113610fef51931c4b3f5672c2407de1fb097e10b4008c4",
+      "public_operations": [
+        {
+          "name": "stewardGardenSeason",
+          "path": "stewardGardenSeason.nl",
+          "purpose": "Reconcile one garden season without turning preferences into duties or unaccepted allocations."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "stewardGardenSeason.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "stewardGardenSeason",
+          "state_key": "community-garden-checkpoint",
+          "input": [
+            "garden",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7947,
+        "type_declarations": 4340,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "4086a204665d16bf45c3c10c3d0b19f8865a21643f540d2ed51ca03ef864192e",
+      "decomposition": "codebases/design_briefs/070-community-garden-steward/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "071",
+      "title": "Public Consultation Synthesis Studio",
+      "source_sha256": "55374f98c42e8de55b64f9073d676272b9411f34880f7de982a1f009c81f3ff7",
+      "interface_sha256": "59c308f03f4a4eef6c8f01bca8706043911760bdf74258b65ba24151d62b4cb8",
+      "public_operations": [
+        {
+          "name": "synthesizeConsultation",
+          "path": "synthesizeConsultation.nl",
+          "purpose": "Trace consultation arguments to themes and options while reporting participant counts separately from campaign templates."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "synthesizeConsultation.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "synthesizeConsultation",
+          "state_key": "consultation-synthesis-checkpoint",
+          "input": [
+            "docket",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8688,
+        "type_declarations": 4615,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e3be9996207e8e099b7064075623ec1e5291492a1d2c5dececbce831247a5258",
+      "decomposition": "codebases/design_briefs/071-public-consultation-synthesis-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "072",
+      "title": "Participatory Budgeting Facilitator",
+      "source_sha256": "dd213da32535ddb4aee7866512e546d50e678f6ea7f833dda8b066315742c8c7",
+      "interface_sha256": "db1957882f81122f8742ea64d3f4c7a4249a0a59d1a3a91ff5ff108a48163f2a",
+      "public_operations": [
+        {
+          "name": "facilitateBudgetRound",
+          "path": "facilitateBudgetRound.nl",
+          "purpose": "Compose rule-bound project portfolios with shared work counted once and prepare a traceable deliberation packet."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "facilitateBudgetRound.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "facilitateBudgetRound",
+          "state_key": "participatory-budgeting-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7073,
+        "type_declarations": 4250,
+        "typescript_mechanisms": 2410
+      },
+      "source_topology_fingerprint": "83689c736eb658061a6e19f28fa9e5af2736e8c4aa35f0193fab2b8e4e82425f",
+      "decomposition": "codebases/design_briefs/072-participatory-budgeting-facilitator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "073",
+      "title": "Public Service Application Navigator",
+      "source_sha256": "f330ea142b7a38643691014f062c0a2eea63e00a683ae70aa0cac169908b6158",
+      "interface_sha256": "30e267c574e850b2713750b74dbb3ad613ffede06983488ff90451f85653a789",
+      "public_operations": [
+        {
+          "name": "navigateServiceApplication",
+          "path": "navigateServiceApplication.nl",
+          "purpose": "Map an applicant's situation to permitted evidence routes, truthful tasks and safe receipt recovery."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "navigateServiceApplication.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "navigateServiceApplication",
+          "state_key": "public-service-navigation-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6762,
+        "type_declarations": 4441,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "83689c736eb658061a6e19f28fa9e5af2736e8c4aa35f0193fab2b8e4e82425f",
+      "decomposition": "codebases/design_briefs/073-public-service-application-navigator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "074",
+      "title": "Volunteer Deployment Coordinator",
+      "source_sha256": "d1152a8aea7478e245c91666c72f24200b3c96d91ec134063007870dfc491be0",
+      "interface_sha256": "81cdc5938ed293dbc3be525112d1ca7e7556d64538566a1a1333e445ef45bea0",
+      "public_operations": [
+        {
+          "name": "deployVolunteerMission",
+          "path": "deployVolunteerMission.nl",
+          "purpose": "Build and revise mission assignments by required skill coverage, verified qualifications, consent, supervision and privacy."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "deployVolunteerMission.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "deployVolunteerMission",
+          "state_key": "volunteer-mission-checkpoint",
+          "input": [
+            "mission",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7027,
+        "type_declarations": 4152,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "da598b8136a78c5bdfc92ca805971101941f461af9a813c58b1abee0e2a97d01",
+      "decomposition": "codebases/design_briefs/074-volunteer-deployment-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "075",
+      "title": "Community Agreement Mediator",
+      "source_sha256": "7abe38908ec650203024029902b5bd9b0e7038973a2da73db33d273ecea04500",
+      "interface_sha256": "dea5518535011ec889d1276768de79af1e6ebda9fcd36f2e4b2a3eff1727cdfd",
+      "public_operations": [
+        {
+          "name": "mediateAgreement",
+          "path": "mediateAgreement.nl",
+          "purpose": "Prepare bounded agreement options and trials while preserving participant-specific accounts, consent and outcomes."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "mediateAgreement.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "mediateAgreement",
+          "state_key": "community-agreement-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6708,
+        "type_declarations": 4146,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "da598b8136a78c5bdfc92ca805971101941f461af9a813c58b1abee0e2a97d01",
+      "decomposition": "codebases/design_briefs/075-community-agreement-mediator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "076",
+      "title": "Referral Packet Completeness Manager",
+      "source_sha256": "1fbd9959b84d30efe5306867fd91a0cde5dc8a611efa136e59034916dabaf70e",
+      "interface_sha256": "029d064ce6028749fe8749d023b65bc87028ff510e993496dfb1ac936bdd9cda",
+      "public_operations": [
+        {
+          "name": "manageReferralPacket",
+          "path": "manageReferralPacket.nl",
+          "purpose": "Reconcile an identity-bound referral against the recipient's current checklist and safe transfer state."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "manageReferralPacket.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "manageReferralPacket",
+          "state_key": "referral-packet-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 8786,
+        "type_declarations": 4715,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "83689c736eb658061a6e19f28fa9e5af2736e8c4aa35f0193fab2b8e4e82425f",
+      "decomposition": "codebases/design_briefs/076-referral-packet-completeness-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "077",
+      "title": "Care Transition Logistics Coordinator",
+      "source_sha256": "622f019a1c83361bca1096cf0af4ffec36acedde13b895e3b28db212b178f059",
+      "interface_sha256": "e57e66f420e696c8360e8fc9cd32de5e729d2d3032d6fbcbd0b9d7aa2a789cac",
+      "public_operations": [
+        {
+          "name": "coordinateCareTransition",
+          "path": "coordinateCareTransition.nl",
+          "purpose": "Coordinate a transition task graph from verified equipment, accepted caregiver roles, time windows and handoff receipts."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateCareTransition.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateCareTransition",
+          "state_key": "care-transition-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7109,
+        "type_declarations": 4088,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "da598b8136a78c5bdfc92ca805971101941f461af9a813c58b1abee0e2a97d01",
+      "decomposition": "codebases/design_briefs/077-care-transition-logistics-coordinator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "078",
+      "title": "Appointment Preparation Service",
+      "source_sha256": "5fb65d61a0cd720f698ed99901f70428b2dfd825c9ab405af524833151e58244",
+      "interface_sha256": "1286f61c0d298fc099e5404e1978b27385f80dc2b27b19ec75e05c705da20ef6",
+      "public_operations": [
+        {
+          "name": "prepareAppointment",
+          "path": "prepareAppointment.nl",
+          "purpose": "Compile approved appointment requirements into versioned reminders, questions and consent-bounded delivery tracking."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "prepareAppointment.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "prepareAppointment",
+          "state_key": "appointment-preparation-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7148,
+        "type_declarations": 4532,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "527c4b0443e3264b355d339587bfc5b9d639362c4bf8380be970915b658d7b37",
+      "decomposition": "codebases/design_briefs/078-appointment-preparation-service/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "079",
+      "title": "Health Record Request Fulfillment Workbench",
+      "source_sha256": "eba5d203dde3509f1f2c3db126ab796b411c903f046e038f68eeedca325b324d",
+      "interface_sha256": "9ab1805c785b8f10ac0b6974ef59a805f719072a96155bdd8c67eab1d074495c",
+      "public_operations": [
+        {
+          "name": "fulfillHealthRecordRequest",
+          "path": "fulfillHealthRecordRequest.nl",
+          "purpose": "Prepare an authorization-bounded record packet, review only affected disclosure spans, sanitize the rendered derivative and reconcile exact delivery."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "fulfillHealthRecordRequest.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "fulfillHealthRecordRequest",
+          "state_key": "health-record-fulfillment-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6760,
+        "type_declarations": 4649,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "83689c736eb658061a6e19f28fa9e5af2736e8c4aa35f0193fab2b8e4e82425f",
+      "decomposition": "codebases/design_briefs/079-health-record-request-fulfillment-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "080",
+      "title": "Patient Experience Improvement Laboratory",
+      "source_sha256": "3d1334e55f6224d55ecc18fe549a990f11a1072f29828041be48f6f747e311b6",
+      "interface_sha256": "8b8ed961803ccf0dcb8fe9afe22c05998839c38b27a9224ee1668a11153d7cc4",
+      "public_operations": [
+        {
+          "name": "investigateAdministrativeExperience",
+          "path": "investigateAdministrativeExperience.nl",
+          "purpose": "Investigate administrative service mechanisms using patient-scoped evidence, stable observation frames, minority outcomes and consent lineage."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "investigateAdministrativeExperience.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "investigateAdministrativeExperience",
+          "state_key": "patient-experience-study-state",
+          "input": [
+            "studyState"
+          ],
+          "output": [
+            "studyState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10623,
+        "type_declarations": 5053,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "7b3d3e783706c4640bad1d1ed3fcf56390d025d475f8389ec2348a8742ac9287",
+      "decomposition": "codebases/design_briefs/080-patient-experience-improvement-laboratory/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "081",
+      "title": "Localization Release Manager",
+      "source_sha256": "4ddbb0196485df4c026c0b334613dcdb5415898d177ba49008cee923911fd25d",
+      "interface_sha256": "c418d032cf2da9bac30f83445691243aa117aab8391906ee544e3b179f08a405",
+      "public_operations": [
+        {
+          "name": "coordinateLocaleEdition",
+          "path": "coordinateLocaleEdition.nl",
+          "purpose": "Coordinate context-specific localization, concept/sense terminology, independent fidelity review and coherent versioned locale journeys."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "coordinateLocaleEdition.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "coordinateLocaleEdition",
+          "state_key": "localization-edition-ledger",
+          "input": [
+            "localeLedger"
+          ],
+          "output": [
+            "localeLedger"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9551,
+        "type_declarations": 4980,
+        "typescript_mechanisms": 448
+      },
+      "source_topology_fingerprint": "412891652e09a35ac8dc9699d6c72639b9390cc69f68de0fdaf74c09c476a54a",
+      "decomposition": "codebases/design_briefs/081-localization-release-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "082",
+      "title": "Plain Language Transformation Studio",
+      "source_sha256": "0324da4a3495a11a6591f8c62b3f3b721666ce794897b745e397edeb8f3c3283",
+      "interface_sha256": "e0e4a020a73b34dcf9043c2d1ab5d18c7198bb5ee156a344596af1ef2440a99f",
+      "public_operations": [
+        {
+          "name": "reviseReaderEdition",
+          "path": "reviseReaderEdition.nl",
+          "purpose": "Rewrite around reader decisions while preserving an operative meaning graph and independently testing source/draft consequence equivalence."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "reviseReaderEdition.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reviseReaderEdition",
+          "state_key": "plain-language-edition-state",
+          "input": [
+            "edition"
+          ],
+          "output": [
+            "edition"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9878,
+        "type_declarations": 4682,
+        "typescript_mechanisms": 279
+      },
+      "source_topology_fingerprint": "db2ec06a7e7f753d0f0d44180c07e13448777311f34384dfea2865bea0d8b2c3",
+      "decomposition": "codebases/design_briefs/082-plain-language-transformation-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "083",
+      "title": "Accessible Narrative Production Desk",
+      "source_sha256": "6a6bb583081a33db3c4ab957d6414224de252fb3f9829c9d7a98c091dfa1d1a1",
+      "interface_sha256": "6bd17c88cb730301d47ac4aa9257de519e7e452a91d386e7b848a2bebfc2451a",
+      "public_operations": [
+        {
+          "name": "produceAccessibleTimeline",
+          "path": "produceAccessibleTimeline.nl",
+          "purpose": "Coordinate captions, descriptions and transcripts against stable scene edits, actual channel windows and the audience knowledge timeline."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "produceAccessibleTimeline.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "produceAccessibleTimeline",
+          "state_key": "accessible-media-production-state",
+          "input": [
+            "mediaState"
+          ],
+          "output": [
+            "mediaState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9830,
+        "type_declarations": 4977,
+        "typescript_mechanisms": 665
+      },
+      "source_topology_fingerprint": "a626971fc9bfc6746d5045a2cc4bb2a6c3c21b7f70d56ddd1274a00e931b6675",
+      "decomposition": "codebases/design_briefs/083-accessible-narrative-production-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "084",
+      "title": "Cross Cultural Training Adaptation Studio",
+      "source_sha256": "2219e144afb549fe15a74d6b905d0fc5eebea79b14c8ebf43705f9d9ef95fadc",
+      "interface_sha256": "675caadce797d70c6720977600e984e6256eec795a189badb4e09329f9fa3bcb",
+      "public_operations": [
+        {
+          "name": "adaptTrainingScenario",
+          "path": "adaptTrainingScenario.nl",
+          "purpose": "Adapt scenario context while preserving competency, decision complexity and versioned learner-test evidence."
+        }
+      ],
+      "native_functions": 8,
+      "potential_edges": 6,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "adaptTrainingScenario.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "adaptTrainingScenario",
+          "state_key": "training-adaptation-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 5620,
+        "type_declarations": 4232,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "3d1dc74cdd4d0b2c5d57ab3bcbd219b50e25fffbbe2a22a160186d7ddedb343f",
+      "decomposition": "codebases/design_briefs/084-cross-cultural-training-adaptation-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "085",
+      "title": "Multilingual Terminology Negotiation Workbench",
+      "source_sha256": "453a54b54694a37693bbbd2c92b65df60d7f0df1382ce588a84abbabd9c98347",
+      "interface_sha256": "965cc16f0479888116b6ca03033d5f91a73d03fd813edd7e72d191c954c7a18c",
+      "public_operations": [
+        {
+          "name": "negotiateTerminology",
+          "path": "negotiateTerminology.nl",
+          "purpose": "Resolve concept-scoped terminology, preserve regional forms and stage coherent versioned migrations."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "negotiateTerminology.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "negotiateTerminology",
+          "state_key": "terminology-negotiation-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6947,
+        "type_declarations": 4389,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "da598b8136a78c5bdfc92ca805971101941f461af9a813c58b1abee0e2a97d01",
+      "decomposition": "codebases/design_briefs/085-multilingual-terminology-negotiation-workbench/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "086",
+      "title": "Museum Exhibition Curator",
+      "source_sha256": "9be73b7bc28518da12b2633fbedd01ba3d6ae16845fe877b699c181e5dbae4ab",
+      "interface_sha256": "fe52b9249da8c4a4ad1af51dfecf0542970c3a90f755994122dfac8a5cd1b37a",
+      "public_operations": [
+        {
+          "name": "curateExhibition",
+          "path": "curateExhibition.nl",
+          "purpose": "Build an evidence-backed exhibition argument and qualify every physical and digital projection against current constraints."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "curateExhibition.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "curateExhibition",
+          "state_key": "museum-exhibition-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7134,
+        "type_declarations": 4354,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "da598b8136a78c5bdfc92ca805971101941f461af9a813c58b1abee0e2a97d01",
+      "decomposition": "codebases/design_briefs/086-museum-exhibition-curator/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "087",
+      "title": "Oral History Reconciliation Archive",
+      "source_sha256": "525f22afdd4d3da4aebae13af0b9a865a5cb07467d18e5014e69325130b198f0",
+      "interface_sha256": "85c3db3654969a243b7e14ba0d39aad636f8a19ce6a5671045d8df8dec35adf7",
+      "public_operations": [
+        {
+          "name": "archiveOralHistory",
+          "path": "archiveOralHistory.nl",
+          "purpose": "Reconcile speaker-attributed accounts under source-span consent and prepare a privacy-reviewed, traceable edition."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "archiveOralHistory.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "archiveOralHistory",
+          "state_key": "oral-history-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7819,
+        "type_declarations": 4185,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c369c9b2cc1c9875e1f67723638514661e1a4510058899465c2573592c801cd0",
+      "decomposition": "codebases/design_briefs/087-oral-history-reconciliation-archive/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "088",
+      "title": "Historical Record Linkage Atelier",
+      "source_sha256": "ae8359e885294c5966b06151ab2c486813159dd16c0d0b7c1d21fbca7c591cf7",
+      "interface_sha256": "0a9099f0837cc29a4f8a38c01718079a45777bbe4c3b510fc720150279a187b3",
+      "public_operations": [
+        {
+          "name": "reconcileHistoricalLinkage",
+          "path": "reconcileHistoricalLinkage.nl",
+          "purpose": "Build a reversible historical identity network using uncertainty-aware chronology and time-specific geography."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "reconcileHistoricalLinkage.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "reconcileHistoricalLinkage",
+          "state_key": "historical-linkage-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 7803,
+        "type_declarations": 4566,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "e3be9996207e8e099b7064075623ec1e5291492a1d2c5dececbce831247a5258",
+      "decomposition": "codebases/design_briefs/088-historical-record-linkage-atelier/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "089",
+      "title": "Collection Rights And Consent Steward",
+      "source_sha256": "13d699d058c68a77c10c99d2fc1f90745b670367ce7d93f209c6d13de8352d9e",
+      "interface_sha256": "971766449601b00eb758a388122782cb5f4babe3bdc3bcd85527d678b72abd10",
+      "public_operations": [
+        {
+          "name": "stewardCollectionUse",
+          "path": "stewardCollectionUse.nl",
+          "purpose": "Test a proposed collection use against every item's rights, channel, audience, attribution and duration scope."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "stewardCollectionUse.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "stewardCollectionUse",
+          "state_key": "collection-rights-checkpoint",
+          "input": [
+            "dossier",
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 6131,
+        "type_declarations": 4053,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "83689c736eb658061a6e19f28fa9e5af2736e8c4aa35f0193fab2b8e4e82425f",
+      "decomposition": "codebases/design_briefs/089-collection-rights-and-consent-steward/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "090",
+      "title": "Archive Research Commission Manager",
+      "source_sha256": "80019fbec9dbeaa2633f6e05c25e27023be0a0fc6ee79cd29da23b795496a870",
+      "interface_sha256": "13d567c15a964640748435f50f8e8d76d4a06e75c36bf097e85a5abf4c9aee99",
+      "public_operations": [
+        {
+          "name": "commissionArchive",
+          "path": "commissionArchive.nl",
+          "purpose": "Bound an archival inquiry, route contextual searches, reconcile supported claims and resume from provenance state."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "commissionArchive.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "commissionArchive",
+          "state_key": "archive-research-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10326,
+        "type_declarations": 4385,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "527c4b0443e3264b355d339587bfc5b9d639362c4bf8380be970915b658d7b37",
+      "decomposition": "codebases/design_briefs/090-archive-research-commission-manager/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "091",
+      "title": "Serial Fiction Continuity Room",
+      "source_sha256": "c52d12e7b5a9276f17233c3c3244ad170ff9b8648d2c5c4ed8e67b4f036c762c",
+      "interface_sha256": "e4e840f99d059cfa815500ba6cdfd3a58cc4276a5d397b4e78c397487b015896",
+      "public_operations": [
+        {
+          "name": "continuityRoom",
+          "path": "continuityRoom.nl",
+          "purpose": "Review a scene proposal against edition-bound canon, character knowledge and narrative obligations."
+        }
+      ],
+      "native_functions": 11,
+      "potential_edges": 9,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "continuityRoom.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "continuityRoom",
+          "state_key": "serial-continuity-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13218,
+        "type_declarations": 4467,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "c369c9b2cc1c9875e1f67723638514661e1a4510058899465c2573592c801cd0",
+      "decomposition": "codebases/design_briefs/091-serial-fiction-continuity-room/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "092",
+      "title": "Documentary Assembly Studio",
+      "source_sha256": "abc4bd8eab25f3c785bd17f819eec3fe364d610867faff321f231db2adddd9bc",
+      "interface_sha256": "229f070fd52ba94496e2a5994dffc40f1cef4e88c6676017e95566b54977dfd8",
+      "public_operations": [
+        {
+          "name": "assembleDocumentary",
+          "path": "assembleDocumentary.nl",
+          "purpose": "Audit a documentary assembly graph and freeze a version-bound release package."
+        },
+        {
+          "name": "prepareDocumentaryDelivery",
+          "path": "assembleDocumentary/prepareDocumentaryDelivery.nl",
+          "purpose": "Prepare a digest-bound documentary package transfer or reconcile its observed receipt."
+        }
+      ],
+      "native_functions": 10,
+      "potential_edges": 8,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "assembleDocumentary.nl",
+          "depth": 2
+        },
+        {
+          "path": "assembleDocumentary/prepareDocumentaryDelivery.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "assembleDocumentary",
+          "state_key": "documentary-assembly-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        },
+        {
+          "operation": "prepareDocumentaryDelivery",
+          "state_key": "documentary-assembly-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13330,
+        "type_declarations": 4498,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "37a4a307339d0c8b0d10e7cc0ce9b70e15ee46ab12b394dcfaadceb7a6b40861",
+      "decomposition": "codebases/design_briefs/092-documentary-assembly-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "093",
+      "title": "Magazine Commissioning And Issue Planning Desk",
+      "source_sha256": "2ae21ed087d1b4e28498ba9c1a472d8a07d982abac288d6fbff2186bb07d6df1",
+      "interface_sha256": "e4c1c703e3a32db420e86ba8dd3c31b17efa96956395e0d1d7981534c3a905ee",
+      "public_operations": [
+        {
+          "name": "planMagazineIssue",
+          "path": "planMagazineIssue.nl",
+          "purpose": "Shape a magazine issue portfolio and advance only accepted, evidence-ready commissions to freeze."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "planMagazineIssue.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "planMagazineIssue",
+          "state_key": "magazine-issue-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 9815,
+        "type_declarations": 4664,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "d3b880125dcb5b1e394c5971775c0cc214a48c96dc25e60d23ea574d977968db",
+      "decomposition": "codebases/design_briefs/093-magazine-commissioning-and-issue-planning-desk/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "094",
+      "title": "Brand And Design Language Studio",
+      "source_sha256": "79d41b00880aad66f451705df5af19861d6806467f89b975bb67f436178f5956",
+      "interface_sha256": "fcf60b8f738cb2000cb17443ea36b81c3da76f9327541b2fc676b5d057291b7e",
+      "public_operations": [
+        {
+          "name": "shapeBrandSystem",
+          "path": "shapeBrandSystem.nl",
+          "purpose": "Maintain a sourced brand system and channel-specific assets under scoped approval."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "shapeBrandSystem.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "shapeBrandSystem",
+          "state_key": "brand-system-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10718,
+        "type_declarations": 3975,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "d3b880125dcb5b1e394c5971775c0cc214a48c96dc25e60d23ea574d977968db",
+      "decomposition": "codebases/design_briefs/094-brand-and-design-language-studio/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "095",
+      "title": "Culinary Concept Development Kitchen",
+      "source_sha256": "508cd43c89a282d629a9f8565610d59516754a315e1b25fb128e2938f238a632",
+      "interface_sha256": "7d0dc21c0a02a5e6cddecf58bd28f12c8092de6be0c16e076fba168fcc867adc",
+      "public_operations": [
+        {
+          "name": "developMenu",
+          "path": "developMenu.nl",
+          "purpose": "Develop and stage a service menu against dietary, ingredient, equipment, cost, and tasting constraints."
+        }
+      ],
+      "native_functions": 12,
+      "potential_edges": 10,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "developMenu.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "developMenu",
+          "state_key": "kitchen-service-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 13289,
+        "type_declarations": 4351,
+        "typescript_mechanisms": 3192
+      },
+      "source_topology_fingerprint": "a626971fc9bfc6746d5045a2cc4bb2a6c3c21b7f70d56ddd1274a00e931b6675",
+      "decomposition": "codebases/design_briefs/095-culinary-concept-development-kitchen/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "096",
+      "title": "Escape Room Foundry",
+      "source_sha256": "722c01c6a7217be21e779d23ff4d49c0f07cbc060d953b649e9ea0eac928f39f",
+      "interface_sha256": "41bc805391528e61974d2920007dbbbd0c873bc0f271a5c966334bb89eddf924",
+      "public_operations": [
+        {
+          "name": "foundryRoom",
+          "path": "foundryRoom.nl",
+          "purpose": "Develop a solvable, recoverable and safe escape room with session-reset operations."
+        },
+        {
+          "name": "verifySessionReset",
+          "path": "verifySessionReset.nl",
+          "purpose": "Verify one observed room reset against the exact room revision, prop baseline, cleared puzzle state, emergency exit and next session identity."
+        }
+      ],
+      "native_functions": 17,
+      "potential_edges": 14,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "foundryRoom.nl",
+          "depth": 3
+        },
+        {
+          "path": "verifySessionReset.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "foundryRoom",
+          "state_key": "escape-room-design-state",
+          "input": [
+            "room"
+          ],
+          "output": [
+            "room"
+          ]
+        },
+        {
+          "operation": "verifySessionReset",
+          "state_key": "escape-room-reset-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 19108,
+        "type_declarations": 5659,
+        "typescript_mechanisms": 5048
+      },
+      "source_topology_fingerprint": "83200c34cca93a147fec219a31584f13ca141ff6c21bd93042d8948da0564b53",
+      "decomposition": "codebases/design_briefs/096-escape-room-foundry/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "097",
+      "title": "Live Event Disruption Director",
+      "source_sha256": "00ffd8a7dda1e070919b0e0a3bc2e5cbb0dff5eca32074351bf363581dda16cd",
+      "interface_sha256": "c68b0af6e462e8ee2eaced46b5d65c7b8b9506ef1c4bf8fee91dca473081af9f",
+      "public_operations": [
+        {
+          "name": "directLiveEvent",
+          "path": "directLiveEvent.nl",
+          "purpose": "Replan disrupted live program segments and coordinate revision-bound staff acknowledgements."
+        },
+        {
+          "name": "prepareLiveEventEffects",
+          "path": "directLiveEvent/prepareLiveEventEffects.nl",
+          "purpose": "Prepare revision-bound resource, staff and public-event intentions from a proved run sheet."
+        }
+      ],
+      "native_functions": 9,
+      "potential_edges": 7,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "directLiveEvent.nl",
+          "depth": 2
+        },
+        {
+          "path": "directLiveEvent/prepareLiveEventEffects.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "directLiveEvent",
+          "state_key": "live-event-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        },
+        {
+          "operation": "prepareLiveEventEffects",
+          "state_key": "live-event-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 10638,
+        "type_declarations": 4660,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "fc4959d291b589ada30c702b111f6a7d4fceab8887c6dfc1c929b0f5d174a634",
+      "decomposition": "codebases/design_briefs/097-live-event-disruption-director/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "098",
+      "title": "Persistent World Game Director",
+      "source_sha256": "76c2a96e4679118e342c2852e345f32234a7333932af7f4fb2c6fd1cc1b8d432",
+      "interface_sha256": "1c1f8b254ab5c77345072c78a1521310a1b14354fc02463c541e690154c5bcfc",
+      "public_operations": [
+        {
+          "name": "directPersistentWorld",
+          "path": "directPersistentWorld.nl",
+          "purpose": "Interpret player actions through character knowledge and reconcile authoritative world-simulator receipts."
+        },
+        {
+          "name": "prepareWorldActionEffects",
+          "path": "directPersistentWorld/prepareWorldActionEffects.nl",
+          "purpose": "Prepare a version-bound simulator action or status-read intention and carry its idempotency checkpoint."
+        }
+      ],
+      "native_functions": 13,
+      "potential_edges": 11,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "directPersistentWorld.nl",
+          "depth": 2
+        },
+        {
+          "path": "directPersistentWorld/prepareWorldActionEffects.nl",
+          "depth": 0
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "directPersistentWorld",
+          "state_key": "persistent-world-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        },
+        {
+          "operation": "prepareWorldActionEffects",
+          "state_key": "persistent-world-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 17043,
+        "type_declarations": 6428,
+        "typescript_mechanisms": 7175
+      },
+      "source_topology_fingerprint": "bd3f72c590cd9fe0d5ad852028993749d087e2015dece058fa64b00d1c3bd30e",
+      "decomposition": "codebases/design_briefs/098-persistent-world-game-director/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "099",
+      "title": "Negotiation Training Arena",
+      "source_sha256": "8e72fe74c79f275e09d44568f585d4be114e8c8886a823586d54761f1f1e0d51",
+      "interface_sha256": "73ed99e4b56a1fe145c9fdcaff05c9e0e85aaf91247e2227454d5ce0490ee30d",
+      "public_operations": [
+        {
+          "name": "runNegotiationArena",
+          "path": "runNegotiationArena.nl",
+          "purpose": "Run a private-role negotiation exercise with exact offer state and behavior-grounded debrief."
+        }
+      ],
+      "native_functions": 15,
+      "potential_edges": 13,
+      "unreferenced": [],
+      "max_potential_native_depth": 2,
+      "entrypoint_depths": [
+        {
+          "path": "runNegotiationArena.nl",
+          "depth": 2
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "runNegotiationArena",
+          "state_key": "negotiation-arena-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "checkpoint"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 16359,
+        "type_declarations": 4227,
+        "typescript_mechanisms": 0
+      },
+      "source_topology_fingerprint": "65d72b41605150652f25544dad0a96f648da5dac47022d494e88e4f78f34161c",
+      "decomposition": "codebases/design_briefs/099-negotiation-training-arena/DECOMPOSITION.md"
+    },
+    {
+      "application_id": "100",
+      "title": "Immersive Theatre Stage Manager",
+      "source_sha256": "c2e44f69d8a529d2513387fb042c8eff5c35ae056d66cdf76823775cdcc1542a",
+      "interface_sha256": "ffadbbd746155d8c23afff3c90a479eaa773184a4dfe1196d7327b1fd408b3b7",
+      "public_operations": [
+        {
+          "name": "controlPerformance",
+          "path": "controlPerformance.nl",
+          "purpose": "Classify one show incident and return the incident-specific scene, resource, cue or safety-hold proposal."
+        }
+      ],
+      "native_functions": 28,
+      "potential_edges": 27,
+      "unreferenced": [],
+      "max_potential_native_depth": 3,
+      "entrypoint_depths": [
+        {
+          "path": "controlPerformance.nl",
+          "depth": 3
+        }
+      ],
+      "state_bindings": [
+        {
+          "operation": "controlPerformance",
+          "state_key": "performance-checkpoint",
+          "input": [
+            "checkpoint"
+          ],
+          "output": [
+            "resumeState"
+          ]
+        }
+      ],
+      "source_bytes": {
+        "natlang": 34360,
+        "type_declarations": 8816,
+        "typescript_mechanisms": 1410
+      },
+      "source_topology_fingerprint": "48100dd9f87082803865de4603e34c13437d5ae2ddfb818306f4e7905ee624b8",
+      "decomposition": "codebases/design_briefs/100-immersive-theatre-stage-manager/DECOMPOSITION.md"
+    }
+  ]
+}

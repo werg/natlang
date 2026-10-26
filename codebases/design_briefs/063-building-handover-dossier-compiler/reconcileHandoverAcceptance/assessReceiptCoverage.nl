@@ -1,0 +1,9 @@
+---
+args: { book: HandoverAcceptanceBook, context: HandoverAcceptanceContext, receipt: HandoverAcceptanceReceipt }
+returns: HandoverAcceptanceAssessment
+---
+1. Bind currentBinding to the exact caseId/currentDossierVersion match plus a permitted receivingRole, nonempty receivingPartyId and versioned signedEvidence. Keep each mismatch as a reason. Bind unexpectedDeliverableIds to received IDs outside context.requiredDeliverableIds. An unknown deliverable is never counted as coverage.
+2. Build eligibleReceipts only from book.receipts whose IDs occur in book.validReceiptIds and whose case and dossier edition match this context. Include the new receipt only when currentBinding is valid and it has no unexpected deliverable IDs. Held or older receipts cannot cover this edition.
+3. For each distinct required deliverable ID, bind item = traceDeliverableAcceptance(deliverableId, eligibleReceipts). Use item.covered to derive missingDeliverableIds. Retain actual receipt references and unresolved exceptions from the child instead of substituting a signed cover page for individual delivery.
+4. Bind exceptionItems to the current receipt's exceptions and any still-unresolved exceptions in same-edition eligible receipts. Exceptions are not cleared by silence in a later receipt. Include context.missingDeliverableIds as outstanding technical preparation gaps even when a receiver signed.
+5. Bind disposition to "held" for identity, version, authority or unexpected-ID mismatches; otherwise "complete" only when context.readyForAcceptance is true, missingDeliverableIds and exceptionItems are empty and no preparation gap remains; otherwise "partial". Return HandoverAcceptanceAssessment { disposition, missingDeliverableIds, unexpectedDeliverableIds, exceptionItems, reasons: the exact binding, preparation and per-item coverage reasons }. No receiver receipt changes the underlying certificate or technical verification.

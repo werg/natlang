@@ -1,0 +1,50 @@
+{
+  "application_id": "072",
+  "title": "Participatory Budgeting Facilitator",
+  "source_relative_path": "applications/15-civic-participation-and-community-operations/072-participatory-budgeting-facilitator.md",
+  "source_sha256": "6e19f006d2bcf8830837ff3d1edc01267b08449e3513b79efa42188d99a98eac",
+  "domain_id": "15",
+  "stages": [
+    {
+      "name": "interpretProposals",
+      "output_type": "CivicProposal",
+      "algorithm": "Translate informal proposals into clear intended outcomes, work scope, and affected groups. Preserve the proposer’s intent, distinguish a preferred implementation from the underlying benefit, and request clarification where ambiguity changes feasibility or eligibility.",
+      "gate": "Proposal normalization does not silently change the project’s purpose."
+    },
+    {
+      "name": "assessOverlap",
+      "output_type": "ProposalRelationship",
+      "algorithm": "Compare proposals by intended benefit, location, and required work. Identify genuine duplicates and complementary bundles without merging projects whose similar wording masks different communities or uses; obtain proposer review for material combinations.",
+      "gate": "Merging preserves distinct intents and does not erase minority proposals."
+    },
+    {
+      "name": "qualifyFeasibility",
+      "output_type": "ProposalFeasibility",
+      "algorithm": "Compare proposals with supplied eligibility, resource, and delivery rules, using exact estimates and qualified assessments where necessary. Separate infeasibility from missing information and provide a clear path for revision rather than silently excluding difficult proposals.",
+      "gate": "Eligibility and feasibility decisions cite supplied rules and verified estimates."
+    },
+    {
+      "name": "constructPortfolios",
+      "output_type": "CivicPortfolio",
+      "algorithm": "Enumerate feasible combinations under exact budget and dependency constraints, accounting for shared work and mutually exclusive uses. Present alternatives for deliberation without autonomously choosing political priorities or inferring participant preferences from personal data.",
+      "gate": "Exact budget feasibility and complete disclosure of exclusions and dependencies."
+    },
+    {
+      "name": "prepareDeliberation",
+      "output_type": "BudgetDecisionPacket",
+      "algorithm": "Produce accessible comparisons, maps or structured location views, and clear decision procedures. Preserve proposer corrections, record the authorized community decision, and transfer selected projects into accountable delivery plans with explicit acceptance criteria.",
+      "gate": "Selection follows the published process and the selected portfolio matches its approved scope."
+    }
+  ],
+  "operational_details": [
+    "Two proposals share enabling work: count its cost once and expose the dependency.",
+    "A revised estimate exceeds the budget: reopen portfolio feasibility before voting or approval.",
+    "A merged proposal changes one group’s intent: require explicit proposer review.",
+    "A project is location-sensitive: show the relevant supplied constraints without profiling residents.",
+    "A selected project changes during delivery: record the scope change and applicable community approval rule."
+  ],
+  "scenario": {
+    "representative_episode": "Several park proposals overlap, one accessibility project is small but essential under the supplied rules, and two projects share an expensive enabling task.",
+    "independent_truth": "Generated proposals, exact costs and dependencies, supplied eligibility rules, and authorized decision procedures."
+  }
+}

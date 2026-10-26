@@ -175,6 +175,61 @@ def test_zero_rows_require_both_exact_dedup_receipts_and_bound_inputs(tmp_path, 
         worker._publish_if_new_delta(ctx, conversion)
 
 
+@pytest.mark.parametrize('tamper', [None, 'source', 'cache', 'policy', 'manifest'])
+def test_historical_cache_receipt_rechecks_restored_source(tmp_path, monkeypatch, tamper):
+    from natlang_neuralese.common import row_index
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    conversion = zero_conversion(tmp_path)
+    monkeypatch.setattr(worker, 'ROOT', tmp_path)
+    monkeypatch.setattr(conversion_module, '_legacy_inputs', lambda root, model: [])
+    proof_path = conversion / 'both-port-conversion.json'
+    proof = json.loads(proof_path.read_text())
+    sources, indexes = [], []
+    for model in proof['models']:
+        receipt_path = Path(model['receipt']['path'])
+        receipt = json.loads(receipt_path.read_text())
+        original = receipt['deduplication']['inputs'][0]
+        source = Path(original['path']); sources.append(source)
+        contents, rows = conversion_module._validated_content_fingerprints(
+            source, receipt['tokenizer']['expanded_fingerprint'])
+        key = {'source_sha256': original['sha256'],
+               'tokenizer_fingerprint': receipt['tokenizer']['expanded_fingerprint'],
+               'policy_sha256': conversion_module._content_index_policy_sha256(),
+               'kind': 'teacher-content-fingerprints-v1'}
+        index = tmp_path / (model['model'] + '-historical-index.pkl'); indexes.append(index)
+        value = {'key': key, 'fingerprints': contents, 'rows': rows,
+                 'metadata_sha256': canonical_json_sha256_hex({'rows': rows, 'fingerprints': contents})}
+        if tamper == 'policy':
+            value = {**value, 'key': {**key, 'policy_sha256': '0' * 64}}
+        row_index.save(index, value)
+        historical_path = ('registered-cache:registered-native-predecessor/'
+                           + model['model'] + '/train/native-graphs.jsonl.zst')
+        receipt['deduplication']['inputs'][0] = {
+            **original, 'path': historical_path, 'content_index_cache': file_binding(index),
+            'content_index_key': key, 'cache_only_source': True}
+        receipt['deduplication']['omissions'][0]['represented_by']['path'] = historical_path
+        model['receipt'] = write_json(receipt_path, receipt)
+    write_json(proof_path, proof)
+    if tamper == 'source':
+        sources[0].write_bytes(b'changed restored source')
+    elif tamper == 'cache':
+        indexes[0].write_bytes(b'changed index')
+    elif tamper == 'manifest':
+        path = tmp_path / 'training/corpus-manifests/registered-native-predecessor.json'
+        value = json.loads(path.read_text()); value['files'][0]['sha256'] = '0' * 64
+        write_json(path, value)
+    ctx = worker.Tranche(21, 1,
+        teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853')
+    if tamper:
+        with pytest.raises(ValueError, match='(restored dedup source|historical dedup content index)'):
+            worker._publish_if_new_delta(ctx, conversion)
+    else:
+        result = worker._publish_if_new_delta(ctx, conversion)
+        assert result['status'] == 'verified-zero-delta'
+        assert result['training_admission'] is False
+        assert result['training_exposure'] is False
+
+
 @pytest.mark.parametrize('field,value', [('content_sha256', '0' * 64), ('represented_id', 'forged-row-id')])
 def test_zero_row_rejects_forged_content_or_represented_id_with_same_graph_bytes(tmp_path, monkeypatch, field, value):
     conversion = zero_conversion(tmp_path)
@@ -196,6 +251,24 @@ def test_zero_row_rejects_forged_content_or_represented_id_with_same_graph_bytes
     with pytest.raises(ValueError, match='(omission|deduplication identity)'):
         worker._publish_if_new_delta(worker.Tranche(21, 1,
             teacher_namespace='qwen36-verified-positive-native-graphs-20261022-recovery7853'), conversion)
+
+
+@pytest.mark.parametrize('state', ['present','missing','changed','unadmitted'])
+def test_new_conversion_selects_restored_registered_graph_instead_of_cache(tmp_path,state):
+    zero_conversion(tmp_path)
+    ident='registered-native-predecessor'
+    source=tmp_path/'runs'/ident/'lfm25/train/native-graphs.jsonl.zst'
+    if state=='missing':source.unlink()
+    elif state=='changed':source.write_bytes(b'changed graph')
+    elif state=='unadmitted':
+        p=tmp_path/'training/neuralese_corpora.json';d=json.loads(p.read_text())
+        d['corpora'][0]['training_admission']=False;write_json(p,d)
+    if state in('changed','unadmitted'):
+        with pytest.raises(ValueError):conversion_module.registered_dedup_args(tmp_path,ident,'lfm25')
+    else:
+        expected=(['--deduplicate-against',str(source)]if state=='present'else
+                  ['--deduplicate-against-registered-cache',ident])
+        assert conversion_module.registered_dedup_args(tmp_path,ident,'lfm25')==expected
 
 
 def test_zero_row_requires_readable_empty_native_output_streams(tmp_path, monkeypatch):
@@ -408,6 +481,32 @@ class StopPolling(Exception):
     pass
 
 
+@pytest.mark.parametrize('tamper', [None,'completed-result','source-cases','relocation-bytes'])
+def test_source_retry_uses_exact_recovered_closure_without_cloud_fetch(tmp_path,monkeypatch,tamper):
+    spool=tmp_path/'spool';monkeypatch.setattr(worker,'SPOOL',spool)
+    ctx=worker.Tranche(63,7,teacher_namespace='fixture-teacher')
+    target='a'*64
+    relocation=tmp_path/'recovered-relocation.json'
+    reference=write_json(relocation,{'source_cases_sha256':'b'*64 if tamper=='source-cases'else target})
+    if tamper=='completed-result':
+        reference=write_json(tmp_path/'relocation-result.json',{
+            'schema':'natlang.teacher-ready-packet-relocation-result/1',
+            'relocation_declaration':reference})
+    write_json(spool/'source-executions'/ctx.corpus_id/'execution.json',{
+        'ready_packet_relocation':reference})
+    if tamper=='relocation-bytes':relocation.write_text('{}')
+    monkeypatch.setattr(worker,'_exists_valid_source',lambda ctx:False)
+    calls=[];monkeypatch.setattr(worker,'_run',lambda command,*args:calls.append(command))
+    if tamper in ('source-cases','relocation-bytes'):
+        with pytest.raises(ValueError):worker._ensure_source(ctx,target)
+        assert not calls
+    else:
+        worker._ensure_source(ctx,target)
+        assert len(calls)==1
+        assert calls[0][1].endswith('/teacher_internal_source.py')
+        assert calls[0][calls[0].index('--ready-packet-relocation')+1]==str(relocation)
+
+
 def polling_fixture(tmp_path,monkeypatch):
     spool=tmp_path/'spool';monkeypatch.setattr(worker,'SPOOL',spool)
     settings=tmp_path/'settings.json';write_json(settings,{'teacher_namespace':'fixture-teacher'})
@@ -465,6 +564,40 @@ def test_failed_poll_retries_before_any_completed_scheduling_reuse(tmp_path,monk
     assert len(attempts)==2
     records=[json.loads(line)for path in (worker.SPOOL/'worker-logs').glob('worker-*.jsonl')for line in path.read_text().splitlines()]
     assert [row['status']for row in records]==['error','verified-zero-delta']
+
+
+@pytest.mark.parametrize('tamper', [None, 'source', 'outcomes', 'source-result', 'row-type'])
+def test_zero_positive_source_is_terminal_without_numeric_conversion(tmp_path, monkeypatch, tamper):
+    polling_fixture(tmp_path, monkeypatch)
+    ctx=worker.Tranche(41,0,teacher_namespace='fixture-teacher')
+    source=ctx.admission(worker.SPOOL)/'native-trajectories.jsonl'
+    source.write_bytes(b'')
+    proof={'schema':'natlang.teacher-live-tranche-canonical-source-verification/1',
+           'status':'passed','training_admission':False,'rows':0,
+           'source':{**file_binding(source),'rows':0},'teacher_action_turns':0,
+           'selected_outputs':1,'rejected_outputs':[{'source_output':'outputs/failed.jsonl',
+               'sha256':'a'*64,'reason':'oracle rejected incorrect execution'}]}
+    if tamper=='outcomes':proof['rejected_outputs']=[]
+    if tamper=='row-type':proof['rows']=False
+    ref=write_json(ctx.admission(worker.SPOOL)/'canonical-source-verification.json',proof)
+    write_json(worker.SPOOL/'source-executions'/ctx.corpus_id/'source-result.json',{
+        'source_proof':ref,'source':proof['source'],'training_admission':False,
+        'training_exposure':False,'source_disposition':(
+            'positive-source'if tamper=='source-result'else'verified-zero-positive-source')})
+    if tamper=='source':source.write_bytes(b'not empty')
+    monkeypatch.setattr(worker,'_ensure_source',lambda *args:None)
+    monkeypatch.setattr(worker,'_next_conversion',lambda *args:pytest.fail('converted an empty source'))
+    worker.run(once=True,poll_seconds=60)
+    records=[json.loads(line)for p in(worker.SPOOL/'worker-logs').glob('worker-*.jsonl')
+             for line in p.read_text().splitlines()]
+    assert len(records)==1
+    if tamper:
+        assert records[0]['status']=='error'
+    else:
+        assert records[0]['status']=='verified-zero-positive-source'
+        assert records[0]['row_counts']=={'lfm25':0,'mellum21':0}
+    assert records[0]['training_admission']is False
+    assert records[0]['training_exposure']is False
 
 
 @pytest.mark.parametrize('changed',['source-proof','source-result','conversion','model-receipt','new-conversion'])

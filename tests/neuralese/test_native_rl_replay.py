@@ -76,6 +76,34 @@ def test_graph_replay_matches_incremental_actor_including_write_and_terminal_act
     assert block.token_ids.tolist() == [5, 6]  # no learner mutation of archived observations
 
 
+def test_captured_prompt_segment_position_keeps_actual_kv_import_order_and_gradient():
+    from natlang_neuralese.rl.native_occurrences import graph_binding
+    model, roles, identity, block_id, block, turns = actor_rollout('lfm')
+    reader = turns[0]
+    nodes = {
+        'producer-turn': {'node':'producer-turn','kind':'model_turn'},
+        'write-0': {'node':'write-0','kind':'block_write','turn':'producer','block':block_id},
+        'reader-turn': {'node':'reader-turn','kind':'model_turn'},
+        'captured-read': {'node':'captured-read','kind':'block_read','turn':'consumer','block':block_id,
+            'positions':[0,1],'position_source':'captured_prompt_segment',
+            'inputs':[{'node':'write-0','port':'block','block':block_id}]},
+    }
+    reader.update(graph_binding('consumer',reader['sampling'],nodes))
+    replay=compile_replay(turns,identity=identity,roles=roles,fetch_block=lambda key:block)
+    consumer=next(node for node in replay.plan.invocations if node.name=='consumer')
+    # The capture has two text tokens before the native-state segment; the graph
+    # segment coordinate is provenance, while replay imports at the actual KV
+    # offset determined from the complete sampling prompt and retains the exact
+    # producer edge for gradients.
+    assert consumer.imports[0].at==2
+    logps,behavior=replay_logps(model,replay,chunk_tokens=2)
+    torch.testing.assert_close(logps.detach(),behavior,rtol=2e-5,atol=2e-6)
+    consumer_actions=torch.tensor([i for i,action in enumerate(replay.actions) if action['turn']=='consumer'])
+    (-logps[consumer_actions].mean()).backward()
+    assert model.adapter.up.weight.grad is not None
+    assert model.adapter.up.weight.grad.abs().sum()>0
+
+
 @pytest.mark.parametrize('stop', [False, True])
 def test_optional_import_stop_keyword_preserves_legacy_default_and_explicit_stop(monkeypatch, stop):
     from natlang_neuralese.rl import native_replay

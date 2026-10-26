@@ -1,0 +1,10 @@
+---
+description: Reconcile one simulator action receipt and authoritative world readback without duplicate application or invented outcome.
+args: { world: PersistentWorldState; actions: LegalAction[]; receipts: WorldTransitionReceipt[]; checkpoint: GameCheckpoint; readback: WorldSimulatorReadback | null }
+returns: WorldReconciliation
+---
+1. Bind bindings = `validateReceiptBindings(world, actions, receipts, readback)`. This exact helper returns duplicate, identifier, revision, hash, action and event comparison facts; it does not decide pending, unknown or terminal lifecycle state.
+2. Bind eventReview = `reviewCommittedEvents(world, actions, bindings.receipts, readback, readback?.world.events ?? [])`. Accept only events tied to the exact committed action and current world readback. Preserve its event-specific blockers.
+3. If actions contain multiple clientActionIds, bindings.blockers is nonempty, or eventReview.blockers is nonempty, return a complete blocked WorldReconciliation with exact actual receipts, no committed events or updatedWorld, and the union of every precise blocker.
+4. For each action binding fact, if receipt is absent classify it pending only when neither checkpoint.pendingActionIds, checkpoint.unknownReceiptIds nor a full pendingActions record already contains that ID; otherwise classify it unknown. A committed receipt without readback is unknown. A rejection with its exact reason is a completed actual outcome and does not change world resources. If any action remains pending or unknown, return awaiting-simulator with those IDs, exact receipts and no world update; do not narrate a proposed effect or advance replay state.
+5. Return reconciled only when every committed receipt has matching world, advancing revision, rule version, resource hash, action receipt and event bindings in the supplied readback, and all other actions have actual rejection receipts. Use readback.world as updatedWorld when any commit occurred; when every action was rejected, return the unchanged input world and the exact rejection receipts. Never model substitute events, resource balances or a success receipt.

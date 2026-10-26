@@ -49,6 +49,7 @@ export { wasmCallStore, wasmDatabase, DatabaseMedium } from '../calls/store-wasm
 export { CallStore } from '../calls/store-core.js';
 export type { UiNode, UiAction } from './dom.js';
 export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel, wllamaChatTransport } from './local-model.js';
+export { loadBrowserRelease, type BrowserRelease } from './tuned-release.js';
 export { chatCompletionModelTurn, httpChatTransport, assembleChatCompletion, fetchModel, requestLimit, limitedTransport } from '../model/chat-completion.js';
 export type { ChatTransport, ChatCompletionOptions, ChatTurnStats, HttpChatOptions, RequestLimit } from '../model/chat-completion.js';
 export { openAICompatibleModelTurn } from '../model/openai-compatible.js';

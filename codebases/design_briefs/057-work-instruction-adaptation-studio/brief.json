@@ -1,0 +1,90 @@
+{
+  "application_id": "057",
+  "title": "Work instruction adaptation studio",
+  "source_relative_path": "applications/12-manufacturing-maintenance-and-industrial-quality/057-work-instruction-adaptation-studio.md",
+  "source_sha256": "84739c82d80d3b9b53cd1bd18caa23b8854d72905902efecde20ca11d78099bd",
+  "domain_id": "12",
+  "stages": [
+    {
+      "name": "recoverProcedure",
+      "output_type": "ProcedureRequirement",
+      "algorithm": "Parse the master instruction into actions, guards, prerequisites, and verification obligations. Distinguish explanatory advice from mandatory controls, preserve warnings in their operative context, and identify cross-references needed to execute the procedure correctly.",
+      "gate": "Every mandatory control has a traceable source and cannot disappear during simplification."
+    },
+    {
+      "name": "mapLocalContext",
+      "output_type": "LocalProcedureConstraint",
+      "algorithm": "Compare local equipment, materials, staffing, and terminology with the master procedure. Separate harmless naming differences from capability changes and identify where local conditions make a step impossible or require engineering review.",
+      "gate": "Local compatibility is verified; unknown critical differences block adaptation."
+    },
+    {
+      "name": "constructVariant",
+      "output_type": "InstructionVariant",
+      "algorithm": "Rewrite steps for the local context using approved terminology and resources. Preserve sequence, guards, stop conditions, and verification; represent genuine deviations explicitly rather than hiding them in friendlier wording or inferred substitutions.",
+      "gate": "All master safety and prerequisite obligations survive unless explicitly superseded by authorized engineering change."
+    },
+    {
+      "name": "replayProcedure",
+      "output_type": "ProcedureScenario",
+      "algorithm": "Generate ordinary and adverse scenarios involving local exceptions, missing resources, and interrupted work. Replay the adapted procedure to detect ambiguous instructions, skipped prerequisites, or branches that cannot reach a safe terminal state.",
+      "gate": "No scenario bypasses a retained safeguard or requires an unavailable capability."
+    },
+    {
+      "name": "releaseInstruction",
+      "output_type": "InstructionRelease",
+      "algorithm": "Obtain qualified review of the exact variant, publish controlled copies, and coordinate acknowledgment or training. Retire outdated copies without erasing historical execution records and re-evaluate affected instructions when equipment or master procedures change.",
+      "gate": "Approved version and site applicability are visible at every point of use."
+    }
+  ],
+  "operational_details": [
+    "A printed instruction remains on the floor: include version identifiers and a withdrawal task.",
+    "A local term names two controls: require unambiguous equipment references.",
+    "A translation shortens a warning: verify semantic preservation before release.",
+    "A procedure is interrupted mid-step: specify restart and re-verification conditions.",
+    "A local exception waives a queue but not an inspection: preserve the inspection guard explicitly."
+  ],
+  "domain_records": {
+    "InstructionAdaptation": [
+      "masterProcedureId: ID",
+      "siteId: ID",
+      "equipmentVariantIds: ID[]",
+      "ownerId: ID",
+      "intendedAudience: string"
+    ],
+    "ProcedureRequirement": [
+      "caseId: ID",
+      "action: string",
+      "prerequisite: string",
+      "safetyConstraint: string",
+      "expectedEvidence: string"
+    ],
+    "LocalProcedureConstraint": [
+      "caseId: ID",
+      "siteId: ID",
+      "equipmentDifference: string",
+      "localResource: string",
+      "incompatibility: string"
+    ],
+    "InstructionVariant": [
+      "caseId: ID",
+      "requirementIds: ID[]",
+      "adaptedSteps: string[]",
+      "retainedControls: string[]",
+      "deviationIds: ID[]"
+    ],
+    "ProcedureScenario": [
+      "caseId: ID",
+      "variantId: ID",
+      "initialCondition: string",
+      "expectedAction: string",
+      "counterexample: string"
+    ],
+    "InstructionRelease": [
+      "caseId: ID",
+      "variantId: ID",
+      "approvalRefs: Ref[]",
+      "trainingTaskIds: ID[]",
+      "supersededVersion: string"
+    ]
+  }
+}
