@@ -287,6 +287,18 @@ supersede older projection/recursive graph-replay foundation rules for new work.
 Track implementation and cutover in
 `plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
 
+Complete producer targets (engineering finding, 2026-10-26): static pair
+conversion must preserve the original complete assistant/tool response and its
+declared result contract, placing producer markers only around the authenticated
+exported span. Replacing that response with the payload alone taught incomplete
+returns under unchanged typed prompts. Verify retained sibling fields, tool
+wrappers and every consumer import on real source trajectories with both model
+tokenizers. The affected converter family is quarantined until repaired sources
+are admitted; preserve original source data and held groups. Historical exposure
+to truncated targets does not qualify repaired communication foundations or VAE
+inputs. Earn and record fresh exposure to the corrected row bindings while
+preserving useful weights, optimizer/RNG and the original exposure history.
+
 Publication dependencies (engineering finding, 2026-10-20): newly admitted
 classification witnesses retain exact historical parser-policy dependencies.
 Include their explicitly verified package roots in both provider and checkpoint
