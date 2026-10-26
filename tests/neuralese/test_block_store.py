@@ -201,3 +201,69 @@ def test_http_native_artifact_routes_share_owner_custody_and_collection():
         httpd.server_close()
         thread.join()
         store.close()
+
+
+class _RefusingStore(TensorStore):
+    """A store whose writes fail their content checks, and whose reads fail unexpectedly."""
+
+    def put_native_state(self, block, owner=None):
+        raise ValueError("native state content ID collision")
+
+    def get_native_tensor_artifact(self, block_id):
+        raise OSError("disk unavailable")
+
+
+def test_http_errors_answer_the_envelope_with_their_own_codes():
+    from natlang_neuralese.model.native_artifact import native_tensor_artifact_id
+    from natlang_neuralese.serve.http import serve
+
+    store = _RefusingStore()
+    httpd = serve(_FakeEngine(store))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+    def error(method, path, body=None):
+        status, raw = _call(base, method, path, body)
+        return status, json.loads(raw)["error"]["code"]
+
+    try:
+        absent_state, absent_artifact = "nzs1_" + "a" * 52, "nnt1_" + "b" * 52
+        # Pinning an absent artifact names the artifact's own kind.
+        assert error("POST", f"/v1/neuralese/native-states/{absent_state}/pin") == (404, "neuralese-unknown-native-state")
+        assert error("POST", f"/v1/neuralese/native-tensor-artifacts/{absent_artifact}/pin") == (
+            404, "neuralese-unknown-native-artifact")
+        # A store-level check that refuses an upload is a request error, not a dropped connection.
+        state = _state(1)
+        assert error("PUT", f"/v1/neuralese/native-states/{native_state_id(state)}", encode_native_state(state)) == (
+            400, "neuralese-bad-native-state")
+        # An unexpected failure while reading still answers the envelope.
+        artifact_id = native_tensor_artifact_id(_artifact(1))
+        assert error("GET", f"/v1/neuralese/native-tensor-artifacts/{artifact_id}") == (500, "internal")
+        # Malformed recorded-objective and derivative-program requests fail validation with 400, as graph requests do.
+        assert error("POST", "/v1/neuralese/grad", {"schema": "natlang.native-recorded-objective-request/1"}) == (
+            400, "neuralese-native-grad-invalid")
+        assert error("POST", "/v1/neuralese/grad", {"schema": "natlang.native-derivative-program/1"}) == (
+            400, "neuralese-native-grad-invalid")
+        # Graph requests are first order and say where second-order objectives go.
+        status, raw = _call(base, "POST", "/v1/neuralese/grad", {"schema": "natlang.native-gradient-request/1", "order": 2})
+        assert status == 400 and "natlang.native-derivative-program/1" in json.loads(raw)["error"]["message"]
+        # A batched item's error names its code once.
+        status, raw = _call(base, "POST", "/v1/neuralese/decide_many", {"items": [{"messages": [], "options": []}]})
+        assert status == 200
+        assert json.loads(raw)["results"] == [{"error": "neuralese-decision: a decision needs at least one option"}]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join()
+        store.close()
+
+
+def test_prompt_rendering_mismatch_is_a_request_error():
+    from natlang_neuralese.serve.chat import RequestError
+    from natlang_neuralese.serve.engine import Engine
+
+    engine = SimpleNamespace(prompt_rendering="program-header")
+    with pytest.raises(RequestError) as caught:
+        Engine.render_request(engine, [{"role": "system", "content": [{"type": "text", "text": "x"}]}])
+    assert caught.value.code == "prompt-rendering"

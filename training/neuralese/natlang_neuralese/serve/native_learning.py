@@ -42,7 +42,10 @@ def _decision_render(engine, messages, tools, options):
     for option in options:
         if not isinstance(option, str):
             raise RequestError("neuralese-decision", "options are reply texts")
-        before, rest = target_items(engine, messages, tools, {"role": "assistant", "content": option})
+        try:
+            before, rest = target_items(engine, messages, tools, {"role": "assistant", "content": option})
+        except RequestError as error:
+            raise RequestError("neuralese-decision", str(error).removeprefix(f"{error.code}: ")) from error
         if prompt is not None and before != prompt:
             raise RequestError("neuralese-decision", "options rendered different prompts")
         if any(kind != "tok" for kind, _ in rest):
@@ -106,6 +109,7 @@ def decide_many_native(engine, body: dict) -> dict:
         try:
             results.append(_score_item(engine, {"native_state_modes": body.get("native_state_modes"), "native_recording":body.get("native_recording",False), **item}, body.get("adapters")))
         except Exception as error:  # item failures are part of the shared score contract
-            code = error.code if isinstance(error, RequestError) else "internal"
-            results.append({"error": f"{code}: {error}"[:500]})
+            # A RequestError's text already starts with its code.
+            message = str(error) if isinstance(error, RequestError) else f"internal: {error}"
+            results.append({"error": message[:500]})
     return {"results": results}

@@ -35,8 +35,9 @@ def block_ids(value) -> set[str]:
         return set().union(*map(block_ids, value)) if value else set()
     return set()
 
-# What this server serves (spec/NEURALESE_PORT.md "Capabilities"): every runtime reports its list in
-# /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
+# What this server serves (spec/NEURALESE_PORT.md "Capabilities"), reported in /v1/neuralese/info. Clients choose
+# paths by this list and fail a request that needs an unlisted capability before sending it
+# (`neuralese-<capability>-unavailable`); this server serves every capability it lists.
 NATIVE_CAPABILITIES = sorted([
     "chat", "chat.stream", "decide", "score", "grad", "grad.order2", "optim", "native.adapters", "adapters.create", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
@@ -54,6 +55,17 @@ def completion_limit(body: dict) -> int:
             raise RequestError("bad-max-tokens", f"{key} must be a non-negative integer, got {json.dumps(value)}")
         return value
     return 512
+
+
+def _grad_request(run):
+    """Recorded-objective and derivative-program requests: a request that fails validation is a 400
+    `neuralese-native-grad-invalid`, as for graph requests (native_grad.native_graph_gradient)."""
+    try:
+        return run()
+    except RequestError:
+        raise
+    except (ValueError, KeyError, TypeError, RuntimeError) as error:
+        raise RequestError('neuralese-native-grad-invalid', str(error)) from error
 
 
 def make_handler(engine: Engine):
@@ -95,7 +107,19 @@ def make_handler(engine: Engine):
         def _body(self) -> bytes:
             return self.rfile.read(int(self.headers.get("content-length") or 0))
 
+        def _guarded(self, handler):
+            """Every failure answers the error envelope, for GET and PUT as for POST."""
+            try:
+                return handler()
+            except RequestError as error:
+                self._error(400, error.code, str(error))
+            except Exception as error:  # noqa: BLE001
+                self._error(500, "internal", f"{type(error).__name__}: {error}")
+
         def do_GET(self):
+            return self._guarded(self._get)
+
+        def _get(self):
             if self.path == "/metrics":
                 body = ''.join(f'{name} {value}\n' for name, value in engine.progress_metrics().items())
                 return self._send(200, body.encode(), "text/plain; version=0.0.4")
@@ -178,6 +202,9 @@ def make_handler(engine: Engine):
             return body
 
         def do_PUT(self):
+            return self._guarded(self._put)
+
+        def _put(self):
             native = _NATIVE_STATE.match(self.path)
             if native and native.group(2) is None:
                 return self._put_native_state(native.group(1))
@@ -193,7 +220,10 @@ def make_handler(engine: Engine):
                 return self._error(400, "neuralese-bad-native-state", str(error))
             if actual_id != expected_id:
                 return self._error(400, "neuralese-id-mismatch", f"content hashes to {actual_id}")
-            stored = engine.store.put_native_state(block, self._owner)
+            try:
+                stored = engine.store.put_native_state(block, self._owner)
+            except ValueError as error:  # a failed derivation check or a content collision with a stored state
+                return self._error(400, "neuralese-bad-native-state", str(error))
             return self._json(201, stored.meta())
 
         def _put_native_tensor_artifact(self, expected_id):
@@ -204,7 +234,10 @@ def make_handler(engine: Engine):
                 return self._error(400, "neuralese-bad-native-artifact", str(error))
             if actual_id != expected_id:
                 return self._error(400, "neuralese-id-mismatch", f"content hashes to {actual_id}")
-            stored = engine.store.put_native_tensor_artifact(artifact, self._owner)
+            try:
+                stored = engine.store.put_native_tensor_artifact(artifact, self._owner)
+            except (ValueError, TypeError) as error:  # a failed gradient-origin check or a content collision
+                return self._error(400, "neuralese-bad-native-artifact", str(error))
             return self._json(201, stored.meta())
 
         def do_POST(self):
@@ -230,17 +263,18 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
                     from .native_grad import native_graph_gradient, native_recorded_gradient
+                    from .native_derivative import execute_derivative_program
                     with grad_lock:
                         if 'native_recorded_objective' in body:
-                            return self._json(200, native_recorded_gradient(engine, body['native_recorded_objective'], self._owner))
+                            return self._json(200, _grad_request(lambda: native_recorded_gradient(
+                                engine, body['native_recorded_objective'], self._owner)))
                         if body.get('schema') == 'natlang.native-recorded-objective-request/1':
-                            return self._json(200, native_recorded_gradient(engine, body, self._owner))
+                            return self._json(200, _grad_request(lambda: native_recorded_gradient(engine, body, self._owner)))
                         if body.get('schema') == 'natlang.native-derivative-program/1':
-                            from .native_derivative import execute_derivative_program
-                            return self._json(200, execute_derivative_program(engine, body, self._owner))
+                            return self._json(200, _grad_request(lambda: execute_derivative_program(engine, body, self._owner)))
                         if isinstance(body.get('native_derivative_program'), dict):
-                            from .native_derivative import execute_derivative_program
-                            return self._json(200, execute_derivative_program(engine, body['native_derivative_program'], self._owner))
+                            return self._json(200, _grad_request(lambda: execute_derivative_program(
+                                engine, body['native_derivative_program'], self._owner)))
                         return self._json(200, native_graph_gradient(engine, body, self._owner))
                 if self.path == "/v1/neuralese/decide":
                     body = self._object()
@@ -328,7 +362,6 @@ def make_handler(engine: Engine):
                     from .chat import split_escaped
 
                     body = self._object()
-                    # As prefill renders it: a stored block typed Neuralese<unknown> defaults to value_type "unknown".
                     rendered = engine.render_request(body.get("messages") or [], body.get("tools"))
                     prompt = "".join("<block>" if isinstance(segment, int) else
                                      "".join(run for run, _ in split_escaped(segment, rendered.escape_nonce))
@@ -339,13 +372,15 @@ def make_handler(engine: Engine):
                 pin_match = native or tensor
                 if pin_match and pin_match.group(2) in ("/pin", "/unpin"):
                     if pin_match.group(2) == "/pin":
-                        engine.store.pin(pin_match.group(1), self._owner)
+                        try:
+                            engine.store.pin(pin_match.group(1), self._owner)
+                        except KeyError:
+                            return self._error(404, "neuralese-unknown-native-state" if native else
+                                               "neuralese-unknown-native-artifact", pin_match.group(1))
                     else:
                         engine.store.unpin(pin_match.group(1), self._owner)
                     return self._json(200, {"ok": True})
                 self._error(404, "not-found", self.path)
-            except KeyError as error:
-                self._error(404, "neuralese-unknown-block", str(error))
             except RequestError as error:
                 self._error(400, error.code, str(error))
             except json.JSONDecodeError as error:
