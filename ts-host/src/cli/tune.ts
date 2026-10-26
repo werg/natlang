@@ -18,6 +18,7 @@ import { readActive, rollbackRelease, tuneDirectory, tuneStatus } from '../adapt
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings } from '../tune/settings.js';
+import { uploadRelease } from './weights.js';
 import { tuneProgram, type TuneReport } from '../tune/pipeline.js';
 
 const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
@@ -26,7 +27,8 @@ const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path
 type Session = ReturnType<typeof createResolvedModelSession>;
 const driverOf = (session: Session): ModelDriver => Object.assign(
   (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
-  { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow() });
+  { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
+    ...(session.neuralese ? { neuralese: true as const } : {}) });
 
 function formatReport(report: TuneReport): string {
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -73,7 +75,15 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       return await tuneProgram({ root, program, settings, student, teacher: driverOf(teacherSession),
         teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
         serve: async ({ manifest, directory }) => {
-          if (settings.backend !== 'managed-local') throw new Error(`natlang tune: serving backend ${settings.backend} is not wired into tune validation yet`);
+          if (settings.backend === 'native') {
+            const serving = loadModelConfiguration(undefined);
+            if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
+              throw new Error('natlang tune: the native backend needs a default profile with neuraleseServer: true');
+            const session = createResolvedModelSession(serving.choice, process.env, process.stderr);
+            await session.prepare();
+            const loaded = await uploadRelease(session.nativeArtifacts!()!, directory);
+            return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
+          }
           const adapters = manifest.artifacts.filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(undefined);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');

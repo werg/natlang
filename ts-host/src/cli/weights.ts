@@ -3,7 +3,9 @@
  * program's active release is found beside it and served on the selected backend without flags or manifests.
  * A release the backend cannot serve runs the base model, marked degraded with the reason; never as tuned execution.
  */
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { decodeNativeState, decodeNativeTensorArtifact } from '../native/neuralese-store.js';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
@@ -34,6 +36,14 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
   const { manifest, directory } = release;
   let incompatible: string | undefined;
   const loaded: { id: string; path: string }[] = [];
+  if (choice.kind === 'external' && choice.neuraleseServer) {
+    // The native reference server applies the exact native artifacts and imports soft states.
+    const store = new HttpNeuraleseStore(choice.endpoint, { ...choice.headers,
+      ...(environment[choice.apiKeyEnv] ? { authorization: 'Bearer ' + environment[choice.apiKeyEnv] } : {}) });
+    const uploaded = await uploadRelease(store, directory);
+    const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: uploaded, nativeState: true });
+    return { weights: [binding], ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
+  }
   if (choice.kind !== 'managed-local') incompatible = `the ${choice.kind} backend does not serve tuned weights; use the managed local model or the native server`;
   else {
     const base = await managedModelSha256(environment);
@@ -54,4 +64,23 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
     ...(incompatible ? { incompatible } : {}) });
   return { weights: [binding], ...(loaded.length ? { loraAdapters: () => loaded } : {}),
     ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
+}
+
+/**
+ * Upload a release's native artifacts (`artifacts/*.nnt`: coefficients, bases) and soft states (`states/*`) to a
+ * native server store. Each file must hold exactly the content its name claims. Returns the IDs now served.
+ */
+export async function uploadRelease(store: HttpNeuraleseStore, directory: string): Promise<Set<string>> {
+  const served = new Set<string>();
+  for (const [folder, put] of [['artifacts', async (bytes: Uint8Array) => (await store.putNativeTensorArtifact(decodeNativeTensorArtifact(bytes))).id],
+      ['states', async (bytes: Uint8Array) => (await store.putNativeState(decodeNativeState(bytes))).id]] as const) {
+    const path = join(directory, folder);
+    if (!existsSync(path)) continue;
+    for (const file of readdirSync(path).sort()) {
+      const id = await put(new Uint8Array(readFileSync(join(path, file))));
+      if (id !== file.replace(/\.[^.]+$/, '')) throw new Error(`release file ${folder}/${file} does not hold its named content (${id})`);
+      served.add(id);
+    }
+  }
+  return served;
 }

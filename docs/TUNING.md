@@ -84,6 +84,18 @@ const runtime = createNatlangRuntime({ model, program, weights: activeWeights(pr
 managed llama.cpp session loads GGUF exports (`loraAdapters`) and sets each request's own stack; the native
 reference server applies the stack through its exact native adapter path.
 
+## Backends
+
+| Backend | Weight residuals | Soft instruction/skill states | Mixed stacks in one batch |
+| --- | --- | --- | --- |
+| Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
+| llama.cpp fork (`--lora-per-sequence`) | Same | Through its Neuralese server (not yet wired here) | Yes, per-sequence scales, verified bitwise isolation |
+| Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
+| vLLM, wllama | Not yet implemented | Not yet implemented | Not yet implemented |
+
+The managed runtime accepts the fork's server only once the fork is rebased onto a build the runtime check accepts
+(currently `>= b10964`).
+
 ## Migration
 
 `activeNativeAdapters()` (what model drivers read) now returns the invocation's lexical stack followed by the

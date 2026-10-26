@@ -21,6 +21,9 @@ export type ModelProfile = {
   /** Match the prompt rendering declared by the trained weights; unadapted models use full. */
   promptRendering?: import('../native/system-prompts.js').PromptRendering;
   endpoint?: string; chatCompletionsUrl?: string; provider?: string; model?: string; apiKeyEnv?: string;
+  /** The endpoint is a native Neuralese reference server: tuned weights, native state and soft instruction/skill
+   * states run through its exact native path (docs/TUNING.md). */
+  neuraleseServer?: boolean;
   headers?: Record<string, string>; request?: Record<string, unknown>;
   piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
   piMode?: 'native' | 'simple'; modelOptions?: Record<string, unknown>;
@@ -41,7 +44,8 @@ export type ModelProfile = {
 type Common = { promptRendering?: ModelProfile['promptRendering']; headers?: Record<string, string>; runtime?: ModelProfile['runtime']; concurrency?: number; batching?: BatchingSettings };
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
-  | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown> })
+  | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown>;
+    neuraleseServer?: true })
   | (Common & { kind: 'pi-provider'; provider: string; model: string; apiKeyEnv?: string;
     piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
     piMode: 'native' | 'simple'; modelOptions?: Record<string, unknown> });
@@ -116,7 +120,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.endpoint) return { ...common, kind: 'external', endpoint: profile.endpoint,
     ...(profile.chatCompletionsUrl ? { chatCompletionsUrl: profile.chatCompletionsUrl } : {}),
     model: profile.model ?? DEFAULT_MODEL_RELEASE.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
-    request: profile.request };
+    request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
   return { ...common, kind: 'managed-local', model: DEFAULT_MODEL_RELEASE.id,
     request: profile.request, local: profile.local };

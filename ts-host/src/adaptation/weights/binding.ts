@@ -179,6 +179,12 @@ export class WeightBinding {
       if (this.options.strict) throw new WeightBindingError('weights-unavailable', reason);
       return this.base(entry.id, requested, softStates.map(item => ({ artifact: item.state, node: `soft:${item.kind}`, reason: 'backend has no native-state import' })), 'degraded', reason);
     }
+    const missingSoft = available ? softStates.filter(item => !available.has(item.state)) : [];
+    if (missingSoft.length) {
+      const reason = 'soft instruction/skill states are not loaded by the serving backend';
+      if (this.options.strict) throw new WeightBindingError('weights-unavailable', reason);
+      return this.base(entry.id, requested, missingSoft.map(item => ({ artifact: item.state, node: `soft:${item.kind}`, reason: 'not loaded' })), 'degraded', reason);
+    }
     const soft = softStates.length ? { ...(softStates.find(item => item.kind === 'instructions')
       ? { instructions: (({ state, textSha256 }) => ({ state, textSha256 }))(softStates.find(item => item.kind === 'instructions')!) } : {}),
       skills: Object.fromEntries(softStates.filter(item => item.kind === 'skill').map(item => [item.target!, { state: item.state, textSha256: item.textSha256 }])) } : undefined;

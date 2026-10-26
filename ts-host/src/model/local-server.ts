@@ -9,7 +9,9 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
-import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
+import { openAICompatibleModelTurn, serverContextWindow, type OpenAICompatibleOptions } from './openai-compatible.js';
+import { neuraleseServerModelTurn } from './neuralese-server.js';
+import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
 import type { DecisionRequest, DecisionScores, ModelTurn, ModelTurnRequest, SessionTurnOptions } from '../contracts.js';
@@ -23,6 +25,10 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
+  /** A native reference server's artifact store, for uploading tuned artifacts and states; undefined otherwise. */
+  nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
+  /** Requests carry native content parts (native-state imports); wrappers must keep this marker. */
+  readonly neuralese?: boolean;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
   turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
@@ -204,9 +210,15 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     // Every loaded adapter is listed, so an adapter outside this call's stack is explicitly off.
     return { lora: [...loraIndex.values()].map(index => ({ id: index, scale: scales.get(index) ?? 0 })) };
   };
-  const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
+  // A native reference server: one driver whose requests carry the exact native adapter stack and state parts.
+  let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
+  const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
+    headers: external!.headers, apiKey: environment[external!.apiKeyEnv], request: external!.request, owner: randomUUID() });
+  const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
     ...(choice.kind === 'managed-local' ? { tunedRequest } : {}) });
+  const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
+    { contextWindow: () => serverContextWindow(options) }) : openai(options);
   let unscored: string | null = null;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
@@ -305,6 +317,9 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
     scheduler,
+    /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
+    nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
+    neuralese: !!external?.neuraleseServer,
     slotPlan() { return plan; },
     async close() {
       closed = true;

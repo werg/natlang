@@ -8,7 +8,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
@@ -112,6 +112,10 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
       // Only training and development roots are executed by the teacher here; confirmation stays for evaluation.
       const collected = await collect({ root, program, scaffold, examples, teacher: options.teacher, teacherId: options.teacherId,
         partitions: ['train', 'development'] });
+      const failures = collected.roots.filter(item => !item.ok);
+      if (failures.length === collected.roots.length)
+        // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
+        throw new Error(`every root invocation failed with the teacher; first error: ${failures[0]?.error ?? 'unknown'}`);
       writeFileSync(turnsPath, collected.turns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
       writeFileSync(join(dataDir, 'receipt.json'), JSON.stringify({ schema: 'natlang.tune-data-receipt/v1', key: dataKey, roots: collected.roots,
         turns: collected.turns.length, teacher: options.teacherId, program: program.buildHash }, null, 2));
@@ -147,6 +151,12 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
         validatedReductions: result.validatedReductions ?? [], receipts: { data: dataKey, training: result.receipt } } as Omit<WeightManifest, 'digest'>);
       storeRelease(root, sealed);
       const directory = dirname(releaseFile(root, sealed.digest));
+      // Native artifacts (coefficients, bases) and soft states, for backends that serve them exactly.
+      for (const folder of ['artifacts', 'states']) if (existsSync(join(out, folder))) {
+        mkdirSync(join(directory, folder), { recursive: true });
+        for (const file of readdirSync(join(out, folder))) if (!existsSync(join(directory, folder, file)))
+          copyFileSync(join(out, folder, file), join(directory, folder, file));
+      }
       for (const artifact of sealed.artifacts) if (artifact.exports?.gguf) {
         const target = join(directory, artifact.exports.gguf.file);
         mkdirSync(dirname(target), { recursive: true });
