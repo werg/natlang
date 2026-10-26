@@ -289,19 +289,24 @@
   },
   {
     "id": "026-workflow-01",
-    "root": "runCase.nl",
+    "root": "analyzeContract.nl",
     "split_group": "design-brief-app-026",
     "inputs": {
       "request": {
         "caseId": "SYN-026-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "agreementIds": [
+          "C-26"
+        ],
+        "partyIds": [
+          "Acme Systems",
+          "Vendor V-26"
+        ],
+        "operationalScope": "Replacement of verified failed modules",
+        "ownerId": "Owner-26",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "contracts": [
           {
             "agreementIds": [
               "C-26"
@@ -382,6 +387,181 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "businessCalendars": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause 8.4 gives 10 business days under calendar CAL-26, which excludes the Oct 12 holiday; defect notice was verified Oct 1."
+              },
+              {
+                "id": "E3",
+                "source": "026-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft states a 24-hour replacement duty, while clause 8.4 provides 10 business days after verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "partyIdentityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause 8.4 gives 10 business days under calendar CAL-26, which excludes the Oct 12 holiday; defect notice was verified Oct 1."
+              },
+              {
+                "id": "E3",
+                "source": "026-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft states a 24-hour replacement duty, while clause 8.4 provides 10 business days after verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause 8.4 gives 10 business days under calendar CAL-26, which excludes the Oct 12 holiday; defect notice was verified Oct 1."
+              },
+              {
+                "id": "E3",
+                "source": "026-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft states a 24-hour replacement duty, while clause 8.4 provides 10 business days after verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "disputedClauseRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause 8.4 gives 10 business days under calendar CAL-26, which excludes the Oct 12 holiday; defect notice was verified Oct 1."
+              },
+              {
+                "id": "E3",
+                "source": "026-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft states a 24-hour replacement duty, while clause 8.4 provides 10 business days after verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "confidentialTaskRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause 8.4 gives 10 business days under calendar CAL-26, which excludes the Oct 12 holiday; defect notice was verified Oct 1."
+              },
+              {
+                "id": "E3",
+                "source": "026-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The draft states a 24-hour replacement duty, while clause 8.4 provides 10 business days after verification."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -404,19 +584,24 @@
   },
   {
     "id": "026-workflow-02",
-    "root": "runCase.nl",
+    "root": "analyzeContract.nl",
     "split_group": "design-brief-app-026",
     "inputs": {
       "request": {
         "caseId": "SYN-026-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "agreementIds": [
+          "C-26"
+        ],
+        "partyIds": [
+          "Acme Systems",
+          "Vendor V-26"
+        ],
+        "operationalScope": "Replacement of verified failed modules",
+        "ownerId": "Owner-26",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "contracts": [
           {
             "agreementIds": [
               "C-26"
@@ -488,6 +673,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "businessCalendars": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty name changed from Acme Ltd to Acme Systems; registration ID REG-26 is unchanged."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "partyIdentityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty name changed from Acme Ltd to Acme Systems; registration ID REG-26 is unchanged."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty name changed from Acme Ltd to Acme Systems; registration ID REG-26 is unchanged."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "disputedClauseRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty name changed from Acme Ltd to Acme Systems; registration ID REG-26 is unchanged."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "confidentialTaskRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty name changed from Acme Ltd to Acme Systems; registration ID REG-26 is unchanged."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -510,19 +825,24 @@
   },
   {
     "id": "026-workflow-03",
-    "root": "runCase.nl",
+    "root": "analyzeContract.nl",
     "split_group": "design-brief-app-026",
     "inputs": {
       "request": {
         "caseId": "SYN-026-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "agreementIds": [
+          "C-26"
+        ],
+        "partyIds": [
+          "Acme Systems",
+          "Vendor V-26"
+        ],
+        "operationalScope": "Replacement of verified failed modules",
+        "ownerId": "Owner-26",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "contracts": [
           {
             "agreementIds": [
               "C-26"
@@ -594,6 +914,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "businessCalendars": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notice N-26 was dispatched to address 14 but agreement specifies address 41; courier receipt confirms dispatch only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "partyIdentityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notice N-26 was dispatched to address 14 but agreement specifies address 41; courier receipt confirms dispatch only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notice N-26 was dispatched to address 14 but agreement specifies address 41; courier receipt confirms dispatch only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "disputedClauseRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notice N-26 was dispatched to address 14 but agreement specifies address 41; courier receipt confirms dispatch only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "confidentialTaskRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Notice N-26 was dispatched to address 14 but agreement specifies address 41; courier receipt confirms dispatch only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -616,19 +1066,24 @@
   },
   {
     "id": "026-workflow-04",
-    "root": "runCase.nl",
+    "root": "analyzeContract.nl",
     "split_group": "design-brief-app-026",
     "inputs": {
       "request": {
         "caseId": "SYN-026-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "agreementIds": [
+          "C-26"
+        ],
+        "partyIds": [
+          "Acme Systems",
+          "Vendor V-26"
+        ],
+        "operationalScope": "Replacement of verified failed modules",
+        "ownerId": "Owner-26",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "contracts": [
           {
             "agreementIds": [
               "C-26"
@@ -700,6 +1155,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "businessCalendars": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause C-26 permits repair or replacement after review; operational consequence differs by defect severity and parties dispute severity."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "partyIdentityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause C-26 permits repair or replacement after review; operational consequence differs by defect severity and parties dispute severity."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause C-26 permits repair or replacement after review; operational consequence differs by defect severity and parties dispute severity."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "disputedClauseRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause C-26 permits repair or replacement after review; operational consequence differs by defect severity and parties dispute severity."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "confidentialTaskRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Clause C-26 permits repair or replacement after review; operational consequence differs by defect severity and parties dispute severity."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -722,19 +1307,24 @@
   },
   {
     "id": "026-workflow-05",
-    "root": "runCase.nl",
+    "root": "analyzeContract.nl",
     "split_group": "design-brief-app-026",
     "inputs": {
       "request": {
         "caseId": "SYN-026-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "agreementIds": [
+          "C-26"
+        ],
+        "partyIds": [
+          "Acme Systems",
+          "Vendor V-26"
+        ],
+        "operationalScope": "Replacement of verified failed modules",
+        "ownerId": "Owner-26",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "contracts": [
           {
             "agreementIds": [
               "C-26"
@@ -806,6 +1396,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "businessCalendars": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Confidential clause 9.2 requires a 48-hour notice; task card can carry deadline and recipient without clause text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "partyIdentityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Confidential clause 9.2 requires a 48-hour notice; task card can carry deadline and recipient without clause text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "noticeReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Confidential clause 9.2 requires a 48-hour notice; task card can carry deadline and recipient without clause text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "disputedClauseRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Confidential clause 9.2 requires a 48-hour notice; task card can carry deadline and recipient without clause text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "confidentialTaskRefs": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "026-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Executed agreement C-26 requires vendor V-26 to replace failed modules within 10 business days after a verified defect notice; clause 8.4 is signed and effective."
+              },
+              {
+                "id": "E2",
+                "source": "026-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Confidential clause 9.2 requires a 48-hour notice; task card can carry deadline and recipient without clause text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

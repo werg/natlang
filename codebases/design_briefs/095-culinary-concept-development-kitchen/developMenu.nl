@@ -1,0 +1,12 @@
+---
+description: Develop a dietary-aware menu and reconcile exact kitchen production before chef review.
+args:{ sourceRecord: MenuProject; sourceEvidence: EvidenceItem[];ledger:KitchenLedger;change:string[];checkpoint:KitchenCheckpoint}
+returns:KitchenProposal
+---
+Read `venueId`, `creativeBrief`, `ingredientInventoryIds`, `serviceWindow` and `chefOwnerId` from the top level of the MenuProject record. Use its food-safety and service constraints to govern each proposed dish and substitution; no generic recipe may override them. Carry every source fact and evidence ref into the analysis branch that depends on it; when any transformed proposal conflicts with this anchor, hold that branch for review instead of accepting the placeholder.
+
+Bind requirements = `interpretKitchenBrief(ledger.brief, change, ledger.ingredientFacts, sourceRecord, sourceEvidence)`. Keep mandatory restrictions distinct from preferences. Bind candidateDishes = `designDishConcepts(ledger, requirements)`; reject any proposed substitution whose verified ingredient facts do not cover the exact restriction.
+
+Bind composition = `composeServiceMenu(ledger, requirements, candidateDishes)`. Treat each shared sauce or prep component as one production node while retaining links to every dish. Use only the supplied `ledger.exactScaledBatches` artifact for the exact cover count, recipe revisions and yields; NatLang must not round or multiply recipe quantities. Preserve the artifact provenance for deterministic verification. Bind scaledBatches = ledger.exactScaledBatches. Bind resourceCheck = `scheduleKitchenLine(ledger, composition.sharedPrep, composition.dishes)`; overlapping use of a limited station is infeasible and must be replanned.
+
+Bind tasting = `propagateTastingRevisions(ledger, change, composition, resourceCheck)`. Separate subjective preferences from repeatable defects; a changed shared component invalidates all dependent dishes and disclosures. Bind safetyReview = `verifyIngredientAndServiceControls(ledger, requirements, tasting, scaledBatches)`. An allergen-free label requires verified venue controls plus qualified approval. Return a chef-review packet; do not claim food safety or release from recipe composition alone.

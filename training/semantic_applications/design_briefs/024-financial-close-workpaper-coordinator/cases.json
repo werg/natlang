@@ -292,19 +292,22 @@
   },
   {
     "id": "024-workflow-01",
-    "root": "runCase.nl",
+    "root": "coordinateClose.nl",
     "split_group": "design-brief-app-024",
     "inputs": {
       "request": {
         "caseId": "SYN-024-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "books": {
+        "workpapers": [
           {
             "entityId": "ENTITY-24",
             "period": "2026-09",
@@ -373,7 +376,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
       }
     },
     "expected": {
@@ -395,19 +529,22 @@
   },
   {
     "id": "024-workflow-02",
-    "root": "runCase.nl",
+    "root": "coordinateClose.nl",
     "split_group": "design-brief-app-024",
     "inputs": {
       "request": {
         "caseId": "SYN-024-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "books": {
+        "workpapers": [
           {
             "entityId": "ENTITY-24",
             "period": "2026-09",
@@ -476,7 +613,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
       }
     },
     "expected": {
@@ -498,19 +766,22 @@
   },
   {
     "id": "024-workflow-03",
-    "root": "runCase.nl",
+    "root": "coordinateClose.nl",
     "split_group": "design-brief-app-024",
     "inputs": {
       "request": {
         "caseId": "SYN-024-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "books": {
+        "workpapers": [
           {
             "entityId": "ENTITY-24",
             "period": "2026-09",
@@ -579,7 +850,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
       }
     },
     "expected": {
@@ -601,19 +1003,22 @@
   },
   {
     "id": "024-workflow-04",
-    "root": "runCase.nl",
+    "root": "coordinateClose.nl",
     "split_group": "design-brief-app-024",
     "inputs": {
       "request": {
         "caseId": "SYN-024-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "books": {
+        "workpapers": [
           {
             "entityId": "ENTITY-24",
             "period": "2026-09",
@@ -682,7 +1087,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
       }
     },
     "expected": {
@@ -704,19 +1240,22 @@
   },
   {
     "id": "024-workflow-05",
-    "root": "runCase.nl",
+    "root": "coordinateClose.nl",
     "split_group": "design-brief-app-024",
     "inputs": {
       "request": {
         "caseId": "SYN-024-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "books": {
+        "workpapers": [
           {
             "entityId": "ENTITY-24",
             "period": "2026-09",
@@ -785,7 +1324,138 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
-        ]
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
       }
     },
     "expected": {

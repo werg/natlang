@@ -2,4 +2,4 @@
 args: { assignments: RepairerMatch[], repair: CooperativeRepairRequest }
 returns: RepairSequence
 ---
-Order only approved checks and assigned tasks by their prerequisites. Reject a tool window already reserved, accept a substitute part only with compatibility evidence, and stop when any new cost or scope exceeds the customer authorization. Return workshop work only if all checks pass; otherwise hold or route to the specialist process.
+Bind parts = verifySparePartCompatibility(assignments, repair.parts). Bind tools = reserveSharedRepairTools(assignments, repair.toolWindows). Bind budget = reviewAuthorizedRepairBudget(assignments, parts, repair.budget). Order approved task prerequisites only after these checks. If any part is unsupported, tool conflicts, or scope/cost exceeds approval, stop only the affected work and request the required evidence or customer reapproval; never proceed with a substitute by inference.

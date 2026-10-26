@@ -145,3 +145,13 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type MediaAsset={id:string;revision:string;durationFrames:number;frameRate:number;speaker:string;claim:string;qualifier:string;contextBefore:string;contextAfter:string;rights:string[];sourceDate:string;correctedClaim:string;};
+export type Cut={assetId:string;inFrame:number;outFrame:number;};
+export type CutTransition={fromAssetId:string;toAssetId:string;narration:string;argument:string;};
+export type AssemblyState={id:string;revision:number;assets:MediaAsset[];cuts:Cut[];transitions:CutTransition[];targetFrames:number;approvedClaimIds:string[];captionsRevision:string;descriptionsRevision:string;};
+export type CutFinding={assetId:string;kind:'timecode'|'qualifier'|'rights'|'fact'|'implication'|'duration'|'correction';status:'clear'|'blocked'|'needs-review';evidenceIds:string[];reason:string;repair:string;};
+export type DocumentaryCheckpoint={assemblyId:string;revision:number;digest:string;checkedAssets:string[];invalidatedOutputs:string[];clearanceRefs:string[];receiptStatus:'none'|'sent'|'unknown'|'confirmed';};
+export type DocumentaryDeliverable={kind:'edit-list'|'script'|'captions'|'description'|'asset-manifest';revision:string;assemblyDigest:string;};
+export type AssemblyRelease={assembly:AssemblyState;findings:CutFinding[];deliverables:DocumentaryDeliverable[];clearanceTasks:string[];factCheckTasks:string[];checkpoint:DocumentaryCheckpoint;status:'blocked'|'review'|'frozen';};
+

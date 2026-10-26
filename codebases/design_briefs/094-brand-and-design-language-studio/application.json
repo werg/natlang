@@ -1,0 +1,91 @@
+{
+  "schema": "natlang.application/1",
+  "id": "094",
+  "title": "Brand And Design Language Studio",
+  "entrypoint": "shapeBrandSystem.nl",
+  "interfaces": [
+    {
+      "name": "shapeBrandSystem",
+      "path": "shapeBrandSystem.nl",
+      "purpose": "Maintain a sourced brand system and channel-specific assets under scoped approval."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverBrandConstraints",
+        "paths": [
+          "shapeBrandSystem/recoverProductConstraints.nl"
+        ]
+      },
+      {
+        "stage": "generateDirections",
+        "paths": [
+          "shapeBrandSystem/differentiateCreativeDirections.nl"
+        ]
+      },
+      {
+        "stage": "constructSystem",
+        "paths": [
+          "shapeBrandSystem/testBrandRules.nl"
+        ]
+      },
+      {
+        "stage": "applyChannels",
+        "paths": [
+          "shapeBrandSystem/adaptBrandAssets.nl"
+        ]
+      },
+      {
+        "stage": "reviewCoherence",
+        "paths": [
+          "shapeBrandSystem/auditBrandCoherence.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "shapeBrandSystem/recoverProductConstraints.nl",
+          "shapeBrandSystem/adaptBrandAssets.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "shapeBrandSystem/recoverProductConstraints.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "shapeBrandSystem/testBrandRules.nl",
+          "shapeBrandSystem/adaptBrandAssets.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "shapeBrandSystem/auditBrandCoherence.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "shapeBrandSystem/auditBrandCoherence.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "runCase/recoverBrandConstraints/audit/qualify.nl",
+    "shapeBrandSystem.nl",
+    "shapeBrandSystem/adaptBrandAssets.nl",
+    "shapeBrandSystem/auditBrandCoherence.nl",
+    "shapeBrandSystem/differentiateCreativeDirections.nl",
+    "shapeBrandSystem/recoverProductConstraints.nl",
+    "shapeBrandSystem/testBrandRules.nl",
+    "types.ts"
+  ]
+}

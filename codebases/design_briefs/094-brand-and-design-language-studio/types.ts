@@ -143,3 +143,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type ProductBrief={id:string;product:string;capabilities:string[];prohibitions:string[];audiences:string[];goals:string[];channels:string[];};
+export type ClaimEvidence={claimId:string;text:string;sourceId:string;revision:string;status:'supported'|'disputed'|'withdrawn';};
+export type BrandDirection={id:string;name:string;positioning:string;emphasis:string[];exclusions:string[];messageLogic:string;claimIds:string[];rightsQuestions:string[];};
+export type VoiceRule={context:string;principle:string;allowedExamples:string[];disallowedExamples:string[];disclosure:string[];};
+export type BrandSystemState={id:string;revision:string;directionId:string;rules:VoiceRule[];approvedByClient:boolean;approvalScope:string[];};
+export type BrandAssetDraft={id:string;channel:string;task:string;copy:string;claimIds:string[];systemRevision:string;requiredDisclosures:string[];};
+export type BrandDefect={assetId:string;kind:'unsupported-claim'|'rights'|'voice'|'disclosure'|'inconsistent-term'|'approval-scope';state:'blocked'|'review';sourceIds:string[];repair:string;};
+export type BrandCheckpoint={productRevision:string;systemRevision:string;assetRevisions:string[];invalidatedAssetIds:string[];approvedScopes:string[];};
+export type BrandReviewPacket={directions:BrandDirection[];system:BrandSystemState;assets:BrandAssetDraft[];defects:BrandDefect[];clearanceTasks:string[];checkpoint:BrandCheckpoint;status:'blocked'|'review'|'ready';};
+

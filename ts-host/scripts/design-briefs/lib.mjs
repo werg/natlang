@@ -123,6 +123,9 @@ export function checkNativeCalls(files, root = 'runCase.nl') {
   let references = 0;
   for (const path of paths) {
     const definition = programDefinition({ semantics: { root: path, files } });
+    const formalNames = declaredInlineNames(files[path]) ?? definition.params.map(parameter => parameter.name);
+    if (new Set(formalNames).size !== formalNames.length)
+      throw new Error(`${path}: duplicate native parameter names`);
     const localTypes = definitionNode(definition, definition.params.map(() => undefined)).types;
     for (const [name, type] of Object.entries(sharedTypes)) {
       if (/^(Draft|StageResult)/.test(name) && localTypes[name] && JSON.stringify(type) !== JSON.stringify(localTypes[name]))
@@ -134,6 +137,8 @@ export function checkNativeCalls(files, root = 'runCase.nl') {
       const call = new RegExp(`\\b${escaped}\\s*\\(|\\b(?:call|calling|invoke|invoking)\\s+${escaped}\\b`, 'i');
       if (call.test(definition.body)) {
         if (!visible.has(name)) throw new Error(`${path}: referenced helper ${name} is outside its native callable scope`);
+        if (new RegExp(`[A-Za-z0-9_-]+/${escaped}\\s*\\(`).test(definition.body))
+          throw new Error(`${path}: invoke native helper ${name} by its callable name, not a source-file path`);
         const child = definition.codebase[name];
         if (child.kind === 'natlang') {
           const parameters = Object.keys(child.args ?? {}), minimum = parameters.filter(name => !name.endsWith('?')).length;
@@ -148,6 +153,33 @@ export function checkNativeCalls(files, root = 'runCase.nl') {
     }
   }
   return { functions: paths.length, visible_references: references };
+}
+
+// Native metadata can normalize an inline argument map before exposing params.
+// Inspect its top-level keys first so a duplicate cannot silently replace a type.
+function declaredInlineNames(source) {
+  const header = source.split(/^---\s*$/m)[1] ?? '';
+  const clause = /^args\s*:\s*\{(.*)\}\s*$/m.exec(header)?.[1];
+  if (clause === undefined) return null;
+  const fields = []; let depth = 0, quote = null, escape = false, start = 0;
+  for (let i = 0; i <= clause.length; i++) {
+    const c = clause[i];
+    if (quote) {
+      if (escape) escape = false;
+      else if (c === '\\') escape = true;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (c && '([{<'.includes(c)) depth++;
+    else if (c && ')]}>'.includes(c) && depth > 0) depth--;
+    if (i === clause.length || (depth === 0 && (c === ',' || c === ';'))) {
+      const match = /^\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$]*\??))\s*:/.exec(clause.slice(start, i));
+      if (match) fields.push((match[1] ?? match[2] ?? match[3]).replace(/\?$/, ''));
+      start = i + 1;
+    }
+  }
+  return fields;
 }
 
 // Only inspect explicitly parenthesized calls. Natural-language references remain potential graph evidence.

@@ -7,11 +7,12 @@ import { openDesignBriefStore, StoreError } from './store.mjs';
 
 const capabilities = { brief: {
   read: ['reader','operator','reviewer'], write: ['operator'], propose: ['operator'], approve: ['reviewer'],
-  commit: ['operator'], reject: ['reviewer','operator'], dispatch: ['dispatcher'],
+  commit: ['operator'], reject: ['reviewer','operator'], dispatch: ['dispatcher'], reconcile: ['reconciler'],
 } };
 const op = { id: 'op-1', tenantId: 'tenant-1', roles: ['operator'] };
 const reviewer = { id: 'reviewer-1', tenantId: 'tenant-1', roles: ['reviewer'] };
 const dispatcher = { id: 'worker-principal', tenantId: 'tenant-1', roles: ['dispatcher'] };
+const reconciler = { id: 'ops-reconciler', tenantId: 'tenant-1', roles: ['reconciler'] };
 const reader = { id: 'reader-1', tenantId: 'tenant-1', roles: ['reader'] };
 const key = { tenantId: 'tenant-1', appId: 'brief', caseId: 'case-1' };
 const snapshot = () => ({ caseRecords: [{ customer: { id: 'c-1' } }], capturedAt: '2026-10-26T00:00:00Z', previousEvidencePages: [{ id: 'previous-1' }], evidencePages: [{ id: 'page-1' }], policyCandidates: [], searchedPartitions: [] });
@@ -100,7 +101,7 @@ test('expired outbox lease after a lost acknowledgment becomes unknown and is re
     assert.equal(s.readOutbox(dispatcher,claim.id).status,'leased');
     assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:100,limit:1}),[]);
     assert.equal(s.readOutbox(dispatcher,claim.id).status,'unknown');
-    assert.deepEqual(s.reconcileOutbox(dispatcher,claim.id,{outcome:'delivered',receipt:{remoteId:'receipt-1'},evidence:{kind:'remote_receipt',reference:'receipt-1'}}),{id:claim.id,status:'delivered',evidence:{kind:'remote_receipt',reference:'receipt-1'}});
+    assert.deepEqual(s.reconcileOutbox(reconciler,claim.id,{outcome:'delivered',receipt:{remoteId:'receipt-1'},evidence:{kind:'operator_assertion',reference:'receipt-1',assertion:'I confirmed the receiver receipt in its audit console.'}}),{id:claim.id,status:'delivered',evidence:{kind:'operator_assertion',reference:'receipt-1',assertion:'I confirmed the receiver receipt in its audit console.'}});
     assert.equal(s.readOutbox(dispatcher,claim.id).receipt.remoteId,'receipt-1');
     assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-3',leaseMs:100,limit:1}),[]);s.close();
   }finally{t.cleanup();}
@@ -110,7 +111,7 @@ test('failed and unknown sends are not automatically retried; only explicit not-
   const t=tempDb();try{const s=open(t.filename);const {p}=make(s);const a=approve(s,p);commit(s,p,a);const [claim]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-1',leaseMs:1000,limit:1});
     assert.deepEqual(s.failOutbox(dispatcher,claim.id,'worker-1',{code:'timeout',ambiguous:true}),{id:claim.id,status:'unknown',code:'timeout'});
     assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:1000,limit:1}),[]);
-    assert.deepEqual(s.reconcileOutbox(dispatcher,claim.id,{outcome:'not_sent',evidence:{kind:'not_sent_confirmation',reference:'operator-check-22'}}),{id:claim.id,status:'pending',evidence:{kind:'not_sent_confirmation',reference:'operator-check-22'}});
+    assert.deepEqual(s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:{kind:'operator_assertion',reference:'operator-check-22',assertion:'I verified the receiver did not accept this key.'}}),{id:claim.id,status:'pending',evidence:{kind:'operator_assertion',reference:'operator-check-22',assertion:'I verified the receiver did not accept this key.'}});
     assert.equal(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:1000,limit:1})[0].attempt,2);s.close();
   }finally{t.cleanup();}
 });
@@ -137,18 +138,23 @@ test('idempotency is actor-bound and replay lookup works across two open SQLite 
     assert.equal(first.approver,reviewer.id);a.close();b.close();}finally{t.cleanup();}
 });
 
-test('expired lease and failed delivery reconciliation are audited, and requeue requires durable evidence', () => {
+test('only separate reconciliation authority can make an auditable operator assertion to release an outbox entry', () => {
   const t=tempDb();try{let now=3000;const s=open(t.filename,()=>now);const {p}=make(s);const a=approve(s,p);commit(s,p,a);
     const [claim]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-x',leaseMs:100,limit:1});
     assert.deepEqual(s.failOutbox(dispatcher,claim.id,'worker-x',{code:'remote_rejected'}),{id:claim.id,status:'failed',code:'remote_rejected'});
-    assert.throws(()=>s.reconcileOutbox(dispatcher,claim.id,{outcome:'not_sent'}),e=>code(e,'evidence_required'));
-    const result=s.reconcileOutbox(dispatcher,claim.id,{outcome:'not_sent',evidence:{kind:'remote_negative_receipt',reference:'receipt-negative-3'}});
-    assert.equal(result.status,'pending');assert.deepEqual(s.readOutbox(dispatcher,claim.id).reconciliation,{kind:'remote_negative_receipt',reference:'receipt-negative-3'});
+    const assertion={kind:'operator_assertion',reference:'receiver-audit-3',assertion:'I confirmed no acceptance for this idempotency key.'};
+    assert.throws(()=>s.reconcileOutbox(dispatcher,claim.id,{outcome:'not_sent',evidence:assertion}),e=>code(e,'forbidden'));
+    assert.equal(s.readOutbox(dispatcher,claim.id).status,'failed','unauthorized reconciliation leaves the item unreleased');
+    assert.throws(()=>s.reconcileOutbox({...reconciler,tenantId:'tenant-2'},claim.id,{outcome:'not_sent',evidence:assertion}),e=>code(e,'not_found'));
+    assert.throws(()=>s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:{kind:'remote_negative_receipt',reference:'receipt-negative-3'}}),e=>code(e,'evidence_required'));
+    const result=s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:assertion});
+    assert.equal(result.status,'pending');assert.deepEqual(s.readOutbox(dispatcher,claim.id).reconciliation,assertion);
+    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'&&e.actor===reconciler.id&&e.detail.evidence.assertion===assertion.assertion));
     const [next]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-y',leaseMs:100,limit:1});now=3200;
     assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-z',leaseMs:100,limit:1}),[]);
     assert.equal(s.readOutbox(dispatcher,next.id).status,'unknown');
     assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.claimed'));
     assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.unknown'));
-    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'));
+    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'&&e.actor===reconciler.id));
     s.close();}finally{t.cleanup();}
 });

@@ -212,60 +212,120 @@
   },
   {
     "id": "099-workflow-1",
-    "root": "runCase.nl",
+    "root": "runNegotiationArena.nl",
     "split_group": "world-099-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
-      "records": [
+      "scenario": {
+        "id": "099-workflow-1",
+        "revision": 1,
+        "issues": [
+          {
+            "id": "price",
+            "name": "price",
+            "unit": "USD",
+            "minimum": "0",
+            "maximum": "10000"
+          }
+        ],
+        "roles": [
+          {
+            "id": "role-a",
+            "authority": [
+              "price"
+            ],
+            "privatePriorities": [
+              "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence."
+            ],
+            "reservationConditions": [],
+            "conductLimits": [
+              "no coercion"
+            ],
+            "disclosableFacts": []
+          }
+        ],
+        "learningGoals": [
+          "099-workflow-1-record"
+        ],
+        "allowedTactics": [
+          "clarify",
+          "offer",
+          "counter"
+        ],
+        "prohibitedTactics": [
+          "coercion"
+        ],
+        "debriefPolicy": [
+          "instructor only"
+        ],
+        "acceptanceRule": "explicit terms accepted before expiry"
+      },
+      "learnerUtterance": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "roleId": "role-a",
+      "turns": [
         {
-          "id": "099-workflow-1-record",
-          "caseId": "099-workflow-1",
-          "sourceRefs": [
-            "099-wf-1-source"
-          ],
-          "state": "draft",
-          "kind": "NegotiationExercise",
-          "subject": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
-          "evidenceIds": [
-            "099-wf-1-source"
-          ],
-          "fields": {
-            "sourceArtifact": "099-wf-1-source",
-            "sourceVersion": "v1"
+          "turnId": "context",
+          "speaker": "system",
+          "utterance": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+          "offer": null,
+          "counterpart": null,
+          "state": "open"
+        }
+      ],
+      "feasibility": [
+        {
+          "scenarioRevision": 1,
+          "offerId": "099-workflow-1-turn",
+          "feasible": true,
+          "authorityValid": true,
+          "withinIssueBounds": true,
+          "utilityBandByRole": {
+            "role-a": "private"
           },
-          "learningObjectives": [
-            "Clarify conditional offers.",
-            "Respect authority and explicit acceptance."
+          "hiddenToLearner": [
+            "utilityBandByRole"
           ],
-          "participantIds": [
-            "BUYER-9",
-            "SUPPLIER-4"
-          ],
-          "scenarioFamily": "repair-deadline negotiation",
-          "instructorId": "INSTR-99",
-          "conductPolicyId": "CONDUCT-4",
-          "workflowStatus": "candidate"
+          "verifier": "exact scenario feasibility model"
         }
       ],
-      "evidence": [
-        {
-          "id": "099-wf-1-source",
-          "source": "primary case artifact 099-E1",
-          "version": "v1",
-          "text": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "099-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "099-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "scenarioId": "099-workflow-1",
+        "revision": 1,
+        "turns": [],
+        "openOfferIds": [],
+        "acceptedTerms": [],
+        "difficultyRevision": "v1",
+        "debriefReleaseScope": "instructor only"
+      },
+      "sourceRecord": {
+        "id": "099-workflow-1-record",
+        "caseId": "099-workflow-1",
+        "sourceRefs": [
+          "099-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "NegotiationExercise",
+        "subject": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+        "evidenceIds": [
+          "099-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "099-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "learningObjectives": [
+          "Clarify conditional offers.",
+          "Respect authority and explicit acceptance."
+        ],
+        "participantIds": [
+          "BUYER-9",
+          "SUPPLIER-4"
+        ],
+        "scenarioFamily": "repair-deadline negotiation",
+        "instructorId": "INSTR-99",
+        "conductPolicyId": "CONDUCT-4",
+        "workflowStatus": "candidate"
+      },
+      "sourceEvidence": [
         {
           "id": "099-wf-1-source",
           "source": "primary case artifact 099-E1",
@@ -297,60 +357,120 @@
   },
   {
     "id": "099-workflow-2",
-    "root": "runCase.nl",
+    "root": "runNegotiationArena.nl",
     "split_group": "world-099-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
-      "records": [
+      "scenario": {
+        "id": "099-workflow-2",
+        "revision": 1,
+        "issues": [
+          {
+            "id": "price",
+            "name": "price",
+            "unit": "USD",
+            "minimum": "0",
+            "maximum": "10000"
+          }
+        ],
+        "roles": [
+          {
+            "id": "role-a",
+            "authority": [
+              "price"
+            ],
+            "privatePriorities": [
+              "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence."
+            ],
+            "reservationConditions": [],
+            "conductLimits": [
+              "no coercion"
+            ],
+            "disclosableFacts": []
+          }
+        ],
+        "learningGoals": [
+          "099-workflow-2-record"
+        ],
+        "allowedTactics": [
+          "clarify",
+          "offer",
+          "counter"
+        ],
+        "prohibitedTactics": [
+          "coercion"
+        ],
+        "debriefPolicy": [
+          "instructor only"
+        ],
+        "acceptanceRule": "explicit terms accepted before expiry"
+      },
+      "learnerUtterance": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "roleId": "role-a",
+      "turns": [
         {
-          "id": "099-workflow-2-record",
-          "caseId": "099-workflow-2",
-          "sourceRefs": [
-            "099-wf-2-source"
-          ],
-          "state": "draft",
-          "kind": "NegotiationExercise",
-          "subject": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
-          "evidenceIds": [
-            "099-wf-2-source"
-          ],
-          "fields": {
-            "sourceArtifact": "099-wf-2-source",
-            "sourceVersion": "v1"
+          "turnId": "context",
+          "speaker": "system",
+          "utterance": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+          "offer": null,
+          "counterpart": null,
+          "state": "open"
+        }
+      ],
+      "feasibility": [
+        {
+          "scenarioRevision": 1,
+          "offerId": "099-workflow-2-turn",
+          "feasible": true,
+          "authorityValid": true,
+          "withinIssueBounds": true,
+          "utilityBandByRole": {
+            "role-a": "private"
           },
-          "learningObjectives": [
-            "Clarify conditional offers.",
-            "Respect authority and explicit acceptance."
+          "hiddenToLearner": [
+            "utilityBandByRole"
           ],
-          "participantIds": [
-            "BUYER-9",
-            "SUPPLIER-4"
-          ],
-          "scenarioFamily": "repair-deadline negotiation",
-          "instructorId": "INSTR-99",
-          "conductPolicyId": "CONDUCT-4",
-          "workflowStatus": "candidate"
+          "verifier": "exact scenario feasibility model"
         }
       ],
-      "evidence": [
-        {
-          "id": "099-wf-2-source",
-          "source": "primary case artifact 099-E2",
-          "version": "v1",
-          "text": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "099-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "099-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "scenarioId": "099-workflow-2",
+        "revision": 1,
+        "turns": [],
+        "openOfferIds": [],
+        "acceptedTerms": [],
+        "difficultyRevision": "v1",
+        "debriefReleaseScope": "instructor only"
+      },
+      "sourceRecord": {
+        "id": "099-workflow-2-record",
+        "caseId": "099-workflow-2",
+        "sourceRefs": [
+          "099-wf-2-source"
+        ],
+        "state": "draft",
+        "kind": "NegotiationExercise",
+        "subject": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+        "evidenceIds": [
+          "099-wf-2-source"
+        ],
+        "fields": {
+          "sourceArtifact": "099-wf-2-source",
+          "sourceVersion": "v1"
+        },
+        "learningObjectives": [
+          "Clarify conditional offers.",
+          "Respect authority and explicit acceptance."
+        ],
+        "participantIds": [
+          "BUYER-9",
+          "SUPPLIER-4"
+        ],
+        "scenarioFamily": "repair-deadline negotiation",
+        "instructorId": "INSTR-99",
+        "conductPolicyId": "CONDUCT-4",
+        "workflowStatus": "candidate"
+      },
+      "sourceEvidence": [
         {
           "id": "099-wf-2-source",
           "source": "primary case artifact 099-E2",
@@ -382,60 +502,120 @@
   },
   {
     "id": "099-workflow-3",
-    "root": "runCase.nl",
+    "root": "runNegotiationArena.nl",
     "split_group": "world-099-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
-      "records": [
+      "scenario": {
+        "id": "099-workflow-3",
+        "revision": 1,
+        "issues": [
+          {
+            "id": "price",
+            "name": "price",
+            "unit": "USD",
+            "minimum": "0",
+            "maximum": "10000"
+          }
+        ],
+        "roles": [
+          {
+            "id": "role-a",
+            "authority": [
+              "price"
+            ],
+            "privatePriorities": [
+              "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence."
+            ],
+            "reservationConditions": [],
+            "conductLimits": [
+              "no coercion"
+            ],
+            "disclosableFacts": []
+          }
+        ],
+        "learningGoals": [
+          "099-workflow-3-record"
+        ],
+        "allowedTactics": [
+          "clarify",
+          "offer",
+          "counter"
+        ],
+        "prohibitedTactics": [
+          "coercion"
+        ],
+        "debriefPolicy": [
+          "instructor only"
+        ],
+        "acceptanceRule": "explicit terms accepted before expiry"
+      },
+      "learnerUtterance": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "roleId": "role-a",
+      "turns": [
         {
-          "id": "099-workflow-3-record",
-          "caseId": "099-workflow-3",
-          "sourceRefs": [
-            "099-wf-3-source"
-          ],
-          "state": "draft",
-          "kind": "NegotiationExercise",
-          "subject": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
-          "evidenceIds": [
-            "099-wf-3-source"
-          ],
-          "fields": {
-            "sourceArtifact": "099-wf-3-source",
-            "sourceVersion": "v1"
+          "turnId": "context",
+          "speaker": "system",
+          "utterance": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+          "offer": null,
+          "counterpart": null,
+          "state": "open"
+        }
+      ],
+      "feasibility": [
+        {
+          "scenarioRevision": 1,
+          "offerId": "099-workflow-3-turn",
+          "feasible": true,
+          "authorityValid": true,
+          "withinIssueBounds": true,
+          "utilityBandByRole": {
+            "role-a": "private"
           },
-          "learningObjectives": [
-            "Clarify conditional offers.",
-            "Respect authority and explicit acceptance."
+          "hiddenToLearner": [
+            "utilityBandByRole"
           ],
-          "participantIds": [
-            "BUYER-9",
-            "SUPPLIER-4"
-          ],
-          "scenarioFamily": "repair-deadline negotiation",
-          "instructorId": "INSTR-99",
-          "conductPolicyId": "CONDUCT-4",
-          "workflowStatus": "candidate"
+          "verifier": "exact scenario feasibility model"
         }
       ],
-      "evidence": [
-        {
-          "id": "099-wf-3-source",
-          "source": "primary case artifact 099-E3",
-          "version": "v1",
-          "text": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "099-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "099-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "scenarioId": "099-workflow-3",
+        "revision": 1,
+        "turns": [],
+        "openOfferIds": [],
+        "acceptedTerms": [],
+        "difficultyRevision": "v1",
+        "debriefReleaseScope": "instructor only"
+      },
+      "sourceRecord": {
+        "id": "099-workflow-3-record",
+        "caseId": "099-workflow-3",
+        "sourceRefs": [
+          "099-wf-3-source"
+        ],
+        "state": "draft",
+        "kind": "NegotiationExercise",
+        "subject": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+        "evidenceIds": [
+          "099-wf-3-source"
+        ],
+        "fields": {
+          "sourceArtifact": "099-wf-3-source",
+          "sourceVersion": "v1"
+        },
+        "learningObjectives": [
+          "Clarify conditional offers.",
+          "Respect authority and explicit acceptance."
+        ],
+        "participantIds": [
+          "BUYER-9",
+          "SUPPLIER-4"
+        ],
+        "scenarioFamily": "repair-deadline negotiation",
+        "instructorId": "INSTR-99",
+        "conductPolicyId": "CONDUCT-4",
+        "workflowStatus": "candidate"
+      },
+      "sourceEvidence": [
         {
           "id": "099-wf-3-source",
           "source": "primary case artifact 099-E3",
@@ -467,60 +647,120 @@
   },
   {
     "id": "099-workflow-4",
-    "root": "runCase.nl",
+    "root": "runNegotiationArena.nl",
     "split_group": "world-099-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
-      "records": [
+      "scenario": {
+        "id": "099-workflow-4",
+        "revision": 1,
+        "issues": [
+          {
+            "id": "price",
+            "name": "price",
+            "unit": "USD",
+            "minimum": "0",
+            "maximum": "10000"
+          }
+        ],
+        "roles": [
+          {
+            "id": "role-a",
+            "authority": [
+              "price"
+            ],
+            "privatePriorities": [
+              "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence."
+            ],
+            "reservationConditions": [],
+            "conductLimits": [
+              "no coercion"
+            ],
+            "disclosableFacts": []
+          }
+        ],
+        "learningGoals": [
+          "099-workflow-4-record"
+        ],
+        "allowedTactics": [
+          "clarify",
+          "offer",
+          "counter"
+        ],
+        "prohibitedTactics": [
+          "coercion"
+        ],
+        "debriefPolicy": [
+          "instructor only"
+        ],
+        "acceptanceRule": "explicit terms accepted before expiry"
+      },
+      "learnerUtterance": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "roleId": "role-a",
+      "turns": [
         {
-          "id": "099-workflow-4-record",
-          "caseId": "099-workflow-4",
-          "sourceRefs": [
-            "099-wf-4-source"
-          ],
-          "state": "draft",
-          "kind": "NegotiationExercise",
-          "subject": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
-          "evidenceIds": [
-            "099-wf-4-source"
-          ],
-          "fields": {
-            "sourceArtifact": "099-wf-4-source",
-            "sourceVersion": "v1"
+          "turnId": "context",
+          "speaker": "system",
+          "utterance": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+          "offer": null,
+          "counterpart": null,
+          "state": "open"
+        }
+      ],
+      "feasibility": [
+        {
+          "scenarioRevision": 1,
+          "offerId": "099-workflow-4-turn",
+          "feasible": true,
+          "authorityValid": true,
+          "withinIssueBounds": true,
+          "utilityBandByRole": {
+            "role-a": "private"
           },
-          "learningObjectives": [
-            "Clarify conditional offers.",
-            "Respect authority and explicit acceptance."
+          "hiddenToLearner": [
+            "utilityBandByRole"
           ],
-          "participantIds": [
-            "BUYER-9",
-            "SUPPLIER-4"
-          ],
-          "scenarioFamily": "repair-deadline negotiation",
-          "instructorId": "INSTR-99",
-          "conductPolicyId": "CONDUCT-4",
-          "workflowStatus": "candidate"
+          "verifier": "exact scenario feasibility model"
         }
       ],
-      "evidence": [
-        {
-          "id": "099-wf-4-source",
-          "source": "primary case artifact 099-E4",
-          "version": "v1",
-          "text": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "099-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "099-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "scenarioId": "099-workflow-4",
+        "revision": 1,
+        "turns": [],
+        "openOfferIds": [],
+        "acceptedTerms": [],
+        "difficultyRevision": "v1",
+        "debriefReleaseScope": "instructor only"
+      },
+      "sourceRecord": {
+        "id": "099-workflow-4-record",
+        "caseId": "099-workflow-4",
+        "sourceRefs": [
+          "099-wf-4-source"
+        ],
+        "state": "draft",
+        "kind": "NegotiationExercise",
+        "subject": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+        "evidenceIds": [
+          "099-wf-4-source"
+        ],
+        "fields": {
+          "sourceArtifact": "099-wf-4-source",
+          "sourceVersion": "v1"
+        },
+        "learningObjectives": [
+          "Clarify conditional offers.",
+          "Respect authority and explicit acceptance."
+        ],
+        "participantIds": [
+          "BUYER-9",
+          "SUPPLIER-4"
+        ],
+        "scenarioFamily": "repair-deadline negotiation",
+        "instructorId": "INSTR-99",
+        "conductPolicyId": "CONDUCT-4",
+        "workflowStatus": "candidate"
+      },
+      "sourceEvidence": [
         {
           "id": "099-wf-4-source",
           "source": "primary case artifact 099-E4",
@@ -552,60 +792,120 @@
   },
   {
     "id": "099-workflow-5",
-    "root": "runCase.nl",
+    "root": "runNegotiationArena.nl",
     "split_group": "world-099-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
-      "records": [
+      "scenario": {
+        "id": "099-workflow-5",
+        "revision": 1,
+        "issues": [
+          {
+            "id": "price",
+            "name": "price",
+            "unit": "USD",
+            "minimum": "0",
+            "maximum": "10000"
+          }
+        ],
+        "roles": [
+          {
+            "id": "role-a",
+            "authority": [
+              "price"
+            ],
+            "privatePriorities": [
+              "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence."
+            ],
+            "reservationConditions": [],
+            "conductLimits": [
+              "no coercion"
+            ],
+            "disclosableFacts": []
+          }
+        ],
+        "learningGoals": [
+          "099-workflow-5-record"
+        ],
+        "allowedTactics": [
+          "clarify",
+          "offer",
+          "counter"
+        ],
+        "prohibitedTactics": [
+          "coercion"
+        ],
+        "debriefPolicy": [
+          "instructor only"
+        ],
+        "acceptanceRule": "explicit terms accepted before expiry"
+      },
+      "learnerUtterance": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "roleId": "role-a",
+      "turns": [
         {
-          "id": "099-workflow-5-record",
-          "caseId": "099-workflow-5",
-          "sourceRefs": [
-            "099-wf-5-source"
-          ],
-          "state": "draft",
-          "kind": "NegotiationExercise",
-          "subject": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
-          "evidenceIds": [
-            "099-wf-5-source"
-          ],
-          "fields": {
-            "sourceArtifact": "099-wf-5-source",
-            "sourceVersion": "v1"
+          "turnId": "context",
+          "speaker": "system",
+          "utterance": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+          "offer": null,
+          "counterpart": null,
+          "state": "open"
+        }
+      ],
+      "feasibility": [
+        {
+          "scenarioRevision": 1,
+          "offerId": "099-workflow-5-turn",
+          "feasible": true,
+          "authorityValid": true,
+          "withinIssueBounds": true,
+          "utilityBandByRole": {
+            "role-a": "private"
           },
-          "learningObjectives": [
-            "Clarify conditional offers.",
-            "Respect authority and explicit acceptance."
+          "hiddenToLearner": [
+            "utilityBandByRole"
           ],
-          "participantIds": [
-            "BUYER-9",
-            "SUPPLIER-4"
-          ],
-          "scenarioFamily": "repair-deadline negotiation",
-          "instructorId": "INSTR-99",
-          "conductPolicyId": "CONDUCT-4",
-          "workflowStatus": "candidate"
+          "verifier": "exact scenario feasibility model"
         }
       ],
-      "evidence": [
-        {
-          "id": "099-wf-5-source",
-          "source": "primary case artifact 099-E5",
-          "version": "v1",
-          "text": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "099-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "099-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "scenarioId": "099-workflow-5",
+        "revision": 1,
+        "turns": [],
+        "openOfferIds": [],
+        "acceptedTerms": [],
+        "difficultyRevision": "v1",
+        "debriefReleaseScope": "instructor only"
+      },
+      "sourceRecord": {
+        "id": "099-workflow-5-record",
+        "caseId": "099-workflow-5",
+        "sourceRefs": [
+          "099-wf-5-source"
+        ],
+        "state": "draft",
+        "kind": "NegotiationExercise",
+        "subject": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+        "evidenceIds": [
+          "099-wf-5-source"
+        ],
+        "fields": {
+          "sourceArtifact": "099-wf-5-source",
+          "sourceVersion": "v1"
+        },
+        "learningObjectives": [
+          "Clarify conditional offers.",
+          "Respect authority and explicit acceptance."
+        ],
+        "participantIds": [
+          "BUYER-9",
+          "SUPPLIER-4"
+        ],
+        "scenarioFamily": "repair-deadline negotiation",
+        "instructorId": "INSTR-99",
+        "conductPolicyId": "CONDUCT-4",
+        "workflowStatus": "candidate"
+      },
+      "sourceEvidence": [
         {
           "id": "099-wf-5-source",
           "source": "primary case artifact 099-E5",

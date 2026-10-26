@@ -1,0 +1,5 @@
+---
+args: { request: AmendmentReviewRequest; baseline: GoalContract; targets: AmendmentTargetMap; scope: AmendmentScopeMap; composition: ObligationComposition; impacts: AmendmentImpactMap; regressions: EvidencePage[]; exceptionCheck: AmendmentGuardrail; cutoverReview: AmendmentGuardrail }
+returns: AmendmentReleasePlan
+---
+Create a before-after release package only when target resolution, temporal scope, precedence, impact ownership, exceptionCheck.blockers and cutoverReview.blockers are all clear. Preserve every exceptionCheck and cutoverReview finding in release blockers. Preserve every exceptionCheck finding in release blockers. Each lost baseline exception must have explicit signed removal authority; otherwise block. Require reviewer identity and an exact composed-diff hash. Describe active-case rebasing as a proposed migration decision and preserve the superseded baseline for rollback and audit. This plan does not publish or execute migrations.

@@ -286,19 +286,23 @@
   },
   {
     "id": "027-workflow-01",
-    "root": "runCase.nl",
+    "root": "reviewAmendment.nl",
     "split_group": "design-brief-app-027",
     "inputs": {
       "request": {
         "caseId": "SYN-027-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baseAgreementId": "B-27",
+        "amendmentIds": [
+          "A-27",
+          "A-28"
+        ],
+        "effectiveDate": "2026-10-01",
+        "reviewOwnerId": "Reviewer-27",
+        "baselineHash": "sha256:B27",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "executed": {
+        "agreements": [
           {
             "baseAgreementId": "B-27",
             "amendmentIds": [
@@ -377,6 +381,181 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "executedEditions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 references section 4, resolved to executed edition B-27 clause 4.2 by its signed exhibit and hash."
+              },
+              {
+                "id": "E3",
+                "source": "027-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The release draft applies A-27 to base edition B-26, whose clause numbering differs; target identity is not established."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 references section 4, resolved to executed edition B-27 clause 4.2 by its signed exhibit and hash."
+              },
+              {
+                "id": "E3",
+                "source": "027-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The release draft applies A-27 to base edition B-26, whose clause numbering differs; target identity is not established."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "overlapEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 references section 4, resolved to executed edition B-27 clause 4.2 by its signed exhibit and hash."
+              },
+              {
+                "id": "E3",
+                "source": "027-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The release draft applies A-27 to base edition B-26, whose clause numbering differs; target identity is not established."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "cutoverReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 references section 4, resolved to executed edition B-27 clause 4.2 by its signed exhibit and hash."
+              },
+              {
+                "id": "E3",
+                "source": "027-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The release draft applies A-27 to base edition B-26, whose clause numbering differs; target identity is not established."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exceptionRegressions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 references section 4, resolved to executed edition B-27 clause 4.2 by its signed exhibit and hash."
+              },
+              {
+                "id": "E3",
+                "source": "027-source-3",
+                "version": "v3",
+                "observedAt": "2026-10-03",
+                "authority": "independent versioned record",
+                "scope": "one named case, current period",
+                "text": "The release draft applies A-27 to base edition B-26, whose clause numbering differs; target identity is not established."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -399,19 +578,23 @@
   },
   {
     "id": "027-workflow-02",
-    "root": "runCase.nl",
+    "root": "reviewAmendment.nl",
     "split_group": "design-brief-app-027",
     "inputs": {
       "request": {
         "caseId": "SYN-027-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baseAgreementId": "B-27",
+        "amendmentIds": [
+          "A-27",
+          "A-28"
+        ],
+        "effectiveDate": "2026-10-01",
+        "reviewOwnerId": "Reviewer-27",
+        "baselineHash": "sha256:B27",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "executed": {
+        "agreements": [
           {
             "baseAgreementId": "B-27",
             "amendmentIds": [
@@ -481,6 +664,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "executedEditions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Retroactive A-27 arrived after $3,200 billing; source says correction is proposed, no posted credit or approval exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Retroactive A-27 arrived after $3,200 billing; source says correction is proposed, no posted credit or approval exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "overlapEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Retroactive A-27 arrived after $3,200 billing; source says correction is proposed, no posted credit or approval exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "cutoverReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Retroactive A-27 arrived after $3,200 billing; source says correction is proposed, no posted credit or approval exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exceptionRegressions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Retroactive A-27 arrived after $3,200 billing; source says correction is proposed, no posted credit or approval exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -503,19 +816,23 @@
   },
   {
     "id": "027-workflow-03",
-    "root": "runCase.nl",
+    "root": "reviewAmendment.nl",
     "split_group": "design-brief-app-027",
     "inputs": {
       "request": {
         "caseId": "SYN-027-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baseAgreementId": "B-27",
+        "amendmentIds": [
+          "A-27",
+          "A-28"
+        ],
+        "effectiveDate": "2026-10-01",
+        "reviewOwnerId": "Reviewer-27",
+        "baselineHash": "sha256:B27",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "executed": {
+        "agreements": [
           {
             "baseAgreementId": "B-27",
             "amendmentIds": [
@@ -585,6 +902,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "executedEditions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendments A-27 and A-28 both edit clause 4.2 with different effective dates; neither declares the other's priority."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendments A-27 and A-28 both edit clause 4.2 with different effective dates; neither declares the other's priority."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "overlapEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendments A-27 and A-28 both edit clause 4.2 with different effective dates; neither declares the other's priority."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "cutoverReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendments A-27 and A-28 both edit clause 4.2 with different effective dates; neither declares the other's priority."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exceptionRegressions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendments A-27 and A-28 both edit clause 4.2 with different effective dates; neither declares the other's priority."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -607,19 +1054,23 @@
   },
   {
     "id": "027-workflow-04",
-    "root": "runCase.nl",
+    "root": "reviewAmendment.nl",
     "split_group": "design-brief-app-027",
     "inputs": {
       "request": {
         "caseId": "SYN-027-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baseAgreementId": "B-27",
+        "amendmentIds": [
+          "A-27",
+          "A-28"
+        ],
+        "effectiveDate": "2026-10-01",
+        "reviewOwnerId": "Reviewer-27",
+        "baselineHash": "sha256:B27",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "executed": {
+        "agreements": [
           {
             "baseAgreementId": "B-27",
             "amendmentIds": [
@@ -689,6 +1140,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "executedEditions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Task T-27 approved before Oct 1 cutover but executes Oct 3; policy binding changed Oct 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Task T-27 approved before Oct 1 cutover but executes Oct 3; policy binding changed Oct 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "overlapEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Task T-27 approved before Oct 1 cutover but executes Oct 3; policy binding changed Oct 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "cutoverReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Task T-27 approved before Oct 1 cutover but executes Oct 3; policy binding changed Oct 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exceptionRegressions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Task T-27 approved before Oct 1 cutover but executes Oct 3; policy binding changed Oct 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -711,19 +1292,23 @@
   },
   {
     "id": "027-workflow-05",
-    "root": "runCase.nl",
+    "root": "reviewAmendment.nl",
     "split_group": "design-brief-app-027",
     "inputs": {
       "request": {
         "caseId": "SYN-027-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baseAgreementId": "B-27",
+        "amendmentIds": [
+          "A-27",
+          "A-28"
+        ],
+        "effectiveDate": "2026-10-01",
+        "reviewOwnerId": "Reviewer-27",
+        "baselineHash": "sha256:B27",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "executed": {
+        "agreements": [
           {
             "baseAgreementId": "B-27",
             "amendmentIds": [
@@ -793,6 +1378,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "executedEditions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft release removes exception E-27 although unchanged annex retains its signed authorization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "billingHistory": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft release removes exception E-27 although unchanged annex retains its signed authorization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "overlapEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft release removes exception E-27 although unchanged annex retains its signed authorization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "cutoverReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft release removes exception E-27 although unchanged annex retains its signed authorization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "exceptionRegressions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "027-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-27 explicitly replaces clause 5.2 in signed base edition B-27; clause 5.3 remains untouched and the document hash identifies the edition."
+              },
+              {
+                "id": "E2",
+                "source": "027-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft release removes exception E-27 although unchanged annex retains its signed authorization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

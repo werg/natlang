@@ -143,3 +143,13 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type CommissionRequest = { id:string; researchQuestion:string; requesterId:string; researcherId:string; collectionIds:string[]; effortBudget:number; deliverable:string; exclusions:string[]; };
+export type ArchiveSource = { id:string; collectionId:string; title:string; description:string; access:'open'|'closed'|'restricted'; revision:string; citation:string; rights:string[]; linkedSourceIds:string[]; };
+export type SearchObservation = { id:string; collectionId:string; query:string; result:'hit'|'no-hit'|'closed'|'not-searched'; sourceIds:string[]; reason:string; };
+export type FollowupLead = { id:string; questionId:string; sourceId:string; rationale:string; missingSource:boolean; estimatedEffort:number; state:'open'|'pursued'|'stopped'|'unavailable'; };
+export type SupportedClaim = { id:string; questionId:string; statement:string; evidenceIds:string[]; counterEvidenceIds:string[]; inferenceLimit:string; certainty:'direct'|'supported'|'contested'|'unknown'; };
+export type ResearchCheckpoint = { requestId:string; questionIds:string[]; manifest:SearchObservation[]; leads:FollowupLead[]; claims:SupportedClaim[]; consumedEffort:number; sourceRevisions:string[]; };
+export type CommissionDossier = { requestId:string; subquestions:string[]; claims:SupportedClaim[]; searchManifest:SearchObservation[]; remainingLeads:FollowupLead[]; coverageLimits:string[]; restrictedSources:string[]; interpretationNotes:string[]; checkpoint:ResearchCheckpoint; status:'bounded'|'extension-needed'|'incomplete'; };
+
+export type ArchiveCommissionBinding = { request: CommissionRequest; evidenceIds: string[]; blockers: string[] };

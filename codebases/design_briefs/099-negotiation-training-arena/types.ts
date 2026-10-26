@@ -142,3 +142,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type ArenaIssue={id:string;name:string;unit:string;minimum:string;maximum:string;};
+export type ArenaRole={id:string;authority:string[];privatePriorities:string[];reservationConditions:string[];conductLimits:string[];disclosableFacts:string[];};
+export type ArenaScenario={id:string;revision:number;issues:ArenaIssue[];roles:ArenaRole[];learningGoals:string[];allowedTactics:string[];prohibitedTactics:string[];debriefPolicy:string[];acceptanceRule:string;};
+export type ParsedArenaOffer={turnId:string;fromRole:string;terms:Record<string,string>;conditions:string[];expiresAt:string;commitment:'exploratory'|'firm'|'conditional-acceptance'|'withdrawal';clarifications:string[];};
+export type FeasibilityArtifact={scenarioRevision:number;offerId:string;feasible:boolean;authorityValid:boolean;withinIssueBounds:boolean;utilityBandByRole:Record<string,string>;hiddenToLearner:string[];verifier:string;};
+export type CounterpartChoice={roleId:string;actionId:string;terms:Record<string,string>;language:string;revealedFacts:string[];conductCheck:string;};
+export type ArenaTurn={turnId:string;speaker:string;utterance:string;offer:ParsedArenaOffer|null;counterpart:CounterpartChoice|null;state:'open'|'clarification-needed'|'accepted'|'withdrawn'|'rejected';};
+export type ArenaCheckpoint={scenarioId:string;revision:number;turns:ArenaTurn[];openOfferIds:string[];acceptedTerms:string[];difficultyRevision:string;debriefReleaseScope:string;};
+export type ArenaRunResult={scenario:ArenaScenario;turns:ArenaTurn[];clarificationQuestions:string[];feasibility:FeasibilityArtifact[];privateFeedback:string[];debrief:string[];checkpoint:ArenaCheckpoint;status:'in-progress'|'clarification-needed'|'agreement'|'withdrawn'|'debrief-ready';};
+

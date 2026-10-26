@@ -195,58 +195,83 @@
   },
   {
     "id": "090-workflow-1",
-    "root": "runCase.nl",
+    "root": "commissionArchive.nl",
     "split_group": "world-090-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
-      "records": [
+      "request": {
+        "id": "090-workflow-1-record",
+        "researchQuestion": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "requesterId": "accountable reviewer",
+        "researcherId": "accountable reviewer",
+        "collectionIds": [
+          "090-workflow-1-record"
+        ],
+        "effortBudget": 2,
+        "deliverable": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "exclusions": []
+      },
+      "sources": [
         {
           "id": "090-workflow-1-record",
-          "caseId": "090-workflow-1",
-          "sourceRefs": [
-            "090-event-1"
-          ],
-          "state": "draft",
-          "kind": "ArchiveCommission",
-          "subject": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
-          "status": "candidate",
-          "evidenceIds": [
-            "090-event-1"
-          ],
-          "fields": {
-            "sourceArtifact": "090-event-1",
-            "sourceVersion": "v1"
-          },
-          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
-          "requesterId": "REQ-90",
-          "collectionIds": [
-            "CAT-A",
-            "CAT-B",
-            "BOX-18"
-          ],
-          "researcherId": "RES-90",
-          "effortBudget": 6
+          "collectionId": "090-workflow-1-record",
+          "title": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+          "description": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+          "access": "open",
+          "revision": "v1",
+          "citation": "090-workflow-1-record",
+          "rights": [],
+          "linkedSourceIds": []
         }
       ],
-      "evidence": [
+      "observations": [
         {
           "id": "090-event-1",
-          "source": "current domain record 090-E1",
-          "version": "v1",
-          "text": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "collectionId": "090-workflow-1-record",
+          "query": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+          "result": "hit",
+          "sourceIds": [
+            "090-workflow-1-record"
+          ],
+          "reason": "Supplied source observation"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "090-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "090-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "requestId": "090-workflow-1-record",
+        "questionIds": [],
+        "manifest": [],
+        "leads": [],
+        "claims": [],
+        "consumedEffort": 0,
+        "sourceRevisions": []
+      },
+      "sourceRecord": {
+        "id": "090-workflow-1-record",
+        "caseId": "090-workflow-1",
+        "sourceRefs": [
+          "090-event-1"
+        ],
+        "state": "draft",
+        "kind": "ArchiveCommission",
+        "subject": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+        "status": "candidate",
+        "evidenceIds": [
+          "090-event-1"
+        ],
+        "fields": {
+          "sourceArtifact": "090-event-1",
+          "sourceVersion": "v1"
+        },
+        "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+        "requesterId": "REQ-90",
+        "collectionIds": [
+          "CAT-A",
+          "CAT-B",
+          "BOX-18"
+        ],
+        "researcherId": "RES-90",
+        "effortBudget": 6
+      },
+      "sourceEvidence": [
         {
           "id": "090-event-1",
           "source": "current domain record 090-E1",
@@ -278,58 +303,83 @@
   },
   {
     "id": "090-workflow-2",
-    "root": "runCase.nl",
+    "root": "commissionArchive.nl",
     "split_group": "world-090-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
-      "records": [
+      "request": {
+        "id": "090-workflow-2-record",
+        "researchQuestion": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "requesterId": "accountable reviewer",
+        "researcherId": "accountable reviewer",
+        "collectionIds": [
+          "090-workflow-2-record"
+        ],
+        "effortBudget": 2,
+        "deliverable": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "exclusions": []
+      },
+      "sources": [
         {
           "id": "090-workflow-2-record",
-          "caseId": "090-workflow-2",
-          "sourceRefs": [
-            "090-event-2"
-          ],
-          "state": "draft",
-          "kind": "ArchiveCommission",
-          "subject": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
-          "status": "candidate",
-          "evidenceIds": [
-            "090-event-2"
-          ],
-          "fields": {
-            "sourceArtifact": "090-event-2",
-            "sourceVersion": "v1"
-          },
-          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
-          "requesterId": "REQ-90",
-          "collectionIds": [
-            "CAT-A",
-            "CAT-B",
-            "BOX-18"
-          ],
-          "researcherId": "RES-90",
-          "effortBudget": 6
+          "collectionId": "090-workflow-2-record",
+          "title": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+          "description": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+          "access": "open",
+          "revision": "v1",
+          "citation": "090-workflow-2-record",
+          "rights": [],
+          "linkedSourceIds": []
         }
       ],
-      "evidence": [
+      "observations": [
         {
           "id": "090-event-2",
-          "source": "current domain record 090-E2",
-          "version": "v1",
-          "text": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "collectionId": "090-workflow-2-record",
+          "query": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+          "result": "hit",
+          "sourceIds": [
+            "090-workflow-2-record"
+          ],
+          "reason": "Supplied source observation"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "090-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "090-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "requestId": "090-workflow-2-record",
+        "questionIds": [],
+        "manifest": [],
+        "leads": [],
+        "claims": [],
+        "consumedEffort": 0,
+        "sourceRevisions": []
+      },
+      "sourceRecord": {
+        "id": "090-workflow-2-record",
+        "caseId": "090-workflow-2",
+        "sourceRefs": [
+          "090-event-2"
+        ],
+        "state": "draft",
+        "kind": "ArchiveCommission",
+        "subject": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+        "status": "candidate",
+        "evidenceIds": [
+          "090-event-2"
+        ],
+        "fields": {
+          "sourceArtifact": "090-event-2",
+          "sourceVersion": "v1"
+        },
+        "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+        "requesterId": "REQ-90",
+        "collectionIds": [
+          "CAT-A",
+          "CAT-B",
+          "BOX-18"
+        ],
+        "researcherId": "RES-90",
+        "effortBudget": 6
+      },
+      "sourceEvidence": [
         {
           "id": "090-event-2",
           "source": "current domain record 090-E2",
@@ -361,58 +411,83 @@
   },
   {
     "id": "090-workflow-3",
-    "root": "runCase.nl",
+    "root": "commissionArchive.nl",
     "split_group": "world-090-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
-      "records": [
+      "request": {
+        "id": "090-workflow-3-record",
+        "researchQuestion": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "requesterId": "accountable reviewer",
+        "researcherId": "accountable reviewer",
+        "collectionIds": [
+          "090-workflow-3-record"
+        ],
+        "effortBudget": 2,
+        "deliverable": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "exclusions": []
+      },
+      "sources": [
         {
           "id": "090-workflow-3-record",
-          "caseId": "090-workflow-3",
-          "sourceRefs": [
-            "090-event-3"
-          ],
-          "state": "draft",
-          "kind": "ArchiveCommission",
-          "subject": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
-          "status": "candidate",
-          "evidenceIds": [
-            "090-event-3"
-          ],
-          "fields": {
-            "sourceArtifact": "090-event-3",
-            "sourceVersion": "v1"
-          },
-          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
-          "requesterId": "REQ-90",
-          "collectionIds": [
-            "CAT-A",
-            "CAT-B",
-            "BOX-18"
-          ],
-          "researcherId": "RES-90",
-          "effortBudget": 6
+          "collectionId": "090-workflow-3-record",
+          "title": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+          "description": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+          "access": "open",
+          "revision": "v1",
+          "citation": "090-workflow-3-record",
+          "rights": [],
+          "linkedSourceIds": []
         }
       ],
-      "evidence": [
+      "observations": [
         {
           "id": "090-event-3",
-          "source": "current domain record 090-E3",
-          "version": "v1",
-          "text": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "collectionId": "090-workflow-3-record",
+          "query": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+          "result": "hit",
+          "sourceIds": [
+            "090-workflow-3-record"
+          ],
+          "reason": "Supplied source observation"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "090-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "090-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "requestId": "090-workflow-3-record",
+        "questionIds": [],
+        "manifest": [],
+        "leads": [],
+        "claims": [],
+        "consumedEffort": 0,
+        "sourceRevisions": []
+      },
+      "sourceRecord": {
+        "id": "090-workflow-3-record",
+        "caseId": "090-workflow-3",
+        "sourceRefs": [
+          "090-event-3"
+        ],
+        "state": "draft",
+        "kind": "ArchiveCommission",
+        "subject": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+        "status": "candidate",
+        "evidenceIds": [
+          "090-event-3"
+        ],
+        "fields": {
+          "sourceArtifact": "090-event-3",
+          "sourceVersion": "v1"
+        },
+        "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+        "requesterId": "REQ-90",
+        "collectionIds": [
+          "CAT-A",
+          "CAT-B",
+          "BOX-18"
+        ],
+        "researcherId": "RES-90",
+        "effortBudget": 6
+      },
+      "sourceEvidence": [
         {
           "id": "090-event-3",
           "source": "current domain record 090-E3",
@@ -444,58 +519,83 @@
   },
   {
     "id": "090-workflow-4",
-    "root": "runCase.nl",
+    "root": "commissionArchive.nl",
     "split_group": "world-090-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
-      "records": [
+      "request": {
+        "id": "090-workflow-4-record",
+        "researchQuestion": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "requesterId": "accountable reviewer",
+        "researcherId": "accountable reviewer",
+        "collectionIds": [
+          "090-workflow-4-record"
+        ],
+        "effortBudget": 2,
+        "deliverable": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "exclusions": []
+      },
+      "sources": [
         {
           "id": "090-workflow-4-record",
-          "caseId": "090-workflow-4",
-          "sourceRefs": [
-            "090-event-4"
-          ],
-          "state": "draft",
-          "kind": "ArchiveCommission",
-          "subject": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
-          "status": "candidate",
-          "evidenceIds": [
-            "090-event-4"
-          ],
-          "fields": {
-            "sourceArtifact": "090-event-4",
-            "sourceVersion": "v1"
-          },
-          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
-          "requesterId": "REQ-90",
-          "collectionIds": [
-            "CAT-A",
-            "CAT-B",
-            "BOX-18"
-          ],
-          "researcherId": "RES-90",
-          "effortBudget": 6
+          "collectionId": "090-workflow-4-record",
+          "title": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+          "description": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+          "access": "open",
+          "revision": "v1",
+          "citation": "090-workflow-4-record",
+          "rights": [],
+          "linkedSourceIds": []
         }
       ],
-      "evidence": [
+      "observations": [
         {
           "id": "090-event-4",
-          "source": "current domain record 090-E4",
-          "version": "v1",
-          "text": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "collectionId": "090-workflow-4-record",
+          "query": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+          "result": "hit",
+          "sourceIds": [
+            "090-workflow-4-record"
+          ],
+          "reason": "Supplied source observation"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "090-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "090-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "requestId": "090-workflow-4-record",
+        "questionIds": [],
+        "manifest": [],
+        "leads": [],
+        "claims": [],
+        "consumedEffort": 0,
+        "sourceRevisions": []
+      },
+      "sourceRecord": {
+        "id": "090-workflow-4-record",
+        "caseId": "090-workflow-4",
+        "sourceRefs": [
+          "090-event-4"
+        ],
+        "state": "draft",
+        "kind": "ArchiveCommission",
+        "subject": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+        "status": "candidate",
+        "evidenceIds": [
+          "090-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "090-event-4",
+          "sourceVersion": "v1"
+        },
+        "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+        "requesterId": "REQ-90",
+        "collectionIds": [
+          "CAT-A",
+          "CAT-B",
+          "BOX-18"
+        ],
+        "researcherId": "RES-90",
+        "effortBudget": 6
+      },
+      "sourceEvidence": [
         {
           "id": "090-event-4",
           "source": "current domain record 090-E4",
@@ -527,58 +627,83 @@
   },
   {
     "id": "090-workflow-5",
-    "root": "runCase.nl",
+    "root": "commissionArchive.nl",
     "split_group": "world-090-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
-      "records": [
+      "request": {
+        "id": "090-workflow-5-record",
+        "researchQuestion": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "requesterId": "accountable reviewer",
+        "researcherId": "accountable reviewer",
+        "collectionIds": [
+          "090-workflow-5-record"
+        ],
+        "effortBudget": 2,
+        "deliverable": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+        "exclusions": []
+      },
+      "sources": [
         {
           "id": "090-workflow-5-record",
-          "caseId": "090-workflow-5",
-          "sourceRefs": [
-            "090-event-5"
-          ],
-          "state": "draft",
-          "kind": "ArchiveCommission",
-          "subject": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
-          "status": "candidate",
-          "evidenceIds": [
-            "090-event-5"
-          ],
-          "fields": {
-            "sourceArtifact": "090-event-5",
-            "sourceVersion": "v1"
-          },
-          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
-          "requesterId": "REQ-90",
-          "collectionIds": [
-            "CAT-A",
-            "CAT-B",
-            "BOX-18"
-          ],
-          "researcherId": "RES-90",
-          "effortBudget": 6
+          "collectionId": "090-workflow-5-record",
+          "title": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+          "description": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+          "access": "open",
+          "revision": "v1",
+          "citation": "090-workflow-5-record",
+          "rights": [],
+          "linkedSourceIds": []
         }
       ],
-      "evidence": [
+      "observations": [
         {
           "id": "090-event-5",
-          "source": "current domain record 090-E5",
-          "version": "v1",
-          "text": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "collectionId": "090-workflow-5-record",
+          "query": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+          "result": "hit",
+          "sourceIds": [
+            "090-workflow-5-record"
+          ],
+          "reason": "Supplied source observation"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "090-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "090-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "requestId": "090-workflow-5-record",
+        "questionIds": [],
+        "manifest": [],
+        "leads": [],
+        "claims": [],
+        "consumedEffort": 0,
+        "sourceRevisions": []
+      },
+      "sourceRecord": {
+        "id": "090-workflow-5-record",
+        "caseId": "090-workflow-5",
+        "sourceRefs": [
+          "090-event-5"
+        ],
+        "state": "draft",
+        "kind": "ArchiveCommission",
+        "subject": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+        "status": "candidate",
+        "evidenceIds": [
+          "090-event-5"
+        ],
+        "fields": {
+          "sourceArtifact": "090-event-5",
+          "sourceVersion": "v1"
+        },
+        "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+        "requesterId": "REQ-90",
+        "collectionIds": [
+          "CAT-A",
+          "CAT-B",
+          "BOX-18"
+        ],
+        "researcherId": "RES-90",
+        "effortBudget": 6
+      },
+      "sourceEvidence": [
         {
           "id": "090-event-5",
           "source": "current domain record 090-E5",

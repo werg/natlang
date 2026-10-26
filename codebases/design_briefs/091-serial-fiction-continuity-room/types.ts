@@ -143,3 +143,16 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type SerialEdition = { id:string; revision:string; approved:boolean; scenes:SerialScene[]; canon:CanonAssertion[]; knowledge:KnowledgeEvent[]; obligations:ArcObligation[]; };
+export type SerialScene = { id:string; episode:number; order:number; characterIds:string[]; assertedFacts:string[]; revealedSecrets:string[]; narration:'reliable'|'unreliable'|'unknown'; text:string; };
+export type CanonAssertion = { id:string; proposition:string; kind:'world-fact'|'author-plan'|'character-belief'|'narration'; subjectId:string; sourceSceneId:string; editionId:string; confidence:'approved'|'draft'|'contested'; };
+export type KnowledgeEvent = { characterId:string; secretId:string; sceneId:string; editionId:string; learnedAt:number; evidence:string; };
+export type ArcObligation = { id:string; characterId:string; setupSceneId:string; promise:string; state:'open'|'paid'|'deliberate-mystery'|'waived'; rationale:string; };
+export type StoryChange = { proposal:SerialScene; authorIntent:string; requestedCanonChanges:string[]; };
+export type ContinuityCheckpoint = { editionId:string; revision:string; checkedSceneIds:string[]; knowledge:KnowledgeEvent[]; openObligationIds:string[]; invalidatedSceneIds:string[]; };
+export type ContinuityFinding = { sceneId:string; kind:'chronology'|'knowledge'|'world-rule'|'motivation'|'arc'|'narrative'; status:'consistent'|'conflict'|'needs-editor'; evidenceIds:string[]; explanation:string; repairOptions:string[]; };
+export type ContinuityDossier = { editionId:string; proposalId:string; findings:ContinuityFinding[]; repairs:StoryRevision[]; canonAmendmentRequired:boolean; affectedSceneIds:string[]; revisedEdition:SerialEdition; checkpoint:ContinuityCheckpoint; status:'review'|'blocked'|'ready'; };
+
+
+export type BoundStoryContext = { edition: SerialEdition; change: StoryChange; evidence: EvidenceItem[]; seriesId: string; manuscriptIds: string[]; editorId: string; creativeBrief: string; evidenceGaps: string[] };

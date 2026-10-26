@@ -1,17 +1,5 @@
-# 093 — Magazine Commissioning And Issue Planning Desk
+# Magazine Commissioning And Issue Planning Desk
 
-## Source-derived procedure
+An issue is managed as a portfolio under an editorial brief, not a queue of interchangeable slots. Each pitch carries a reporting feasibility map, audience value, distinctive angle, contributor capacity and overlap edges to other pieces. Coverage is evaluated as a set: gaps and redundancy emerge from the portfolio, while unsupported viewpoints are not artificially balanced.
 
-Five domain stages: interpretPitches, mapCoverage, commissionPieces, manageEditorialWork, qualifyIssue. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
-
-## Domain algorithms and gates
-
-- **interpretPitches** — Read pitches against the issue brief to identify the actual angle, reporting plan, and audience value. Distinguish an interesting topic from a viable story, preserve uncertainty about access or evidence, and identify overlap with already commissioned work. Gate: Pitch evaluation is grounded in the supplied editorial goals and feasible reporting.
-- **mapCoverage** — Build a map of themes, formats, perspectives, and reader needs across proposed pieces. Identify genuine gaps and redundancy without forcing artificial balance between unsupported claims, and preserve coherent variety rather than filling slots mechanically. Gate: Coverage choices follow the issue brief and available evidence.
-- **commissionPieces** — Draft precise commissions specifying angle, scope, length, reporting obligations, rights, and deadlines. Identify dependencies such as interviews or photography, obtain contributor acceptance, and avoid assuming a pitch implies agreement to changed terms. Gate: Contributor accepts the exact scope and commercial conditions before work is committed.
-- **manageEditorialWork** — Compare drafts with commissions and source evidence, formulate specific revisions, and coordinate editing, fact-checking, art, and legal or rights review where needed. Preserve author voice while distinguishing stylistic preference from factual or structural defects. Gate: Required reporting and evidence obligations are fulfilled, not merely polished prose.
-- **qualifyIssue** — Reconcile final pieces, captions, headlines, credits, layout, and publication timing as one issue. Check that promotional language does not overstate article claims, preserve contingency plans for late withdrawals, and freeze the approved edition. Gate: Complete issue meets scope, rights, factual, and production gates.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+Commissions become commitments only after the contributor accepts the exact angle, length, deadline, rights and reporting duties. Dependencies such as access and photography remain explicit, and loss of a source reopens feasibility instead of being papered over. An issue change propagates through assignments, drafts, fact-check, visuals, captions, headline and promotion. A late withdrawal triggers a prequalified contingency and recomputes coverage. Freeze requires the exact layout edition, accepted assignments, satisfied reporting gates, rights, factual checks, and consistent credit derivatives; a changed photo credit invalidates every dependent export.

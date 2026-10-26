@@ -271,19 +271,20 @@
   },
   {
     "id": "025-workflow-01",
-    "root": "runCase.nl",
+    "root": "coordinateGrantReport.nl",
     "split_group": "design-brief-app-025",
     "inputs": {
       "request": {
         "caseId": "SYN-025-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "grantId": "G-25",
+        "reportingWindow": "2026-09-20 through 2026-10-10",
+        "projectId": "COMMUNITY-SURVEY",
+        "principalOwnerId": "Owner-25",
+        "funderId": "FUNDER-25",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "ledger": {
+        "reports": [
           {
             "grantId": "G-25",
             "reportingWindow": "2026-09-20 through 2026-10-10",
@@ -350,6 +351,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "periodAllocations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice INV-25 covers services Sep 20-Oct 10; approved allocation basis is workdays, with 8 days in September and 7 in October."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "amendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice INV-25 covers services Sep 20-Oct 10; approved allocation basis is workdays, with 8 days in September and 7 in October."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharedActivityLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice INV-25 covers services Sep 20-Oct 10; approved allocation basis is workdays, with 8 days in September and 7 in October."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantDisclosureRequests": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice INV-25 covers services Sep 20-Oct 10; approved allocation basis is workdays, with 8 days in September and 7 in October."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSubmissions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Invoice INV-25 covers services Sep 20-Oct 10; approved allocation basis is workdays, with 8 days in September and 7 in October."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -372,19 +503,20 @@
   },
   {
     "id": "025-workflow-02",
-    "root": "runCase.nl",
+    "root": "coordinateGrantReport.nl",
     "split_group": "design-brief-app-025",
     "inputs": {
       "request": {
         "caseId": "SYN-025-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "grantId": "G-25",
+        "reportingWindow": "2026-09-20 through 2026-10-10",
+        "projectId": "COMMUNITY-SURVEY",
+        "principalOwnerId": "Owner-25",
+        "funderId": "FUNDER-25",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "ledger": {
+        "reports": [
           {
             "grantId": "G-25",
             "reportingWindow": "2026-09-20 through 2026-10-10",
@@ -451,6 +583,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "periodAllocations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-25 signed Oct 5 permits retroactive field travel from Oct 1; equipment permission applies only after Nov 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "amendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-25 signed Oct 5 permits retroactive field travel from Oct 1; equipment permission applies only after Nov 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharedActivityLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-25 signed Oct 5 permits retroactive field travel from Oct 1; equipment permission applies only after Nov 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantDisclosureRequests": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-25 signed Oct 5 permits retroactive field travel from Oct 1; equipment permission applies only after Nov 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSubmissions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Amendment A-25 signed Oct 5 permits retroactive field travel from Oct 1; equipment permission applies only after Nov 1."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -473,19 +735,20 @@
   },
   {
     "id": "025-workflow-03",
-    "root": "runCase.nl",
+    "root": "coordinateGrantReport.nl",
     "split_group": "design-brief-app-025",
     "inputs": {
       "request": {
         "caseId": "SYN-025-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "grantId": "G-25",
+        "reportingWindow": "2026-09-20 through 2026-10-10",
+        "projectId": "COMMUNITY-SURVEY",
+        "principalOwnerId": "Owner-25",
+        "funderId": "FUNDER-25",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "ledger": {
+        "reports": [
           {
             "grantId": "G-25",
             "reportingWindow": "2026-09-20 through 2026-10-10",
@@ -552,6 +815,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "periodAllocations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Activity ACT-25 is charged to grants G-25 and G-26 at 100% each; ledger lacks the approved shared-funding allocation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "amendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Activity ACT-25 is charged to grants G-25 and G-26 at 100% each; ledger lacks the approved shared-funding allocation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharedActivityLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Activity ACT-25 is charged to grants G-25 and G-26 at 100% each; ledger lacks the approved shared-funding allocation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantDisclosureRequests": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Activity ACT-25 is charged to grants G-25 and G-26 at 100% each; ledger lacks the approved shared-funding allocation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSubmissions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Activity ACT-25 is charged to grants G-25 and G-26 at 100% each; ledger lacks the approved shared-funding allocation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -574,19 +967,20 @@
   },
   {
     "id": "025-workflow-04",
-    "root": "runCase.nl",
+    "root": "coordinateGrantReport.nl",
     "split_group": "design-brief-app-025",
     "inputs": {
       "request": {
         "caseId": "SYN-025-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "grantId": "G-25",
+        "reportingWindow": "2026-09-20 through 2026-10-10",
+        "projectId": "COMMUNITY-SURVEY",
+        "principalOwnerId": "Owner-25",
+        "funderId": "FUNDER-25",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "ledger": {
+        "reports": [
           {
             "grantId": "G-25",
             "reportingWindow": "2026-09-20 through 2026-10-10",
@@ -653,6 +1047,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "periodAllocations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Funder request FR-25 asks for participant names; consent form C-25 authorizes aggregate counts only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "amendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Funder request FR-25 asks for participant names; consent form C-25 authorizes aggregate counts only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharedActivityLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Funder request FR-25 asks for participant names; consent form C-25 authorizes aggregate counts only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantDisclosureRequests": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Funder request FR-25 asks for participant names; consent form C-25 authorizes aggregate counts only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSubmissions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Funder request FR-25 asks for participant names; consent form C-25 authorizes aggregate counts only."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -675,19 +1199,20 @@
   },
   {
     "id": "025-workflow-05",
-    "root": "runCase.nl",
+    "root": "coordinateGrantReport.nl",
     "split_group": "design-brief-app-025",
     "inputs": {
       "request": {
         "caseId": "SYN-025-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "grantId": "G-25",
+        "reportingWindow": "2026-09-20 through 2026-10-10",
+        "projectId": "COMMUNITY-SURVEY",
+        "principalOwnerId": "Owner-25",
+        "funderId": "FUNDER-25",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "ledger": {
+        "reports": [
           {
             "grantId": "G-25",
             "reportingWindow": "2026-09-20 through 2026-10-10",
@@ -754,6 +1279,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "periodAllocations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Submitted report R-25 was corrected after Oct 7 submission; amended file v2 has no transmission receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "amendments": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Submitted report R-25 was corrected after Oct 7 submission; amended file v2 has no transmission receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "sharedActivityLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Submitted report R-25 was corrected after Oct 7 submission; amended file v2 has no transmission receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "participantDisclosureRequests": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Submitted report R-25 was corrected after Oct 7 submission; amended file v2 has no transmission receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSubmissions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "025-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Grant G-25 permits staff travel for field interviews through 2026-12-31; the signed award names the community survey as reporting trigger."
+              },
+              {
+                "id": "E2",
+                "source": "025-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Submitted report R-25 was corrected after Oct 7 submission; amended file v2 has no transmission receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

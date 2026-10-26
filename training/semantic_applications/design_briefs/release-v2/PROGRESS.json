@@ -1,7 +1,7 @@
 {
   "schema": "natlang.design-brief-migration-progress/1",
   "release": "design-briefs-100-distinct-applications-20261026-v2",
-  "status": "in-progress",
+  "status": "source-migration-complete-validation-pending",
   "completed_applications": [
     1,
     2,
@@ -26,6 +26,11 @@
     21,
     22,
     23,
+    24,
+    25,
+    26,
+    27,
+    28,
     29,
     30,
     31,
@@ -86,14 +91,7 @@
     86,
     87,
     88,
-    89
-  ],
-  "remaining_applications": [
-    24,
-    25,
-    26,
-    27,
-    28,
+    89,
     90,
     91,
     92,
@@ -106,6 +104,7 @@
     99,
     100
   ],
+  "remaining_applications": [],
   "training_admission": false,
   "models_executed": 0,
   "note": "Incremental source publication at user request. Final all-application inventory, independent fixture audit and gate evidence follow after all migrations. Full repository gate remains unresolved."

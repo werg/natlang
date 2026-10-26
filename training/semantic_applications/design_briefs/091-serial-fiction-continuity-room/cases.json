@@ -181,38 +181,45 @@
   },
   {
     "id": "091-workflow-1",
-    "root": "runCase.nl",
+    "root": "continuityRoom.nl",
     "split_group": "world-091-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "091-workflow-1-record",
-          "caseId": "091-workflow-1",
-          "sourceRefs": [
-            "091-event-1"
+      "edition": {
+        "id": "091-workflow-1",
+        "revision": "v1",
+        "approved": true,
+        "scenes": [
+          {
+            "id": "091-workflow-1-record",
+            "episode": 0,
+            "order": 0,
+            "characterIds": [],
+            "assertedFacts": [],
+            "revealedSecrets": [],
+            "narration": "unknown",
+            "text": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7."
+          }
+        ],
+        "canon": [],
+        "knowledge": [],
+        "obligations": []
+      },
+      "change": {
+        "proposal": {
+          "id": "091-workflow-1-proposal",
+          "episode": 2,
+          "order": 0,
+          "characterIds": [
+            "Nara"
           ],
-          "state": "draft",
-          "kind": "StorySeries",
-          "subject": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
-          "status": "candidate",
-          "evidenceIds": [
-            "091-event-1"
-          ],
-          "fields": {
-            "sourceArtifact": "091-event-1",
-            "sourceVersion": "v1"
-          },
-          "seriesId": "SERIES-91",
-          "manuscriptIds": [
-            "BOOK-2-DRAFT-A",
-            "BOOK-2-DRAFT-B"
-          ],
-          "canonVersion": "canon-v6",
-          "editorId": "ED-9",
-          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
-        }
-      ],
+          "assertedFacts": [],
+          "revealedSecrets": [],
+          "narration": "unknown",
+          "text": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7."
+        },
+        "authorIntent": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+        "requestedCanonChanges": []
+      },
       "evidence": [
         {
           "id": "091-event-1",
@@ -223,15 +230,41 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "091-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "091-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "editionId": "091-workflow-1",
+        "revision": "v1",
+        "checkedSceneIds": [],
+        "knowledge": [],
+        "openObligationIds": [],
+        "invalidatedSceneIds": []
+      },
+      "sourceRecord": {
+        "id": "091-workflow-1-record",
+        "caseId": "091-workflow-1",
+        "sourceRefs": [
+          "091-event-1"
+        ],
+        "state": "draft",
+        "kind": "StorySeries",
+        "subject": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
+        "status": "candidate",
+        "evidenceIds": [
+          "091-event-1"
+        ],
+        "fields": {
+          "sourceArtifact": "091-event-1",
+          "sourceVersion": "v1"
+        },
+        "seriesId": "SERIES-91",
+        "manuscriptIds": [
+          "BOOK-2-DRAFT-A",
+          "BOOK-2-DRAFT-B"
+        ],
+        "canonVersion": "canon-v6",
+        "editorId": "ED-9",
+        "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+      },
+      "sourceEvidence": [
         {
           "id": "091-event-1",
           "source": "current domain record 091-E1",
@@ -263,38 +296,45 @@
   },
   {
     "id": "091-workflow-2",
-    "root": "runCase.nl",
+    "root": "continuityRoom.nl",
     "split_group": "world-091-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "091-workflow-2-record",
-          "caseId": "091-workflow-2",
-          "sourceRefs": [
-            "091-wf-2-source"
+      "edition": {
+        "id": "091-workflow-2",
+        "revision": "v1",
+        "approved": true,
+        "scenes": [
+          {
+            "id": "091-workflow-2-record",
+            "episode": 0,
+            "order": 0,
+            "characterIds": [],
+            "assertedFacts": [],
+            "revealedSecrets": [],
+            "narration": "unknown",
+            "text": "Character Juno learns the secret in draft A, but the prior chapter contains no disclosure scene for Juno."
+          }
+        ],
+        "canon": [],
+        "knowledge": [],
+        "obligations": []
+      },
+      "change": {
+        "proposal": {
+          "id": "091-workflow-2-proposal",
+          "episode": 2,
+          "order": 0,
+          "characterIds": [
+            "Nara"
           ],
-          "state": "draft",
-          "kind": "StorySeries",
-          "subject": "Character Juno learns the secret in draft A, but the prior chapter contains no disclosure scene for Juno.",
-          "status": "candidate",
-          "evidenceIds": [
-            "091-wf-2-source"
-          ],
-          "fields": {
-            "sourceArtifact": "091-wf-2-source",
-            "sourceVersion": "v1"
-          },
-          "seriesId": "SERIES-91",
-          "manuscriptIds": [
-            "BOOK-2-DRAFT-A",
-            "BOOK-2-DRAFT-B"
-          ],
-          "canonVersion": "canon-v6",
-          "editorId": "ED-9",
-          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
-        }
-      ],
+          "assertedFacts": [],
+          "revealedSecrets": [],
+          "narration": "unknown",
+          "text": "Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91."
+        },
+        "authorIntent": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+        "requestedCanonChanges": []
+      },
       "evidence": [
         {
           "id": "091-wf-2-source",
@@ -305,15 +345,41 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "091-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "091-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "editionId": "091-workflow-2",
+        "revision": "v1",
+        "checkedSceneIds": [],
+        "knowledge": [],
+        "openObligationIds": [],
+        "invalidatedSceneIds": []
+      },
+      "sourceRecord": {
+        "id": "091-workflow-2-record",
+        "caseId": "091-workflow-2",
+        "sourceRefs": [
+          "091-wf-2-source"
+        ],
+        "state": "draft",
+        "kind": "StorySeries",
+        "subject": "Character Juno learns the secret in draft A, but the prior chapter contains no disclosure scene for Juno.",
+        "status": "candidate",
+        "evidenceIds": [
+          "091-wf-2-source"
+        ],
+        "fields": {
+          "sourceArtifact": "091-wf-2-source",
+          "sourceVersion": "v1"
+        },
+        "seriesId": "SERIES-91",
+        "manuscriptIds": [
+          "BOOK-2-DRAFT-A",
+          "BOOK-2-DRAFT-B"
+        ],
+        "canonVersion": "canon-v6",
+        "editorId": "ED-9",
+        "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+      },
+      "sourceEvidence": [
         {
           "id": "091-wf-2-source",
           "source": "primary case artifact 091-E2",
@@ -345,38 +411,45 @@
   },
   {
     "id": "091-workflow-3",
-    "root": "runCase.nl",
+    "root": "continuityRoom.nl",
     "split_group": "world-091-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "091-workflow-3-record",
-          "caseId": "091-workflow-3",
-          "sourceRefs": [
-            "091-wf-3-source"
+      "edition": {
+        "id": "091-workflow-3",
+        "revision": "v1",
+        "approved": true,
+        "scenes": [
+          {
+            "id": "091-workflow-3-record",
+            "episode": 0,
+            "order": 0,
+            "characterIds": [],
+            "assertedFacts": [],
+            "revealedSecrets": [],
+            "narration": "unknown",
+            "text": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact."
+          }
+        ],
+        "canon": [],
+        "knowledge": [],
+        "obligations": []
+      },
+      "change": {
+        "proposal": {
+          "id": "091-workflow-3-proposal",
+          "episode": 2,
+          "order": 0,
+          "characterIds": [
+            "Nara"
           ],
-          "state": "draft",
-          "kind": "StorySeries",
-          "subject": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
-          "status": "candidate",
-          "evidenceIds": [
-            "091-wf-3-source"
-          ],
-          "fields": {
-            "sourceArtifact": "091-wf-3-source",
-            "sourceVersion": "v1"
-          },
-          "seriesId": "SERIES-91",
-          "manuscriptIds": [
-            "BOOK-2-DRAFT-A",
-            "BOOK-2-DRAFT-B"
-          ],
-          "canonVersion": "canon-v6",
-          "editorId": "ED-9",
-          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
-        }
-      ],
+          "assertedFacts": [],
+          "revealedSecrets": [],
+          "narration": "unknown",
+          "text": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact."
+        },
+        "authorIntent": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+        "requestedCanonChanges": []
+      },
       "evidence": [
         {
           "id": "091-wf-3-source",
@@ -387,15 +460,41 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "091-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "091-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "editionId": "091-workflow-3",
+        "revision": "v1",
+        "checkedSceneIds": [],
+        "knowledge": [],
+        "openObligationIds": [],
+        "invalidatedSceneIds": []
+      },
+      "sourceRecord": {
+        "id": "091-workflow-3-record",
+        "caseId": "091-workflow-3",
+        "sourceRefs": [
+          "091-wf-3-source"
+        ],
+        "state": "draft",
+        "kind": "StorySeries",
+        "subject": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
+        "status": "candidate",
+        "evidenceIds": [
+          "091-wf-3-source"
+        ],
+        "fields": {
+          "sourceArtifact": "091-wf-3-source",
+          "sourceVersion": "v1"
+        },
+        "seriesId": "SERIES-91",
+        "manuscriptIds": [
+          "BOOK-2-DRAFT-A",
+          "BOOK-2-DRAFT-B"
+        ],
+        "canonVersion": "canon-v6",
+        "editorId": "ED-9",
+        "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+      },
+      "sourceEvidence": [
         {
           "id": "091-wf-3-source",
           "source": "primary case artifact 091-E3",
@@ -427,38 +526,45 @@
   },
   {
     "id": "091-workflow-4",
-    "root": "runCase.nl",
+    "root": "continuityRoom.nl",
     "split_group": "world-091-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "091-workflow-4-record",
-          "caseId": "091-workflow-4",
-          "sourceRefs": [
-            "091-event-4"
+      "edition": {
+        "id": "091-workflow-4",
+        "revision": "v1",
+        "approved": true,
+        "scenes": [
+          {
+            "id": "091-workflow-4-record",
+            "episode": 0,
+            "order": 0,
+            "characterIds": [],
+            "assertedFacts": [],
+            "revealedSecrets": [],
+            "narration": "unknown",
+            "text": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue."
+          }
+        ],
+        "canon": [],
+        "knowledge": [],
+        "obligations": []
+      },
+      "change": {
+        "proposal": {
+          "id": "091-workflow-4-proposal",
+          "episode": 2,
+          "order": 0,
+          "characterIds": [
+            "Nara"
           ],
-          "state": "draft",
-          "kind": "StorySeries",
-          "subject": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
-          "status": "candidate",
-          "evidenceIds": [
-            "091-event-4"
-          ],
-          "fields": {
-            "sourceArtifact": "091-event-4",
-            "sourceVersion": "v1"
-          },
-          "seriesId": "SERIES-91",
-          "manuscriptIds": [
-            "BOOK-2-DRAFT-A",
-            "BOOK-2-DRAFT-B"
-          ],
-          "canonVersion": "canon-v6",
-          "editorId": "ED-9",
-          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
-        }
-      ],
+          "assertedFacts": [],
+          "revealedSecrets": [],
+          "narration": "unknown",
+          "text": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue."
+        },
+        "authorIntent": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+        "requestedCanonChanges": []
+      },
       "evidence": [
         {
           "id": "091-event-4",
@@ -469,15 +575,41 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "091-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "091-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "editionId": "091-workflow-4",
+        "revision": "v1",
+        "checkedSceneIds": [],
+        "knowledge": [],
+        "openObligationIds": [],
+        "invalidatedSceneIds": []
+      },
+      "sourceRecord": {
+        "id": "091-workflow-4-record",
+        "caseId": "091-workflow-4",
+        "sourceRefs": [
+          "091-event-4"
+        ],
+        "state": "draft",
+        "kind": "StorySeries",
+        "subject": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
+        "status": "candidate",
+        "evidenceIds": [
+          "091-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "091-event-4",
+          "sourceVersion": "v1"
+        },
+        "seriesId": "SERIES-91",
+        "manuscriptIds": [
+          "BOOK-2-DRAFT-A",
+          "BOOK-2-DRAFT-B"
+        ],
+        "canonVersion": "canon-v6",
+        "editorId": "ED-9",
+        "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+      },
+      "sourceEvidence": [
         {
           "id": "091-event-4",
           "source": "current domain record 091-E4",
@@ -509,38 +641,45 @@
   },
   {
     "id": "091-workflow-5",
-    "root": "runCase.nl",
+    "root": "continuityRoom.nl",
     "split_group": "world-091-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "091-workflow-5-record",
-          "caseId": "091-workflow-5",
-          "sourceRefs": [
-            "091-event-5"
+      "edition": {
+        "id": "091-workflow-5",
+        "revision": "v1",
+        "approved": true,
+        "scenes": [
+          {
+            "id": "091-workflow-5-record",
+            "episode": 0,
+            "order": 0,
+            "characterIds": [],
+            "assertedFacts": [],
+            "revealedSecrets": [],
+            "narration": "unknown",
+            "text": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing."
+          }
+        ],
+        "canon": [],
+        "knowledge": [],
+        "obligations": []
+      },
+      "change": {
+        "proposal": {
+          "id": "091-workflow-5-proposal",
+          "episode": 2,
+          "order": 0,
+          "characterIds": [
+            "Nara"
           ],
-          "state": "draft",
-          "kind": "StorySeries",
-          "subject": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
-          "status": "candidate",
-          "evidenceIds": [
-            "091-event-5"
-          ],
-          "fields": {
-            "sourceArtifact": "091-event-5",
-            "sourceVersion": "v1"
-          },
-          "seriesId": "SERIES-91",
-          "manuscriptIds": [
-            "BOOK-2-DRAFT-A",
-            "BOOK-2-DRAFT-B"
-          ],
-          "canonVersion": "canon-v6",
-          "editorId": "ED-9",
-          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
-        }
-      ],
+          "assertedFacts": [],
+          "revealedSecrets": [],
+          "narration": "unknown",
+          "text": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing."
+        },
+        "authorIntent": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+        "requestedCanonChanges": []
+      },
       "evidence": [
         {
           "id": "091-event-5",
@@ -551,15 +690,41 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "091-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "091-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "editionId": "091-workflow-5",
+        "revision": "v1",
+        "checkedSceneIds": [],
+        "knowledge": [],
+        "openObligationIds": [],
+        "invalidatedSceneIds": []
+      },
+      "sourceRecord": {
+        "id": "091-workflow-5-record",
+        "caseId": "091-workflow-5",
+        "sourceRefs": [
+          "091-event-5"
+        ],
+        "state": "draft",
+        "kind": "StorySeries",
+        "subject": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
+        "status": "candidate",
+        "evidenceIds": [
+          "091-event-5"
+        ],
+        "fields": {
+          "sourceArtifact": "091-event-5",
+          "sourceVersion": "v1"
+        },
+        "seriesId": "SERIES-91",
+        "manuscriptIds": [
+          "BOOK-2-DRAFT-A",
+          "BOOK-2-DRAFT-B"
+        ],
+        "canonVersion": "canon-v6",
+        "editorId": "ED-9",
+        "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+      },
+      "sourceEvidence": [
         {
           "id": "091-event-5",
           "source": "current domain record 091-E5",

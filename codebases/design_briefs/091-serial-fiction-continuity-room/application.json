@@ -1,0 +1,93 @@
+{
+  "schema": "natlang.application/1",
+  "id": "091",
+  "title": "Serial Fiction Continuity Room",
+  "entrypoint": "continuityRoom.nl",
+  "interfaces": [
+    {
+      "name": "continuityRoom",
+      "path": "continuityRoom.nl",
+      "purpose": "Review a scene proposal against edition-bound canon, character knowledge and narrative obligations."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverCanon",
+        "paths": [
+          "continuityRoom/recoverStoryCanon.nl",
+          "continuityRoom/bindStorySeriesContext.nl"
+        ]
+      },
+      {
+        "stage": "trackArcs",
+        "paths": [
+          "continuityRoom/assessSerialChange.nl"
+        ]
+      },
+      {
+        "stage": "assessProposals",
+        "paths": [
+          "continuityRoom/assessSerialChange.nl"
+        ]
+      },
+      {
+        "stage": "generateRepairs",
+        "paths": [
+          "continuityRoom/mapContinuityRepairs.nl"
+        ]
+      },
+      {
+        "stage": "verifyEdition",
+        "paths": [
+          "continuityRoom/verifySerialEdition.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "continuityRoom/advanceKnowledgeLedger.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "continuityRoom/recoverStoryCanon.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "continuityRoom/mapContinuityRepairs.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "continuityRoom/recoverStoryCanon.nl",
+          "continuityRoom/assessSerialChange.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "continuityRoom/assessSerialChange.nl",
+          "continuityRoom/verifySerialEdition.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "continuityRoom.nl",
+    "continuityRoom/advanceKnowledgeLedger.nl",
+    "continuityRoom/assessSerialChange.nl",
+    "continuityRoom/bindStorySeriesContext.nl",
+    "continuityRoom/mapContinuityRepairs.nl",
+    "continuityRoom/recoverStoryCanon.nl",
+    "continuityRoom/verifySerialEdition.nl",
+    "runCase/recoverCanon/audit/qualify.nl",
+    "types.ts"
+  ]
+}

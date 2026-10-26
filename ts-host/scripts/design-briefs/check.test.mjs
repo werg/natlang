@@ -76,6 +76,9 @@ test('explicit native calls obey positional signatures rather than a single name
   assert.equal(checkNativeCalls(parent('Bind result = interpret(mission, change).'), 'plan.nl').visible_references, 1);
   assert.throws(() => checkNativeCalls(parent('Call interpret({ mission, change }).'), 'plan.nl'), /2 positional arguments.*supplies 1/);
   assert.throws(() => checkNativeCalls(parent('Call interpret(mission, change, "extra").'), 'plan.nl'), /supplies 3/);
+  assert.throws(() => checkNativeCalls(parent('Bind result = plan/interpret(mission, change).'), 'plan.nl'), /callable name/);
+  const duplicate = { 'plan.nl': '---\nargs: { mission: string; mission: string }\nreturns: string\n---\nReturn mission.\n' };
+  assert.throws(() => checkNativeCalls(duplicate, 'plan.nl'), /duplicate native parameter/);
 });
 
 test('existing exact scorer rewards only the finite answer; judged workflow never auto-passes', async () => {

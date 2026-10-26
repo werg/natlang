@@ -1,7 +1,7 @@
 [
   {
     "id": "100-first-gate-pass",
-    "root": "runCase/modelDramaturgy/audit/qualify.nl",
+    "root": "controlPerformance/modelDramaturgy/auditScene/qualify.nl",
     "split_group": "world-100-first-gate",
     "inputs": {
       "evidence": {
@@ -69,7 +69,7 @@
   },
   {
     "id": "100-first-gate-fail",
-    "root": "runCase/modelDramaturgy/audit/qualify.nl",
+    "root": "controlPerformance/modelDramaturgy/auditScene/qualify.nl",
     "split_group": "world-100-first-gate",
     "inputs": {
       "evidence": {
@@ -137,7 +137,7 @@
   },
   {
     "id": "100-first-gate-needs-review",
-    "root": "runCase/modelDramaturgy/audit/qualify.nl",
+    "root": "controlPerformance/modelDramaturgy/auditScene/qualify.nl",
     "split_group": "world-100-first-gate",
     "inputs": {
       "evidence": {
@@ -205,12 +205,11 @@
   },
   {
     "id": "100-workflow-1",
-    "root": "runCase.nl",
+    "root": "controlPerformance.nl",
     "split_group": "world-100-workflow-1",
     "inputs": {
-      "request": "Review the cast and cue evidence for Amir’s no-participation choice and the knowledge boundary around letter L4.",
-      "records": [
-        {
+      "sources": {
+        "production": {
           "id": "100-production-1",
           "caseId": "100-workflow-1",
           "sourceRefs": [
@@ -219,10 +218,6 @@
           "state": "draft",
           "kind": "ImmersiveProduction",
           "subject": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
-          "status": "candidate",
-          "evidenceIds": [
-            "100-event-1"
-          ],
           "fields": {
             "sourceArtifact": "100-event-1",
             "sourceVersion": "v2"
@@ -241,36 +236,78 @@
           ],
           "venueId": "VENUE-4",
           "stageManagerId": "SM-8"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "100-event-1",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "100-production-1"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "100-production-1"
-      ],
-      "sourceDelta": [
-        {
-          "id": "100-event-1",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+        },
+        "scriptEvidence": [],
+        "productionEvidence": [
+          {
+            "id": "100-event-1",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "safetyRules": [],
+        "sourceRecordStatus": "candidate",
+        "priorRecordIds": [
+          "100-production-1"
+        ],
+        "reviewAudience": "accountable reviewer"
+      },
+      "checkpoint": {
+        "id": "",
+        "productionId": "PROD-100-R1",
+        "priorCheckpointId": "",
+        "version": "v2",
+        "state": "unknown",
+        "sceneOrder": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ],
+        "executedCueReceiptIds": [],
+        "audienceKnowledgeByGroup": {},
+        "characterKnowledgeById": {},
+        "pendingCueIds": [],
+        "reservedResourceWindows": [],
+        "safetyHold": false,
+        "holdSignalIds": [],
+        "changedSourceIds": []
+      },
+      "event": {
+        "request": "Review the cast and cue evidence for Amir’s no-participation choice and the knowledge boundary around letter L4.",
+        "evidence": [
+          {
+            "id": "100-event-1",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "updates": [
+          {
+            "id": "100-event-1",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Cue S3 records audience member Amir declining the speaking role. The run sheet provides quiet route B, which conveys the same scene outcome without an audience action.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "sceneIds": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ]
+      },
+      "stageManager": {
+        "id": "SM-8"
+      }
     },
     "expected": {
       "application": "Immersive Theatre Stage Manager",
@@ -293,12 +330,11 @@
   },
   {
     "id": "100-workflow-2",
-    "root": "runCase.nl",
+    "root": "controlPerformance.nl",
     "split_group": "world-100-workflow-2",
     "inputs": {
-      "request": "Replan scene S6 using the supplied availability and approved variant record.",
-      "records": [
-        {
+      "sources": {
+        "production": {
           "id": "100-production-2",
           "caseId": "100-workflow-2",
           "sourceRefs": [
@@ -307,10 +343,6 @@
           "state": "draft",
           "kind": "ImmersiveProduction",
           "subject": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
-          "status": "candidate",
-          "evidenceIds": [
-            "100-event-2"
-          ],
           "fields": {
             "sourceArtifact": "100-event-2",
             "sourceVersion": "v2"
@@ -329,36 +361,78 @@
           ],
           "venueId": "VENUE-4",
           "stageManagerId": "SM-8"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "100-event-2",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "100-production-2"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "100-production-2"
-      ],
-      "sourceDelta": [
-        {
-          "id": "100-event-2",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+        },
+        "scriptEvidence": [],
+        "productionEvidence": [
+          {
+            "id": "100-event-2",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "safetyRules": [],
+        "sourceRecordStatus": "candidate",
+        "priorRecordIds": [
+          "100-production-2"
+        ],
+        "reviewAudience": "accountable reviewer"
+      },
+      "checkpoint": {
+        "id": "",
+        "productionId": "PROD-100-R1",
+        "priorCheckpointId": "",
+        "version": "v2",
+        "state": "unknown",
+        "sceneOrder": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ],
+        "executedCueReceiptIds": [],
+        "audienceKnowledgeByGroup": {},
+        "characterKnowledgeById": {},
+        "pendingCueIds": [],
+        "reservedResourceWindows": [],
+        "safetyHold": false,
+        "holdSignalIds": [],
+        "changedSourceIds": []
+      },
+      "event": {
+        "request": "Replan scene S6 using the supplied availability and approved variant record.",
+        "evidence": [
+          {
+            "id": "100-event-2",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "updates": [
+          {
+            "id": "100-event-2",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Actor playing Mira is marked unavailable for scene S6 at 19:30. Approved variant V2 assigns the line to Noor and preserves the scene’s required discovery beat; variant V2 was signed off at rehearsal.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "sceneIds": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ]
+      },
+      "stageManager": {
+        "id": "SM-8"
+      }
     },
     "expected": {
       "application": "Immersive Theatre Stage Manager",
@@ -381,12 +455,11 @@
   },
   {
     "id": "100-workflow-3",
-    "root": "runCase.nl",
+    "root": "controlPerformance.nl",
     "split_group": "world-100-workflow-3",
     "inputs": {
-      "request": "Prepare the bounded prop-failure recovery from the approved cue sheet and inspection record.",
-      "records": [
-        {
+      "sources": {
+        "production": {
           "id": "100-production-3",
           "caseId": "100-workflow-3",
           "sourceRefs": [
@@ -395,10 +468,6 @@
           "state": "draft",
           "kind": "ImmersiveProduction",
           "subject": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
-          "status": "candidate",
-          "evidenceIds": [
-            "100-event-3"
-          ],
           "fields": {
             "sourceArtifact": "100-event-3",
             "sourceVersion": "v2"
@@ -417,36 +486,78 @@
           ],
           "venueId": "VENUE-4",
           "stageManagerId": "SM-8"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "100-event-3",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "100-production-3"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "100-production-3"
-      ],
-      "sourceDelta": [
-        {
-          "id": "100-event-3",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+        },
+        "scriptEvidence": [],
+        "productionEvidence": [
+          {
+            "id": "100-event-3",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "safetyRules": [],
+        "sourceRecordStatus": "candidate",
+        "priorRecordIds": [
+          "100-production-3"
+        ],
+        "reviewAudience": "accountable reviewer"
+      },
+      "checkpoint": {
+        "id": "",
+        "productionId": "PROD-100-R1",
+        "priorCheckpointId": "",
+        "version": "v2",
+        "state": "unknown",
+        "sceneOrder": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ],
+        "executedCueReceiptIds": [],
+        "audienceKnowledgeByGroup": {},
+        "characterKnowledgeById": {},
+        "pendingCueIds": [],
+        "reservedResourceWindows": [],
+        "safetyHold": false,
+        "holdSignalIds": [],
+        "changedSourceIds": []
+      },
+      "event": {
+        "request": "Prepare the bounded prop-failure recovery from the approved cue sheet and inspection record.",
+        "evidence": [
+          {
+            "id": "100-event-3",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "updates": [
+          {
+            "id": "100-event-3",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "Hand prop P7 (glass vial) fails its inspection latch at preshow. Approved recovery cue R2 uses a lighting change and sound cue; no physical handling or hazardous substitute is listed.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "sceneIds": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ]
+      },
+      "stageManager": {
+        "id": "SM-8"
+      }
     },
     "expected": {
       "application": "Immersive Theatre Stage Manager",
@@ -469,12 +580,11 @@
   },
   {
     "id": "100-workflow-4",
-    "root": "runCase.nl",
+    "root": "controlPerformance.nl",
     "split_group": "world-100-workflow-4",
     "inputs": {
-      "request": "Reconcile what group North, group South, and Mira know before scene S8.",
-      "records": [
-        {
+      "sources": {
+        "production": {
           "id": "100-production-4",
           "caseId": "100-workflow-4",
           "sourceRefs": [
@@ -483,10 +593,6 @@
           "state": "draft",
           "kind": "ImmersiveProduction",
           "subject": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
-          "status": "candidate",
-          "evidenceIds": [
-            "100-event-4"
-          ],
           "fields": {
             "sourceArtifact": "100-event-4",
             "sourceVersion": "v2"
@@ -505,36 +611,78 @@
           ],
           "venueId": "VENUE-4",
           "stageManagerId": "SM-8"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "100-event-4",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "100-production-4"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "100-production-4"
-      ],
-      "sourceDelta": [
-        {
-          "id": "100-event-4",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+        },
+        "scriptEvidence": [],
+        "productionEvidence": [
+          {
+            "id": "100-event-4",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "safetyRules": [],
+        "sourceRecordStatus": "candidate",
+        "priorRecordIds": [
+          "100-production-4"
+        ],
+        "reviewAudience": "accountable reviewer"
+      },
+      "checkpoint": {
+        "id": "",
+        "productionId": "PROD-100-R1",
+        "priorCheckpointId": "",
+        "version": "v2",
+        "state": "unknown",
+        "sceneOrder": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ],
+        "executedCueReceiptIds": [],
+        "audienceKnowledgeByGroup": {},
+        "characterKnowledgeById": {},
+        "pendingCueIds": [],
+        "reservedResourceWindows": [],
+        "safetyHold": false,
+        "holdSignalIds": [],
+        "changedSourceIds": []
+      },
+      "event": {
+        "request": "Reconcile what group North, group South, and Mira know before scene S8.",
+        "evidence": [
+          {
+            "id": "100-event-4",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "updates": [
+          {
+            "id": "100-event-4",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "At the scene S8 branch, audience group North has read letter L4. Group South has not. Character Mira knows the meeting place and time but does not know who wrote the letter.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "sceneIds": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ]
+      },
+      "stageManager": {
+        "id": "SM-8"
+      }
     },
     "expected": {
       "application": "Immersive Theatre Stage Manager",
@@ -557,12 +705,11 @@
   },
   {
     "id": "100-workflow-5",
-    "root": "runCase.nl",
+    "root": "controlPerformance.nl",
     "split_group": "world-100-workflow-5",
     "inputs": {
-      "request": "Handle stop signal SAFE-3 under the supplied production safety protocol.",
-      "records": [
-        {
+      "sources": {
+        "production": {
           "id": "100-production-5",
           "caseId": "100-workflow-5",
           "sourceRefs": [
@@ -571,10 +718,6 @@
           "state": "draft",
           "kind": "ImmersiveProduction",
           "subject": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
-          "status": "candidate",
-          "evidenceIds": [
-            "100-event-5"
-          ],
           "fields": {
             "sourceArtifact": "100-event-5",
             "sourceVersion": "v2"
@@ -593,36 +736,78 @@
           ],
           "venueId": "VENUE-4",
           "stageManagerId": "SM-8"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "100-event-5",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "100-production-5"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "100-production-5"
-      ],
-      "sourceDelta": [
-        {
-          "id": "100-event-5",
-          "source": "approved run sheet, cue or safety record",
-          "version": "v2",
-          "text": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
-          "status": "current",
-          "authority": "primary production artifact"
-        }
-      ]
+        },
+        "scriptEvidence": [],
+        "productionEvidence": [
+          {
+            "id": "100-event-5",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "safetyRules": [],
+        "sourceRecordStatus": "candidate",
+        "priorRecordIds": [
+          "100-production-5"
+        ],
+        "reviewAudience": "accountable reviewer"
+      },
+      "checkpoint": {
+        "id": "",
+        "productionId": "PROD-100-R1",
+        "priorCheckpointId": "",
+        "version": "v2",
+        "state": "unknown",
+        "sceneOrder": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ],
+        "executedCueReceiptIds": [],
+        "audienceKnowledgeByGroup": {},
+        "characterKnowledgeById": {},
+        "pendingCueIds": [],
+        "reservedResourceWindows": [],
+        "safetyHold": false,
+        "holdSignalIds": [],
+        "changedSourceIds": []
+      },
+      "event": {
+        "request": "Handle stop signal SAFE-3 under the supplied production safety protocol.",
+        "evidence": [
+          {
+            "id": "100-event-5",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "updates": [
+          {
+            "id": "100-event-5",
+            "source": "approved run sheet, cue or safety record",
+            "version": "v2",
+            "text": "House manager receives stop signal SAFE-3 at 20:14 during scene S9. The safety protocol says pause performance and house movement pending the safety lead’s all-clear.",
+            "status": "current",
+            "authority": "primary production artifact"
+          }
+        ],
+        "sceneIds": [
+          "S3",
+          "S6",
+          "S8",
+          "S9"
+        ]
+      },
+      "stageManager": {
+        "id": "SM-8"
+      }
     },
     "expected": {
       "application": "Immersive Theatre Stage Manager",

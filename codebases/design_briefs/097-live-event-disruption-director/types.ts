@@ -143,3 +143,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type PromiseLedgerItem={id:string;sourceId:string;kind:'public-promise'|'contract'|'accessibility'|'internal';priority:number;outcome:string;dependencies:string[];owner:string;};
+export type EventResource={id:string;kind:string;available:boolean;windowStart:number;windowEnd:number;setupMinutes:number;teardownMinutes:number;};
+export type ProgramSegment={id:string;start:number;end:number;duration:number;setupBefore:number;teardownAfter:number;resourceIds:string[];ownerRoles:string[];commitmentIds:string[];format:string;accessibility:string[];};
+export type EventProductionState={id:string;revision:number;closingMinute:number;commitments:PromiseLedgerItem[];resources:EventResource[];segments:ProgramSegment[];disruptions:Disruption[];staffAcks:StaffAcknowledgement[];publicRevision:string;};
+export type Disruption={id:string;capabilityId:string;reportedAt:number;state:'confirmed-lost'|'estimated-lost'|'restored';confidence:string;affectedSegmentIds:string[];sourceId:string;};
+export type StaffAcknowledgement={role:string;revision:string;status:'received'|'pending'|'conflict';receivedAt:number;};
+export type RunSheetProof={eventRevision:number;doubleBookedResources:string[];brokenDependencies:string[];closingOverrun:boolean;setupConflicts:string[];switchDeadlines:Record<string,number>;};
+export type LiveCheckpoint={eventId:string;revision:number;runSheetRevision:string;reservedResourceIds:string[];acknowledgements:StaffAcknowledgement[];executionEvents:string[];emergencyActive:boolean;};
+export type ChangePacket={event:EventProductionState;options:string[];proof:RunSheetProof;messages:string[];decisionDeadlines:string[];checkpoint:LiveCheckpoint;status:'suspended-emergency'|'blocked'|'awaiting-approval'|'ready-to-announce'|'executing';};
+

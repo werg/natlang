@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "026",
+  "title": "Contract obligation workbench",
+  "entrypoint": "analyzeContract.nl",
+  "interfaces": [
+    {
+      "name": "analyzeContract",
+      "path": "analyzeContract.nl",
+      "purpose": "Map versioned contract clauses into actor, trigger, deadline, performance and evidence of discharge without flattening dispute or confidentiality."
+    }
+  ],
+  "persistence": [
+    "ContractObligation",
+    "ObligationRelation",
+    "TriggerFinding",
+    "ObligationTask",
+    "ObligationStatus"
+  ],
+  "effects": [
+    "preserve disputed clause interpretations pending authority",
+    "share minimum necessary instruction from confidential clauses"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "parseObligations",
+        "paths": [
+          "obligationWorkbench/parseDutyFacets.nl"
+        ]
+      },
+      {
+        "stage": "resolveInteractions",
+        "paths": [
+          "obligationWorkbench/linkClauseRelations.nl"
+        ]
+      },
+      {
+        "stage": "assessEvents",
+        "paths": [
+          "obligationWorkbench/testEventTriggers.nl"
+        ]
+      },
+      {
+        "stage": "planPerformance",
+        "paths": [
+          "obligationWorkbench/planOwnedPerformance.nl"
+        ]
+      },
+      {
+        "stage": "verifyDischarge",
+        "paths": [
+          "obligationWorkbench/reconcileDischarge.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "contractDesk/resolvePartyIdentity.nl",
+          "contractDesk/frameContract.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "contractDesk/bindBusinessCalendar.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "contractDesk/evaluateEffectiveNotice.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "contractDesk/branchDisputedClause.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "contractDesk/minimizeConfidentialInstruction.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "types.ts",
+    "analyzeContract.nl",
+    "obligationWorkbench/parseDutyFacets.nl",
+    "obligationWorkbench/linkClauseRelations.nl",
+    "obligationWorkbench/testEventTriggers.nl",
+    "obligationWorkbench/planOwnedPerformance.nl",
+    "obligationWorkbench/reconcileDischarge.nl",
+    "contractDesk/resolvePartyIdentity.nl",
+    "contractDesk/bindBusinessCalendar.nl",
+    "contractDesk/evaluateEffectiveNotice.nl",
+    "contractDesk/branchDisputedClause.nl",
+    "contractDesk/minimizeConfidentialInstruction.nl",
+    "runCase/parseObligations/audit/qualify.nl",
+    "contractDesk/frameContract.nl"
+  ]
+}

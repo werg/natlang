@@ -1,0 +1,90 @@
+{
+  "schema": "natlang.application/1",
+  "id": "096",
+  "title": "Escape Room Foundry",
+  "entrypoint": "foundryRoom.nl",
+  "interfaces": [
+    {
+      "name": "foundryRoom",
+      "path": "foundryRoom.nl",
+      "purpose": "Develop a solvable, recoverable and safe escape room with session-reset operations."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "modelExperience",
+        "paths": [
+          "foundryRoom/modelRoomConstraints.nl"
+        ]
+      },
+      {
+        "stage": "constructPuzzleGraph",
+        "paths": [
+          "foundryRoom/auditClueFairness.nl"
+        ]
+      },
+      {
+        "stage": "writeArtifacts",
+        "paths": [
+          "foundryRoom/auditClueFairness.nl"
+        ]
+      },
+      {
+        "stage": "simulatePlayers",
+        "paths": [
+          "foundryRoom/rehearseFailureStates.nl"
+        ]
+      },
+      {
+        "stage": "packageOperations",
+        "paths": [
+          "foundryRoom/packageSessionOperations.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "foundryRoom/auditClueFairness.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "foundryRoom/rehearseFailureStates.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "foundryRoom/packageSessionOperations.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "foundryRoom/designAccessibleRoutes.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "foundryRoom/auditClueFairness.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "foundryRoom.nl",
+    "foundryRoom/auditClueFairness.nl",
+    "foundryRoom/designAccessibleRoutes.nl",
+    "foundryRoom/modelRoomConstraints.nl",
+    "foundryRoom/packageSessionOperations.nl",
+    "foundryRoom/rehearseFailureStates.nl",
+    "foundryRoom/verifyPuzzleGraph.ts",
+    "runCase/modelExperience/audit/qualify.nl",
+    "types.ts"
+  ]
+}

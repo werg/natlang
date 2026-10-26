@@ -1,0 +1,89 @@
+{
+  "schema": "natlang.application/1",
+  "id": "098",
+  "title": "Persistent World Game Director",
+  "entrypoint": "directPersistentWorld.nl",
+  "interfaces": [
+    {
+      "name": "directPersistentWorld",
+      "path": "directPersistentWorld.nl",
+      "purpose": "Interpret player actions through character knowledge and reconcile authoritative world-simulator receipts."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretIntent",
+        "paths": [
+          "directPersistentWorld/interpretPlayerIntent.nl"
+        ]
+      },
+      {
+        "stage": "modelCharacterViews",
+        "paths": [
+          "directPersistentWorld/projectCharacterKnowledge.nl"
+        ]
+      },
+      {
+        "stage": "chooseWorldActions",
+        "paths": [
+          "directPersistentWorld/chooseLegalCharacterActions.nl"
+        ]
+      },
+      {
+        "stage": "advanceConsequences",
+        "paths": [
+          "directPersistentWorld/applyWorldReceipts.nl"
+        ]
+      },
+      {
+        "stage": "maintainContinuity",
+        "paths": [
+          "directPersistentWorld/updateBeliefsAndContinuity.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "directPersistentWorld/applyWorldReceipts.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "directPersistentWorld/applyWorldReceipts.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "directPersistentWorld/updateBeliefsAndContinuity.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "directPersistentWorld/chooseLegalCharacterActions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "directPersistentWorld/updateBeliefsAndContinuity.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "directPersistentWorld.nl",
+    "directPersistentWorld/applyWorldReceipts.nl",
+    "directPersistentWorld/chooseLegalCharacterActions.nl",
+    "directPersistentWorld/interpretPlayerIntent.nl",
+    "directPersistentWorld/projectCharacterKnowledge.nl",
+    "directPersistentWorld/updateBeliefsAndContinuity.nl",
+    "runCase/interpretIntent/audit/qualify.nl",
+    "types.ts"
+  ]
+}

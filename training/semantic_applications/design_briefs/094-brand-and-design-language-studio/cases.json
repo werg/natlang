@@ -181,58 +181,118 @@
   },
   {
     "id": "094-workflow-1",
-    "root": "runCase.nl",
+    "root": "shapeBrandSystem.nl",
     "split_group": "world-094-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "brief": {
+        "id": "094-workflow-1",
+        "product": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+        "capabilities": [
+          "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee."
+        ],
+        "prohibitions": [
+          "094-workflow-1-record"
+        ],
+        "audiences": [
+          "case audience"
+        ],
+        "goals": [
+          "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence."
+        ],
+        "channels": [
+          "web",
+          "support"
+        ]
+      },
+      "claimEvidence": [
         {
-          "id": "094-workflow-1-record",
-          "caseId": "094-workflow-1",
-          "sourceRefs": [
-            "094-wf-1-source"
-          ],
-          "state": "draft",
-          "kind": "BrandProject",
-          "subject": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
-          "status": "candidate",
-          "evidenceIds": [
-            "094-wf-1-source"
-          ],
-          "fields": {
-            "sourceArtifact": "094-wf-1-source",
-            "sourceVersion": "v1"
-          },
-          "clientId": "CLIENT-94",
-          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
-          "productFactIds": [
-            "SERVICE-NORTH",
-            "SERVICE-EAST",
-            "SERVICE-CENTRAL"
-          ],
-          "audienceGuidanceId": "AUD-94",
-          "creativeDirectorId": "CD-4"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "094-wf-1-source",
-          "source": "primary case artifact 094-E1",
-          "version": "v1",
+          "claimId": "094-workflow-1-record",
           "text": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "sourceId": "094-workflow-1-record",
+          "revision": "v1",
+          "status": "supported"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "094-workflow-1-record"
+      "directions": [
+        {
+          "id": "094-workflow-1-direction",
+          "name": "case direction",
+          "positioning": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "emphasis": [
+            "094-workflow-1-record"
+          ],
+          "exclusions": [],
+          "messageLogic": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-1-record"
+          ],
+          "rightsQuestions": []
+        }
       ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "094-workflow-1-record"
+      "system": {
+        "id": "094-workflow-1-system",
+        "revision": "v1",
+        "directionId": "094-workflow-1-direction",
+        "rules": [
+          {
+            "context": "promotion",
+            "principle": "truthful",
+            "allowedExamples": [],
+            "disallowedExamples": [],
+            "disclosure": []
+          }
+        ],
+        "approvedByClient": false,
+        "approvalScope": []
+      },
+      "assets": [
+        {
+          "id": "094-workflow-1-asset",
+          "channel": "web",
+          "task": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "copy": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-1-record"
+          ],
+          "systemRevision": "v1",
+          "requiredDisclosures": []
+        }
       ],
-      "sourceDelta": [
+      "checkpoint": {
+        "productRevision": "v1",
+        "systemRevision": "v1",
+        "assetRevisions": [],
+        "invalidatedAssetIds": [],
+        "approvedScopes": []
+      },
+      "sourceRecord": {
+        "id": "094-workflow-1-record",
+        "caseId": "094-workflow-1",
+        "sourceRefs": [
+          "094-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "BrandProject",
+        "subject": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
+        "status": "candidate",
+        "evidenceIds": [
+          "094-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "094-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "clientId": "CLIENT-94",
+        "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+        "productFactIds": [
+          "SERVICE-NORTH",
+          "SERVICE-EAST",
+          "SERVICE-CENTRAL"
+        ],
+        "audienceGuidanceId": "AUD-94",
+        "creativeDirectorId": "CD-4"
+      },
+      "sourceEvidence": [
         {
           "id": "094-wf-1-source",
           "source": "primary case artifact 094-E1",
@@ -264,58 +324,118 @@
   },
   {
     "id": "094-workflow-2",
-    "root": "runCase.nl",
+    "root": "shapeBrandSystem.nl",
     "split_group": "world-094-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "brief": {
+        "id": "094-workflow-2",
+        "product": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+        "capabilities": [
+          "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded."
+        ],
+        "prohibitions": [
+          "094-workflow-2-record"
+        ],
+        "audiences": [
+          "case audience"
+        ],
+        "goals": [
+          "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence."
+        ],
+        "channels": [
+          "web",
+          "support"
+        ]
+      },
+      "claimEvidence": [
         {
-          "id": "094-workflow-2-record",
-          "caseId": "094-workflow-2",
-          "sourceRefs": [
-            "094-event-2"
-          ],
-          "state": "draft",
-          "kind": "BrandProject",
-          "subject": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
-          "status": "candidate",
-          "evidenceIds": [
-            "094-event-2"
-          ],
-          "fields": {
-            "sourceArtifact": "094-event-2",
-            "sourceVersion": "v1"
-          },
-          "clientId": "CLIENT-94",
-          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
-          "productFactIds": [
-            "SERVICE-NORTH",
-            "SERVICE-EAST",
-            "SERVICE-CENTRAL"
-          ],
-          "audienceGuidanceId": "AUD-94",
-          "creativeDirectorId": "CD-4"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "094-event-2",
-          "source": "current domain record 094-E2",
-          "version": "v1",
+          "claimId": "094-workflow-2-record",
           "text": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "sourceId": "094-workflow-2-record",
+          "revision": "v1",
+          "status": "supported"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "094-workflow-2-record"
+      "directions": [
+        {
+          "id": "094-workflow-2-direction",
+          "name": "case direction",
+          "positioning": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "emphasis": [
+            "094-workflow-2-record"
+          ],
+          "exclusions": [],
+          "messageLogic": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-2-record"
+          ],
+          "rightsQuestions": []
+        }
       ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "094-workflow-2-record"
+      "system": {
+        "id": "094-workflow-2-system",
+        "revision": "v1",
+        "directionId": "094-workflow-2-direction",
+        "rules": [
+          {
+            "context": "promotion",
+            "principle": "truthful",
+            "allowedExamples": [],
+            "disallowedExamples": [],
+            "disclosure": []
+          }
+        ],
+        "approvedByClient": false,
+        "approvalScope": []
+      },
+      "assets": [
+        {
+          "id": "094-workflow-2-asset",
+          "channel": "web",
+          "task": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "copy": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-2-record"
+          ],
+          "systemRevision": "v1",
+          "requiredDisclosures": []
+        }
       ],
-      "sourceDelta": [
+      "checkpoint": {
+        "productRevision": "v1",
+        "systemRevision": "v1",
+        "assetRevisions": [],
+        "invalidatedAssetIds": [],
+        "approvedScopes": []
+      },
+      "sourceRecord": {
+        "id": "094-workflow-2-record",
+        "caseId": "094-workflow-2",
+        "sourceRefs": [
+          "094-event-2"
+        ],
+        "state": "draft",
+        "kind": "BrandProject",
+        "subject": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
+        "status": "candidate",
+        "evidenceIds": [
+          "094-event-2"
+        ],
+        "fields": {
+          "sourceArtifact": "094-event-2",
+          "sourceVersion": "v1"
+        },
+        "clientId": "CLIENT-94",
+        "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+        "productFactIds": [
+          "SERVICE-NORTH",
+          "SERVICE-EAST",
+          "SERVICE-CENTRAL"
+        ],
+        "audienceGuidanceId": "AUD-94",
+        "creativeDirectorId": "CD-4"
+      },
+      "sourceEvidence": [
         {
           "id": "094-event-2",
           "source": "current domain record 094-E2",
@@ -347,58 +467,118 @@
   },
   {
     "id": "094-workflow-3",
-    "root": "runCase.nl",
+    "root": "shapeBrandSystem.nl",
     "split_group": "world-094-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "brief": {
+        "id": "094-workflow-3",
+        "product": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+        "capabilities": [
+          "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone."
+        ],
+        "prohibitions": [
+          "094-workflow-3-record"
+        ],
+        "audiences": [
+          "case audience"
+        ],
+        "goals": [
+          "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence."
+        ],
+        "channels": [
+          "web",
+          "support"
+        ]
+      },
+      "claimEvidence": [
         {
-          "id": "094-workflow-3-record",
-          "caseId": "094-workflow-3",
-          "sourceRefs": [
-            "094-event-3"
-          ],
-          "state": "draft",
-          "kind": "BrandProject",
-          "subject": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
-          "status": "candidate",
-          "evidenceIds": [
-            "094-event-3"
-          ],
-          "fields": {
-            "sourceArtifact": "094-event-3",
-            "sourceVersion": "v1"
-          },
-          "clientId": "CLIENT-94",
-          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
-          "productFactIds": [
-            "SERVICE-NORTH",
-            "SERVICE-EAST",
-            "SERVICE-CENTRAL"
-          ],
-          "audienceGuidanceId": "AUD-94",
-          "creativeDirectorId": "CD-4"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "094-event-3",
-          "source": "current domain record 094-E3",
-          "version": "v1",
+          "claimId": "094-workflow-3-record",
           "text": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "sourceId": "094-workflow-3-record",
+          "revision": "v1",
+          "status": "supported"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "094-workflow-3-record"
+      "directions": [
+        {
+          "id": "094-workflow-3-direction",
+          "name": "case direction",
+          "positioning": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "emphasis": [
+            "094-workflow-3-record"
+          ],
+          "exclusions": [],
+          "messageLogic": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-3-record"
+          ],
+          "rightsQuestions": []
+        }
       ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "094-workflow-3-record"
+      "system": {
+        "id": "094-workflow-3-system",
+        "revision": "v1",
+        "directionId": "094-workflow-3-direction",
+        "rules": [
+          {
+            "context": "promotion",
+            "principle": "truthful",
+            "allowedExamples": [],
+            "disallowedExamples": [],
+            "disclosure": []
+          }
+        ],
+        "approvedByClient": false,
+        "approvalScope": []
+      },
+      "assets": [
+        {
+          "id": "094-workflow-3-asset",
+          "channel": "web",
+          "task": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "copy": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-3-record"
+          ],
+          "systemRevision": "v1",
+          "requiredDisclosures": []
+        }
       ],
-      "sourceDelta": [
+      "checkpoint": {
+        "productRevision": "v1",
+        "systemRevision": "v1",
+        "assetRevisions": [],
+        "invalidatedAssetIds": [],
+        "approvedScopes": []
+      },
+      "sourceRecord": {
+        "id": "094-workflow-3-record",
+        "caseId": "094-workflow-3",
+        "sourceRefs": [
+          "094-event-3"
+        ],
+        "state": "draft",
+        "kind": "BrandProject",
+        "subject": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
+        "status": "candidate",
+        "evidenceIds": [
+          "094-event-3"
+        ],
+        "fields": {
+          "sourceArtifact": "094-event-3",
+          "sourceVersion": "v1"
+        },
+        "clientId": "CLIENT-94",
+        "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+        "productFactIds": [
+          "SERVICE-NORTH",
+          "SERVICE-EAST",
+          "SERVICE-CENTRAL"
+        ],
+        "audienceGuidanceId": "AUD-94",
+        "creativeDirectorId": "CD-4"
+      },
+      "sourceEvidence": [
         {
           "id": "094-event-3",
           "source": "current domain record 094-E3",
@@ -430,58 +610,118 @@
   },
   {
     "id": "094-workflow-4",
-    "root": "runCase.nl",
+    "root": "shapeBrandSystem.nl",
     "split_group": "world-094-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "brief": {
+        "id": "094-workflow-4",
+        "product": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+        "capabilities": [
+          "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged."
+        ],
+        "prohibitions": [
+          "094-workflow-4-record"
+        ],
+        "audiences": [
+          "case audience"
+        ],
+        "goals": [
+          "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence."
+        ],
+        "channels": [
+          "web",
+          "support"
+        ]
+      },
+      "claimEvidence": [
         {
-          "id": "094-workflow-4-record",
-          "caseId": "094-workflow-4",
-          "sourceRefs": [
-            "094-event-4"
-          ],
-          "state": "draft",
-          "kind": "BrandProject",
-          "subject": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
-          "status": "candidate",
-          "evidenceIds": [
-            "094-event-4"
-          ],
-          "fields": {
-            "sourceArtifact": "094-event-4",
-            "sourceVersion": "v1"
-          },
-          "clientId": "CLIENT-94",
-          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
-          "productFactIds": [
-            "SERVICE-NORTH",
-            "SERVICE-EAST",
-            "SERVICE-CENTRAL"
-          ],
-          "audienceGuidanceId": "AUD-94",
-          "creativeDirectorId": "CD-4"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "094-event-4",
-          "source": "current domain record 094-E4",
-          "version": "v1",
+          "claimId": "094-workflow-4-record",
           "text": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "sourceId": "094-workflow-4-record",
+          "revision": "v1",
+          "status": "supported"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "094-workflow-4-record"
+      "directions": [
+        {
+          "id": "094-workflow-4-direction",
+          "name": "case direction",
+          "positioning": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "emphasis": [
+            "094-workflow-4-record"
+          ],
+          "exclusions": [],
+          "messageLogic": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-4-record"
+          ],
+          "rightsQuestions": []
+        }
       ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "094-workflow-4-record"
+      "system": {
+        "id": "094-workflow-4-system",
+        "revision": "v1",
+        "directionId": "094-workflow-4-direction",
+        "rules": [
+          {
+            "context": "promotion",
+            "principle": "truthful",
+            "allowedExamples": [],
+            "disallowedExamples": [],
+            "disclosure": []
+          }
+        ],
+        "approvedByClient": false,
+        "approvalScope": []
+      },
+      "assets": [
+        {
+          "id": "094-workflow-4-asset",
+          "channel": "web",
+          "task": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "copy": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-4-record"
+          ],
+          "systemRevision": "v1",
+          "requiredDisclosures": []
+        }
       ],
-      "sourceDelta": [
+      "checkpoint": {
+        "productRevision": "v1",
+        "systemRevision": "v1",
+        "assetRevisions": [],
+        "invalidatedAssetIds": [],
+        "approvedScopes": []
+      },
+      "sourceRecord": {
+        "id": "094-workflow-4-record",
+        "caseId": "094-workflow-4",
+        "sourceRefs": [
+          "094-event-4"
+        ],
+        "state": "draft",
+        "kind": "BrandProject",
+        "subject": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
+        "status": "candidate",
+        "evidenceIds": [
+          "094-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "094-event-4",
+          "sourceVersion": "v1"
+        },
+        "clientId": "CLIENT-94",
+        "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+        "productFactIds": [
+          "SERVICE-NORTH",
+          "SERVICE-EAST",
+          "SERVICE-CENTRAL"
+        ],
+        "audienceGuidanceId": "AUD-94",
+        "creativeDirectorId": "CD-4"
+      },
+      "sourceEvidence": [
         {
           "id": "094-event-4",
           "source": "current domain record 094-E4",
@@ -513,58 +753,118 @@
   },
   {
     "id": "094-workflow-5",
-    "root": "runCase.nl",
+    "root": "shapeBrandSystem.nl",
     "split_group": "world-094-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "brief": {
+        "id": "094-workflow-5",
+        "product": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+        "capabilities": [
+          "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off."
+        ],
+        "prohibitions": [
+          "094-workflow-5-record"
+        ],
+        "audiences": [
+          "case audience"
+        ],
+        "goals": [
+          "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence."
+        ],
+        "channels": [
+          "web",
+          "support"
+        ]
+      },
+      "claimEvidence": [
         {
-          "id": "094-workflow-5-record",
-          "caseId": "094-workflow-5",
-          "sourceRefs": [
-            "094-event-5"
-          ],
-          "state": "draft",
-          "kind": "BrandProject",
-          "subject": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
-          "status": "candidate",
-          "evidenceIds": [
-            "094-event-5"
-          ],
-          "fields": {
-            "sourceArtifact": "094-event-5",
-            "sourceVersion": "v1"
-          },
-          "clientId": "CLIENT-94",
-          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
-          "productFactIds": [
-            "SERVICE-NORTH",
-            "SERVICE-EAST",
-            "SERVICE-CENTRAL"
-          ],
-          "audienceGuidanceId": "AUD-94",
-          "creativeDirectorId": "CD-4"
-        }
-      ],
-      "evidence": [
-        {
-          "id": "094-event-5",
-          "source": "current domain record 094-E5",
-          "version": "v1",
+          "claimId": "094-workflow-5-record",
           "text": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
-          "status": "current",
-          "authority": "primary domain evidence"
+          "sourceId": "094-workflow-5-record",
+          "revision": "v1",
+          "status": "supported"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "094-workflow-5-record"
+      "directions": [
+        {
+          "id": "094-workflow-5-direction",
+          "name": "case direction",
+          "positioning": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "emphasis": [
+            "094-workflow-5-record"
+          ],
+          "exclusions": [],
+          "messageLogic": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-5-record"
+          ],
+          "rightsQuestions": []
+        }
       ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "094-workflow-5-record"
+      "system": {
+        "id": "094-workflow-5-system",
+        "revision": "v1",
+        "directionId": "094-workflow-5-direction",
+        "rules": [
+          {
+            "context": "promotion",
+            "principle": "truthful",
+            "allowedExamples": [],
+            "disallowedExamples": [],
+            "disclosure": []
+          }
+        ],
+        "approvedByClient": false,
+        "approvalScope": []
+      },
+      "assets": [
+        {
+          "id": "094-workflow-5-asset",
+          "channel": "web",
+          "task": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "copy": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+          "claimIds": [
+            "094-workflow-5-record"
+          ],
+          "systemRevision": "v1",
+          "requiredDisclosures": []
+        }
       ],
-      "sourceDelta": [
+      "checkpoint": {
+        "productRevision": "v1",
+        "systemRevision": "v1",
+        "assetRevisions": [],
+        "invalidatedAssetIds": [],
+        "approvedScopes": []
+      },
+      "sourceRecord": {
+        "id": "094-workflow-5-record",
+        "caseId": "094-workflow-5",
+        "sourceRefs": [
+          "094-event-5"
+        ],
+        "state": "draft",
+        "kind": "BrandProject",
+        "subject": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
+        "status": "candidate",
+        "evidenceIds": [
+          "094-event-5"
+        ],
+        "fields": {
+          "sourceArtifact": "094-event-5",
+          "sourceVersion": "v1"
+        },
+        "clientId": "CLIENT-94",
+        "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+        "productFactIds": [
+          "SERVICE-NORTH",
+          "SERVICE-EAST",
+          "SERVICE-CENTRAL"
+        ],
+        "audienceGuidanceId": "AUD-94",
+        "creativeDirectorId": "CD-4"
+      },
+      "sourceEvidence": [
         {
           "id": "094-event-5",
           "source": "current domain record 094-E5",

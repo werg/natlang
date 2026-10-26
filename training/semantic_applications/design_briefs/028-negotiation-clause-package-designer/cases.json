@@ -280,19 +280,23 @@
   },
   {
     "id": "028-workflow-01",
-    "root": "runCase.nl",
+    "root": "designClausePackage.nl",
     "split_group": "design-brief-app-028",
     "inputs": {
       "request": {
         "caseId": "SYN-028-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "vault": {
+        "negotiations": [
           {
             "agreementDraftId": "DRAFT-28",
             "playbookId": "PLAYBOOK-28",
@@ -362,6 +366,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Definition TERM-28 changes 'covered unit' from repairable product to all shipped units; four downstream clauses cite TERM-28."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -384,19 +518,23 @@
   },
   {
     "id": "028-workflow-02",
-    "root": "runCase.nl",
+    "root": "designClausePackage.nl",
     "split_group": "design-brief-app-028",
     "inputs": {
       "request": {
         "caseId": "SYN-028-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "vault": {
+        "negotiations": [
           {
             "agreementDraftId": "DRAFT-28",
             "playbookId": "PLAYBOOK-28",
@@ -466,6 +604,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Comment C-28 contains internal fallback price $72; export preview still includes the comment text."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -488,19 +756,23 @@
   },
   {
     "id": "028-workflow-03",
-    "root": "runCase.nl",
+    "root": "designClausePackage.nl",
     "split_group": "design-brief-app-028",
     "inputs": {
       "request": {
         "caseId": "SYN-028-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "vault": {
+        "negotiations": [
           {
             "agreementDraftId": "DRAFT-28",
             "playbookId": "PLAYBOOK-28",
@@ -570,6 +842,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Counterparty accepts clause 4 only if clause 7 warranty remains unchanged; signed response includes that condition."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -592,19 +994,23 @@
   },
   {
     "id": "028-workflow-04",
-    "root": "runCase.nl",
+    "root": "designClausePackage.nl",
     "split_group": "design-brief-app-028",
     "inputs": {
       "request": {
         "caseId": "SYN-028-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "vault": {
+        "negotiations": [
           {
             "agreementDraftId": "DRAFT-28",
             "playbookId": "PLAYBOOK-28",
@@ -674,6 +1080,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approver signature SIG-28 binds hash H-28-v1; release packet is H-28-v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -696,19 +1232,23 @@
   },
   {
     "id": "028-workflow-05",
-    "root": "runCase.nl",
+    "root": "designClausePackage.nl",
     "split_group": "design-brief-app-028",
     "inputs": {
       "request": {
         "caseId": "SYN-028-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "parties": [
+          "Legal-28",
+          "Sales-28"
+        ],
+        "issues": [
+          "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work."
+        ],
+        "targetVersion": "v1",
+        "requestedBy": "case owner"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "vault": {
+        "negotiations": [
           {
             "agreementDraftId": "DRAFT-28",
             "playbookId": "PLAYBOOK-28",
@@ -778,6 +1318,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "globalDefinitions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "commentNotes": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "conditionalAcceptances": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "draftApprovals": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "undefinedTermChecks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "028-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Negotiation authority memo AUTH-28 permits swapping a one-week delivery extension for a 2% price reduction; it prohibits reducing the two-year warranty."
+              },
+              {
+                "id": "E2",
+                "source": "028-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Draft clause uses 'service window' without a definition or cited schedule."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

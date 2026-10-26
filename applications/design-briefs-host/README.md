@@ -37,6 +37,8 @@ and `dispatch` to delivery workers. Credentials are an array of
 `{tokenHash, principal: {id, tenantId, roles, scopes?}}`; `tokenHash` is the
 SHA-256 hex digest of a deployment-generated bearer token. No insecure anonymous
 or default-password mode exists. Every case and record is tenant scoped.
+Assign `reconcile` to a separate, narrowly held operations role; ordinary
+`dispatch` workers cannot reconcile delivery outcomes.
 
 The default listener is loopback. Put an authenticated TLS deployment boundary in
 front when exposing it beyond the host, and protect the database and any
@@ -97,9 +99,16 @@ The receiver must implement the supplied idempotency key and return
 `{status:"delivered", idempotencyKey, receiptId}`. A timeout, connection loss,
 unconfirmed response or expired lease becomes an unknown outcome. It is not
 automatically resent. Inspect `GET /outbox/:id`, then use
-`POST /outbox/:id/reconcile` with `{outcome, receipt?, evidence:{kind,reference}}`.
-An evidenced `not_sent` outcome requeues the original entry; a matching delivered
-receipt closes it. A positive HTTP status by itself is not delivery evidence.
+`POST /outbox/:id/reconcile` with `{outcome, receipt?, evidence:{kind,reference,assertion}}`.
+Reconciliation requires the separate `reconcile` capability and an explicit
+operator assertion `{kind:"operator_assertion", reference, assertion}`. The
+authenticated operator identity, assertion text, reference, and time are kept in
+the audit event and reconciliation record. This is an auditable human assertion,
+not cryptographic verification by the host. The operator must inspect the remote
+receiver before choosing `not_sent` (which requeues the original entry) or
+`delivered` (which closes it with the supplied receipt). A positive HTTP status
+by itself is not delivery evidence, and delivery workers cannot release unknown
+outcomes by asserting their own evidence.
 
 ## Verification and limits
 

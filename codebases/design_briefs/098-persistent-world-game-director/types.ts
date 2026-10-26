@@ -145,3 +145,17 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type PlayerUtterance={playerId:string;characterId:string;text:string;visibleLocation:string;clientActionId:string;};
+export type PersistentWorldState={id:string;revision:number;ruleVersion:string;locations:string[];resources:WorldResource[];characters:GameCharacter[];events:WorldEvent[];boundaries:ContentBoundary[];};
+export type WorldResource={id:string;ownerCharacterId:string;location:string;quantity:string;revision:number;};
+export type GameCharacter={id:string;goals:string[];relationships:string[];knownFactIds:string[];beliefs:CharacterBelief[];memoryEventIds:string[];};
+export type CharacterBelief={factId:string;belief:string;sourceEventId:string;certainty:string;};
+export type WorldEvent={id:string;revision:number;kind:string;actorId:string;location:string;facts:string[];privateTo:string[];sourceActionId:string;};
+export type ContentBoundary={participantId:string;blockedTopics:string[];allowedIntensity:string;revision:string;};
+export type LegalAction={id:string;actorId:string;kind:string;targetId:string;location:string;resourceDelta:string;requires:string[];clientActionId:string;};
+export type WorldTransitionReceipt={clientActionId:string;worldId:string;priorRevision:number;newRevision:number;outcome:'committed'|'rejected';eventIds:string[];resourceLedgerHash:string;rejectionReason:string;};
+export type GameCheckpoint={worldId:string;revision:number;ruleVersion:string;pendingActionIds:string[];unknownReceiptIds:string[];boundaryRevisions:string[];replayCursor:string;};
+export type GameSessionResult={intent:LegalAction[];questions:string[];views:CharacterPerspective[];actions:LegalAction[];receipts:WorldTransitionReceipt[];beliefUpdates:CharacterBelief[];continuityNotes:string[];checkpoint:GameCheckpoint;status:'needs-clarification'|'awaiting-simulator'|'reconciled'|'blocked';};
+export type CharacterPerspective={characterId:string;visibleFacts:string[];permittedMemories:string[];privateFactsExcluded:string[];availableActions:string[];};
+

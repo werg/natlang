@@ -6,9 +6,10 @@ import { join, resolve } from 'node:path';
 import { FIXTURE_ROOT, SOURCE_ROOT, REPO, RELEASE, json, sha256 } from './lib.mjs';
 
 const args = process.argv.slice(2);
-if (args.length !== 6 || args[0] !== '--baseline' || args[2] !== '--packet' || args[4] !== '--out')
-  throw new Error('usage: node audit.mjs --baseline ORIGINAL_COMMIT --packet FROZEN_DIRECTORY --out REPORT_DIRECTORY');
-const baseline = args[1], packet = resolve(args[3]), out = resolve(args[5]);
+const fixturesOnly = args.length === 4 && args[0] === '--baseline' && args[2] === '--out';
+if (!fixturesOnly && (args.length !== 6 || args[0] !== '--baseline' || args[2] !== '--packet' || args[4] !== '--out'))
+  throw new Error('usage: node audit.mjs --baseline ORIGINAL_COMMIT [--packet FROZEN_DIRECTORY] --out REPORT_DIRECTORY');
+const baseline = args[1], packet = fixturesOnly ? null : resolve(args[3]), out = resolve(fixturesOnly ? args[3] : args[5]);
 if (!/^[a-f0-9]{40}$/.test(baseline)) throw new Error('baseline must be an exact commit identity');
 const canonical = value => JSON.stringify(value, (_, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.keys(x).sort().map(k => [k, x[k]])) : x);
@@ -23,10 +24,26 @@ function includesRecord(candidates, record) {
   return candidates.some(candidate => Object.keys(record).every(key =>
     Object.hasOwn(candidate, key) && canonical(candidate[key]) === canonical(record[key])));
 }
-function values(value, all = new Set()) {
-  if (value && typeof value === 'object') for (const child of Object.values(value)) values(child, all);
-  else if (typeof value === 'string') all.add(value);
+function leaves(value, path = [], all = []) {
+  if (value && typeof value === 'object') for (const [key, child] of Object.entries(value)) leaves(child, [...path, key], all);
+  else all.push({ path: path.join('.'), value, encoded: canonical(value) });
   return all;
+}
+function retiredTransportField({ path, value }) {
+  // These exact legacy wrapper fields are replaced by the selected domain operation.
+  // They are recorded in the audit, never used as an exception for a source observation.
+  if ((path === 'request.objective' || path === 'request' || path === 'input.goal') && typeof value === 'string' &&
+      (/^Review the .+return a traceable proposal from the supplied records\.$/.test(value) ||
+       /^Prepare a (?:reviewable .+ proposal from the supplied case records and evidence|consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence)\.$/.test(value) ||
+       value === 'Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.'))
+    return 'Generic orchestration instruction replaced by the application-specific operation.';
+  if (['request.requestedBy','recipient','input.audience'].includes(path) && ['case owner','accountable reviewer'].includes(value))
+    return 'Placeholder transport audience removed; actual named actors and source authority remain in domain evidence.';
+  if (path.startsWith('input.policy.') && value === 'current named-source authority; applicability must be checked against version and scope')
+    return 'Generic wrapper instruction replaced by domain-specific authority checks against original evidence.';
+  if (path === 'input.authorityStatus' && ['authorized','unclear'].includes(value))
+    return 'Ambient wrapper authority flag retired; it cannot authorize a domain action without source-specific evidence.';
+  return null;
 }
 const names = (await readdir(join(REPO, SOURCE_ROOT))).filter(name => /^\d{3}-/.test(name)).sort();
 const fixtureResults = [];
@@ -39,23 +56,30 @@ for (const name of names) {
   const issues = [], details = [];
   if (current.length !== previous.length || currentById.size !== previous.length) issues.push('case identity/count changed');
   for (const old of previous) {
-    const now = currentById.get(old.id), errors = [];
+    const now = currentById.get(old.id), errors = [], retiredMetadata = [];
     if (!now) { issues.push(`missing ${old.id}`); continue; }
     for (const [key, value] of Object.entries(old)) if (!['root', 'inputs'].includes(key) && canonical(now[key]) !== canonical(value))
       errors.push(`independent ${key} changed`);
     const exact = old.oracle === 'exact' || old.oracle?.level === 'exact';
     if (exact && canonical(old.inputs) !== canonical(now.inputs)) errors.push('exact qualification input changed');
     if (!exact) {
-      const supplied = objects(now.inputs), oldSnapshot = old.inputs.snapshot ?? {};
-      const sourceRecords = [...(oldSnapshot.caseRecords ?? []), ...(oldSnapshot.policyCandidates ?? []),
-        ...(oldSnapshot.evidencePages ?? []).flatMap(page => page.evidence ?? [])];
+      const supplied = objects(now.inputs);
+      const sourceRecords = objects(old.inputs).filter(record =>
+        ('id' in record && 'tenantId' in record) || ('text' in record && 'source' in record) ||
+        ('id' in record && 'clauses' in record));
+      sourceRecords.push(...Object.values(old.inputs.input?.domainRecords ?? {}).filter(value => value && typeof value === 'object' && !Array.isArray(value)));
       for (const record of sourceRecords) if (!includesRecord(supplied, record)) errors.push(`source record lost or changed: ${record.id ?? record.source ?? 'anonymous'}`);
-      const currentValues = values(now.inputs);
-      for (const value of values(old.inputs)) if (!currentValues.has(value)) errors.push(`source value lost: ${value.slice(0,100)}`);
+      const currentValues = new Set(leaves(now.inputs).map(item => item.encoded));
+      for (const leaf of leaves(old.inputs)) if (!currentValues.has(leaf.encoded)) {
+        const reason = retiredTransportField(leaf);
+        if (reason) retiredMetadata.push({ path: leaf.path, original_value: leaf.value, reason });
+        else errors.push(`source value lost at ${leaf.path}: ${String(leaf.value).slice(0,100)}`);
+      }
     }
     details.push({ id: old.id, kind: exact ? 'exact' : 'judged', original_root: old.root, current_root: now.root,
       independent_truth_sha256: sha256(canonical({ expected: old.expected, oracle: old.oracle, boundary_assertions: old.boundary_assertions })),
-      preserved: errors.length === 0, ...(errors.length ? { issues: errors } : {}) });
+      preserved: errors.length === 0, ...(retiredMetadata.length ? { retired_transport_metadata: retiredMetadata } : {}),
+      ...(errors.length ? { issues: errors } : {}) });
     issues.push(...errors.map(error => `${old.id}: ${error}`));
   }
   fixtureResults.push({ application: name, before_sha256: sha256(oldBytes), after_sha256: sha256(newBytes),
@@ -67,6 +91,11 @@ const migration = { schema: 'natlang.design-brief-fixture-migration/1', release:
   applications: fixtureResults.length, tasks: fixtureResults.reduce((n,x) => n + x.cases,0),
   all_preserved: fixtureResults.length === 100 && fixtureResults.every(item => item.preserved), results: fixtureResults };
 await writeFile(join(out, 'fixture-migration.json'), json(migration));
+if (fixturesOnly) {
+  console.log(json({ applications: migration.applications, tasks: migration.tasks, all_preserved: migration.all_preserved,
+    failures: fixtureResults.filter(item => !item.preserved).map(item => ({ application:item.application, issues:item.issues })) }));
+  process.exit(migration.all_preserved ? 0 : 1);
+}
 const inventory = JSON.parse(await readFile(join(packet, 'inventory.json'), 'utf8'));
 const helperGroups = new Map(), shapeGroups = new Map(), architecture = [];
 for (const item of inventory) {

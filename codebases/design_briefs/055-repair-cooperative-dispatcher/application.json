@@ -87,10 +87,17 @@
   "source_files": [
     "dispatchRepairCase.nl",
     "dispatchRepairCase/scheduleAuthorizedRepairSequence.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/reserveSharedRepairTools.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/reviewAuthorizedRepairBudget.nl",
+    "dispatchRepairCase/scheduleAuthorizedRepairSequence/verifySparePartCompatibility.nl",
     "dispatchRepairCase/selectApprovedBoundedCheck.nl",
     "dispatchRepairCase/separateObservedSymptomsFromCause.nl",
     "dispatchRepairCase/verifyRepairAgainstOriginalSymptom.nl",
+    "dispatchRepairCase/verifyRepairAgainstOriginalSymptom/comparePostWorkChecksToOriginal.nl",
+    "dispatchRepairCase/verifyRepairAgainstOriginalSymptom/identifyTemporaryMasking.nl",
     "dispatchRepairCase/verifyRepairerFitAndConsent.nl",
+    "dispatchRepairCase/verifyRepairerFitAndConsent/filterRepairersByConsentAndAvailability.nl",
+    "dispatchRepairCase/verifyRepairerFitAndConsent/validateTaskCredentialScope.nl",
     "qualification/interpretSymptoms.nl",
     "types.ts"
   ]

@@ -1,0 +1,90 @@
+{
+  "schema": "natlang.application/1",
+  "id": "099",
+  "title": "Negotiation Training Arena",
+  "entrypoint": "runNegotiationArena.nl",
+  "interfaces": [
+    {
+      "name": "runNegotiationArena",
+      "path": "runNegotiationArena.nl",
+      "purpose": "Run a private-role negotiation exercise with exact offer state and behavior-grounded debrief."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "authorNegotiation",
+        "paths": [
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl"
+        ]
+      },
+      {
+        "stage": "prepareRoles",
+        "paths": [
+          "runNegotiationArena/chooseBoundedCounterpartAction.nl"
+        ]
+      },
+      {
+        "stage": "interpretOffers",
+        "paths": [
+          "runNegotiationArena/parseIssueLevelOffer.nl"
+        ]
+      },
+      {
+        "stage": "runCounterparts",
+        "paths": [
+          "runNegotiationArena/chooseBoundedCounterpartAction.nl",
+          "runNegotiationArena/applyNegotiationTimingRules.nl"
+        ]
+      },
+      {
+        "stage": "debriefNegotiation",
+        "paths": [
+          "runNegotiationArena/debriefObservedNegotiation.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "runNegotiationArena/parseIssueLevelOffer.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "runNegotiationArena/applyNegotiationTimingRules.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "runNegotiationArena/applyNegotiationTimingRules.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "runNegotiationArena/debriefObservedNegotiation.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "runCase/authorNegotiation/audit/qualify.nl",
+    "runNegotiationArena.nl",
+    "runNegotiationArena/applyNegotiationTimingRules.nl",
+    "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl",
+    "runNegotiationArena/chooseBoundedCounterpartAction.nl",
+    "runNegotiationArena/debriefObservedNegotiation.nl",
+    "runNegotiationArena/parseIssueLevelOffer.nl",
+    "types.ts"
+  ]
+}

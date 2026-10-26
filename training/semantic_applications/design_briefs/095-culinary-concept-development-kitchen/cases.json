@@ -207,58 +207,104 @@
   },
   {
     "id": "095-workflow-1",
-    "root": "runCase.nl",
+    "root": "developMenu.nl",
     "split_group": "world-095-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "095-workflow-1-record",
-          "caseId": "095-workflow-1",
-          "sourceRefs": [
-            "095-wf-1-source"
+      "ledger": {
+        "brief": {
+          "id": "095-workflow-1",
+          "serviceTime": "TBD",
+          "covers": 10,
+          "mandatoryRestrictions": [
+            "095-workflow-1-record"
           ],
-          "state": "draft",
-          "kind": "MenuProject",
-          "subject": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
-          "status": "candidate",
-          "evidenceIds": [
-            "095-wf-1-source"
-          ],
-          "fields": {
-            "sourceArtifact": "095-wf-1-source",
-            "sourceVersion": "v1"
-          },
-          "venueId": "KITCHEN-95",
-          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
-          "ingredientInventoryIds": [
-            "SAUCE-D3",
-            "ING-I7",
-            "ING-I9"
-          ],
-          "serviceWindow": "12:00–13:00",
-          "chefOwnerId": "CHEF-5"
-        }
+          "preferences": [],
+          "budgetMinor": "100000",
+          "currency": "USD",
+          "equipmentCapacity": {
+            "oven": 1,
+            "range": 1
+          }
+        },
+        "ingredientFacts": [
+          {
+            "ingredientId": "095-workflow-1-record",
+            "lotId": "lot-1",
+            "revision": "v1",
+            "allergens": [],
+            "dietaryProperties": [],
+            "supplier": "case supplier",
+            "verified": true,
+            "substituteFor": []
+          }
+        ],
+        "dishes": [
+          {
+            "id": "095-workflow-1-dish",
+            "revision": "v1",
+            "name": "case dish",
+            "intent": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+            "recipe": [
+              {
+                "ingredientId": "095-workflow-1-record",
+                "quantityMinor": "100",
+                "unit": "g",
+                "yieldServings": "10",
+                "wasteBasis": "none"
+              }
+            ],
+            "equipment": [
+              "oven"
+            ],
+            "prepMinutes": 20,
+            "serviceMinutes": 10,
+            "dietaryLabels": []
+          }
+        ],
+        "sharedComponents": [],
+        "schedule": [],
+        "approvedControls": [],
+        "revision": 1,
+        "exactScaledBatches": []
+      },
+      "change": [
+        "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame."
       ],
-      "evidence": [
-        {
-          "id": "095-wf-1-source",
-          "source": "primary case artifact 095-E1",
-          "version": "v1",
-          "text": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "095-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "095-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "ledgerRevision": 0,
+        "recipeRevisions": [],
+        "ingredientRevisions": [],
+        "invalidatedDishIds": [],
+        "costMinor": "0"
+      },
+      "sourceRecord": {
+        "id": "095-workflow-1-record",
+        "caseId": "095-workflow-1",
+        "sourceRefs": [
+          "095-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "MenuProject",
+        "subject": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
+        "status": "candidate",
+        "evidenceIds": [
+          "095-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "095-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "venueId": "KITCHEN-95",
+        "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+        "ingredientInventoryIds": [
+          "SAUCE-D3",
+          "ING-I7",
+          "ING-I9"
+        ],
+        "serviceWindow": "12:00–13:00",
+        "chefOwnerId": "CHEF-5"
+      },
+      "sourceEvidence": [
         {
           "id": "095-wf-1-source",
           "source": "primary case artifact 095-E1",
@@ -290,58 +336,104 @@
   },
   {
     "id": "095-workflow-2",
-    "root": "runCase.nl",
+    "root": "developMenu.nl",
     "split_group": "world-095-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "095-workflow-2-record",
-          "caseId": "095-workflow-2",
-          "sourceRefs": [
-            "095-wf-2-source"
+      "ledger": {
+        "brief": {
+          "id": "095-workflow-2",
+          "serviceTime": "TBD",
+          "covers": 10,
+          "mandatoryRestrictions": [
+            "095-workflow-2-record"
           ],
-          "state": "draft",
-          "kind": "MenuProject",
-          "subject": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
-          "status": "candidate",
-          "evidenceIds": [
-            "095-wf-2-source"
-          ],
-          "fields": {
-            "sourceArtifact": "095-wf-2-source",
-            "sourceVersion": "v1"
-          },
-          "venueId": "KITCHEN-95",
-          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
-          "ingredientInventoryIds": [
-            "SAUCE-D3",
-            "ING-I7",
-            "ING-I9"
-          ],
-          "serviceWindow": "12:00–13:00",
-          "chefOwnerId": "CHEF-5"
-        }
+          "preferences": [],
+          "budgetMinor": "100000",
+          "currency": "USD",
+          "equipmentCapacity": {
+            "oven": 1,
+            "range": 1
+          }
+        },
+        "ingredientFacts": [
+          {
+            "ingredientId": "095-workflow-2-record",
+            "lotId": "lot-1",
+            "revision": "v1",
+            "allergens": [],
+            "dietaryProperties": [],
+            "supplier": "case supplier",
+            "verified": true,
+            "substituteFor": []
+          }
+        ],
+        "dishes": [
+          {
+            "id": "095-workflow-2-dish",
+            "revision": "v1",
+            "name": "case dish",
+            "intent": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+            "recipe": [
+              {
+                "ingredientId": "095-workflow-2-record",
+                "quantityMinor": "100",
+                "unit": "g",
+                "yieldServings": "10",
+                "wasteBasis": "none"
+              }
+            ],
+            "equipment": [
+              "oven"
+            ],
+            "prepMinutes": 20,
+            "serviceMinutes": 10,
+            "dietaryLabels": []
+          }
+        ],
+        "sharedComponents": [],
+        "schedule": [],
+        "approvedControls": [],
+        "revision": 1,
+        "exactScaledBatches": []
+      },
+      "change": [
+        "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10."
       ],
-      "evidence": [
-        {
-          "id": "095-wf-2-source",
-          "source": "primary case artifact 095-E2",
-          "version": "v1",
-          "text": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "095-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "095-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "ledgerRevision": 0,
+        "recipeRevisions": [],
+        "ingredientRevisions": [],
+        "invalidatedDishIds": [],
+        "costMinor": "0"
+      },
+      "sourceRecord": {
+        "id": "095-workflow-2-record",
+        "caseId": "095-workflow-2",
+        "sourceRefs": [
+          "095-wf-2-source"
+        ],
+        "state": "draft",
+        "kind": "MenuProject",
+        "subject": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
+        "status": "candidate",
+        "evidenceIds": [
+          "095-wf-2-source"
+        ],
+        "fields": {
+          "sourceArtifact": "095-wf-2-source",
+          "sourceVersion": "v1"
+        },
+        "venueId": "KITCHEN-95",
+        "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+        "ingredientInventoryIds": [
+          "SAUCE-D3",
+          "ING-I7",
+          "ING-I9"
+        ],
+        "serviceWindow": "12:00–13:00",
+        "chefOwnerId": "CHEF-5"
+      },
+      "sourceEvidence": [
         {
           "id": "095-wf-2-source",
           "source": "primary case artifact 095-E2",
@@ -373,58 +465,104 @@
   },
   {
     "id": "095-workflow-3",
-    "root": "runCase.nl",
+    "root": "developMenu.nl",
     "split_group": "world-095-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "095-workflow-3-record",
-          "caseId": "095-workflow-3",
-          "sourceRefs": [
-            "095-wf-3-source"
+      "ledger": {
+        "brief": {
+          "id": "095-workflow-3",
+          "serviceTime": "TBD",
+          "covers": 10,
+          "mandatoryRestrictions": [
+            "095-workflow-3-record"
           ],
-          "state": "draft",
-          "kind": "MenuProject",
-          "subject": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
-          "status": "candidate",
-          "evidenceIds": [
-            "095-wf-3-source"
-          ],
-          "fields": {
-            "sourceArtifact": "095-wf-3-source",
-            "sourceVersion": "v1"
-          },
-          "venueId": "KITCHEN-95",
-          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
-          "ingredientInventoryIds": [
-            "SAUCE-D3",
-            "ING-I7",
-            "ING-I9"
-          ],
-          "serviceWindow": "12:00–13:00",
-          "chefOwnerId": "CHEF-5"
-        }
+          "preferences": [],
+          "budgetMinor": "100000",
+          "currency": "USD",
+          "equipmentCapacity": {
+            "oven": 1,
+            "range": 1
+          }
+        },
+        "ingredientFacts": [
+          {
+            "ingredientId": "095-workflow-3-record",
+            "lotId": "lot-1",
+            "revision": "v1",
+            "allergens": [],
+            "dietaryProperties": [],
+            "supplier": "case supplier",
+            "verified": true,
+            "substituteFor": []
+          }
+        ],
+        "dishes": [
+          {
+            "id": "095-workflow-3-dish",
+            "revision": "v1",
+            "name": "case dish",
+            "intent": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+            "recipe": [
+              {
+                "ingredientId": "095-workflow-3-record",
+                "quantityMinor": "100",
+                "unit": "g",
+                "yieldServings": "10",
+                "wasteBasis": "none"
+              }
+            ],
+            "equipment": [
+              "oven"
+            ],
+            "prepMinutes": 20,
+            "serviceMinutes": 10,
+            "dietaryLabels": []
+          }
+        ],
+        "sharedComponents": [],
+        "schedule": [],
+        "approvedControls": [],
+        "revision": 1,
+        "exactScaledBatches": []
+      },
+      "change": [
+        "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously."
       ],
-      "evidence": [
-        {
-          "id": "095-wf-3-source",
-          "source": "primary case artifact 095-E3",
-          "version": "v1",
-          "text": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "095-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "095-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "ledgerRevision": 0,
+        "recipeRevisions": [],
+        "ingredientRevisions": [],
+        "invalidatedDishIds": [],
+        "costMinor": "0"
+      },
+      "sourceRecord": {
+        "id": "095-workflow-3-record",
+        "caseId": "095-workflow-3",
+        "sourceRefs": [
+          "095-wf-3-source"
+        ],
+        "state": "draft",
+        "kind": "MenuProject",
+        "subject": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
+        "status": "candidate",
+        "evidenceIds": [
+          "095-wf-3-source"
+        ],
+        "fields": {
+          "sourceArtifact": "095-wf-3-source",
+          "sourceVersion": "v1"
+        },
+        "venueId": "KITCHEN-95",
+        "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+        "ingredientInventoryIds": [
+          "SAUCE-D3",
+          "ING-I7",
+          "ING-I9"
+        ],
+        "serviceWindow": "12:00–13:00",
+        "chefOwnerId": "CHEF-5"
+      },
+      "sourceEvidence": [
         {
           "id": "095-wf-3-source",
           "source": "primary case artifact 095-E3",
@@ -456,58 +594,104 @@
   },
   {
     "id": "095-workflow-4",
-    "root": "runCase.nl",
+    "root": "developMenu.nl",
     "split_group": "world-095-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "095-workflow-4-record",
-          "caseId": "095-workflow-4",
-          "sourceRefs": [
-            "095-wf-4-source"
+      "ledger": {
+        "brief": {
+          "id": "095-workflow-4",
+          "serviceTime": "TBD",
+          "covers": 10,
+          "mandatoryRestrictions": [
+            "095-workflow-4-record"
           ],
-          "state": "draft",
-          "kind": "MenuProject",
-          "subject": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
-          "status": "candidate",
-          "evidenceIds": [
-            "095-wf-4-source"
-          ],
-          "fields": {
-            "sourceArtifact": "095-wf-4-source",
-            "sourceVersion": "v1"
-          },
-          "venueId": "KITCHEN-95",
-          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
-          "ingredientInventoryIds": [
-            "SAUCE-D3",
-            "ING-I7",
-            "ING-I9"
-          ],
-          "serviceWindow": "12:00–13:00",
-          "chefOwnerId": "CHEF-5"
-        }
+          "preferences": [],
+          "budgetMinor": "100000",
+          "currency": "USD",
+          "equipmentCapacity": {
+            "oven": 1,
+            "range": 1
+          }
+        },
+        "ingredientFacts": [
+          {
+            "ingredientId": "095-workflow-4-record",
+            "lotId": "lot-1",
+            "revision": "v1",
+            "allergens": [],
+            "dietaryProperties": [],
+            "supplier": "case supplier",
+            "verified": true,
+            "substituteFor": []
+          }
+        ],
+        "dishes": [
+          {
+            "id": "095-workflow-4-dish",
+            "revision": "v1",
+            "name": "case dish",
+            "intent": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+            "recipe": [
+              {
+                "ingredientId": "095-workflow-4-record",
+                "quantityMinor": "100",
+                "unit": "g",
+                "yieldServings": "10",
+                "wasteBasis": "none"
+              }
+            ],
+            "equipment": [
+              "oven"
+            ],
+            "prepMinutes": 20,
+            "serviceMinutes": 10,
+            "dietaryLabels": []
+          }
+        ],
+        "sharedComponents": [],
+        "schedule": [],
+        "approvedControls": [],
+        "revision": 1,
+        "exactScaledBatches": []
+      },
+      "change": [
+        "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy."
       ],
-      "evidence": [
-        {
-          "id": "095-wf-4-source",
-          "source": "primary case artifact 095-E4",
-          "version": "v1",
-          "text": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "095-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "095-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "ledgerRevision": 0,
+        "recipeRevisions": [],
+        "ingredientRevisions": [],
+        "invalidatedDishIds": [],
+        "costMinor": "0"
+      },
+      "sourceRecord": {
+        "id": "095-workflow-4-record",
+        "caseId": "095-workflow-4",
+        "sourceRefs": [
+          "095-wf-4-source"
+        ],
+        "state": "draft",
+        "kind": "MenuProject",
+        "subject": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
+        "status": "candidate",
+        "evidenceIds": [
+          "095-wf-4-source"
+        ],
+        "fields": {
+          "sourceArtifact": "095-wf-4-source",
+          "sourceVersion": "v1"
+        },
+        "venueId": "KITCHEN-95",
+        "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+        "ingredientInventoryIds": [
+          "SAUCE-D3",
+          "ING-I7",
+          "ING-I9"
+        ],
+        "serviceWindow": "12:00–13:00",
+        "chefOwnerId": "CHEF-5"
+      },
+      "sourceEvidence": [
         {
           "id": "095-wf-4-source",
           "source": "primary case artifact 095-E4",
@@ -539,58 +723,104 @@
   },
   {
     "id": "095-workflow-5",
-    "root": "runCase.nl",
+    "root": "developMenu.nl",
     "split_group": "world-095-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "095-workflow-5-record",
-          "caseId": "095-workflow-5",
-          "sourceRefs": [
-            "095-wf-5-source"
+      "ledger": {
+        "brief": {
+          "id": "095-workflow-5",
+          "serviceTime": "TBD",
+          "covers": 10,
+          "mandatoryRestrictions": [
+            "095-workflow-5-record"
           ],
-          "state": "draft",
-          "kind": "MenuProject",
-          "subject": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
-          "status": "candidate",
-          "evidenceIds": [
-            "095-wf-5-source"
-          ],
-          "fields": {
-            "sourceArtifact": "095-wf-5-source",
-            "sourceVersion": "v1"
-          },
-          "venueId": "KITCHEN-95",
-          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
-          "ingredientInventoryIds": [
-            "SAUCE-D3",
-            "ING-I7",
-            "ING-I9"
-          ],
-          "serviceWindow": "12:00–13:00",
-          "chefOwnerId": "CHEF-5"
-        }
+          "preferences": [],
+          "budgetMinor": "100000",
+          "currency": "USD",
+          "equipmentCapacity": {
+            "oven": 1,
+            "range": 1
+          }
+        },
+        "ingredientFacts": [
+          {
+            "ingredientId": "095-workflow-5-record",
+            "lotId": "lot-1",
+            "revision": "v1",
+            "allergens": [],
+            "dietaryProperties": [],
+            "supplier": "case supplier",
+            "verified": true,
+            "substituteFor": []
+          }
+        ],
+        "dishes": [
+          {
+            "id": "095-workflow-5-dish",
+            "revision": "v1",
+            "name": "case dish",
+            "intent": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+            "recipe": [
+              {
+                "ingredientId": "095-workflow-5-record",
+                "quantityMinor": "100",
+                "unit": "g",
+                "yieldServings": "10",
+                "wasteBasis": "none"
+              }
+            ],
+            "equipment": [
+              "oven"
+            ],
+            "prepMinutes": 20,
+            "serviceMinutes": 10,
+            "dietaryLabels": []
+          }
+        ],
+        "sharedComponents": [],
+        "schedule": [],
+        "approvedControls": [],
+        "revision": 1,
+        "exactScaledBatches": []
+      },
+      "change": [
+        "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2."
       ],
-      "evidence": [
-        {
-          "id": "095-wf-5-source",
-          "source": "primary case artifact 095-E5",
-          "version": "v1",
-          "text": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "095-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "095-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "ledgerRevision": 0,
+        "recipeRevisions": [],
+        "ingredientRevisions": [],
+        "invalidatedDishIds": [],
+        "costMinor": "0"
+      },
+      "sourceRecord": {
+        "id": "095-workflow-5-record",
+        "caseId": "095-workflow-5",
+        "sourceRefs": [
+          "095-wf-5-source"
+        ],
+        "state": "draft",
+        "kind": "MenuProject",
+        "subject": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
+        "status": "candidate",
+        "evidenceIds": [
+          "095-wf-5-source"
+        ],
+        "fields": {
+          "sourceArtifact": "095-wf-5-source",
+          "sourceVersion": "v1"
+        },
+        "venueId": "KITCHEN-95",
+        "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+        "ingredientInventoryIds": [
+          "SAUCE-D3",
+          "ING-I7",
+          "ING-I9"
+        ],
+        "serviceWindow": "12:00–13:00",
+        "chefOwnerId": "CHEF-5"
+      },
+      "sourceEvidence": [
         {
           "id": "095-wf-5-source",
           "source": "primary case artifact 095-E5",

@@ -143,3 +143,13 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type PuzzleNodeSpec={id:string;clueIds:string[];requires:string[];solves:string[];propIds:string[];mandatory:boolean;};
+export type PropState={id:string;present:boolean;working:boolean;sessionId:string;safeMechanism:boolean;};
+export type AccessibilityRoute={id:string;declinedSensoryElements:string[];equivalentClueIds:string[];terminalNodeId:string;};
+export type EscapeBrief={id:string;goals:string[];accessibilityNeeds:string[];safetyRules:string[];sessionMinutes:number;};
+export type EscapeRoomState={id:string;revision:number;brief:EscapeBrief;nodes:PuzzleNodeSpec[];props:PropState[];clues:string[];routes:AccessibilityRoute[];startNodeId:string;goalNodeIds:string[];exitAlwaysAvailable:boolean;};
+export type PuzzleProof={graphRevision:number;reachableNodeIds:string[];unreachableGoalIds:string[];cycleNodeIds:string[];softLockStates:string[];exitInvariantHolds:boolean;propCoverageGaps:string[];};
+export type PlaytestFinding={scenario:string;stateId:string;kind:'misread'|'out-of-order'|'lost-prop'|'accessibility'|'repeat-action'|'soft-lock';disposition:'safe-recovery'|'repair'|'block';affectedNodeIds:string[];staffAction:string;};
+export type EscapeOperationsPacket={room:EscapeRoomState;proof:PuzzleProof;playtests:PlaytestFinding[];setup:string[];reset:string[];hints:string[];staffRecovery:string[];checkpoint:{roomId:string;revision:number;resetVerified:boolean;nextSessionId:string;};status:'blocked'|'review'|'ready-for-safety-and-playtest-review';};
+

@@ -368,11 +368,14 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
       const p=principalOf(principalArg);if(!Number.isSafeInteger(entryId)||entryId<1)fail('invalid_input');
       if(!['delivered','not_sent'].includes(outcome))fail('invalid_reconciliation');
       if(outcome==='delivered')json(receipt);
-      if(!evidence||typeof evidence!=='object'||Array.isArray(evidence)||typeof evidence.kind!=='string'||typeof evidence.reference!=='string'||!evidence.reference)fail('evidence_required');
-      if(outcome==='not_sent' && !['not_sent_confirmation','remote_negative_receipt'].includes(evidence.kind))fail('evidence_required');
-      if(outcome==='delivered' && !['remote_receipt','operator_reconciliation'].includes(evidence.kind))fail('evidence_required');
+      // This is a manual operator assertion, not cryptographic verification of the
+      // remote system. Keep reconciliation authority separate from delivery workers
+      // and persist the assertion text alongside the authenticated actor in events.
+      if(!evidence||typeof evidence!=='object'||Array.isArray(evidence)||evidence.kind!=='operator_assertion'||
+          typeof evidence.reference!=='string'||!evidence.reference.trim()||
+          typeof evidence.assertion!=='string'||!evidence.assertion.trim()||evidence.assertion.length>4000)fail('evidence_required');
       json(evidence);
-      return transact(()=>{const r=db.prepare('SELECT * FROM outbox WHERE id=?').get(entryId);if(!r||r.tenant_id!==p.tenantId)fail('not_found');authorize(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'dispatch');
+      return transact(()=>{const r=db.prepare('SELECT * FROM outbox WHERE id=?').get(entryId);if(!r||r.tenant_id!==p.tenantId)fail('not_found');authorize(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'reconcile');
         if(!['unknown','failed'].includes(r.status))fail('invalid_lifecycle');const time=now();
         if(outcome==='delivered')db.prepare("UPDATE outbox SET status='delivered',receipt_json=?,failure_code=NULL,reconciliation_json=?,updated_at=? WHERE id=? AND status IN ('unknown','failed')").run(json(receipt),json(evidence),time,entryId);
         else db.prepare("UPDATE outbox SET status='pending',failure_code=NULL,reconciliation_json=?,updated_at=? WHERE id=? AND status IN ('unknown','failed')").run(json(evidence),time,entryId);

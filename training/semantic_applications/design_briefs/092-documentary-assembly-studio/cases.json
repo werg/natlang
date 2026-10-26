@@ -184,41 +184,62 @@
   },
   {
     "id": "092-workflow-1",
-    "root": "runCase.nl",
+    "root": "assembleDocumentary.nl",
     "split_group": "world-092-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Documentary Assembly Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "assets": [
         {
           "id": "092-workflow-1-record",
-          "caseId": "092-workflow-1",
-          "sourceRefs": [
-            "092-event-1"
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
           ],
-          "state": "draft",
-          "kind": "DocumentaryProject",
-          "subject": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
-          "status": "candidate",
-          "evidenceIds": [
-            "092-event-1"
-          ],
-          "fields": {
-            "sourceArtifact": "092-event-1",
-            "sourceVersion": "v1"
-          },
-          "interviewIds": [
-            "INT-92-A",
-            "INT-92-B"
-          ],
-          "archiveAssetIds": [
-            "ARCH-92-A"
-          ],
-          "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
-          "editorId": "ED-92",
-          "targetDurationSeconds": 1800
+          "sourceDate": "unknown",
+          "correctedClaim": ""
         }
       ],
-      "evidence": [
+      "assembly": {
+        "id": "092-workflow-1",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-1-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-1-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
         {
           "id": "092-event-1",
           "source": "current domain record 092-E1",
@@ -228,15 +249,44 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "092-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "092-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "assemblyId": "092-workflow-1",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-1-record",
+        "caseId": "092-workflow-1",
+        "sourceRefs": [
+          "092-event-1"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-event-1"
+        ],
+        "fields": {
+          "sourceArtifact": "092-event-1",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
         {
           "id": "092-event-1",
           "source": "current domain record 092-E1",
@@ -268,41 +318,62 @@
   },
   {
     "id": "092-workflow-2",
-    "root": "runCase.nl",
+    "root": "assembleDocumentary.nl",
     "split_group": "world-092-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Documentary Assembly Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "assets": [
         {
           "id": "092-workflow-2-record",
-          "caseId": "092-workflow-2",
-          "sourceRefs": [
-            "092-wf-2-source"
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
           ],
-          "state": "draft",
-          "kind": "DocumentaryProject",
-          "subject": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
-          "status": "candidate",
-          "evidenceIds": [
-            "092-wf-2-source"
-          ],
-          "fields": {
-            "sourceArtifact": "092-wf-2-source",
-            "sourceVersion": "v1"
-          },
-          "interviewIds": [
-            "INT-92-A",
-            "INT-92-B"
-          ],
-          "archiveAssetIds": [
-            "ARCH-92-A"
-          ],
-          "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
-          "editorId": "ED-92",
-          "targetDurationSeconds": 1800
+          "sourceDate": "unknown",
+          "correctedClaim": ""
         }
       ],
-      "evidence": [
+      "assembly": {
+        "id": "092-workflow-2",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-2-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-2-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
         {
           "id": "092-wf-2-source",
           "source": "primary case artifact 092-E2",
@@ -312,15 +383,44 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "092-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "092-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "assemblyId": "092-workflow-2",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-2-record",
+        "caseId": "092-workflow-2",
+        "sourceRefs": [
+          "092-wf-2-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-2-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-2-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
         {
           "id": "092-wf-2-source",
           "source": "primary case artifact 092-E2",
@@ -352,41 +452,62 @@
   },
   {
     "id": "092-workflow-3",
-    "root": "runCase.nl",
+    "root": "assembleDocumentary.nl",
     "split_group": "world-092-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Documentary Assembly Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "assets": [
         {
           "id": "092-workflow-3-record",
-          "caseId": "092-workflow-3",
-          "sourceRefs": [
-            "092-wf-3-source"
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
           ],
-          "state": "draft",
-          "kind": "DocumentaryProject",
-          "subject": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
-          "status": "candidate",
-          "evidenceIds": [
-            "092-wf-3-source"
-          ],
-          "fields": {
-            "sourceArtifact": "092-wf-3-source",
-            "sourceVersion": "v2"
-          },
-          "interviewIds": [
-            "INT-92-A",
-            "INT-92-B"
-          ],
-          "archiveAssetIds": [
-            "ARCH-92-A"
-          ],
-          "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
-          "editorId": "ED-92",
-          "targetDurationSeconds": 1800
+          "sourceDate": "unknown",
+          "correctedClaim": ""
         }
       ],
-      "evidence": [
+      "assembly": {
+        "id": "092-workflow-3",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-3-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-3-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
         {
           "id": "092-wf-3-source",
           "source": "archive license L-92 and production calendar v4",
@@ -396,15 +517,44 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "092-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "092-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "assemblyId": "092-workflow-3",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-3-record",
+        "caseId": "092-workflow-3",
+        "sourceRefs": [
+          "092-wf-3-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-3-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-3-source",
+          "sourceVersion": "v2"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
         {
           "id": "092-wf-3-source",
           "source": "archive license L-92 and production calendar v4",
@@ -436,41 +586,62 @@
   },
   {
     "id": "092-workflow-4",
-    "root": "runCase.nl",
+    "root": "assembleDocumentary.nl",
     "split_group": "world-092-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Documentary Assembly Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "assets": [
         {
           "id": "092-workflow-4-record",
-          "caseId": "092-workflow-4",
-          "sourceRefs": [
-            "092-wf-4-source"
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
           ],
-          "state": "draft",
-          "kind": "DocumentaryProject",
-          "subject": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
-          "status": "candidate",
-          "evidenceIds": [
-            "092-wf-4-source"
-          ],
-          "fields": {
-            "sourceArtifact": "092-wf-4-source",
-            "sourceVersion": "v1"
-          },
-          "interviewIds": [
-            "INT-92-A",
-            "INT-92-B"
-          ],
-          "archiveAssetIds": [
-            "ARCH-92-A"
-          ],
-          "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
-          "editorId": "ED-92",
-          "targetDurationSeconds": 1800
+          "sourceDate": "unknown",
+          "correctedClaim": ""
         }
       ],
-      "evidence": [
+      "assembly": {
+        "id": "092-workflow-4",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-4-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-4-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
         {
           "id": "092-wf-4-source",
           "source": "primary case artifact 092-E4",
@@ -480,15 +651,44 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "092-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "092-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "assemblyId": "092-workflow-4",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-4-record",
+        "caseId": "092-workflow-4",
+        "sourceRefs": [
+          "092-wf-4-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-4-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-4-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
         {
           "id": "092-wf-4-source",
           "source": "primary case artifact 092-E4",
@@ -520,41 +720,62 @@
   },
   {
     "id": "092-workflow-5",
-    "root": "runCase.nl",
+    "root": "assembleDocumentary.nl",
     "split_group": "world-092-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Documentary Assembly Studio proposal from the supplied case records and evidence.",
-      "records": [
+      "assets": [
         {
           "id": "092-workflow-5-record",
-          "caseId": "092-workflow-5",
-          "sourceRefs": [
-            "092-wf-5-source"
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
           ],
-          "state": "draft",
-          "kind": "DocumentaryProject",
-          "subject": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
-          "status": "candidate",
-          "evidenceIds": [
-            "092-wf-5-source"
-          ],
-          "fields": {
-            "sourceArtifact": "092-wf-5-source",
-            "sourceVersion": "v1"
-          },
-          "interviewIds": [
-            "INT-92-A",
-            "INT-92-B"
-          ],
-          "archiveAssetIds": [
-            "ARCH-92-A"
-          ],
-          "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
-          "editorId": "ED-92",
-          "targetDurationSeconds": 1800
+          "sourceDate": "unknown",
+          "correctedClaim": ""
         }
       ],
-      "evidence": [
+      "assembly": {
+        "id": "092-workflow-5",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-5-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-5-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
         {
           "id": "092-wf-5-source",
           "source": "primary case artifact 092-E5",
@@ -564,15 +785,44 @@
           "authority": "primary domain evidence"
         }
       ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "092-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "092-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "checkpoint": {
+        "assemblyId": "092-workflow-5",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-5-record",
+        "caseId": "092-workflow-5",
+        "sourceRefs": [
+          "092-wf-5-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-5-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-5-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
         {
           "id": "092-wf-5-source",
           "source": "primary case artifact 092-E5",

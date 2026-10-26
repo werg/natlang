@@ -145,3 +145,17 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type IssueBrief={id:string;theme:string;audience:string;mustCover:string[];exclusions:string[];publicationDate:string;formats:string[];};
+export type StoryPitch={id:string;contributor:string;angle:string;reportingPlan:string[];sourceAccess:string[];format:string;estimatedWords:number;rightsTerms:string[];deadline:string;};
+export type PitchAssessment={pitchId:string;audienceValue:string;distinctiveContribution:string;feasibility:'viable'|'conditional'|'unproven';overlaps:string[];coverageTags:string[];riskDependencies:string[];};
+export type Commission={pitchId:string;angle:string;scope:string;wordCount:number;reportingDuties:string[];rights:string[];deadline:string;dependencies:string[];acceptance:{contributor:string;accepted:boolean;termsRevision:string;};state:'offered'|'accepted'|'declined'|'withdrawn';};
+export type EditorialAsset={id:string;kind:'photo'|'illustration'|'headline'|'caption'|'promotion';text:string;credit:string;rights:string[];revision:string;pieceId:string;};
+export type PieceStatus={pieceId:string;draftRevision:string;reportingComplete:boolean;factCheckRefs:string[];editorialTasks:string[];assets:EditorialAsset[];state:'pitched'|'commissioned'|'reporting'|'editing'|'ready'|'withdrawn';};
+export type IssueState={id:string;revision:number;brief:IssueBrief;pitches:StoryPitch[];assessments:PitchAssessment[];commissions:Commission[];pieces:PieceStatus[];contingencies:StoryPitch[];layoutPieceIds:string[];creditsRevision:string;};
+export type IssueFinding={kind:'gap'|'overlap'|'terms'|'access'|'reporting'|'fact'|'rights'|'headline'|'withdrawal'|'credit';pieceIds:string[];status:'clear'|'blocked'|'needs-review';reason:string;dependencies:string[];};
+export type EditorialCheckpoint={issueId:string;revision:number;acceptedTerms:string[];checkedPieceRevisions:string[];invalidatedAssets:string[];freezeDigest:string;};
+export type IssueReadinessPacket={issue:IssueState;findings:IssueFinding[];coverageGaps:string[];withdrawalPlan:string[];invalidatedAssets:string[];checkpoint:EditorialCheckpoint;status:'blocked'|'review'|'ready-to-freeze';};
+
+
+export type MagazineSourceBinding = { brief: IssueBrief; issue: IssueState; editorId: string; sectionIds: string[]; sourceEvidenceIds: string[]; blockers: string[] };

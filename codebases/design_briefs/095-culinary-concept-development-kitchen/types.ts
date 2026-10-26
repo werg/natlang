@@ -143,3 +143,16 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type IngredientFact={ingredientId:string;lotId:string;revision:string;allergens:string[];dietaryProperties:string[];supplier:string;verified:boolean;substituteFor:string[];};
+export type RecipeLine={ingredientId:string;quantityMinor:string;unit:string;yieldServings:string;wasteBasis:string;};
+export type Dish={id:string;revision:string;name:string;intent:string;recipe:RecipeLine[];equipment:string[];prepMinutes:number;serviceMinutes:number;dietaryLabels:string[];};
+export type KitchenBrief={id:string;serviceTime:string;covers:number;mandatoryRestrictions:string[];preferences:string[];budgetMinor:string;currency:string;equipmentCapacity:Record<string,number>;};
+export type KitchenLedger={brief:KitchenBrief;ingredientFacts:IngredientFact[];dishes:Dish[];exactScaledBatches:ScaledBatch[];sharedComponents:string[];schedule:KitchenSlot[];approvedControls:string[];revision:number;};
+export type KitchenSlot={equipment:string;taskId:string;startMinute:number;endMinute:number;capacity:number;};
+export type MenuFinding={kind:'ingredient'|'allergen'|'coverage'|'yield'|'cost'|'equipment'|'tasting'|'disclosure';subjectId:string;state:'clear'|'blocked'|'review';evidenceIds:string[];detail:string;};
+export type KitchenCheckpoint={ledgerRevision:number;recipeRevisions:string[];ingredientRevisions:string[];invalidatedDishIds:string[];costMinor:string;};
+export type KitchenProposal={menu:Dish[];findings:MenuFinding[];scaledBatches:ScaledBatch[];sharedPrep:SharedPrep[];disclosures:string[];checkpoint:KitchenCheckpoint;status:'blocked'|'review'|'ready-for-chef';};
+export type ScaledBatch={dishId:string;ingredientId:string;quantityMinor:string;unit:string;};
+export type SharedPrep={componentId:string;totalQuantityMinor:string;unit:string;usedByDishIds:string[];equipment:string[];};
+

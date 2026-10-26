@@ -190,60 +190,79 @@
   },
   {
     "id": "098-workflow-1",
-    "root": "runCase.nl",
+    "root": "directPersistentWorld.nl",
     "split_group": "world-098-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "098-workflow-1-record",
-          "caseId": "098-workflow-1",
-          "sourceRefs": [
-            "098-wf-1-source"
-          ],
-          "state": "draft",
-          "kind": "GameWorld",
-          "subject": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
-          "status": "candidate",
-          "evidenceIds": [
-            "098-wf-1-source"
-          ],
-          "fields": {
-            "sourceArtifact": "098-wf-1-source",
-            "sourceVersion": "v1"
-          },
-          "worldId": "WORLD-98",
-          "ruleSetId": "RULES-98-V3",
-          "sessionIds": [
-            "SESSION-98-A"
-          ],
-          "directorId": "DIRECTOR-8",
-          "contentBoundaryIds": [
-            "LETTER-L4",
-            "GATE-WEST-NORTH",
-            "GATE-WEST-SOUTH"
-          ]
-        }
-      ],
-      "evidence": [
-        {
-          "id": "098-wf-1-source",
-          "source": "primary case artifact 098-E1",
-          "version": "v1",
-          "text": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "098-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "098-workflow-1-record"
-      ],
-      "sourceDelta": [
+      "world": {
+        "id": "098-workflow-1",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "locations": [
+          "current"
+        ],
+        "resources": [],
+        "characters": [
+          {
+            "id": "098-workflow-1-character",
+            "goals": [
+              "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence."
+            ],
+            "relationships": [],
+            "knownFactIds": [],
+            "beliefs": [],
+            "memoryEventIds": []
+          }
+        ],
+        "events": [],
+        "boundaries": []
+      },
+      "utterance": {
+        "playerId": "player",
+        "characterId": "098-workflow-1-character",
+        "text": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence. Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+        "visibleLocation": "current",
+        "clientActionId": "098-workflow-1-action"
+      },
+      "checkpoint": {
+        "worldId": "098-workflow-1",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "pendingActionIds": [],
+        "unknownReceiptIds": [],
+        "boundaryRevisions": [],
+        "replayCursor": "start"
+      },
+      "receipts": [],
+      "sourceRecord": {
+        "id": "098-workflow-1-record",
+        "caseId": "098-workflow-1",
+        "sourceRefs": [
+          "098-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "GameWorld",
+        "subject": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+        "status": "candidate",
+        "evidenceIds": [
+          "098-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "098-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "worldId": "WORLD-98",
+        "ruleSetId": "RULES-98-V3",
+        "sessionIds": [
+          "SESSION-98-A"
+        ],
+        "directorId": "DIRECTOR-8",
+        "contentBoundaryIds": [
+          "LETTER-L4",
+          "GATE-WEST-NORTH",
+          "GATE-WEST-SOUTH"
+        ]
+      },
+      "sourceEvidence": [
         {
           "id": "098-wf-1-source",
           "source": "primary case artifact 098-E1",
@@ -275,60 +294,79 @@
   },
   {
     "id": "098-workflow-2",
-    "root": "runCase.nl",
+    "root": "directPersistentWorld.nl",
     "split_group": "world-098-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "098-workflow-2-record",
-          "caseId": "098-workflow-2",
-          "sourceRefs": [
-            "098-event-2"
-          ],
-          "state": "draft",
-          "kind": "GameWorld",
-          "subject": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
-          "status": "candidate",
-          "evidenceIds": [
-            "098-event-2"
-          ],
-          "fields": {
-            "sourceArtifact": "098-event-2",
-            "sourceVersion": "v1"
-          },
-          "worldId": "WORLD-98",
-          "ruleSetId": "RULES-98-V3",
-          "sessionIds": [
-            "SESSION-98-A"
-          ],
-          "directorId": "DIRECTOR-8",
-          "contentBoundaryIds": [
-            "LETTER-L4",
-            "GATE-WEST-NORTH",
-            "GATE-WEST-SOUTH"
-          ]
-        }
-      ],
-      "evidence": [
-        {
-          "id": "098-event-2",
-          "source": "current domain record 098-E2",
-          "version": "v1",
-          "text": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "098-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "098-workflow-2-record"
-      ],
-      "sourceDelta": [
+      "world": {
+        "id": "098-workflow-2",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "locations": [
+          "current"
+        ],
+        "resources": [],
+        "characters": [
+          {
+            "id": "098-workflow-2-character",
+            "goals": [
+              "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence."
+            ],
+            "relationships": [],
+            "knownFactIds": [],
+            "beliefs": [],
+            "memoryEventIds": []
+          }
+        ],
+        "events": [],
+        "boundaries": []
+      },
+      "utterance": {
+        "playerId": "player",
+        "characterId": "098-workflow-2-character",
+        "text": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence. Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+        "visibleLocation": "current",
+        "clientActionId": "098-workflow-2-action"
+      },
+      "checkpoint": {
+        "worldId": "098-workflow-2",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "pendingActionIds": [],
+        "unknownReceiptIds": [],
+        "boundaryRevisions": [],
+        "replayCursor": "start"
+      },
+      "receipts": [],
+      "sourceRecord": {
+        "id": "098-workflow-2-record",
+        "caseId": "098-workflow-2",
+        "sourceRefs": [
+          "098-event-2"
+        ],
+        "state": "draft",
+        "kind": "GameWorld",
+        "subject": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+        "status": "candidate",
+        "evidenceIds": [
+          "098-event-2"
+        ],
+        "fields": {
+          "sourceArtifact": "098-event-2",
+          "sourceVersion": "v1"
+        },
+        "worldId": "WORLD-98",
+        "ruleSetId": "RULES-98-V3",
+        "sessionIds": [
+          "SESSION-98-A"
+        ],
+        "directorId": "DIRECTOR-8",
+        "contentBoundaryIds": [
+          "LETTER-L4",
+          "GATE-WEST-NORTH",
+          "GATE-WEST-SOUTH"
+        ]
+      },
+      "sourceEvidence": [
         {
           "id": "098-event-2",
           "source": "current domain record 098-E2",
@@ -360,60 +398,79 @@
   },
   {
     "id": "098-workflow-3",
-    "root": "runCase.nl",
+    "root": "directPersistentWorld.nl",
     "split_group": "world-098-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "098-workflow-3-record",
-          "caseId": "098-workflow-3",
-          "sourceRefs": [
-            "098-event-3"
-          ],
-          "state": "draft",
-          "kind": "GameWorld",
-          "subject": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
-          "status": "candidate",
-          "evidenceIds": [
-            "098-event-3"
-          ],
-          "fields": {
-            "sourceArtifact": "098-event-3",
-            "sourceVersion": "v1"
-          },
-          "worldId": "WORLD-98",
-          "ruleSetId": "RULES-98-V3",
-          "sessionIds": [
-            "SESSION-98-A"
-          ],
-          "directorId": "DIRECTOR-8",
-          "contentBoundaryIds": [
-            "LETTER-L4",
-            "GATE-WEST-NORTH",
-            "GATE-WEST-SOUTH"
-          ]
-        }
-      ],
-      "evidence": [
-        {
-          "id": "098-event-3",
-          "source": "current domain record 098-E3",
-          "version": "v1",
-          "text": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "098-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "098-workflow-3-record"
-      ],
-      "sourceDelta": [
+      "world": {
+        "id": "098-workflow-3",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "locations": [
+          "current"
+        ],
+        "resources": [],
+        "characters": [
+          {
+            "id": "098-workflow-3-character",
+            "goals": [
+              "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence."
+            ],
+            "relationships": [],
+            "knownFactIds": [],
+            "beliefs": [],
+            "memoryEventIds": []
+          }
+        ],
+        "events": [],
+        "boundaries": []
+      },
+      "utterance": {
+        "playerId": "player",
+        "characterId": "098-workflow-3-character",
+        "text": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence. Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+        "visibleLocation": "current",
+        "clientActionId": "098-workflow-3-action"
+      },
+      "checkpoint": {
+        "worldId": "098-workflow-3",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "pendingActionIds": [],
+        "unknownReceiptIds": [],
+        "boundaryRevisions": [],
+        "replayCursor": "start"
+      },
+      "receipts": [],
+      "sourceRecord": {
+        "id": "098-workflow-3-record",
+        "caseId": "098-workflow-3",
+        "sourceRefs": [
+          "098-event-3"
+        ],
+        "state": "draft",
+        "kind": "GameWorld",
+        "subject": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+        "status": "candidate",
+        "evidenceIds": [
+          "098-event-3"
+        ],
+        "fields": {
+          "sourceArtifact": "098-event-3",
+          "sourceVersion": "v1"
+        },
+        "worldId": "WORLD-98",
+        "ruleSetId": "RULES-98-V3",
+        "sessionIds": [
+          "SESSION-98-A"
+        ],
+        "directorId": "DIRECTOR-8",
+        "contentBoundaryIds": [
+          "LETTER-L4",
+          "GATE-WEST-NORTH",
+          "GATE-WEST-SOUTH"
+        ]
+      },
+      "sourceEvidence": [
         {
           "id": "098-event-3",
           "source": "current domain record 098-E3",
@@ -445,60 +502,79 @@
   },
   {
     "id": "098-workflow-4",
-    "root": "runCase.nl",
+    "root": "directPersistentWorld.nl",
     "split_group": "world-098-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "098-workflow-4-record",
-          "caseId": "098-workflow-4",
-          "sourceRefs": [
-            "098-event-4"
-          ],
-          "state": "draft",
-          "kind": "GameWorld",
-          "subject": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
-          "status": "candidate",
-          "evidenceIds": [
-            "098-event-4"
-          ],
-          "fields": {
-            "sourceArtifact": "098-event-4",
-            "sourceVersion": "v1"
-          },
-          "worldId": "WORLD-98",
-          "ruleSetId": "RULES-98-V3",
-          "sessionIds": [
-            "SESSION-98-A"
-          ],
-          "directorId": "DIRECTOR-8",
-          "contentBoundaryIds": [
-            "LETTER-L4",
-            "GATE-WEST-NORTH",
-            "GATE-WEST-SOUTH"
-          ]
-        }
-      ],
-      "evidence": [
-        {
-          "id": "098-event-4",
-          "source": "current domain record 098-E4",
-          "version": "v1",
-          "text": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "098-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "098-workflow-4-record"
-      ],
-      "sourceDelta": [
+      "world": {
+        "id": "098-workflow-4",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "locations": [
+          "current"
+        ],
+        "resources": [],
+        "characters": [
+          {
+            "id": "098-workflow-4-character",
+            "goals": [
+              "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence."
+            ],
+            "relationships": [],
+            "knownFactIds": [],
+            "beliefs": [],
+            "memoryEventIds": []
+          }
+        ],
+        "events": [],
+        "boundaries": []
+      },
+      "utterance": {
+        "playerId": "player",
+        "characterId": "098-workflow-4-character",
+        "text": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence. Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+        "visibleLocation": "current",
+        "clientActionId": "098-workflow-4-action"
+      },
+      "checkpoint": {
+        "worldId": "098-workflow-4",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "pendingActionIds": [],
+        "unknownReceiptIds": [],
+        "boundaryRevisions": [],
+        "replayCursor": "start"
+      },
+      "receipts": [],
+      "sourceRecord": {
+        "id": "098-workflow-4-record",
+        "caseId": "098-workflow-4",
+        "sourceRefs": [
+          "098-event-4"
+        ],
+        "state": "draft",
+        "kind": "GameWorld",
+        "subject": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+        "status": "candidate",
+        "evidenceIds": [
+          "098-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "098-event-4",
+          "sourceVersion": "v1"
+        },
+        "worldId": "WORLD-98",
+        "ruleSetId": "RULES-98-V3",
+        "sessionIds": [
+          "SESSION-98-A"
+        ],
+        "directorId": "DIRECTOR-8",
+        "contentBoundaryIds": [
+          "LETTER-L4",
+          "GATE-WEST-NORTH",
+          "GATE-WEST-SOUTH"
+        ]
+      },
+      "sourceEvidence": [
         {
           "id": "098-event-4",
           "source": "current domain record 098-E4",
@@ -530,60 +606,79 @@
   },
   {
     "id": "098-workflow-5",
-    "root": "runCase.nl",
+    "root": "directPersistentWorld.nl",
     "split_group": "world-098-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
-      "records": [
-        {
-          "id": "098-workflow-5-record",
-          "caseId": "098-workflow-5",
-          "sourceRefs": [
-            "098-event-5"
-          ],
-          "state": "draft",
-          "kind": "GameWorld",
-          "subject": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
-          "status": "candidate",
-          "evidenceIds": [
-            "098-event-5"
-          ],
-          "fields": {
-            "sourceArtifact": "098-event-5",
-            "sourceVersion": "v1"
-          },
-          "worldId": "WORLD-98",
-          "ruleSetId": "RULES-98-V3",
-          "sessionIds": [
-            "SESSION-98-A"
-          ],
-          "directorId": "DIRECTOR-8",
-          "contentBoundaryIds": [
-            "LETTER-L4",
-            "GATE-WEST-NORTH",
-            "GATE-WEST-SOUTH"
-          ]
-        }
-      ],
-      "evidence": [
-        {
-          "id": "098-event-5",
-          "source": "current domain record 098-E5",
-          "version": "v1",
-          "text": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "098-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "098-workflow-5-record"
-      ],
-      "sourceDelta": [
+      "world": {
+        "id": "098-workflow-5",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "locations": [
+          "current"
+        ],
+        "resources": [],
+        "characters": [
+          {
+            "id": "098-workflow-5-character",
+            "goals": [
+              "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence."
+            ],
+            "relationships": [],
+            "knownFactIds": [],
+            "beliefs": [],
+            "memoryEventIds": []
+          }
+        ],
+        "events": [],
+        "boundaries": []
+      },
+      "utterance": {
+        "playerId": "player",
+        "characterId": "098-workflow-5-character",
+        "text": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence. World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+        "visibleLocation": "current",
+        "clientActionId": "098-workflow-5-action"
+      },
+      "checkpoint": {
+        "worldId": "098-workflow-5",
+        "revision": 1,
+        "ruleVersion": "v1",
+        "pendingActionIds": [],
+        "unknownReceiptIds": [],
+        "boundaryRevisions": [],
+        "replayCursor": "start"
+      },
+      "receipts": [],
+      "sourceRecord": {
+        "id": "098-workflow-5-record",
+        "caseId": "098-workflow-5",
+        "sourceRefs": [
+          "098-event-5"
+        ],
+        "state": "draft",
+        "kind": "GameWorld",
+        "subject": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+        "status": "candidate",
+        "evidenceIds": [
+          "098-event-5"
+        ],
+        "fields": {
+          "sourceArtifact": "098-event-5",
+          "sourceVersion": "v1"
+        },
+        "worldId": "WORLD-98",
+        "ruleSetId": "RULES-98-V3",
+        "sessionIds": [
+          "SESSION-98-A"
+        ],
+        "directorId": "DIRECTOR-8",
+        "contentBoundaryIds": [
+          "LETTER-L4",
+          "GATE-WEST-NORTH",
+          "GATE-WEST-SOUTH"
+        ]
+      },
+      "sourceEvidence": [
         {
           "id": "098-event-5",
           "source": "current domain record 098-E5",

@@ -1,0 +1,95 @@
+{
+  "schema": "natlang.application/1",
+  "id": "093",
+  "title": "Magazine Commissioning And Issue Planning Desk",
+  "entrypoint": "planMagazineIssue.nl",
+  "interfaces": [
+    {
+      "name": "planMagazineIssue",
+      "path": "planMagazineIssue.nl",
+      "purpose": "Shape a magazine issue portfolio and advance only accepted, evidence-ready commissions to freeze."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretPitches",
+        "paths": [
+          "planMagazineIssue/scorePitchPortfolio.nl",
+          "planMagazineIssue/bindMagazineSource.nl"
+        ]
+      },
+      {
+        "stage": "mapCoverage",
+        "paths": [
+          "planMagazineIssue/mapIssueCoverage.nl"
+        ]
+      },
+      {
+        "stage": "commissionPieces",
+        "paths": [
+          "planMagazineIssue/secureExactCommissions.nl"
+        ]
+      },
+      {
+        "stage": "manageEditorialWork",
+        "paths": [
+          "planMagazineIssue/reconcileEditorialProduction.nl"
+        ]
+      },
+      {
+        "stage": "qualifyIssue",
+        "paths": [
+          "planMagazineIssue/qualifyIssueFreeze.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planMagazineIssue/scorePitchPortfolio.nl",
+          "planMagazineIssue/secureExactCommissions.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planMagazineIssue/scorePitchPortfolio.nl",
+          "planMagazineIssue/mapIssueCoverage.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planMagazineIssue/reconcileEditorialProduction.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planMagazineIssue/mapIssueCoverage.nl",
+          "planMagazineIssue/reconcileEditorialProduction.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planMagazineIssue/reconcileEditorialProduction.nl",
+          "planMagazineIssue/qualifyIssueFreeze.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "planMagazineIssue.nl",
+    "planMagazineIssue/bindMagazineSource.nl",
+    "planMagazineIssue/mapIssueCoverage.nl",
+    "planMagazineIssue/qualifyIssueFreeze.nl",
+    "planMagazineIssue/reconcileEditorialProduction.nl",
+    "planMagazineIssue/scorePitchPortfolio.nl",
+    "planMagazineIssue/secureExactCommissions.nl",
+    "runCase/interpretPitches/audit/qualify.nl",
+    "types.ts"
+  ]
+}

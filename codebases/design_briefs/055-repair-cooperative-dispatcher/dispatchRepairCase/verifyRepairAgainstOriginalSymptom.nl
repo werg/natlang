@@ -2,4 +2,4 @@
 args: { work: RepairSequence, symptom: SymptomSeparation, repair: CooperativeRepairRequest }
 returns: VerifiedRepairOutcome
 ---
-Compare each supplied post-work check against each original observation under equivalent conditions. Unverified or unavailable checks cannot certify the repair. A temporary mask keeps a recurrence watch pending; scope each reusable lesson to this item's evidence and procedures.
+Bind comparison = comparePostWorkChecksToOriginal(symptom, repair.outcomeChecks, repair.customerEvidence). Bind recurrence = identifyTemporaryMasking(comparison, work). Verify against the original observations under equivalent conditions. If a check is absent or a temporary mask can explain improvement, keep verification open and add a recurrence watch; do not claim a full repair from an unobserved result.

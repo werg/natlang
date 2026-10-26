@@ -1,0 +1,91 @@
+{
+  "schema": "natlang.application/1",
+  "id": "090",
+  "title": "Archive Research Commission Manager",
+  "entrypoint": "commissionArchive.nl",
+  "interfaces": [
+    {
+      "name": "commissionArchive",
+      "path": "commissionArchive.nl",
+      "purpose": "Bound an archival inquiry, route contextual searches, reconcile supported claims and resume from provenance state."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "frameCommission",
+        "paths": [
+          "commissionArchive/boundQuestions.nl",
+          "commissionArchive/bindCommissionScope.nl"
+        ]
+      },
+      {
+        "stage": "planSearch",
+        "paths": [
+          "commissionArchive/routeArchiveSearch.nl"
+        ]
+      },
+      {
+        "stage": "followEvidence",
+        "paths": [
+          "commissionArchive/traceSourceLeads.nl"
+        ]
+      },
+      {
+        "stage": "reconcileFindings",
+        "paths": [
+          "commissionArchive/weighArchiveClaims.nl"
+        ]
+      },
+      {
+        "stage": "assembleDossier",
+        "paths": [
+          "commissionArchive/composeResearchDossier.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "commissionArchive/traceSourceLeads.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "commissionArchive/routeArchiveSearch.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "commissionArchive/routeArchiveSearch.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "commissionArchive/traceSourceLeads.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "commissionArchive/composeResearchDossier.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "commissionArchive.nl",
+    "commissionArchive/bindCommissionScope.nl",
+    "commissionArchive/boundQuestions.nl",
+    "commissionArchive/composeResearchDossier.nl",
+    "commissionArchive/routeArchiveSearch.nl",
+    "commissionArchive/traceSourceLeads.nl",
+    "commissionArchive/weighArchiveClaims.nl",
+    "runCase/frameCommission/audit/qualify.nl",
+    "types.ts"
+  ]
+}
