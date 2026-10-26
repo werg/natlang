@@ -1062,6 +1062,26 @@ def _foundation_readiness_boundary(foundation, prior_foundations, *, completed,
     return bool(completed and new_optimizer_updates > 0 and not policy_operation)
 
 
+def _cotangent_transition_capacity_request(args):
+    """Route a storage transition through the actual objective's pre-SGD check."""
+    if args.memory_qualification:
+        return args.memory_qualification
+    request=getattr(args,'policy_capacity_request',None)
+    objective_path=getattr(args,'objective_spec',None)
+    if request and objective_path and json.loads(Path(objective_path).read_text()).get('kind')=='native-policy':
+        from .native_resident import bound
+        from ..rl.native_replay import NativePolicyObjective
+        value=json.loads(bound(json.loads(request)).read_text())
+        if (value.get('schema')!='natlang.native-policy-capacity-request/1'
+                or value.get('objective')!=NativePolicyObjective(objective_path).binding()):
+            raise ValueError('cotangent transition policy capacity request differs from its actual objective')
+        # qualify_policy_objective validates every actual graph and packed
+        # maximum, executes its backward pass and restores RNG/optimizer state
+        # before the training loop. A request itself grants no capacity credit.
+        return request
+    raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
+
+
 def main(argv=None):
     from .loop import StopSignal
     requested_refresh = StopSignal().install((signal.SIGUSR2,))
@@ -1246,14 +1266,13 @@ def _main(argv=None, *, requested_refresh):
     if args.cotangent_accumulator_backend not in ('cpu_file', 'device_fp32'):
         raise ValueError('native checkpoint declares an unknown cotangent accumulator backend')
     if saved_training and args.cotangent_accumulator_backend != previous_cotangent_backend:
-        if not args.memory_qualification:
-            raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
+        transition_capacity_request=_cotangent_transition_capacity_request(args)
         history = list(saved_options.get('cotangent_accumulator_history') or [])
         history.append({'from': previous_cotangent_backend,
             'to': args.cotangent_accumulator_backend,
             'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
             'weights_optimizer_rng_exposure': 'preserved',
-            'capacity_request': args.memory_qualification})
+            'capacity_request': transition_capacity_request})
         checkpoint_options['cotangent_accumulator_history'] = history
     else:
         checkpoint_options['cotangent_accumulator_history'] = list(

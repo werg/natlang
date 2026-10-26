@@ -126,3 +126,37 @@ def test_mellum_actual_policy_capacity_executes_fp8_without_optimizer_update(tmp
             checkpoint_layers=True,chunk_tokens=3,objective=objective)
         assert any(not torch.equal(parameters[name],p)for name,p in opt._native_named_parameters)
     finally:engine.stop();engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_cotangent_storage_transition_uses_actual_policy_capacity_before_update(tmp_path,family):
+    from natlang_neuralese.train.native_state_sft import _cotangent_transition_capacity_request
+    from natlang_neuralese.train.native_resident import binding
+    engine,model,opt,objective,train,args,config,backend,batches=actual(tmp_path,family)
+    try:
+        args.memory_qualification=None
+        with pytest.raises(ValueError,match='fresh exact-parent capacity'):
+            _cotangent_transition_capacity_request(args)
+        path=args.out/'rl-policy-capacity-request.json'
+        write_json_durable(path,policy_capacity_request(train,objective))
+        args.policy_capacity_request=json.dumps(binding(path))
+        assert _cotangent_transition_capacity_request(args)==args.policy_capacity_request
+        before={name:p.detach().clone()for name,p in opt._native_named_parameters}
+        history=copy.deepcopy(opt.state_dict());rng=capture_training_rng_state(args.device)
+        proof=qualify_policy_objective(model,opt,train,objective,args,config,backend=backend,
+            checkpoint_sha256='a'*64,pending_batches=batches)
+        assert proof['proof']['passed'] and proof['proof']['optimizer_updates']==0
+        assert_exact(history,opt.state_dict());assert_exact(rng,capture_training_rng_state(args.device))
+        assert all(torch.equal(before[name],p)for name,p in opt._native_named_parameters)
+        native_training_update(model,opt,list(train.iter_indices([0])),checkpoint_layers=True,
+            chunk_tokens=args.chunk_tokens,objective=objective)
+        assert any(not torch.equal(before[name],p)for name,p in opt._native_named_parameters)
+        value=json.loads(path.read_text());value['objective']['sha256']='f'*64
+        write_json_durable(path,value);args.policy_capacity_request=json.dumps(binding(path))
+        with pytest.raises(ValueError,match='actual objective'):
+            _cotangent_transition_capacity_request(args)
+        write_json_durable(path,{'schema':'natlang.native-memory-qualification-request/1'})
+        args.policy_capacity_request=json.dumps(binding(path))
+        with pytest.raises(ValueError,match='actual objective'):
+            _cotangent_transition_capacity_request(args)
+    finally:engine.stop();engine.store.close()
