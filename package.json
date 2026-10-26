@@ -16,6 +16,8 @@
     "test": "npm --workspace @natlang/typescript-host test",
     "pack:node": "npm pack --workspace @natlang/node",
     "pack:browser": "npm pack --workspace @natlang/browser",
-    "pack:cli": "npm pack --workspace @natlang/cli"
+    "pack:cli": "npm pack --workspace @natlang/cli",
+    "website:dev": "node scripts/website-dev/server.mjs",
+    "test:website": "node --test tests/test_website_dev.mjs"
   }
 }

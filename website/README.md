@@ -1,11 +1,7 @@
 # natlang, explained
 
-An interactive explainer of natlang for technically curious readers. It is a static site with no build step and no
-dependencies beyond three Google Fonts. Open `index.html` in a browser, or serve the folder:
-
-```sh
-python3 -m http.server -d website 8000   # then open http://localhost:8000
-```
+An illustrated, interactive explanation of natlang for technically curious readers. It is a static site with no
+build step and no dependencies beyond three Google Fonts.
 
 | File | Contents |
 |---|---|
@@ -13,8 +9,47 @@ python3 -m http.server -d website 8000   # then open http://localhost:8000
 | `style.css` | Flat poster palette with fixed meanings (mustard is prose, sky is types, plum is soft values, vermilion is the λ, actions and errors), light and dark themes, layout |
 | `app.js` | The exhibits. Each one is a small re-implementation of one rule from the specification |
 
-The widgets model rules from [`spec/SPEC.md`](../spec/SPEC.md), its [extensions](../spec/ext/), the
+The exhibits model rules from [`spec/SPEC.md`](../spec/SPEC.md), its [extensions](../spec/ext/), the
 [inline lambda design](../docs/inline-natlang-lambdas.md), [`iterateOn`](../docs/ITERATE_ON_PLAN.md) and
-[trace specialization](../plans/TRACE_SPECIALIZATION.md). None of them calls a model. Where a widget shows a model's
-answer, the page labels it illustrative. When the specification changes, update the chapter text and the widget that
-models the rule; the specification wins any disagreement.
+[trace specialization](../plans/TRACE_SPECIALIZATION.md). None of them calls a model; where an exhibit shows a
+model's answer, the page marks it as an example. When the specification changes, update the chapter text and the
+exhibit that models the rule. The specification wins any disagreement.
+
+## Run it locally and edit the text in place
+
+```sh
+npm run website:dev                # or: node scripts/website-dev/server.mjs
+npm run website:dev -- --open      # also open it in the browser
+```
+
+The page is served at <http://127.0.0.1:4180/>. It reloads when a file in `website/` changes; stylesheet changes
+apply without a reload.
+
+To edit the copy, press **Edit text** in the toolbar at the bottom of the page and click any heading, paragraph, list
+item, caption or label. Bold, italic and `code` are on the toolbar (also Ctrl+B, Ctrl+I and Ctrl+\`). Changed text is
+outlined in mustard. **Save** (Ctrl+S or ⌘S) writes the changes into `website/index.html` and reloads the page where
+you were; **Discard** restores the text you started with.
+
+- Only the inner text of existing elements is written back; the rest of the file is left byte for byte as it was.
+  The changes show up as an ordinary diff (`git diff website/index.html`).
+- New paragraphs, list items, links and exhibits are added in `index.html` itself. Enter does nothing while editing.
+- Elements with an `id`, code blocks, buttons and everything inside an exhibit are not editable, because the page's
+  script fills or rewrites them. Add `data-no-edit` to an element to exclude it, or `data-edit` to include one the
+  rules miss (the rules are in `scripts/website-dev/html-targets.mjs`).
+- If `index.html` changes on disk while you have unsaved edits, saving is refused and the page says so, so that an
+  edit made in the browser never overwrites one made in an editor.
+
+Options: `--port <n>`, `--host <addr>`, `--open`, `--read-only` (live reload without the editing toolbar),
+`--root <dir>` and `--page <file>`. Run with `--help` for details. The server binds to 127.0.0.1 by default and
+accepts saves only from the page it serves.
+
+The dev server's tests run with `npm run test:website`.
+
+## Publish
+
+The workflow in [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) runs the tests on pull requests that
+touch the site, and publishes `website/` to GitHub Pages whenever it changes on `main`. It can also be started by hand
+from the Actions tab. Before the first run, set **Settings → Pages → Build and deployment → Source** to
+**GitHub Actions**.
+
+A typical round: run the dev server, edit and save, review `git diff website/`, commit, and merge to `main`.

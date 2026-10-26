@@ -214,16 +214,16 @@ const flags = await Promise.all(
   <header class="plate chead" style="--pb: #1d2840; --pt: #f2e9d6; --nc: #efb02e">
     <div class="ctext"><span class="numeral">I</span><h2>The contract</h2></div>
     <div class="cemb"><svg viewBox="0 0 300 180" aria-hidden="true"><use href="#em-1"/></svg></div>
-    <p class="plate-cap"><b>I</b><span>The compiler fixes the type of every natural-language call before the model runs, and the runtime checks what comes back.</span></p>
+    <p class="plate-cap"><b>I</b><span>Every natural-language call has TypeScript types, fixed before the model runs and checked when it returns.</span></p>
   </header>
   <div class="cols">
     <div class="read">
-      <p>A natural-language function has an ordinary TypeScript signature: typed parameters and one return type. Its body is instructions. The compiler works out the signature before any model runs and shows it to the model as part of the call. The runtime checks each value the model hands back, after every eval and again when the call finishes.</p>
-      <p>A value of the wrong shape does not reach your code. It goes back to the model as an error message, and the model corrects it. Simple scalar mistakes, such as a number written as a string, are converted when the intended type is unambiguous. A call that cannot succeed rejects with a <code>NatlangCallError</code> carrying its outcome, a detail message and the trace.</p>
-      <p>Functions come in two forms. Inline, as a tagged template in TypeScript:</p>
+      <p>You declare a natural-language function like any other function: typed parameters and one return type. Only the body is different: it is instructions. The compiler settles the signature before any model runs and shows it to the model, and every value the model returns is checked against it.</p>
+      <p>A wrong value never reaches your code. It goes back to the model as an error, and the model corrects it. Obvious slips, such as <code>"9"</code> where a number is expected, are converted. A call that cannot succeed rejects with a <code>NatlangCallError</code> that carries the outcome, a message and the trace.</p>
+      <p>Write a function inline, as a tagged template:</p>
       <pre class="code" data-hl>const priority: 'urgent' | 'normal' =
   await nl`Decide whether ticket is urgent.`(ticket);</pre>
-      <p style="margin-top: 16px">Or named, as a <code>.nl</code> file with YAML frontmatter, which TypeScript imports like a module. This is <code>classify.nl</code> from the triage example:</p>
+      <p style="margin-top: 16px">or in its own <code>.nl</code> file, which TypeScript imports like a module:</p>
       <pre class="code" data-hl="nl">---
 description: Label one ticket using the rubric.
 args:
@@ -269,14 +269,14 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>Most inline calls carry no type annotation. The compiler finds the type before the model runs, from four sources in order: an explicit <code>nl&lt;F&gt;</code>, the type the surrounding expression expects, the arguments and result of an immediate call, and finally the later uses of a local variable.</p>
-      <p>For the last source the compiler gives the call a placeholder result type, <code>?ρ</code>, and type-checks the program a second time. The placeholder flows through ordinary TypeScript (variables, arrays, <code>Promise.all</code>, <code>for…of</code>), and every place it reaches adds a requirement.</p>
+      <p>You rarely annotate an inline call. The compiler takes its type from an explicit <code>nl&lt;F&gt;</code>, from what the surrounding code expects, or, failing those, from how the result is used later.</p>
+      <p>For that last case it gives the result a placeholder type, <code>?ρ</code>, checks the program again and collects a requirement from every place the placeholder reaches:</p>
       <ol class="steps">
-        <li><span>Strong requirements come from what TypeScript expects at that point, such as an annotated assignment, a function argument or a push into a typed array, or from what the syntax implies: a condition needs <code>boolean</code>, arithmetic needs <code>number</code>, and <code>.toUpperCase()</code> needs <code>string</code>.</span></li>
-        <li><span>Weak requirements count only when there is no strong one. Interpolating the value into text suggests <code>string</code>; comparing it with a literal suggests that literal's base type.</span></li>
-        <li><span>The result type is the most specific requirement that satisfies all the others. If none does, compilation fails with <code>nl-ambiguous-signature</code>, and the message cites the conflicting lines.</span></li>
+        <li><span><b>Strong</b> requirements come from what TypeScript expects there (an annotated variable, a parameter, a typed array) or what the syntax needs: a condition needs <code>boolean</code>, arithmetic needs <code>number</code>.</span></li>
+        <li><span><b>Weak</b> requirements count only when nothing is strong: printing the value suggests <code>string</code>, and comparing it with a literal suggests that literal's type.</span></li>
+        <li><span>The type is the most specific requirement that fits all the others. If none fits, compilation fails with <code>nl-ambiguous-signature</code> and points at the conflicting lines.</span></li>
       </ol>
-      <p>This works like Hindley–Milner inference, where an unknown type is a variable solved from how a value is used. The model's first answer is never used to decide the type, because the type has to exist before generation in order to guide it.</p>
+      <p>This is the idea behind Hindley–Milner type inference, applied to calls whose bodies are prose. The model's answer never decides the type; the type has to exist first so that it can guide the answer.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span><i>Γ</i>, r : ?ρ ⊢ uses(r) ⇝ <i>C</i></span><span>ρ = the most specific type satisfying <i>C</i></span></div>
         <div class="post"><i>Γ</i> ⊢ <span class="t">nl`…`(ticket)</span> : <span class="t">Promise&lt;ρ&gt;</span></div>
@@ -313,9 +313,9 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>An inline <code>nl</code> function closes over the variables in scope, as an arrow function does. Because its body is prose, the compiler decides which variables it uses by matching the words of the instruction against the names in scope, using case-sensitive JavaScript identifier boundaries. The word <code>policy</code> captures the variable <code>policy</code>; the word "Policy" at the start of a sentence does not.</p>
-      <p>Explicit parameters take precedence over captures. Captured data is read at each call, not when the function is created. If the instruction mentions a <code>let</code> variable, the model may assign to it. The new value is written back after a successful eval; if another call changed the variable in the meantime, the eval fails with <code>capture-conflict</code> and the model retries. Assigning to a captured <code>const</code> is a compile error. Variables of function type are captured by value, which chapter V relies on.</p>
-      <p>An ordinary English word that happens to match a variable name is captured too. The capture list appears in the call's opening and in its trace, so this is visible.</p>
+      <p>An inline <code>nl</code> function can use the variables around it, like an arrow function. It uses exactly the ones its instructions name: the compiler matches the words of the instruction against the variables in scope, case-sensitively. "Judge note against policy" captures <code>note</code> and <code>policy</code>; "Policy says…" captures nothing.</p>
+      <p>Captured values are read when the function is called, not when it is created. The model may assign to a captured <code>let</code>; the new value is written back after a successful step, and if another call changed the variable first, the step is retried. Assigning to a captured <code>const</code> is a compile error.</p>
+      <p>Each call's trace lists what it captured, so an English word that happens to match a variable name is easy to spot.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span>x ∈ dom(<i>Γ</i>)</span><span>x ∈ words(<span class="kw">body</span>)</span><span>x ∉ params</span></div>
         <div class="post">x ∈ captures(<span class="t">nl`<span class="kw">body</span>`</span>)</div>
@@ -346,8 +346,8 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full">
     <div class="read">
-      <p>Text from outside the program, such as an email or an HTTP body, can be typed <code>Untrusted&lt;T&gt;</code>. A <code>.nl</code> body is fixed text, so the only place a value could become part of the instructions is a <code>${…}</code> interpolation in an inline template. The compiler rejects interpolating an untrusted value there with <code>untrusted-instruction</code> and suggests passing it as an argument instead.</p>
-      <p>Arguments are shown to the model as data. Untrusted text appears in a fenced block labelled with its source. The fence is three backticks, or one more than the longest run of backticks in the text, so the text cannot end the fence early.</p>
+      <p>Text from outside the program, such as an email, can be typed <code>Untrusted&lt;T&gt;</code>. It always reaches the model as data. Interpolating it into instructions with <code>${…}</code> is a compile error, <code>untrusted-instruction</code>, and the fix is to pass it as an argument.</p>
+      <p>The model sees untrusted text in a fenced block labelled with its source. The fence is longer than any run of backticks in the text, so the text cannot close the block and pose as instructions.</p>
     </div>
     <div class="ex">
       <div class="panel" id="fence">
@@ -373,20 +373,20 @@ the ticket, report an error saying what is missing.</pre>
   <header class="plate chead" style="--pb: #c4421f; --pt: #f2e9d6; --nc: #efb02e">
     <div class="ctext"><span class="numeral">IV</span><h2>The interpreter</h2></div>
     <div class="cemb"><svg viewBox="0 0 300 180" aria-hidden="true"><use href="#em-4"/></svg></div>
-    <p class="plate-cap"><b>IV</b><span>When a natural-language function is awaited, a model runs TypeScript in a persistent scope until it returns a result.</span></p>
+    <p class="plate-cap"><b>IV</b><span>When you await a natural-language function, a model works in a TypeScript scope until it returns a typed result.</span></p>
   </header>
   <div class="cols">
     <div class="read">
-      <p>A call opens a conversation with a model and offers it a few tools. The main one is <code>eval</code>, which runs TypeScript in a persistent scope. The scope holds the parameters (constant and deeply frozen), the captured variables, the functions in the call's context and the services the host provides. Declarations made in one eval are available in the next.</p>
-      <p>The model finishes with <code>return_result</code> and one of three statuses: <code>success</code> with a value of the declared type, <code>blocked</code> when required information is missing, or <code>failed</code> when the instructions ask for something contradictory. The last two carry a one-sentence reason instead of a value. A task that needs only reading and judgment can be answered directly, without running code.</p>
-      <p>An eval is atomic: if it fails, none of its changes to variables are kept, although effects such as service calls remain. Values too long to show are cut off with a note naming the variable that holds all of it, for example <code>&lt;&lt;cut off: 37 of 40 items not shown; tickets holds all of it&gt;&gt;</code>; a cut-off value pasted into code fails to compile rather than running on partial data. Errors explain the fix in one sentence. When the conversation reaches three quarters of its context budget, the model must summarize its progress with <code>compact_history</code>, and older outputs remain searchable through <code>transcript</code>.</p>
+      <p>The model works in steps. Its main tool, <code>eval</code>, runs TypeScript in a scope that holds the call's arguments, the captured variables, the functions it may call and the host's services. Variables declared in one step are still there in the next.</p>
+      <p>It finishes with <code>return_result</code>: <code>success</code> with a value of the declared type, <code>blocked</code> when information is missing, or <code>failed</code> when the instructions contradict themselves, the last two with a one-sentence reason. A question that needs only reading is answered directly.</p>
+      <p>A failed step changes nothing in the scope, although effects it already performed, such as service calls, remain. Long values are shown cut off, with a note naming the variable that holds all of it. When a conversation grows long, the model summarizes it and the full history stays searchable.</p>
     </div>
     <div class="ex">
       <div class="rule"><div class="frac">
         <div class="pre"><span>⟨σ, e⟩ ⇓ ok σ′ ⟹ commit σ′</span><span>⟨σ, e⟩ ⇓ error ⟹ keep σ</span></div>
         <div class="post">an <span class="t">eval</span> commits all of its changes or none</div>
       </div><span class="name">EVAL</span></div>
-      <p style="margin: 6px 0 0">The trace below steps through one call of <code>rank.nl</code>, which orders 40 tickets by severity. It includes one rejected eval.</p>
+      <p style="margin: 6px 0 0">The trace below follows one call of <code>rank.nl</code>, which orders 40 tickets by severity, including one rejected step.</p>
     </div>
   </div>
   <div class="panel full" id="theater">
@@ -417,8 +417,8 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>natlang does not stop runaway programs with budgets. Three rules make programs end on their own.</p>
-      <p>First, contexts form a directed acyclic graph. Each natural-language function is bound to its context: an immutable folder of functions and data whose ID is a hash of its contents. <code>foo.nl</code> can call only the items in its folder <code>foo/</code>, and each of those is bound to its own folder, so every call moves down the graph. A folder cannot contain its own hash, so natural-language functions cannot call themselves, directly or indirectly.</p>
+      <p>natlang has no turn, token or time budgets. Programs end because three rules leave no way to loop forever.</p>
+      <p><b>1. Natural-language functions cannot call themselves.</b> <code>foo.nl</code> may call only the items in its folder <code>foo/</code>, and each folder is identified by a hash of its contents. Calls therefore always move down a tree of folders and can never return to a caller.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span>f ∈ items(<i>ctx</i>)</span><span>id(<i>ctx</i>) = H(contents(<i>ctx</i>))</span></div>
         <div class="post">calls go from <i>ctx</i> to <i>ctx</i>(f), so the call graph is acyclic</div>
@@ -440,16 +440,15 @@ the ticket, report an error saying what is missing.</pre>
   </div>
 
   <div class="read full" style="max-width: 760px">
-    <p>Second, code in callable folders and in eval uses only finite loops: <code>for…of</code> over a fixed collection, counted <code>for</code> loops and array methods. <code>while</code>, <code>do</code>, open <code>for(;;)</code> and generators are rejected. A TypeScript function may call itself only on a smaller argument (part of its input, a shorter array or string, or a smaller non-negative integer). This is the rule a proof assistant's termination checker enforces, checked here at run time. Decide what happens to each program below.</p>
-  </div>
+      <p><b>2. Code only loops over finite things:</b> <code>for…of</code> over a fixed collection, counted <code>for</code> loops and array methods. <code>while</code> and generators are rejected, and a TypeScript function may call itself only on a smaller argument, the rule proof assistants use to guarantee termination. Decide what happens to each program below.</p>
+    </div>
   <div class="row between" style="margin-top: 10px"><span class="score" id="quiz-score">0 / 8 answered</span></div>
   <div class="quiz" id="quiz"></div>
 
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>Third, open-ended work goes through <code>iterateOn(step, initial)</code>, which records every step and returns the first state that satisfies a stopping predicate. A TypeScript predicate requires either a measure, a non-negative integer that must decrease at every step that continues (a loop variant), or a step limit. Without one the run fails with <code>iteration-unbounded</code>.</p>
-      <p>A natural-language predicate needs neither. It is told that it is a loop's stopping condition and asked to accept a reasonably met criterion. A progress judge reviews the whole trajectory, more often as the run grows longer than usual for that call site. Only a <code>divergent</code> verdict from the judge ends the run.</p>
-      <p>Two loops are left to the model on purpose: an <code>iterateOn</code> with a natural-language predicate, and the agent loop of a single call, which has no turn limit unless the caller sets one. The rules prevent accidental infinite loops; the specification states that the Node backend is not a sandbox. The triage example uses a step limit:</p>
+      <p><b>3. Open-ended work uses <code>iterateOn(step, initial)</code>,</b> which repeats a step until a stopping test passes. A TypeScript test needs a step limit or a number that shrinks every step; without one the loop is refused with <code>iteration-unbounded</code>. An English test needs neither, but a progress judge reviews long runs and can end one that has stopped making progress.</p>
+      <p>The model's own loop within a single call has no limit unless the caller sets one. These rules prevent accidental infinite loops; they are not a sandbox. The triage example caps its summary loop at three steps:</p>
       <pre class="code" data-hl>return await iterateOn(shorten, draft)
   .withLimit({ maxSteps: 3 })
   .until(text =&gt; words(text) &lt;= MAX_SUMMARY_WORDS);</pre>
@@ -486,12 +485,11 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>A function whose result type is finite (a union of literals, <code>boolean</code> or <code>null</code>) may declare <code>readout: decision</code>. The call then offers the model no tools. The runtime asks the model to score every allowed value as the reply to the call's opening and returns the most probable one.</p>
-      <p>The normalized scores are kept in the trace, so each decision is a probability vector. It can be graded with proper scoring rules such as the Brier score, log loss or the ranked probability score, and on a Neuralese server it can be differentiated. Host code reads it with <code>runtime.decide</code>:</p>
+      <p>When a function returns one of a few values, such as a label, it can declare <code>readout: decision</code>. The model then scores every allowed value instead of writing an answer, and the call returns the most likely value together with the whole distribution:</p>
       <pre class="code" data-hl>const d = await runtime.decide(classify, ticket, rubric);
 // { value, probabilities: [{ value, probability }],
 //   confidence, scored }</pre>
-      <p style="margin-top: 16px">In the exhibit, drag the bars (or focus them and use the arrow keys) to set the probabilities, then choose the true label. Log loss penalizes a confident wrong answer much more than the Brier score does.</p>
+      <p style="margin-top: 16px">A distribution can be graded with proper scoring rules. In the exhibit, set the probabilities, pick the true label and compare the scores: log loss punishes a confident mistake far more than the Brier score does.</p>
     </div>
     <div class="ex">
       <div class="panel" id="dec">
@@ -512,9 +510,8 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>A type can also carry a predicate written in English: <code>Is&lt;string, "a reply to the customer that is polite and does not blame them"&gt;</code>. The value is still a <code>string</code> everywhere. The predicate is checked when a value enters a refined position: a return value, an argument, a declared service result, or an explicit <code>refine(value, predicate)</code>. <code>assume</code> skips the check and records the assumption in the trace.</p>
-      <p>The check is a single decision readout that estimates the probability the predicate holds. A value passes at or above the threshold. Inside an optional uncertainty band a policy applies: accept, reject with <code>refinement-undecided</code>, or escalate to a stronger model. A failed return goes back to the model, which may repair it up to three times by default. Verdicts are cached by the SHA-256 of the value, the normalized predicate and the judge.</p>
-      <p>The subtyping rules are simple. <code>Is&lt;B, P&gt;</code> can be used wherever <code>B</code> can. A plain <code>T</code> can be used where <code>Is&lt;B, P&gt;</code> is expected, and the check happens there. Two refinements with the same normalized predicate are interchangeable without a check.</p>
+      <p>A type can also carry a condition written in English: <code>Is&lt;string, "a reply to the customer that is polite and does not blame them"&gt;</code>. The value is still a <code>string</code>. The condition is checked when the value is returned, passed as an argument or wrapped with <code>refine()</code>; <code>assume()</code> skips the check and records that it did.</p>
+      <p>The check asks a model for the probability that the condition holds and compares it with a threshold. Close calls can be accepted, rejected or sent to a stronger model. A failed return goes back to the executing model to fix, up to three times by default, and each verdict is cached.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span><i>Γ</i> ⊢ v : <span class="t">T</span></span><span>judge(v, <span class="kw">P</span>) ≥ θ</span></div>
         <div class="post"><i>Γ</i> ⊢ v : <span class="t">Is&lt;T, <span class="kw">P</span>&gt;</span></div>
@@ -553,16 +550,16 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>The runtime records every call: the definition and its revision, the exact inputs and captures, the result, each service call, the code the model ran and the cost. Many natural-language functions run the same code whenever they see the same kind of input. The specializer looks for those patterns in the call store, as a tracing JIT looks for hot paths, and writes a compilation: an ordered list of cases, each a guard over the arguments and a TypeScript body with the function's signature.</p>
-      <p>The first active case whose guard accepts the arguments serves the call, and no model runs. If a case throws or returns a value of the wrong type, the call does not fail; the model handles it and is told which effects the case already performed. The program's source never changes, and a compilation applies only while the function's context matches the one it was compiled against.</p>
-      <p>Cases are promoted and demoted by comparing them with the model: shadow runs, audits of served calls, and a minimum number of comparisons on live calls (three by default). The live comparisons were added after one case passed 496 replays of recorded calls and then failed every live call, because the replays shared the context the case had been written from. The specializer itself is a natlang program: <code>worthLooking.nl</code>, <code>chooseCondition.nl</code> and <code>promote.nl</code> make its decisions, and TypeScript measures each condition exactly.</p>
+      <p>Every call is recorded: its inputs, the code the model ran, service calls, the result and the cost. Many functions run the same code for the same kind of input. The specializer finds those patterns and writes cases, each a condition on the arguments plus the TypeScript that produces the answer.</p>
+      <p>When a case's condition matches, the case answers instead of the model. If it fails, the model takes over and is told what the case already did. Your source code never changes.</p>
+      <p>Cases have to earn their place. They run in shadow beside the model before promotion and are audited afterwards, and at least three comparisons must be on live calls: one case passed 496 replays of old calls and then failed every live one. The specializer is itself written in natlang.</p>
     </div>
     <div class="ex">
       <div class="rule"><div class="frac">
         <div class="pre"><span>guard<sub>i</sub>(args)</span><span>no earlier guard<sub>j</sub>(args)</span><span>case<sub>i</sub> active</span></div>
         <div class="post">body<sub>i</sub>(args) answers; otherwise the model runs</div>
       </div><span class="name">CASE</span></div>
-      <p style="margin: 6px 0 0">The exhibit below simulates the call store for <code>classify</code>. Send calls to record them, mine the store for cases, and keep sending calls to see cases shadowed, promoted and demoted.</p>
+      <p style="margin: 6px 0 0">Send calls to <code>classify</code>, mine the recorded calls for cases, then keep sending calls to watch cases being shadowed, promoted and demoted.</p>
     </div>
   </div>
   <div class="panel full" id="jitp">
@@ -592,8 +589,8 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>When one model's result goes straight to another model, it need not be converted to text. <code>Neuralese&lt;T, D&gt;</code> is a soft value of type <code>T</code>: an immutable sequence of vectors in dialect <code>D</code>, which a model reads directly. It is an abstract type. Host code may store, pass and return a soft value but may not look inside it: no field access, arithmetic, comparison or use as a condition. <code>read</code> is the only way back to a <code>T</code>, and its result is validated like any call result.</p>
-      <p>To a model, a soft value is a run of vectors between two control tokens. Writing one is stochastic, controlled by a Neuralese temperature <code>τ</code> separate from the text temperature: the payload is <code>μ + τ·σ⊙ε</code>, which is deterministic at the default <code>τ = 0</code>. A call that needs Neuralese on a backend without support fails with <code>neuralese-unsupported-backend</code>; there is no text fallback.</p>
+      <p>When one model's output goes straight into another model, turning it into text loses information. <code>Neuralese&lt;T&gt;</code> is a value of type <code>T</code> stored as vectors that only a model can read. Your code can store and pass it but cannot look inside; <code>read()</code> turns it back into a checked <code>T</code>.</p>
+      <p>Writing such a value has its own randomness setting, <code>τ</code>, separate from text sampling, and is deterministic at the default <code>τ = 0</code>. Using Neuralese on a backend that does not support it is an error; there is no silent fallback to text.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span>v : <span class="t">Neuralese&lt;T&gt;</span></span><span><span class="t">v.f</span>, <span class="t">v + 1</span>, <span class="t">if (v)</span>: rejected</span></div>
         <div class="post"><span class="t">read(v) : Promise&lt;T&gt;</span></div>
@@ -617,8 +614,8 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>The module <code>natlang:neuralese</code> provides combinators: <code>map</code>, <code>zip</code>, <code>combine</code>, <code>split</code>, <code>read</code>, <code>ask</code> and others. Except for <code>empty</code> and <code>ask</code>, each is itself a natural-language function with a soft body, so it can be trained. They approximately satisfy algebraic laws: map identity, map fusion, read/map commutation, associativity and identity of combine, and split of zip.</p>
-      <p>The compiler uses these laws as rewrite rules to make programs cheaper, in the manner of GHC's rewrite rules. A rule applies only where the intermediate value has no other use, never moves a call across an effect, and is enabled for a model and dialect version only after a comparison on held-out programs shows that it does no harm. Approximate equality is measured through <code>read</code> and the downstream results, not by comparing vectors. Click a highlighted expression to apply a rule.</p>
+      <p>The operations on these values (<code>map</code>, <code>zip</code>, <code>combine</code>, <code>split</code>, <code>read</code>, <code>ask</code>) are themselves trainable natural-language functions. They roughly obey algebraic laws, such as map fusion: <code>map(map(v, g), f) ≈ map(v, compose(f, g))</code>.</p>
+      <p>The compiler uses these laws to remove model calls, like GHC's rewrite rules. A rule fires only where the intermediate value is used once, never across a side effect, and only after a test on held-out programs shows it does no harm. Click a highlighted expression to apply a rule.</p>
     </div>
     <div class="ex">
       <div class="panel" id="rw">
@@ -642,9 +639,8 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>A program can benefit from Neuralese without mentioning it. When <code>natlang check</code> can prove that a stage's result is read only by the next stage, the runtime may keep that hand-off as vectors. The language already expresses this: a call inside a call, as in <code>analyze(parse(source))</code>, or a name used exactly once, as the next stage's argument.</p>
-      <p>Any second reader keeps the hand-off as text: the orchestrator reading a field, a log line, a second consumer, or a different <code>model:</code> setting. The authoring guide recommends having the consumer pass along whatever the orchestrator needs from the middle value.</p>
-      <p>Current research replaces the vector channel with shared positional key-value and hybrid-state spans: producers export model state, and consumers import it at the correct positions, with separate markers for producing and consuming. This work is being trained now and has no results to report yet.</p>
+      <p>You get this without writing Neuralese yourself. If one stage's result goes only into the next stage, as in <code>analyze(parse(source))</code>, the runtime may pass it as vectors. Any other reader, such as a log line or a field access, keeps it as text.</p>
+      <p>Research under way replaces the vectors with model state passed directly from the producing model to the consuming one. It is being trained and has no results yet.</p>
     </div>
     <div class="ex">
       <div class="panel" id="fu">
@@ -670,26 +666,26 @@ the ticket, report an error saying what is missing.</pre>
   </header>
   <div class="cols">
     <div class="read">
-      <p>The project's design rule is to start every component as a natlang program: typed natural-language functions, callable folders, and services for the outside world, with ordinary code only where exactness or the outside world requires it. Any component that makes a decision, such as which model serves a call, what to fuse, what to promote or how to recover, is a natlang program, including parts of natlang's own runtime and compiler. TypeScript handles services, the command line, atomic commits, exact checks of what the natural-language stages produce, and plumbing.</p>
-      <p>When a decision is on a hot path, it gets one interface with both implementations behind a setting. The <code>isUrgent</code> example at the top of the page uses this primitive:</p>
+      <p>natlang projects follow one rule: write decisions as natural-language functions and keep exact work in TypeScript. Choosing a model, deciding what to merge or how to recover from an error are decisions. Services, storage and checking what the decisions produced are exact work. natlang's own runtime is built this way too.</p>
+      <p>When a decision is performance-sensitive, it gets both versions behind one switch. The <code>isUrgent</code> example at the top of the page uses this:</p>
       <pre class="code" data-hl>import { pluggable } from '@natlang/node';
 const choose = pluggable(
   { crisp: chooseTierCrisp, nl: chooseTier },
   settings.tier,
 );
 // 'crisp' | 'nl' | 'shadow': shadow runs both, serves one,
-// and records a pluggable_shadow event saying whether they agreed.</pre>
+// and records whether they agreed.</pre>
     </div>
     <div class="read">
-      <p>The project's working rules for model-facing design:</p>
+      <p>Rules the project follows when writing for models:</p>
       <ul class="plain">
-        <li>Wrong forms are never spelled out in a prompt, because that primes the model to produce them. The runtime handles them and explains the fix in a one-sentence error.</li>
-        <li>No resource limits are added before a problem appears. Termination comes from structure, as described in chapter V.</li>
-        <li>Any change the executing model sees, including prompt text, value rendering and error wording, is sampled on the live model, about 48 times per variant, before it is adopted.</li>
-        <li>The program author is expected to be capable and the interpreter may be a small model, so the algorithm, decomposition and data contracts go in the source, written as numbered steps over named data.</li>
-        <li>Standard JavaScript idioms are made to work in preference to inventing new names.</li>
+        <li>Never show a wrong form in a prompt, because it primes the model to produce it. Handle it in the runtime and explain the fix in a one-line error.</li>
+        <li>Add a resource limit only after a real problem; termination comes from structure (chapter V).</li>
+        <li>Test any change the model sees, such as a prompt or an error message, on the live model, about 48 samples per variant, before adopting it.</li>
+        <li>Assume the model is small: put the algorithm and the data contracts in the source, as numbered steps.</li>
+        <li>Make ordinary JavaScript idioms work rather than inventing new names.</li>
       </ul>
-      <p>Most applications in the repository include a <code>DECOMPOSITION.md</code> that records, for each part of the system, whether it became a function, one instruction or a TypeScript helper, and why.</p>
+      <p>Most applications in the repository record, part by part, what became an English function and what stayed code, in a <code>DECOMPOSITION.md</code>.</p>
     </div>
   </div>
   <div class="apps">
@@ -707,7 +703,7 @@ const choose = pluggable(
   <div class="coda">
     <div style="flex: 1 1 340px">
       <h2>Try it</h2>
-      <p style="margin: 0">Set up the TypeScript runtime and the <code>natlang</code> command, choose a model backend with <code>natlang setup</code> (a managed local model, an OpenAI-compatible endpoint or a Pi provider), then check and run the triage example. Where this page and the specification disagree, the specification is correct, and the specification lists its own known disagreements with the code.</p>
+      <p style="margin: 0">Install the runtime and the <code>natlang</code> command, choose a model backend with <code>natlang setup</code> (a managed local model, an OpenAI-compatible endpoint or a Pi provider), then check and run the triage example. The specification is the reference; where it and the code disagree, it says so.</p>
     </div>
     <div class="copywrap"><button class="btn copy" id="copy-cmds" type="button">Copy</button><pre class="code" data-hl="sh" id="cmds">scripts/setup_dev.sh --node-only
 natlang doctor

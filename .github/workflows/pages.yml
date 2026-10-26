@@ -1,0 +1,51 @@
+name: Website
+
+# Checks the website and its dev-server tooling on pull requests, and publishes website/ to GitHub Pages when it
+# changes on main. Pages must be set to deploy from GitHub Actions (Settings → Pages → Source).
+on:
+  push:
+    branches: [main]
+    paths: ['website/**', 'scripts/website-dev/**', 'tests/test_website_dev.mjs', '.github/workflows/pages.yml']
+  pull_request:
+    paths: ['website/**', 'scripts/website-dev/**', 'tests/test_website_dev.mjs', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test the dev server and the page's editable regions
+        run: node --test tests/test_website_dev.mjs
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+      - id: deployment
+        uses: actions/deploy-pages@v4
