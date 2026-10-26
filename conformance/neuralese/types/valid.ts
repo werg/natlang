@@ -1,7 +1,7 @@
 // Programs the type rules accept (spec/SPEC.md, "Neuralese").
 import { map, zip, ap, combine, empty, split, splitList, read, convert, type Neuralese } from 'natlang:neuralese';
 import { grad, valueAndGrad, stopGradient, objectives, optimizers, type Loss } from 'natlang:learning';
-import type { Bound, Context } from 'natlang:context';
+import type { Bound, Context } from '@natlang/node';
 
 type Ticket = { id: string; text: string };
 type Label = 'urgent' | 'normal' | 'spam';

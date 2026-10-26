@@ -67,6 +67,8 @@ declare module 'natlang:neuralese' {
   export function read<T, D extends Dialect = DefaultDialect>(v: Neuralese<T, D>): Promise<T>;
   export function convert<T, D1 extends Dialect, D2 extends Dialect>(
     v: Neuralese<T, D1>, to: D2): Promise<Neuralese<T, D2>>;
+  /** `f` after `g`, exactly: the right side of the map-fusion rewrite (NEURALESE_REWRITES.md). */
+  export function compose<A, B, C>(f: (b: B) => C | Promise<C>, g: (a: A) => B | Promise<B>): (a: A) => Promise<C>;
   /** Diagnostic text for people. Not a value form; never shown to a model as the value. */
   export function gloss(v: SoftValue<unknown, Dialect>): Promise<string>;
   /** The query operator, defined as `read(map(v, question))`: the answer to `question` from what `v` holds. */
@@ -100,16 +102,26 @@ declare const __neuralese: {
   body(id: string, constant?: true, sourceOccurrence?: string): import('natlang:neuralese').SoftBody;
 };
 
-declare module 'natlang:context' {
+// Contexts are exported by the runtime package (`@natlang/node`, `@natlang/browser`; runtime/contexts.ts), not by a
+// `natlang:` module.
+declare module '@natlang/node' {
   /** An immutable, content-addressed folder value of definitions and data. */
   export interface Context {
     readonly id: string;
+    /** Entry names: executable items and data, sorted. */
+    readonly names: string[];
     /** A context with data entries replaced or added, and executable nodes edited in place. */
     with(entries: Record<string, unknown>): Context;
-    /** A union of contexts loaded from files (and of their subsets). */
-    union(...others: Context[]): Context;
+    /** A context without the named entries. */
+    without(...names: string[]): Context;
+    /** A context whose executable node `name` is replaced by an edited definition that compiles against it. */
+    edit(name: string, text: string): Context;
     /** A subset by entry name. */
     pick(...names: string[]): Context;
+    /** The union of two contexts; an entry present in both must be the same entry (`context-conflict`). */
+    union(other: Context): Context;
+    /** Whether every entry of `other` is in this context. */
+    contains(other: Context): boolean;
   }
 
   /** A natural-language function bound to its context. */

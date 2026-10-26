@@ -33,8 +33,11 @@ A graph record is the trace's event sequence plus:
 | `rewrite` | Rule, site, enabling comparison, the nodes it replaced. |
 | `effect` | Service, method, arguments, recorded result. |
 | `iteration_step` | Iteration ID, step index, state references, predicate result, review verdict. |
-| `grad` | Loss node, argument references, order, resulting gradient reference. The TypeScript runtime currently records each gradient session as a replay record (`natlang.replay-record/1`) instead of emitting this node. |
 | `literal` | A model-written state in eval code: the state, its contextual type, the reference expression it was replaced with. |
+
+A gradient session is not a graph node: the runtime records each one as a replay record
+(`natlang.replay-record/1`, `ts-host/src/neuralese/replay-records.ts`) holding its arguments, terms, order,
+native turns and graph nodes, and the resulting gradients.
 
 Node IDs are unique within a task: an invocation is `call:<call id>`, any other node `<call id>#<n>`. An input
 whose producer is outside the record (a `.nz` file, another task) names the node `external` and the state.

@@ -143,8 +143,10 @@ not match the content.
 
 This repository contains one implementation of this protocol, the reference server
 (`training/neuralese/natlang_neuralese/serve/`, `python -m natlang_neuralese.serve`).
-The vendored WebAssembly build in `ts-host/vendor/neuralese-wasm/` serves the retired
-projected protocol and does not implement this one.
+The vendored WebAssembly build in `ts-host/vendor/neuralese-wasm/` (the browser's local
+model engine) predates native state: it serves chat completions, decisions and guidance,
+and declares no `native_state` in `info`, so a runtime configured for Neuralese values
+refuses it at setup (`neuralese-native-state-unavailable`).
 
 ### Capabilities
 
@@ -177,7 +179,8 @@ dashes) before sending it.
 - A POST body that is not valid JSON or not a JSON object answers 400 `bad-json`.
 - 400 for a request error, with the error's code. 404 `not-found` for an unknown path.
   405 `method-not-allowed` for every method but GET, PUT and POST, HEAD included.
-  500 `internal` for an unexpected failure in a POST handler.
+  500 `internal` for an unexpected failure. Every failure of every method answers this
+  envelope ([ERRORS.md](ERRORS.md) "Model server codes").
 - The server reads only the request fields named in this document. Other fields are
   ignored, except the retired fields listed under Chat completions, which are rejected.
 - An endpoint that creates a native state or tensor artifact stores it before answering.
@@ -234,7 +237,8 @@ Retired fields answer 400 `unsupported-request-field`: `x_natlang_forced`,
 `neuralese_temperature`, `neuralese_max_length`, `neuralese_length`,
 `neuralese_passes`.
 
-Other request errors: `empty-prompt`, `context-length` (the prompt, or a template
+Other request errors: `empty-prompt`, `prompt-rendering` (the messages do not fit the
+server's declared prompt rendering), `context-length` (the prompt, or a template
 prefix, does not fit the served context), `neuralese-native-actor-changed` (the adapter
 binding changed during a captured request), `cancelled` (the client left).
 
@@ -270,12 +274,12 @@ connection while it has nothing to send and stops generating.
 
 | Endpoint | Meaning |
 | --- | --- |
-| `PUT /v1/neuralese/native-states/{id}` | Store a native state (body, `application/octet-stream`). 201 with its meta. 400 `neuralese-bad-native-state` for a malformed body, 400 `neuralese-id-mismatch` when the content hashes to another ID. A repeated upload of identical content is accepted. |
+| `PUT /v1/neuralese/native-states/{id}` | Store a native state (body, `application/octet-stream`). 201 with its meta. 400 `neuralese-bad-native-state` for a body that does not decode or that the store refuses (a failed derivation check, a content collision), 400 `neuralese-id-mismatch` when the content hashes to another ID. A repeated upload of identical content is accepted. |
 | `GET /v1/neuralese/native-states/{id}` | The body. 404 `neuralese-unknown-native-state`. |
 | `GET /v1/neuralese/native-states/{id}/meta` | `{"id", …metadata}`. 404 `neuralese-unknown-native-state`. |
-| `PUT /v1/neuralese/native-tensor-artifacts/{id}` | Store a tensor artifact. 201 with its meta. 400 `neuralese-bad-native-artifact`, 400 `neuralese-id-mismatch`. |
+| `PUT /v1/neuralese/native-tensor-artifacts/{id}` | Store a tensor artifact. 201 with its meta. 400 `neuralese-bad-native-artifact` for a body that does not decode or that the store refuses (a failed gradient-origin check, a content collision), 400 `neuralese-id-mismatch`. |
 | `GET /v1/neuralese/native-tensor-artifacts/{id}`, `…/{id}/meta` | Body or meta. 404 `neuralese-unknown-native-artifact`. |
-| `POST /v1/neuralese/native-states/{id}/pin`, `POST /v1/neuralese/native-tensor-artifacts/{id}/pin` | Count one pin for the requesting owner (anonymous pins belong to the owner `""`). A pinned artifact survives every collection; an owner's pin also holds it for that owner. `{"ok": true}`. 404 `neuralese-unknown-block` for an absent artifact. |
+| `POST /v1/neuralese/native-states/{id}/pin`, `POST /v1/neuralese/native-tensor-artifacts/{id}/pin` | Count one pin for the requesting owner (anonymous pins belong to the owner `""`). A pinned artifact survives every collection; an owner's pin also holds it for that owner. `{"ok": true}`. 404 `neuralese-unknown-native-state` or `neuralese-unknown-native-artifact` for an absent artifact. |
 | `POST …/{id}/unpin` | Release one of the requesting owner's pins. `{"ok": true}`. |
 | `POST /v1/neuralese/collect` | `{"referenced": [id…]}` (absent or `null`: empty; anything but a list of strings is 400 `bad-json`). With an owner: afterwards the owner holds exactly the stored artifacts in `referenced` and those it pins; each artifact it released is removed unless another owner holds or pins it. Without an owner: remove every stored artifact that no owner holds or pins and `referenced` does not name. Artifacts that a kept, held or pinned artifact depends on (adapter bases, derivation inputs) are kept. `{"removed": [id…]}`. |
 
@@ -307,7 +311,7 @@ index on disk, with a bounded resident set (`--store-resident-gb`, default 2).
 | Endpoint | Meaning |
 | --- | --- |
 | `POST /v1/neuralese/decide` | `{"messages", "options", "tools"?, "adapters"?, "native_state_modes"?, "native_recording"?}` → 200 `{"log_probs", "tokens", "native_state_imports", "native_decision_capture"?}`. Each option is a reply text scored as the whole assistant reply, end of message included, after one shared prompt pass; `tokens[i]` is the option's token count. `native_recording` adds `native_decision_capture` (`natlang.native-decision-capture/1`). Errors: `neuralese-decision` (no options, non-string options, options that render different prompts or contain states). |
-| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | `{"items": [{"messages", "options" \| "continuations", "tools"?, "adapters"?, "native_state_modes"?, "native_recording"?}], "adapters"?, "native_state_modes"?, "native_recording"?}` → 200 `{"results": [{"log_probs", "tokens", …} \| {"error"}]}`, one per item in order. Top-level fields are item defaults. Each result equals `decide` on that item alone; a failing item fails alone with `error` `"<code>: …"` (`internal` for an unexpected failure), cut to 500 characters. `items` not a list: 400 `neuralese-decision`. |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | `{"items": [{"messages", "options" \| "continuations", "tools"?, "adapters"?, "native_state_modes"?, "native_recording"?}], "adapters"?, "native_state_modes"?, "native_recording"?}` → 200 `{"results": [{"log_probs", "tokens", …} \| {"error"}]}`, one per item in order. Top-level fields are item defaults. Each result equals `decide` on that item alone; a failing item fails alone with `error` `"<code>: <detail>"` (`internal` for an unexpected failure), cut to 500 characters. `items` not a list: 400 `neuralese-decision`. |
 | `POST /v1/neuralese/render` | `{"messages", "tools"?}` → 201 `{"prompt"}`: the rendered prompt with each native-state reference as `<block>`. |
 | `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → 201 with the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}`. Reasons: `unknown-tool`, `repetition`, `redeclaration`, `syntax`. |
 
@@ -315,7 +319,7 @@ index on disk, with a bounded resident set (`--store-resident-gb`, default 2).
 
 | Endpoint | Meaning |
 | --- | --- |
-| `POST /v1/neuralese/grad` | One of four request forms. (1) `{"schema": "natlang.native-gradient-request/1", "graph", "target", "objective"? ("graph-ce"), "native_identity"?, "graph_sha256"?, "adapters"?, "invocation_adapters"?, "native_state_modes"?, "adapter_gradient_precision"?}`: one complete train-split native graph row evaluated in one pass; `target` is `{"kind": "model-parameters", "names"}`, `{"kind": "adapter", "id", "names"?}` or `{"kind": "native-state", "id", "names"?}` (an imported state of the graph); `objective` is `"graph-ce"`, `{"kind": "native-policy", "path", "sha256"}` or `{"kind": "native-query", …}`. 200 `{"loss", "stats", "gradient": meta, "native_identity", "objective", "effective_native_identity" \| "invocation_actors", "actor_graph_sha256"}`. (2) `{"native_recorded_objective": {…}}` or a body with `schema: "natlang.native-recorded-objective-request/1"` (`turns`, `events`, `terms`, `targets`, `native_state_modes`?): 200 `{"loss", "stats", "gradients": {root: meta}, "native_identity", "objective"}`. (3) `{"native_derivative_program": {…}}` or a body with `schema: "natlang.native-derivative-program/1"` (`inputs`, `nodes`, `outer`, `wrt`, `arithmetic`): 200 `{"schema": "natlang.native-derivative-execution/1", "program_id", "execution_id", "loss", "arithmetic", "gradients", "outputs", "optimizer_states"}`. Gradients are stored tensor artifacts of kind `parameter-gradient`, `adapter-gradient` or `state-gradient`, held for the requesting owner. Errors: `neuralese-native-grad-schema`, `neuralese-native-grad-order` (`order` other than 1, `derived` or `create_graph`), `neuralese-native-grad-graph`, `neuralese-native-grad-objective`, `neuralese-native-grad-target`, `neuralese-native-grad-invalid`. |
+| `POST /v1/neuralese/grad` | One of four request forms. (1) `{"schema": "natlang.native-gradient-request/1", "graph", "target", "objective"? ("graph-ce"), "native_identity"?, "graph_sha256"?, "adapters"?, "invocation_adapters"?, "native_state_modes"?, "adapter_gradient_precision"?}`: one complete train-split native graph row evaluated in one pass; `target` is `{"kind": "model-parameters", "names"}`, `{"kind": "adapter", "id", "names"?}` or `{"kind": "native-state", "id", "names"?}` (an imported state of the graph); `objective` is `"graph-ce"`, `{"kind": "native-policy", "path", "sha256"}` or `{"kind": "native-query", …}`. 200 `{"loss", "stats", "gradient": meta, "native_identity", "objective", "effective_native_identity" \| "invocation_actors", "actor_graph_sha256"}`. (2) `{"native_recorded_objective": {…}}` or a body with `schema: "natlang.native-recorded-objective-request/1"` (`turns`, `events`, `terms`, `targets`, `native_state_modes`?): 200 `{"loss", "stats", "gradients": {root: meta}, "native_identity", "objective"}`. (3) `{"native_derivative_program": {…}}` or a body with `schema: "natlang.native-derivative-program/1"` (`inputs`, `nodes`, `outer`, `wrt`, `arithmetic`): 200 `{"schema": "natlang.native-derivative-execution/1", "program_id", "execution_id", "loss", "arithmetic", "gradients", "outputs", "optimizer_states"}`. Gradients are stored tensor artifacts of kind `parameter-gradient`, `adapter-gradient` or `state-gradient`, held for the requesting owner. Errors: `neuralese-native-grad-schema`, `neuralese-native-grad-order` (a graph request with `order` other than 1, `derived` or `create_graph`: graph requests are first order, and a second-order objective is sent as form 3), `neuralese-native-grad-graph`, `neuralese-native-grad-objective`, `neuralese-native-grad-target`, `neuralese-native-grad-invalid` (any form that fails validation, decision objectives included). |
 | `POST /v1/neuralese/optim` | `{"schema": "natlang.native-optimizer-request/1", "native_identity", "gradient_id", "optimizer": {"name": "sgd" \| "adam", "learning_rate"? (1e-3), "weight_decay"? (0), "beta1"? (0.9), "beta2"? (0.999), "eps"? (1e-8), "momentum"? (0)}, "optimizer_state_id"?}`. The live model is not changed. A `parameter-gradient` publishes a new composite checkpoint: 200 `{"checkpoint", "parameters": meta, "optimizer_state_id", "native_identity", "step"}`. An `adapter-gradient` updates the coefficients: 200 `{"adapter": meta, "optimizer_state_id", "step", "native_identity", …}`. A `state-gradient` updates the native state: 200 `{"native_state_id", "native_state": meta, "optimizer_state_id", "update_artifact_id", "step", "native_identity"}`. A server started from an actor view or an inference-only checkpoint refuses. Errors: `neuralese-native-optim-schema`, `neuralese-native-optim-invalid`. |
 | `POST /v1/neuralese/adapters` | Create an exact-base actor adapter: `{"parameter_names", "kind"? ("xs" \| "free-lora"), "rank"? (8), "seed"? (0), "alpha"? (free-lora; default `rank`), "basis_id"?, "native_identity"?}` → 201 meta of an `adapter-coefficients` artifact. The adapter's weight delta starts at zero. `xs` also stores an `adapter-basis` artifact (the coefficients' `source_artifact_id`); `basis_id` slices an existing canonical basis. Errors: `neuralese-native-adapter-invalid`. |
 

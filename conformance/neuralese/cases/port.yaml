@@ -27,16 +27,17 @@ cases:
   - id: marker-violations
     title: 'Malformed producer and consumer markers are rejected'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_native_marker_failure.py
     spec: NEURALESE_PORT.md#producing
-    note: 'tests/neuralese/test_native_marker_failure.py covers the close and open violations; nested and consume-marker have no test yet.'
     given: 'Forced draws of a close marker with no open span, a nested open marker, a consume marker, and a reply that ends inside an open span.'
     expect: 'neuralese-native-state-close, neuralese-native-state-nested, neuralese-native-state-consume-marker and neuralese-native-state-open; with protocol recovery, a failure observation instead.'
 
   - id: exact-import
     title: 'A state from the same model is spliced, not re-read'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_native_serve.py
     spec: NEURALESE_PORT.md#consuming
     given: 'A request whose message names an `nzs1_` state produced by the serving checkpoint.'
     expect: 'The import receipt has mode `exact-native-state` and `observed_native_state_id` equal to the state; the prompt counts its tokens plus the two consume markers.'
@@ -44,7 +45,8 @@ cases:
   - id: text-retokenization
     title: 'A state from another checkpoint is read as its text'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_native_serve.py
     spec: NEURALESE_PORT.md#consuming
     given: 'A request naming a state whose checkpoint differs from the serving one, with no semantic adapter.'
     expect: 'The import receipt has mode `best-effort-text-retokenization` and no `observed_native_state_id`; the stored tensors are not used.'
@@ -52,7 +54,8 @@ cases:
   - id: retired-request-fields
     title: 'Projected-write request fields are refused'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_block_store.py
     spec: NEURALESE_PORT.md#chat-completions-post-v1chatcompletions
     given: 'A chat completion request with `neuralese_temperature`, or a content part of type `"neuralese"`.'
     expect: '400 `unsupported-request-field`, and 400 `neuralese-retired-part` for the part.'
@@ -60,7 +63,8 @@ cases:
   - id: native-state-put-integrity
     title: 'A native state whose ID does not match its content is rejected'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_block_store.py
     spec: NEURALESE_PORT.md#native-artifact-store
     given: 'PUT /v1/neuralese/native-states/nzs1_a with a body whose content hashes to another ID.'
     expect: '400 `neuralese-id-mismatch`; nothing is stored.'
@@ -68,7 +72,8 @@ cases:
   - id: unsupported-backend
     title: 'A backend without Neuralese support fails the call'
     stage: S4
-    status: pending
+    status: implemented
+    implemented_by: ts-host/test/neuralese-dialects.test.mjs
     spec: NEURALESE_PORT.md#missing-server
     given: 'A call with a Neuralese argument against a server whose /v1/neuralese/info is absent.'
     expect: { error: neuralese-unsupported-backend }

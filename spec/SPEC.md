@@ -492,11 +492,3 @@ needs an owner decision. Found while splitting the specification (2026-10-09).
    requires at least two values, so a single-literal or `null`-only return is rejected.
 5. **`iteration-unbounded` and `iteration-measure-exhausted`.** Both are carried by `IterationLimitError` (the text
    says so only for the second); `iteration-unbounded` is thrown at run time, after the initial state fails the predicate and before the first step (a loop whose initial state already satisfies it returns without error), not when a limit is reached.
-6. **Code comments cite the old layout.** `ts-host/src/neuralese/*.ts` and `ts-host/src/runtime/contexts.ts` cite
-   "spec/SPEC.md, Neuralese chapter"; that text is now `spec/ext/neuralese.md` and `spec/ext/learning.md`.
-7. **`objectives.law` and other learning declarations.** The runtime's `natlang:learning` module implements
-   `objectives.law` (law names `mapIdentity`, `mapFusion`, `readMapCommutation`, `combineAssociativity`,
-   `combineIdentity`, `splitZip`), `load`, `deltas` and `nativeAdapters.optimize` (`neuralese/learning.ts`); the
-   declarations the compiler ships for checked code (`compiler/project.ts`, `NEURALESE_MODULES_SOURCE`) omit them.
-8. **`compose`.** The `map-fusion` rewrite emits a `compose(f, g)` call (`compiler/rewrites.ts`); no standard library
-   body or `natlang:neuralese` export provides it.

@@ -36,13 +36,11 @@ an `await` of another call with effects, or a capture write-back.
 
 ## Composition
 
-`compose(f, g)` is a system natural-language function with a trained soft body. For
-text functions it produces the composed function's instructions; for soft functions
-it is the same operator applied to soft bodies. Its result is a function-typed value
-in the caller's context, so it adds no executable node. The current standard
-library has no `compose` body and `natlang:neuralese` does not export one, so the
-rewritten `compose` call (a bare `compose`, or `compose` on the namespace the
-`map` call used) resolves only where the program provides one.
+`compose(f, g)`, exported by `natlang:neuralese`, is exact function composition: a
+function value that applies `f` to what `g` returns. It is made once where the
+rewrite runs and makes no model call itself, so `map(v, compose(f, g))` runs one
+`map` where the original ran two. The rewritten call uses `compose` from the
+namespace the `map` call used, or a bare `compose` when `map` was imported by name.
 
 ## Enabling
 

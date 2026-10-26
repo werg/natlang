@@ -29,4 +29,3 @@ Cases for the Neuralese extension (spec/SPEC.md "Neuralese", "Contexts", "Captur
 | `spec` | Section(s) the case checks. |
 | `given` | Program, files, values, or server state. |
 | `expect` | Diagnostic code, value, error, trace property, or agreement. |
-| `note` | Optional: partial coverage, such as a test that checks part of the case. |
