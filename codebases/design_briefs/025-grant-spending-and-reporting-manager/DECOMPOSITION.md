@@ -6,3 +6,6 @@ Grant reporting is organized around funding tranches and service periods. The pr
 ## Review completion and blocked-state construction (2026-10-26)
 
 The first grant cycle has no prior checkpoint. Bind that absence explicitly to null before checkpoint reconciliation; all allocation, conservation, disclosure and submission results continue to come from their domain calls.
+
+Slice IDs are exact identities across expenses. A collision withholds both the
+earlier and later expense; input ordering must never select an eligible winner.

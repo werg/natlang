@@ -13,7 +13,7 @@ import { generationHoldReason, quarantineReason } from '../../dist/teacher/curri
 export const REPO = resolve(import.meta.dirname, '../../..');
 export const SOURCE_ROOT = 'codebases/design_briefs';
 export const FIXTURE_ROOT = 'training/semantic_applications/design_briefs';
-export const RELEASE = 'design-briefs-100-distinct-applications-20261026-v2';
+export const RELEASE = 'design-briefs-100-distinct-applications-20261026-v3';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const json = value => JSON.stringify(value, null, 2) + '\n';
 export const jsonl = rows => rows.map(row => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : '');
@@ -461,7 +461,7 @@ export function makeRecord(app, files, fixture, fixtureHash) {
   } : fixture.expected;
   const row = {
     version: 'natlang.program/2',
-    id: `design-briefs-v2:${applicationId}:${fixture.id}`,
+    id: `design-briefs-v3:${applicationId}:${fixture.id}`,
     kind: 'lambda_graph', family: `design_brief_${applicationId}`, split,
     source: 'user-design-brief-native-program',
     source_ids: [app.source_relative_path], source_groups: [group],

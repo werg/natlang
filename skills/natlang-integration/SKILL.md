@@ -651,3 +651,9 @@ Identical in-flight native requests may share one execution, but each caller own
 Validate domain checkpoints and complete return records on all branches, including blocked discovery and partial execution. Keep source-native result construction and branch decisions in Natlang. Host tests with scripted engineering drivers exercise persistence, isolation, cancellation and transport; they do not qualify model behavior or real external adapters.
 
 The shipped referral, documentary, live-event and world-action adapters accept only their declared native effect kinds and serialize the checked intention unchanged. Configure their fixed topics explicitly. `invalid_effect_adapter` requires correcting the declared effect shape or adapter registration; do not route an unknown kind to a generic fallback. Transport receipt IDs establish delivery custody, while the program reconciles actual recipient, simulator or physical outcomes in its next native operation.
+
+Register `effectsPath` and the exact adapter on every public operation that can
+return effects, including parent roots that call preparation helpers. The
+`effect_adapter_required` error means the result has outgoing intentions without
+a configured serializer: register that operation's adapter and retry its durable
+invocation. Do not advance a pending checkpoint separately from its outbox write.

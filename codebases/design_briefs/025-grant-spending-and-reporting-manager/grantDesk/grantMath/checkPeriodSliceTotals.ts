@@ -14,6 +14,7 @@ export default function verifyPeriodConservation(slices: GrantPeriodSlice[]): Pe
   for (const slice of slices) {
     const prior = firstById.get(slice.sliceId);
     if (prior) {
+      invalidExpenses.add(prior.expenseId);
       invalidExpenses.add(slice.expenseId);
       blockers.push(`duplicate_slice:${slice.sliceId}`);
     } else firstById.set(slice.sliceId, slice);

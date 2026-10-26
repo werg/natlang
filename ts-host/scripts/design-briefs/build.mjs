@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Freeze native authored programs and fixtures; do not generate assistant turns. */
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FIXTURE_ROOT, REPO, RELEASE, SOURCE_ROOT, json, jsonl, oracleLevel,
   readApplication, sha256 } from './lib.mjs';
@@ -29,6 +29,7 @@ export async function build({ repo = REPO, out }) {
     if (groups.has(group) && groups.get(group) !== row.split) throw new Error(`cross-split group: ${group}`);
     groups.set(group, row.split);
   }
+  await mkdir(dirname(resolve(out)), { recursive: true });
   await mkdir(resolve(out), { recursive: false });
   const outputs = [];
   for (const split of ['train', 'dev', 'test']) {

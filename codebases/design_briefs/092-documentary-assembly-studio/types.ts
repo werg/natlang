@@ -77,5 +77,5 @@ export type DocumentaryCheckpoint={assemblyId:string;revision:number;digest:stri
 export type DocumentaryDeliverable={kind:'edit-list'|'script'|'captions'|'description'|'asset-manifest';revision:string;assemblyDigest:string;};
 export type DocumentaryDeliveryEffect={kind:'deliver-documentary-package'|'read-documentary-delivery-status';assemblyId:string;revision:number;digest:string;deliverables:DocumentaryDeliverable[];clearanceRefs:string[];idempotencyKey:string;};
 export type DocumentaryDeliveryReadback={assemblyId:string;revision:number;digest:string;receiptId:string;status:'confirmed'|'absent'|'conflict';observedAt:string;};
-export type AssemblyRelease={assembly:AssemblyState;findings:CutFinding[];deliverables:DocumentaryDeliverable[];clearanceTasks:string[];factCheckTasks:string[];checkpoint:DocumentaryCheckpoint;status:'blocked'|'review'|'frozen';effects?:DocumentaryDeliveryEffect[];};
+export type AssemblyRelease={assembly:AssemblyState;findings:CutFinding[];deliverables:DocumentaryDeliverable[];clearanceTasks:string[];factCheckTasks:string[];checkpoint:DocumentaryCheckpoint;status:'blocked'|'review'|'frozen';effects:DocumentaryDeliveryEffect[];};
 export type DocumentaryDeliveryPreparation={effects:DocumentaryDeliveryEffect[];checkpoint:DocumentaryCheckpoint;};

@@ -119,9 +119,9 @@ repository root:
 {
   "effectAdapters": {
     "076": { "manageReferralPacket": "./applications/design-briefs-host/adapters/076-referral-packet-transfer.mjs" },
-    "092": { "prepareDocumentaryDelivery": "./applications/design-briefs-host/adapters/092-documentary-delivery.mjs" },
-    "097": { "prepareLiveEventEffects": "./applications/design-briefs-host/adapters/097-live-event-effects.mjs" },
-    "098": { "prepareWorldActionEffects": "./applications/design-briefs-host/adapters/098-persistent-world-actions.mjs" }
+    "092": { "assembleDocumentary": "./applications/design-briefs-host/adapters/092-documentary-delivery.mjs", "prepareDocumentaryDelivery": "./applications/design-briefs-host/adapters/092-documentary-delivery.mjs" },
+    "097": { "directLiveEvent": "./applications/design-briefs-host/adapters/097-live-event-effects.mjs", "prepareLiveEventEffects": "./applications/design-briefs-host/adapters/097-live-event-effects.mjs" },
+    "098": { "directPersistentWorld": "./applications/design-briefs-host/adapters/098-persistent-world-actions.mjs", "prepareWorldActionEffects": "./applications/design-briefs-host/adapters/098-persistent-world-actions.mjs" }
   }
 }
 ```

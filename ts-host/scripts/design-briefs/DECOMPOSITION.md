@@ -38,6 +38,18 @@ semantic implementation:
 
 ## Data flow
 
+Operational integration retains the existing queue supervisor and its immutable
+per-case custody. A reviewed plan may bind a separate rubric judge; the binding
+is copied into every case queue and forwarded to the existing collector. The
+judge remains a distinct model and shares the collector's whole-case request
+budget. Missing judge bindings must fail before dispatching judged cases, rather
+than spend generation on cases that cannot be scored. No fixture truth becomes
+model-visible input, and only the TRAIN application partition enters collection.
+Source inventories bind the actual native project, root and inputs for these
+programs. A scripted reference is optional; do not invent a reference trajectory
+to satisfy a collector-specific inventory assumption. Existing reference-backed
+inventories retain their exact representation and malformed references fail.
+
 The build reads native source, brief metadata, and independently stored case
 inputs/oracles. Only the explicit `application.json.source_files` inventory of
 `.nl`, non-generated `.ts`, and the root `natlang.json` package boundary enters

@@ -49,19 +49,40 @@ def inventory(source: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
                 or any(not isinstance(group, str) or not group for group in source_groups)
                 or len(set(source_groups)) != len(source_groups)):
             raise ValueError(f"source row {index} must identify its complete distinct source groups")
-        program = row.get("curriculum", {}).get("reference", {}).get("root")
-        if not isinstance(program, list) or not program or not isinstance(program[0], list) or len(program[0]) < 2:
+        curriculum = row.get("curriculum", {})
+        if not isinstance(curriculum, dict):
+            raise ValueError(f"source row {index} has malformed curriculum metadata")
+        reference = curriculum.get("reference")
+        program = reference.get("root") if isinstance(reference, dict) else None
+        if "reference" not in curriculum:
+            semantics = row.get("semantics") or {}
+            root, project = semantics.get("root"), semantics.get("files")
+            if (row.get('version') != 'natlang.program/2'
+                    or row.get('kind') not in ('lambda_source', 'lambda_graph')
+                    or not isinstance(root, str) or not root.endswith('.nl')
+                    or not isinstance(project, dict) or root not in project
+                    or not project or any(not isinstance(name, str) or not name
+                        or name.startswith('/') or '\\' in name or '..' in name.split('/')
+                        or not isinstance(body, str) for name, body in project.items())
+                    or not isinstance(semantics.get('inputs'), dict)):
+                raise ValueError(f"source row {index} has no complete native source project")
+            root_binding = {'root_source_format': 'native-project-v1',
+                'root_source_sha256': sha256(json.dumps(
+                    {'root': root, 'files': project, 'inputs': semantics['inputs']},
+                    sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))}
+        elif not isinstance(program, list) or not program or not isinstance(program[0], list) or len(program[0]) < 2:
             raise ValueError(f"source row {index} has no canonical root program")
-        if any(not isinstance(call, list) or len(call) != 2
+        elif any(not isinstance(call, list) or len(call) != 2
                or not isinstance(call[0], str) or not call[0]
                or not isinstance(call[1], dict) for call in program):
             raise ValueError(f"source row {index} root program has malformed tool calls")
-        root_code = program[0][1].get("code")
-        # References can legitimately read a file or apply a reducer before
-        # their first eval. Preserve existing exact inventories for eval-first
-        # recovery sources; bind the complete tool sequence for other roots.
-        root_binding = ({"root_code_sha256": sha256(root_code.encode("utf-8"))}
-                        if isinstance(root_code, str) else {
+        else:
+            root_code = program[0][1].get("code")
+            # References can legitimately read a file or apply a reducer before
+            # their first eval. Preserve existing inventories for eval-first
+            # recovery sources; bind the complete tool sequence for other roots.
+            root_binding = ({"root_code_sha256": sha256(root_code.encode("utf-8"))}
+                            if isinstance(root_code, str) else {
                             "root_reference_format": "tool-calls-v1",
                             "root_reference_sha256": sha256(json.dumps(
                                 program, sort_keys=True, separators=(",", ":"),

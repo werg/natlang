@@ -54,6 +54,12 @@ before commit and must be pure. A delivery acknowledgment records transport
 evidence, not domain acceptance. Applications consume that evidence in their own
 receipt/reconciliation operations. Missing or ambiguous evidence stays unresolved.
 
+Effect-producing root operations declare this boundary too: documentary assembly,
+live-event direction and persistent-world direction must return an explicit
+effects array, including an empty array on branches that perform no effect.
+They use the same serializers as their preparation operations. A pending
+checkpoint cannot advance when its corresponding outgoing effect is unbound.
+
 Application-specific adapters are deployable serializers, not semantic workers.
 For applications 076, 092, 097 and 098, each closed effect kind maps to one
 stable topic and one receiver operation. The adapter preserves the full checked

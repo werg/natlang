@@ -12,7 +12,8 @@
       "stateResultPath": [
         "checkpoint"
       ],
-      "stateKey": "documentary-assembly-checkpoint"
+      "stateKey": "documentary-assembly-checkpoint",
+      "effectsPath": ["effects"]
     },
     {
       "name": "prepareDocumentaryDelivery",

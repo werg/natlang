@@ -142,6 +142,25 @@ Resolve the teacher and judge endpoint/model bindings to approved deployed
 identities before any separately authorized collection. The repository's model
 selection and generation policy remain authoritative.
 
+The owner resumed six Luna generation workers on 2026-10-26 and authorized Sol
+or Luna for judging. For independent model judging, bind the actual Sol model
+separately from the Luna teacher:
+
+```sh
+NATLANG_PYTHON=python3 node ts-host/scripts/design-briefs/prepare.mjs \
+  --packet data/teacher/design-briefs-v2 --out runs/design-briefs-configured-v2 \
+  --teacher-model-id gpt-6-luna --teacher-provider openai-codex \
+  --judge-model-id gpt-6-sol --judge-provider openai-codex
+```
+
+The reviewed six-slot dispatcher now accepts these native projects without
+inventing scripted reference trajectories. Its immutable plan binds
+`judge_model: { model_id: "gpt-6-sol", provider: "openai-codex" }`, which reaches
+each case's queue and the collector. Judged cases fail preparation without a
+judge binding; the judge shares the whole-case model-request budget. Complete
+source-bound accepted trajectories still pass the normal verifier and admission
+path before either student trains on them.
+
 Real collection must retain complete native journals, actual sampled/forced
 producer turns, consumer imports and occurrence bindings. Correct plain-text
 execution remains rewardable. Do not fabricate call edges, force communication

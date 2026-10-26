@@ -1,5 +1,21 @@
 # Model-facing changes and their measurement
 
+### 2026-10-26 — design-brief root effect completeness (PR #4 review)
+
+The documentary, live-event and persistent-world root result types now require
+their effects arrays. Return `[]` on branches without an outgoing intention.
+Their application interfaces declare `effectsPath`, so missing deployment
+adapters cannot commit pending checkpoints while silently dropping the send.
+Grant slice-ID collisions now withhold both affected expenses, regardless of
+input order. Original fixture truth and whole-application splits remain intact.
+The corrected frozen programs use release v3 and fresh task identities.
+
+Measurement debt: these source changes have engineering regressions but no
+learned-model qualification yet. Measure about 48 executions per retained
+presentation variant during authorized Luna collection, with independently
+identified Sol rubric judging; retain actual actor and outcome provenance.
+Static/source admission does not establish training exposure or capability lift.
+
 ### 2026-10-26 — independently designed design-brief application source
 
 PR #4's one-hundred application corpus is being revised from repeated request

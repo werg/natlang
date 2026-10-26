@@ -12,7 +12,8 @@
       "stateResultPath": [
         "checkpoint"
       ],
-      "stateKey": "persistent-world-checkpoint"
+      "stateKey": "persistent-world-checkpoint",
+      "effectsPath": ["effects"]
     },
     {
       "name": "prepareWorldActionEffects",

@@ -12,7 +12,8 @@
       "stateResultPath": [
         "checkpoint"
       ],
-      "stateKey": "live-event-checkpoint"
+      "stateKey": "live-event-checkpoint",
+      "effectsPath": ["effects"]
     },
     {
       "name": "prepareLiveEventEffects",

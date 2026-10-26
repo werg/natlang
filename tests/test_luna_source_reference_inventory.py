@@ -51,3 +51,37 @@ def test_malformed_reference_is_rejected(tmp_path):
     path = source(tmp_path, [['read_file', 'invalid arguments']])
     with pytest.raises(ValueError, match='malformed tool calls'):
         inventory(path, [{'index': 0, 'seed': 42}])
+
+
+def test_authored_native_project_is_bound_without_inventing_a_reference(tmp_path):
+    path = source(tmp_path, [])
+    row = json.loads(path.read_text())
+    row.update(version='natlang.program/2', kind='lambda_graph')
+    row['curriculum'].pop('reference')
+    row['semantics']['inputs'] = {'question': 'actual task'}
+    path.write_text(json.dumps(row) + '\n')
+    cases = [{'index': 0, 'seed': 42}]
+    result = inventory(path, cases)
+    entry = result['entries'][0]
+    assert entry['root_source_format'] == 'native-project-v1'
+    assert 'root_code_sha256' not in entry and 'root_reference_sha256' not in entry
+    pin = tmp_path / 'inventory.json'
+    pin.write_text(json.dumps(result))
+    for member, value in [('files', {'main.nl': 'Changed executable source.'}),
+                          ('inputs', {'question': 'different task'})]:
+        changed = json.loads(json.dumps(row))
+        changed['semantics'][member] = value
+        path.write_text(json.dumps(changed) + '\n')
+        with pytest.raises(ValueError, match='inventory does not match'):
+            verify(pin, path, cases)
+    for name in ('../outside.nl', '/outside.nl', 'folder\\outside.nl'):
+        changed = json.loads(json.dumps(row))
+        changed['semantics']['files'][name] = 'Unsafe source member.'
+        path.write_text(json.dumps(changed) + '\n')
+        with pytest.raises(ValueError, match='complete native source project'):
+            inventory(path, cases)
+    changed = json.loads(json.dumps(row))
+    changed['curriculum']['reference'] = {}
+    path.write_text(json.dumps(changed) + '\n')
+    with pytest.raises(ValueError, match='canonical root program'):
+        inventory(path, cases)

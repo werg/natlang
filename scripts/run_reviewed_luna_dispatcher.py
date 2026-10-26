@@ -22,6 +22,7 @@ from generation_authority import authority_lock, reconcile_luna_authority
 from freeze_training_runtime import tree_identity
 from start_reviewed_generation_successor import atomic_json, digest
 from luna_source_inventory import verify as verify_luna_source_inventory
+from run_bonsai_queue import judge_arguments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +156,7 @@ def validate_plan(plan_path, expected_sha256):
     if not isinstance(cases, list) or not cases:
         raise ValueError('Plan requires a nonempty immutable master case list')
     rows = dict(_source_rows(source))
+    judge_arguments(plan, plan['model_id'])
     seen = set()
     normalized_cases = []
     for case in cases:
@@ -163,6 +165,10 @@ def validate_plan(plan_path, expected_sha256):
         index = case['index']
         if index in seen or index not in rows:
             raise ValueError(f'Duplicate or out-of-range source index: {index}')
+        oracle = rows[index].get('semantics', {}).get('oracle', 'exact')
+        level = oracle if isinstance(oracle, str) else oracle.get('level')
+        if level == 'judged' and not plan.get('judge_model'):
+            raise ValueError('Judged cases require an explicit independent judge_model before dispatch')
         seen.add(index)
         seed = case.get('seed')
         if type(seed) is not int or seed < 0:
@@ -470,6 +476,8 @@ def _claim_queue(plan, identity, slot, case):
             entry[field] = case[field]
     if plan.get('surface') is not None:
         entry['surface'] = plan['surface']
+    if plan.get('judge_model') is not None:
+        entry['judge_model'] = dict(plan['judge_model'])
     payload = (json.dumps(entry, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
     return (entry, str(queue), hashlib.sha256(payload).hexdigest(),
             str(slot_root / 'journal.jsonl'), str(slot_root / 'supervisor.log'), payload)
