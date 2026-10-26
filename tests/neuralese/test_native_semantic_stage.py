@@ -86,6 +86,26 @@ def test_inherited_participant_optimizer_policy_beats_generic_curriculum_default
         _inherited_optimizer_options({'options':{'latent_ns':'quintic'}},participant='mellum')
 
 
+def test_semantic_participant_preserves_optimizer_state_storage_policy():
+    from natlang_neuralese.train.native_semantic_stage import _apply_optimizer_state_storage
+    from natlang_neuralese.train.optim import MuonSR
+
+    parameter=torch.nn.Parameter(torch.ones(3,3))
+    optimizer=MuonSR([parameter],lr=1e-4)
+    # The regular optimizer load path materializes tensors on the parameter
+    # device, so semantic continuation reapplies the bound storage policy after
+    # loading rather than treating serialized tensor placement as authority.
+    optimizer.state[parameter]['momentum']=torch.ones_like(parameter)
+    state=copy.deepcopy(optimizer.state_dict())
+    optimizer.load_state_dict(state)
+    assert optimizer.state_storage=='device'
+    assert _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'cpu'},participant='lfm')=='cpu'
+    assert optimizer.state_storage=='cpu'
+    assert torch.equal(optimizer.state[parameter]['momentum'],torch.ones_like(parameter))
+    with pytest.raises(ValueError,match='unknown optimizer state storage'):
+        _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'pinned'},participant='lfm')
+
+
 def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypatch):
     config, manifest, _, row = _fixture(tmp_path, monkeypatch)
     torch.manual_seed(1234)
@@ -110,6 +130,7 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
             'cubic5' if name=='lfm' else 'quintic')
         assert restored['participants'][name]['training_options']['fp8_profile']=={
             'kind':'off','recipe':'delayed','amax_history_len':16}
+        assert restored['participants'][name]['training_options']['optimizer_state_storage']=='device'
     _assert_same(whole['training']['rng'], restored['training']['rng'])
     assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
                for values in resumed['exposure'].values() for counts in values.values())

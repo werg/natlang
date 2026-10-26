@@ -216,6 +216,19 @@ def _inherited_optimizer_options(inherited, *, participant):
     return dict(options)
 
 
+def _apply_optimizer_state_storage(optimizer, training_options, *, participant):
+    """Apply the source checkpoint's MuonSR history placement exactly."""
+    storage = (training_options or {}).get('optimizer_state_storage', 'device')
+    if storage not in ('device', 'cpu'):
+        raise ValueError('semantic participant checkpoint has unknown optimizer state storage: '+participant)
+    latent = getattr(optimizer, 'latent', optimizer)
+    setter = getattr(latent, 'set_state_storage', None)
+    if not callable(setter):
+        raise ValueError('semantic participant optimizer omitted its history storage mechanism: '+participant)
+    setter(storage)
+    return storage
+
+
 def _qualified_snapshot(name,binding):
     from .native_readiness import validate_ready
     if binding.get('source_role_plan'):
@@ -320,6 +333,7 @@ def load_participant(name, binding, config, device):
         weight_decay=optimizer_options['weight_decay'], latent_ns=optimizer_options['latent_ns'], in_backward=False,
         learned_row_lr=optimizer_options.get('learned_row_lr'),
         interface_row_lr=optimizer_options.get('interface_row_lr'))
+    optimizer_state_storage = _apply_optimizer_state_storage(optimizer, inherited_options, participant=name)
     from .recipe import training_recipe_binding,native_recipe_provenance
     recipe_binding=training_recipe_binding(state)
     declared=native_recipe_provenance(binding.get('recipe'))
@@ -347,6 +361,10 @@ def load_participant(name, binding, config, device):
         recipe_binding=declared
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):
         optimizer.load_state_dict(inherited['optimizer'],native_optimizer_migration=migration)
+        # Optimizer state_dict loading materializes state on each parameter's
+        # device. Restore the source's declared idle-state placement only after
+        # the exact moments have been loaded.
+        optimizer_state_storage = _apply_optimizer_state_storage(optimizer, inherited_options, participant=name)
     if backend is not None and inherited.get('fp8') is not None:
         backend.restore_extra_state(inherited['fp8'])
     # Loading moments must not silently replace the rates and MuonSR policy
@@ -364,6 +382,7 @@ def load_participant(name, binding, config, device):
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend,recipe_binding=recipe_binding)
     result.optimizer_options = effective_optimizer_options
+    result.optimizer_state_storage = optimizer_state_storage
     result.fp8_profile = fp8_profile
     from .native_continuation import collect_sft_progress
     result.sft_progress = collect_sft_progress(inherited)
@@ -490,6 +509,7 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
                 'source_rng':getattr(entry,'source_rng',None),
                 'training_options': {**checkpoint_input_storage_options(entry.model.port),
                     'optimizer_options':dict(entry.optimizer_options),
+                    'optimizer_state_storage':getattr(entry,'optimizer_state_storage','device'),
                     'fp8_profile':dict(entry.fp8_profile),
                     'native_snapshot_ancestors':list(getattr(entry,'snapshot_ancestors',[])),
                     **({'ce_supervision_policy_binding':training['config_history'][-1]['config']['ce_supervision_policy']}
@@ -747,6 +767,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 from .native_optimizer_migration import native_optimizer_migration_option
                 migration=native_optimizer_migration_option(config,name)
                 participant.optimizer.load_state_dict(saved['optimizer'],native_optimizer_migration=migration)
+                participant.optimizer_state_storage = _apply_optimizer_state_storage(
+                    participant.optimizer, saved.get('training_options') or {}, participant=name)
                 saved_optimizer_options=(saved.get('training_options')or{}).get('optimizer_options')
                 if saved_optimizer_options is not None:
                     participant.optimizer_options=_inherited_optimizer_options(
