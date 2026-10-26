@@ -55,6 +55,25 @@ program: `{ "<site ID from sites.json>": "<current component key>" }`. A site th
 training; `natlang tune --incremental` reseals and revalidates the release for the new keys. Labeling a site
 (`/* @natlangSite name */`) makes its identity independent of edits.
 
+## Collecting through the generation pool
+
+When teacher data comes from the operators' reviewed generation pool instead of a configured teacher profile:
+
+```sh
+natlang tune ./my-program --export-cases runs/tune-cases/my-program-1   # roots without valid data
+# operators review and dispatch source.jsonl / cases.json through the existing pool
+natlang tune ./my-program --import-cases runs/<campaign>/               # collector results → tune data
+natlang tune ./my-program                                               # reuses the imported data
+```
+
+The export holds only training and development roots that have an `expected` result and no valid data
+(`--include-confirmation` adds confirmation roots; protected roots never leave the program). Each case binds the
+program build, the scope tree with its site IDs and the split receipt; the import rejects rows collected under any
+other. Turns map to their invocation's binding exactly as at serving time and keep the pool actor's identity as
+`teacher`; roots the teacher got wrong are kept as failures, never as targets. The pool's collector adds a block of
+collection guidance to the system prompt; imported rows present the ordinary serving prompt with exactly that block
+removed. Programs with program-level guidance, imported programs or services cannot use the pool yet.
+
 ## How calls use a release
 
 Each call runs its **own** definition's stack: its families, then its scope ancestry from the program root to its own

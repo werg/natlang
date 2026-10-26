@@ -130,7 +130,8 @@ For a tree edit, deep-copy the input, change only the requested leaf at its exis
 For exact numerical answers, identify the requested operands and their units in the source, compute with eval, and check the order of a ratio or difference against the question.
 Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
 `;
-const GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT = `
+/** GENERATION_GUIDANCE at the depth limit (promptAtNlDepthLimit). */
+export const GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT = `
 
 For a large input, use eval to select the fields or subtree relevant to the question before printing it; read more only when needed.
 For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path. Once the path is known, verify that path directly; a recursive tree walker or an open-ended loop is unnecessary.

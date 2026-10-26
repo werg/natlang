@@ -89,6 +89,30 @@ export function currentSplit(root: string, examplesPath?: string): ReturnType<ty
   return examples;
 }
 
+/** One root's collected trajectories under one teacher identity (`.natlang/tune/data/roots/<key>.json`). */
+export type RootRecord = { schema: 'natlang.tune-root/v1'; root: string; teacher: string; sharedSources: string;
+  bindings: Record<string, string>; outcome: { ok: boolean; oracle: boolean | null }; turns: CollectedTurn[];
+  /** Where trajectories collected outside `natlang tune` came from (tune/pool.ts). */
+  imported?: Record<string, unknown> };
+export const rootRecordPath = (root: string, example: Pick<SplitExample, 'function' | 'input' | 'expected' | 'group'>, teacherId: string) =>
+  join(tuneDirectory(root), 'data', 'roots', sha(['natlang.tune-root/v1', example.function, example.input,
+    example.expected ?? null, example.group ?? null, teacherId]).slice(0, 24) + '.json');
+/** Teacher identities whose trajectories were imported from the generation pool (tune/pool.ts). */
+export function importedTeachers(root: string): string[] {
+  const path = join(tuneDirectory(root), 'data', 'imports.json');
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as { teachers: string[] }).teachers : [];
+}
+/** A root's still-valid record: the configured teacher's first, else one imported from the pool. */
+export function validRootRecord(root: string, example: SplitExample, scaffold: WeightManifest, shared: string, teacherId: string): RootRecord | undefined {
+  for (const teacher of [teacherId, ...importedTeachers(root).filter(id => id !== teacherId)]) {
+    const path = rootRecordPath(root, example, teacher);
+    if (!existsSync(path)) continue;
+    const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
+    if (rootDataValid(record, scaffold, shared)) return record;
+  }
+  return undefined;
+}
+
 /** Discover the scope tree, split root examples before expansion, collect or reuse teacher trajectories. */
 export async function prepareData(options: TuneOptions, timings: StageTiming[] = [], log: (line: string) => void = () => {},
   scopes: ScopeOptions = {}): Promise<TuneData> {
@@ -107,17 +131,12 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   // semantics or the shared (non-instruction) sources changed (keys.ts).
   const shared = sharedSourceHash(program);
   const rootsDir = join(tuneDirectory(root), 'data', 'roots');
-  const recordPath = (example: SplitExample) => join(rootsDir, sha(['natlang.tune-root/v1', example.function, example.input,
-    example.expected ?? null, example.group ?? null, options.teacherId]).slice(0, 24) + '.json');
-  type RootRecord = { schema: 'natlang.tune-root/v1'; root: string; teacher: string; sharedSources: string;
-    bindings: Record<string, string>; outcome: { ok: boolean; oracle: boolean | null }; turns: CollectedTurn[] };
+  const recordPath = (example: SplitExample) => rootRecordPath(root, example, options.teacherId);
   const collectable = examples.filter(example => example.partition === 'train' || example.partition === 'development');
   const records = new Map<string, RootRecord>();
   for (const example of collectable) {
-    const path = recordPath(example);
-    if (!existsSync(path)) continue;
-    const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
-    if (rootDataValid(record, scaffold, shared)) records.set(example.id, record);
+    const record = validRootRecord(root, example, scaffold, shared, options.teacherId);
+    if (record) records.set(example.id, record);
   }
   const missing = collectable.filter(example => !records.has(example.id));
   const reusedData = missing.length === 0;

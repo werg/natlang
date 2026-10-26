@@ -12,6 +12,10 @@
  *                                          candidate within the declared success envelope
  *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
  *   natlang tune <program> --calibrate     measure the configured teachers on development roots and route one (§4.2)
+ *   natlang tune <program> --export-cases <dir> [--include-confirmation]
+ *                                          case list of roots needing data, for the reviewed generation pool (pool.ts)
+ *   natlang tune <program> --import-cases <results>
+ *                                          the pool's collector results → per-root tune data under the actor's identity
  *   natlang tune --families                cross-program family discovery and refits
  */
 import { existsSync, readdirSync, readFileSync, watch } from 'node:fs';
@@ -28,6 +32,7 @@ import { loadVllmStacks, uploadRelease } from './weights.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
 import { programSites } from '../tune/sites.js';
+import { exportCases, importCases } from '../tune/pool.js';
 import { evaluateRelease, prepareData, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
 import { evaluateRoots } from '../tune/evaluate.js';
 import { protectedExamples, readRootExamples } from '../tune/collect.js';
@@ -64,12 +69,12 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
   if (flags.has('--families'))
     throw new Error('natlang tune --families: cross-program family training is not implemented yet (plans/HIERARCHICAL_LORA_TUNING.md §5.5); program tunes run with no family level');
@@ -165,6 +170,28 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     });
     io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : formatOverview(loadOverview(root, 'development')));
     return 0;
+  }
+  const exportDir = value('--export-cases'), importPath = value('--import-cases');
+  if (exportDir !== undefined || importPath !== undefined) {
+    const { settings, student } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
+    const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
+    if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+    const program = inventory.manifest.adaptation!;
+    const examples = currentSplit(root, value('--examples'));
+    const context = { root, program, examples, splitReceipt: examples.receipt,
+      scaffold: scaffoldManifest(program, student.base, { sites: programSites(root, program).sites }) };
+    if (exportDir !== undefined) {
+      const result = exportCases(context, resolve(exportDir), { includeConfirmation: flags.has('--include-confirmation'),
+        teacherId: identityOf(settings.teacher) });
+      io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `${result.cases} case(s) written; ${result.skipped.length} root(s) skipped; ` +
+        `manifest ${result.manifest}\nnext: root review and dispatch through the reviewed pool (see plans/TUNING_OPERATIONS_HANDOFF_20261026.md)`);
+      return 0;
+    }
+    const summary = importCases(context, resolve(importPath!));
+    io.out(flags.has('--json') ? JSON.stringify(summary, null, 2) : `imported ${summary.imported}/${summary.rows} tune case row(s) ` +
+      `(${summary.failures} failed roots kept as failures, ${summary.unboundTurns} turn(s) without a binding); rejected ${summary.rejected.length}` +
+      summary.rejected.slice(0, 5).map(item => `\n  ${item.row}: ${item.reason}`).join(''));
+    return summary.rejected.length && !summary.imported ? 1 : 0;
   }
   if (flags.has('--calibrate')) {
     const { settings } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
