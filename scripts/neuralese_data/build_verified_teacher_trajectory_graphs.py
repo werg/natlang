@@ -25,6 +25,7 @@ from transformers import AutoTokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import CompressedRows, provision
 from scripts import source_review
+from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -698,11 +699,13 @@ def teacher_collection_source(file_receipt, binding):
 def validate_teacher_row(row, binding):
     program = (row.get("task") or {}).get("program_ir") or {}
     outcome = row.get("outcome") or {}
+    accepted_block = exact_honest_root_block(row, program)
     if (row.get("version") != "natlang.teacher_trajectory.native/1"
             or program.get("version") != "natlang.program/2"
             or program.get("split") != "train"
             or program.get("id") not in binding["selected_ids"]
-            or outcome.get("status") != "done" or outcome.get("accepted") is not True
+            or (outcome.get("status") != "done" and not accepted_block)
+            or outcome.get("accepted") is not True
             or outcome.get("oracle", {}).get("accepted") is not True
             or not outcome.get("checks")
             or any(value is not True for value in outcome["checks"].values())):

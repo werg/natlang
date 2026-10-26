@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.neuralese_data import provider_campaign_source as source
+from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
 
 
 def ref(path):
@@ -19,6 +20,9 @@ def fixture(tmp_path, monkeypatch, mutation=None):
         p=tmp_path/name;p.parent.mkdir(parents=True,exist_ok=True)
         p.write_text(json.dumps(value)+'\n');return p
     program={'id':'task','version':'natlang.program/2','split':'train','source_groups':['world-a','world-b']}
+    if mutation=='honest-root-block':
+        program['curriculum']={'reference':{'root':[['return_result',
+            {'status':'blocked','reason':'the records do not settle this'}]]}}
     cases=put('cases.jsonl',program)
     row={'id':'execution','version':'natlang.teacher_trajectory.native/1',
          'task':{'program_ir':program},
@@ -27,6 +31,18 @@ def fixture(tmp_path, monkeypatch, mutation=None):
          'execution_identity':{'execution_run_id':'actual-episode'},
          'trajectory':[{'phase':'action','assistant':{'content':'return 1;'}}],
          'outcome':{'status':'done','accepted':True,'oracle':{'accepted':True},'checks':{'exact':True}}}
+    if mutation=='honest-root-block':
+        row['outcome']={'status':'quiesced','accepted':True,'oracle':{'accepted':True,'level':'exact'},
+            'checks':{'seeded_failure_requirement':True,'expected_status':True,'honest_stop':True,
+                'effects':True,'files':True,'world':True,'file_return_consistency':True,'answer':True},
+            'invocation_ledger':[{'invocation_id':'root','parent_invocation_id':None,
+                'completion_status':'quiesced','completion_source':'execution_graph'}],
+            'action_ledger':[{'call_id':'root','seq':8,'name':'return_result',
+                'arguments':{'status':'blocked','reason':'only the actual record is not enough'},
+                'outcome':'blocked'}]}
+        row['trajectory']=[{'phase':'action','invocation_id':'root','assistant':{'calls':[
+            {'tool':'return_result','source_tool':'return_result',
+             'arguments':{'status':'blocked','reason':'only the actual record is not enough'}}]}}]
     if mutation=='actor':row['provenance']['model']='a-student'
     if mutation=='provider':row['provenance']['provider']='another-provider'
     if mutation=='oracle':row['outcome']['oracle']['accepted']=False
@@ -72,9 +88,75 @@ def test_closed_provider_source_keeps_every_world_and_actual_actor(tmp_path,monk
     assert result['collections'][next(iter(result['collections']))]['runtime_model']=='gpt-6-luna'
 
 
+def test_provider_source_accepts_exact_honest_root_block(tmp_path,monkeypatch):
+    args,protection=fixture(tmp_path,monkeypatch,'honest-root-block')
+    result=source.source_binding(args,protection_reader=lambda _:protection)
+    assert result['selected_ids']=={'task'}
+
+
 @pytest.mark.parametrize('mutation',['actor','provider','oracle','trajectory','unclosed',
                                      'changed-output','protected-related-world'])
 def test_provider_source_rejects_false_success_actor_or_custody(tmp_path,monkeypatch,mutation):
     args,protection=fixture(tmp_path,monkeypatch,mutation)
     with pytest.raises(ValueError):
         source.source_binding(args,protection_reader=lambda _:protection)
+
+
+def _blocked_root_fixture():
+    program = {'id': 'blocked-task', 'version': 'natlang.program/2', 'split': 'train',
+        'source_groups': ['world-a'], 'curriculum': {'reference': {'root': [
+            ['eval', {'code': 'assess(records)'}],
+            ['return_result', {'status': 'blocked', 'reason': 'records are insufficient'}],
+        ]}}}
+    root_id, child_id = 'root-invocation', 'child-invocation'
+    row = {'id': 'blocked-execution', 'task': {'program_ir': program},
+        'outcome': {'status': 'quiesced', 'accepted': True,
+            'oracle': {'accepted': True, 'level': 'exact'},
+            'checks': {'seeded_failure_requirement': True, 'expected_status': True, 'honest_stop': True,
+                'effects': True, 'files': True, 'world': True, 'file_return_consistency': True, 'answer': True},
+            'invocation_ledger': [
+                {'invocation_id': root_id, 'parent_invocation_id': None,
+                 'completion_status': 'quiesced', 'completion_source': 'execution_graph'},
+                {'invocation_id': child_id, 'parent_invocation_id': root_id,
+                 'completion_status': 'done', 'completion_source': 'execution_graph'},
+            ],
+            'action_ledger': [
+                {'call_id': root_id, 'seq': 8, 'name': 'return_result',
+                 'arguments': {'status': 'blocked', 'reason': 'The records do not settle the question.'},
+                 'outcome': 'blocked'},
+            ]},
+        'trajectory': [
+            {'invocation_id': root_id, 'assistant': {'calls': [
+                {'tool': 'eval', 'source_tool': 'eval', 'arguments': {'code': 'assess(records)'}},
+            ]}},
+            {'invocation_id': child_id, 'assistant': {'calls': [
+                {'tool': 'return_result', 'source_tool': 'return_result',
+                 'arguments': {'status': 'success', 'value': {'enough': False}}},
+            ]}},
+            {'invocation_id': root_id, 'assistant': {'calls': [
+                {'tool': 'return_result', 'source_tool': 'return_result',
+                 'arguments': {'status': 'blocked', 'reason': 'The records do not settle the question.'}},
+            ]}},
+        ]}
+    return row, program
+
+
+def test_only_expected_honest_root_block_has_blocked_admission_exception():
+    row, program = _blocked_root_fixture()
+    assert exact_honest_root_block(row, program)
+    child_blocked = copy.deepcopy(row)
+    child_blocked['trajectory'][1]['assistant']['calls'][0]['arguments']['status'] = 'blocked'
+    child_blocked['outcome']['invocation_ledger'][1]['completion_status'] = 'quiesced'
+    assert not exact_honest_root_block(child_blocked, program)
+    unexpected = copy.deepcopy(program)
+    unexpected['curriculum']['reference']['root'][-1][1]['status'] = 'success'
+    assert not exact_honest_root_block(row, unexpected)
+    false_check = copy.deepcopy(row)
+    false_check['outcome']['checks']['honest_stop'] = False
+    assert not exact_honest_root_block(false_check, program)
+    missing_terminal = copy.deepcopy(row)
+    missing_terminal['trajectory'][-1]['assistant']['calls'][0]['arguments']['reason'] = ''
+    assert not exact_honest_root_block(missing_terminal, program)
+    missing_custody = copy.deepcopy(row)
+    missing_custody['outcome']['action_ledger'] = []
+    assert not exact_honest_root_block(missing_custody, program)

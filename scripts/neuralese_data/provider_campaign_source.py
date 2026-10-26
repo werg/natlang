@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
+from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
 
 SCHEMA = 'natlang.provider-campaign-source/1'
 
@@ -97,13 +98,15 @@ def source_binding(args, *, protection_reader):
         program = programs[claim['index']]
         trace = row.get('provenance') or {}
         outcome = row.get('outcome') or {}
+        accepted_block = exact_honest_root_block(row, program)
         if (row.get('version') != 'natlang.teacher_trajectory.native/1'
                 or row.get('task',{}).get('program_ir') != program
                 or trace.get('program_ir_sha256') != canonical_json_sha256_hex(program)
                 or trace.get('model') != plan['model_id'] or trace.get('provider') != plan['provider']
                 or not row.get('execution_identity',{}).get('execution_run_id')
                 or not row.get('trajectory') or program.get('split') != 'train'
-                or outcome.get('status') != 'done' or outcome.get('accepted') is not True
+                or (outcome.get('status') != 'done' and not accepted_block)
+                or outcome.get('accepted') is not True
                 or outcome.get('oracle',{}).get('accepted') is not True
                 or not outcome.get('checks') or any(v is not True for v in outcome['checks'].values())):
             raise ValueError('provider trajectory differs from its actual actor/task/success')
