@@ -491,6 +491,7 @@ def build(model, out_root):
     old_held_receipt, current_held_receipt = old_held.receipt(), current_held.receipt()
     old_origins = _origins(old_receipt, old_train.ordered_ids())
     new_origins = _origins(current_receipt, current_train.ordered_ids())
+    old_communication_ids = {entry['id'] for entry in old_train.entries if entry.get('communication')}
     current_ids = set(current_train.bindings)
     old_ids = set(old_train.bindings)
     deferred = []
@@ -519,13 +520,15 @@ def build(model, out_root):
                     f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
                         'old_source_sha256': digest, 'new_binding': current_train.bindings[row_id],
                         'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
+                        'old_communication': row_id in old_communication_ids,
                         'reason': source_reasons[digest]}, sort_keys=True) + '\n')
                 else:
                     if digest not in BAD_TRAIN:
                         raise ValueError(f'{model}: corrected replacement changed graph identity: {row_id}')
                     f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
                         'old_source_sha256': digest, 'new_binding': None,
-                        'disposition': 'deferred', 'reason': source_reasons[digest]}, sort_keys=True) + '\n')
+                        'disposition': 'deferred', 'old_communication': row_id in old_communication_ids,
+                        'reason': source_reasons[digest]}, sort_keys=True) + '\n')
         for row_id in current_train.ordered_ids():
             if row_id not in old_ids:
                 f.write(json.dumps({'id': row_id, 'old_binding': None, 'old_source_sha256': None,
@@ -536,7 +539,8 @@ def build(model, out_root):
                     raise ValueError('replacement row identity is not in old source inventory')
                 f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
                     'old_source_sha256': old_origins[row_id], 'new_binding': current_train.bindings[row_id],
-                    'new_source_sha256': new_origins[row_id], 'disposition': 'corrected'}, sort_keys=True) + '\n')
+                    'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
+                    'old_communication': row_id in old_communication_ids}, sort_keys=True) + '\n')
     # This subset is intentionally correction-only; it does not authorize
     # promotion of unresolved held targets or full readiness.
     old_held_origins = _origins(old_held_receipt, old_held.ordered_ids())

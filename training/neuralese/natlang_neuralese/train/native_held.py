@@ -61,7 +61,9 @@ def rebind_held_coverage_after_exact_correction(previous_entries, current_entrie
                 raise ValueError('cannot retire held target visits without their exact token counts')
             retired.append({'id':old_row[0],'class':name,
                 'old_binding_sha256':canonical_json_sha256_hex(old_row[1]),
-                'visits':count,'reason':'held target binding changed'})
+                'visits':count,'forward_tokens_per_visit':tokens or 0,
+                'retired_forward_token_visits':count * (tokens or 0),
+                'reason':'held target binding changed'})
             retired_tokens += count * (tokens or 0)
             visits[local]=0
         state['row_prefix_sha256']=canonical_json_sha256_hex(current)
@@ -133,6 +135,10 @@ def bind_held_quality_exclusions(entries, coverage, excluded_ids, *, source_sha2
             raise ValueError('held quality exclusions require an explicit source-correction transition')
     elif result_ids is not None and set(result_ids) != excluded and not allow_transition:
         raise ValueError('held quality exclusion set changed without an explicit held correction')
+    retired=[]
+    retired_tokens=0
+    previously_excluded=set(result.get('quality_excluded_ids') or ())
+    newly_excluded=excluded-previously_excluded
     for name, communication in [('communication', True), ('ordinary', False)]:
         pool = [entry for entry in entries if bool(entry.get('communication')) is communication]
         rows = [[entry['id'], entry.get('binding')] for entry in pool]
@@ -147,10 +153,29 @@ def bind_held_quality_exclusions(entries, coverage, excluded_ids, *, source_sha2
             raise ValueError('held quality hold coverage differs from exact current row bindings')
         for index, entry in enumerate(pool):
             if entry['id'] in excluded:
+                count=state['visits'][index]
+                if count and entry['id'] in newly_excluded:
+                    tokens=entry.get('forward_tokens')
+                    if type(tokens) is not int or tokens < 1:
+                        raise ValueError('cannot retire held quality visits without exact token counts')
+                    retired.append({'id':entry['id'],'class':name,
+                        'old_binding_sha256':canonical_json_sha256_hex(entry.get('binding')),
+                        'visits':count,'forward_tokens_per_visit':tokens,
+                        'retired_forward_token_visits':count * tokens,
+                        'reason':'held target excluded from loss scoring'})
+                    retired_tokens += count*tokens
                 state['visits'][index] = 0
+            elif entry['id'] in previously_excluded and state['visits'][index] != 0:
+                raise ValueError('previously excluded held row has saved observations')
     result['source_sha256'] = source_sha256
     result['source_graphs'] = len(entries)
     result['quality_excluded_ids'] = sorted(excluded)
+    if retired:
+        result['retired_target_visit_history']=list(result.get('retired_target_visit_history') or [])+retired
+        prior_tokens=result.get('forward_token_visits')
+        if type(prior_tokens) is not int or prior_tokens < retired_tokens:
+            raise ValueError('held quality exclusion token history cannot cover retired target visits')
+        result['forward_token_visits']=prior_tokens-retired_tokens
     counts = [visit for state in result['classes'].values() for visit in state.get('visits', [])]
     result['graph_visits'] = sum(counts)
     result['completed_sweeps'] = min(counts, default=0)

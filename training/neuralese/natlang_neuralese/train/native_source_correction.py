@@ -30,6 +30,46 @@ def _binding(ref):
     return {'path': str(Path(ref['path']).resolve()), 'sha256': ref['sha256']}
 
 
+def _pending_communication_class(training, pending_item, row_id, prior_receipt):
+    """Authenticate a pending row's original class from its saved correction lineage."""
+    if not isinstance(pending_item, dict) or type(pending_item.get('communication')) is not bool:
+        raise ValueError('pending source row lacks its authenticated original class: ' + row_id)
+    origin = pending_item.get('classification_provenance')
+    if (not isinstance(origin, dict)
+            or origin.get('schema') != 'natlang.pending-row-classification-provenance/1'
+            or origin.get('row_id') != row_id
+            or origin.get('classification_source') != 'saved_checkpoint_communication_ids'):
+        raise ValueError('pending source row lacks exact classification provenance: ' + row_id)
+    origin_ref = {'path': origin.get('proof_path'), 'sha256': origin.get('proof_sha256')}
+    if (not isinstance(origin_ref['path'], str) or not origin_ref['path']
+            or not isinstance(origin_ref['sha256'], str) or not origin_ref['sha256']):
+        raise ValueError('pending source row classification origin lacks an exact proof binding: ' + row_id)
+    history = (training.get('options') or {}).get('source_correction_history') or []
+    if not isinstance(history, list) or any(not isinstance(item, dict) for item in history):
+        raise ValueError('pending source correction history is malformed')
+    matching = [item for item in history
+                if item.get('proof_sha256') == origin_ref['sha256']
+                and Path(str(item.get('proof_path', ''))).resolve() == Path(str(origin_ref['path'])).resolve()]
+    if len(matching) != 1 or row_id not in set(matching[0].get('deferred_rows') or []):
+        raise ValueError('pending source row is not deferred by its authenticated correction history: ' + row_id)
+    if _binding(matching[0].get('current_source')) != _binding(prior_receipt):
+        raise ValueError('pending source row correction lineage does not end at the loaded source: ' + row_id)
+    if (_binding(origin.get('source_receipt')) != _binding(matching[0].get('prior_source'))
+            or origin.get('model_id') != matching[0].get('model_id')
+            or origin.get('stage_id') != matching[0].get('stage_id')):
+        raise ValueError('pending source row classification is detached from its source lineage: ' + row_id)
+    dependencies = source_correction_dependencies(origin_ref)
+    proof_path = Path(origin_ref['path']).resolve(strict=True)
+    proof = json.loads(proof_path.read_text())
+    if (_binding(proof.get('current_source')) != _binding(prior_receipt)
+            or _binding(proof.get('prior_source')) != _binding(origin.get('source_receipt'))
+            or proof.get('stage_id') != origin.get('stage_id')
+            or proof.get('model_id') != origin.get('model_id')):
+        raise ValueError('pending source row origin proof differs from its saved lineage: ' + row_id)
+    return pending_item['communication'], {'proof_path':str(proof_path),
+        'proof_sha256':origin_ref['sha256'], 'dependencies':dependencies}
+
+
 def _receipt_matches_with_staged_relocation(expected, actual, proof, proof_path):
     """Allow only a source-map-authenticated path relocation of identical bytes."""
     if _binding(expected) == _binding(actual):
@@ -394,7 +434,10 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
         frame['source_receipts'] = receipts
         frame['exposure_counts'] = next_counts
         frame['required_visits'] = next_quotas
-        frame['pending_source_rows'] = {**(frame.get('pending_source_rows') or {}), **pending}
+        frame_pending = {**(frame.get('pending_source_rows') or {}), **pending}
+        for key in corrected:
+            frame_pending.pop(key, None)
+        frame['pending_source_rows'] = frame_pending
         for option_key in ('_communication_ids', '_producer_consumer_ids'):
             if option_key in options:
                 options[option_key] = [key for key in current_order if key in communication_ids]
@@ -407,14 +450,14 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
             frame['held_row_bindings'] = held_bindings
             receipts[1] = protected_held['current_receipt']
             frame['source_receipts'] = receipts
-            coverage = frame.get('held_coverage')
+            frame_metrics = dict(frame.get('metrics') or {})
+            coverage = frame_metrics.get('held_coverage')
             if coverage is not None:
                 from .native_held import rebind_held_coverage_after_exact_correction
-                frame['held_coverage'] = rebind_held_coverage_after_exact_correction(
-                    coverage, prior_receipt=protected_held['prior_receipt'],
-                    current_receipt=protected_held['current_receipt'],
-                    prior_bindings=protected_held['prior_bindings'],
-                    current_bindings=held_bindings)
+                frame_metrics['held_coverage'] = rebind_held_coverage_after_exact_correction(
+                    protected_held['prior_entries'], protected_held['current_entries'], coverage,
+                    source_sha256=protected_held['current_receipt']['sha256'])
+                frame['metrics'] = frame_metrics
         if corrected or added or deferred:
             frame['completed_foundations'] = []
         progress[frame_id] = frame
@@ -532,10 +575,20 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         if disposition == 'corrected':
             new = row.get('new_binding')
             new_sha = row.get('new_source_sha256')
+            if active_old is not None:
+                old_communication = row_id in prior_communication
+                if 'old_communication' in row and row.get('old_communication') is not old_communication:
+                    raise ValueError('source correction changed the authenticated old row class: ' + row_id)
+            else:
+                old_communication, _ = _pending_communication_class(
+                    training, pending_item, row_id, prior_receipt)
+                if ('old_communication' not in row
+                        or type(row.get('old_communication')) is not bool
+                        or row['old_communication'] is not old_communication):
+                    raise ValueError('pending replacement lacks its exact pinned old row class: ' + row_id)
             if (row_id not in current_bindings or current_bindings[row_id] != new
-                    or new_origins.get(row_id) != new_sha or row_id not in prior_communication
-                    or row_id not in current_communication
-                    or old == new):
+                    or new_origins.get(row_id) != new_sha or not old_communication
+                    or row_id not in current_communication or old == new):
                 raise ValueError('source correction replacement is not an exact changed communication row: ' + row_id)
             corrected.add(row_id)
             if row_id in pending:
@@ -553,9 +606,30 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             prior = pending.get(row_id)
             required = max(1, int(quotas.get(row_id,
                 (prior or {}).get('required_visits', math.ceil(epochs)))))
+            if active_old is not None:
+                communication = row_id in prior_communication
+                if 'old_communication' in row and row.get('old_communication') is not communication:
+                    raise ValueError('source correction deferred row class differs from saved source: ' + row_id)
+                classification = {'schema':'natlang.pending-row-classification-provenance/1',
+                    'row_id':row_id, 'model_id':model_id, 'stage_id':stage_id,
+                    'classification_source':'saved_checkpoint_communication_ids',
+                    'proof_path':str(path), 'proof_sha256':proof_sha,
+                    'source_receipt':prior_ref}
+            else:
+                communication, _ = _pending_communication_class(training, prior, row_id, prior_receipt)
+                if ('old_communication' not in row or type(row.get('old_communication')) is not bool
+                        or row['old_communication'] is not communication):
+                    raise ValueError('re-deferred row lacks its exact pinned old class: ' + row_id)
+                classification = dict(prior['classification_provenance'])
+            retired_exposure = (dict(prior['retired_exposure']) if prior is not None else {
+                'visits':int(counts.get(row_id, 0)),
+                'required_visits':int(quotas.get(row_id, required)),
+                'source_receipt':prior_ref})
             item = {'binding': old, 'source_sha256': old_sha,
-                    'required_visits': required,
-                    'reason': row.get('reason')}
+                    'required_visits': required, 'reason': row.get('reason'),
+                    'communication': communication,
+                    'classification_provenance': classification,
+                    'retired_exposure': retired_exposure}
             if prior is not None and prior != item:
                 raise ValueError('source correction changed a prior pending row: ' + row_id)
             pending[row_id] = item
@@ -608,9 +682,13 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     result['exposure_counts'] = new_counts
     result['required_visits'] = new_quotas
     result['options'] = dict(options)
+    for option_key in ('_communication_ids', '_producer_consumer_ids'):
+        if option_key in result['options']:
+            result['options'][option_key] = [key for key in current_order if key in current_communication]
     new_history = list(history)
     record = {
         'proof_path': str(path), 'proof_sha256': proof_sha,
+        'model_id': model_id,
         'prior_source': prior_ref, 'current_source': current_ref,
         'stage_id': stage_id, 'corrected_rows': changes,
         'deferred_rows': sorted(deferred), 'added_rows': sorted(added),
@@ -663,6 +741,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         frame_options['source_correction_history'] = list(new_history)
         frame_options['source_correction_binding'] = ref
         frame_options['foundation_qualification_history'] = list(qualification_history)
+        for option_key in ('_communication_ids', '_producer_consumer_ids'):
+            if option_key in frame_options:
+                frame_options[option_key] = [key for key in current_order if key in current_communication]
         frame['options'] = frame_options
         progress[stage_id] = frame
     result['sft_progress'] = progress
@@ -736,7 +817,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     if carried_transitions:
         result['sft_progress'] = progress
         result['options']['source_correction_history'][-1]['carried_frame_transitions'] = carried_transitions
-        for frame in progress.values():
+        transitioned_ids = {item['stage_id'] for item in carried_transitions}
+        for frame_id in transitioned_ids:
+            frame = progress[frame_id]
             frame_options = dict(frame.get('options') or {})
             frame_options['source_correction_history'] = list(result['options']['source_correction_history'])
             frame_options['source_correction_binding'] = ref

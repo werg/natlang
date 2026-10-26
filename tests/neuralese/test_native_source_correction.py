@@ -1,5 +1,6 @@
 import hashlib
 import json
+import copy
 from pathlib import Path
 
 import pytest
@@ -22,10 +23,11 @@ def _receipt(path, digest, ids, source_hashes):
     return {'path': str(path), 'sha256': digest, 'rows': len(ids), 'sources': sources}
 
 
-def _write_proof(tmp_path, prior, current, rows, model_id='lfm2:inventory', protected_held=None):
-    row_path = tmp_path / 'rows.jsonl'
+def _write_proof(tmp_path, prior, current, rows, model_id='lfm2:inventory', protected_held=None,
+                 name='source-correction'):
+    row_path = tmp_path / (name + '-rows.jsonl')
     row_path.write_text(''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows))
-    proof_path = tmp_path / 'source-correction.json'
+    proof_path = tmp_path / (name + '.json')
     proof = {'schema': SCHEMA, 'model_id': model_id, 'stage_id': 'native_full_sft',
              'prior_source': {'path': prior['path'], 'sha256': prior['sha256']},
              'current_source': {'path': current['path'], 'sha256': current['sha256']},
@@ -46,10 +48,14 @@ def _write_proof(tmp_path, prior, current, rows, model_id='lfm2:inventory', prot
     return proof_path
 
 
-def _row(row_id, old_binding, new_binding, old_sha, new_sha, disposition, reason=None):
-    return {'id': row_id, 'old_binding': old_binding, 'new_binding': new_binding,
+def _row(row_id, old_binding, new_binding, old_sha, new_sha, disposition, reason=None,
+         old_communication=None):
+    row = {'id': row_id, 'old_binding': old_binding, 'new_binding': new_binding,
             'old_source_sha256': old_sha, 'new_source_sha256': new_sha,
             'disposition': disposition, 'reason': reason}
+    if old_communication is not None:
+        row['old_communication'] = old_communication
+    return row
 
 
 def test_prior_receipt_path_change_requires_exact_authenticated_source_map(tmp_path):
@@ -118,7 +124,17 @@ def test_source_correction_preserves_state_and_resets_only_corrected_rows(tmp_pa
     assert result['required_visits']['edge:fixed'] == 1
     assert result['pending_source_rows']['edge:pending'] == {
         'binding': {'h': 'pending'}, 'source_sha256': 'sha-old-pending',
-        'required_visits': 1, 'reason': 'source remains under repair'}
+        'required_visits': 1, 'reason': 'source remains under repair',
+        'communication': True,
+        'classification_provenance': {
+            'schema': 'natlang.pending-row-classification-provenance/1',
+            'row_id': 'edge:pending', 'model_id': 'lfm2:inventory',
+            'stage_id': 'native_full_sft',
+            'classification_source': 'saved_checkpoint_communication_ids',
+            'proof_path': str(proof.resolve()), 'proof_sha256': _sha(proof),
+            'source_receipt': {'path': str(Path(prior['path']).resolve()), 'sha256': prior['sha256']}},
+        'retired_exposure': {'visits': 1, 'required_visits': 1,
+            'source_receipt': {'path': str(Path(prior['path']).resolve()), 'sha256': prior['sha256']}}}
     assert result['completed_foundations'] == []
     assert result['sft_progress']['native_full_sft']['exposure_counts']['edge:fixed'] == 0
 
@@ -153,24 +169,60 @@ def test_corrected_rows_may_move_after_the_unchanged_earned_prefix(tmp_path):
 
 
 def test_pending_row_can_be_corrected_later_without_losing_original_debt(tmp_path):
+    import torch
+
     old_id = 'edge:late'
     first_prior = _receipt('/old/all.json', 'old-all', ['ordinary', old_id], ['sha-o', 'sha-late'])
     first_current = _receipt('/new/partial.json', 'new-partial', ['ordinary'], ['sha-o'])
+    optimizer = {'state': {'exp_avg': torch.tensor([1.0, 2.0])}, 'step': 17}
+    rng = {'cpu': torch.arange(8, dtype=torch.uint8)}
+    weights = {'w': torch.tensor([3.0, 4.0])}
+    same_source_carried = {'source_receipts': [first_prior],
+        'source_row_bindings': {'ordinary': {'h': 'o'}, old_id: {'h': 'late'}},
+        'source_row_order': ['ordinary', old_id], 'exposure_counts': {'ordinary': 1, old_id: 1},
+        'required_visits': {'ordinary': 1, old_id: 2}, 'pending_source_rows': {},
+        'options': {'epochs': 1, '_communication_ids': [old_id]},
+        'metrics': {'held': {'loss': 1.25}, 'marker': 'carried'} }
+    unrelated_dpo = {'source_receipts': [_receipt('/unrelated/dpo.json', 'dpo-v1', ['pair'], ['pair-sha'])],
+        'source_row_bindings': {'pair': {'h': 'pair'}}, 'source_row_order': ['pair'],
+        'exposure_counts': {'pair': 4}, 'required_visits': {'pair': 6},
+        'options': {'stage_id': 'native_dpo', 'objective': {'beta': 0.2}, 'sentinel': {'bytes': 'unchanged'}},
+        'metrics': {'held': {'loss': 9.5}, 'sentinel': 'unchanged'} }
     training = {'source_receipts': [first_prior], 'source_row_bindings': {'ordinary': {'h': 'o'}, old_id: {'h': 'late'}},
         'source_row_order': ['ordinary', old_id], 'exposure_counts': {'ordinary': 1, old_id: 1},
         'required_visits': {'ordinary': 1, old_id: 2}, 'pending_source_rows': {}, 'completed_foundations': [],
-        'step': 9, 'optimizer': object(), 'rng': object(), 'options': {'stage_id': 'native_full_sft', 'epochs': 1,
-            '_communication_ids': [old_id]}, 'sft_progress': {}}
+        'step': 9, 'global_step': 9, 'optimizer': optimizer, 'rng': rng, 'weights': weights,
+        'options': {'stage_id': 'native_full_sft', 'epochs': 1, '_communication_ids': [old_id]},
+        'sft_progress': {'native_full_sft': same_source_carried,
+            'native_supervised-carried':copy.deepcopy(same_source_carried), 'native_dpo': unrelated_dpo}}
     first = _write_proof(tmp_path, first_prior, first_current, [
         _row(old_id, {'h': 'late'}, None, 'sha-late', None, 'deferred', 'awaiting corrected producer graph')],
         model_id='mellum:inventory')
-    training, _ = apply_source_correction(training, first, model_id='mellum:inventory', stage_id='native_full_sft',
+    training, first_summary = apply_source_correction(training, first, model_id='mellum:inventory', stage_id='native_full_sft',
         current_source_receipt=first_current, current_bindings={'ordinary': {'h': 'o'}}, current_order=['ordinary'],
         current_communication_ids=[])
+    assert first_summary['deferred_rows'] == 1
+    assert training['pending_source_rows'][old_id]['communication'] is True
+    assert training['pending_source_rows'][old_id]['retired_exposure'] == {
+        'visits': 1, 'required_visits': 2, 'source_receipt': {'path': first_prior['path'], 'sha256': first_prior['sha256']}}
+    assert training['sft_progress']['native_supervised-carried']['pending_source_rows'][old_id]['communication'] is True
+    assert training['sft_progress']['native_dpo'] == unrelated_dpo
+
+    # Exercise the exact durable boundary and normal resume's current-source
+    # option rebuild, which drops the omitted row from _communication_ids.
+    slot = tmp_path / 'saved-checkpoint.pt'
+    torch.save(training, slot)
+    training = torch.load(slot, map_location='cpu', weights_only=False)
+    assert old_id not in training['options']['_communication_ids']
+    assert old_id not in training['sft_progress']['native_supervised-carried']['options']['_communication_ids']
+    before_numeric = {key: torch.clone(value) for key, value in training['weights'].items()}
+    before_optimizer = torch.clone(training['optimizer']['state']['exp_avg'])
+    before_rng = torch.clone(training['rng']['cpu'])
     second_current = _receipt('/new/complete.json', 'new-complete', ['ordinary', old_id], ['sha-o', 'sha-late-corrected'])
     second = _write_proof(tmp_path, first_current, second_current, [
-        _row(old_id, {'h': 'late'}, {'h': 'corrected'}, 'sha-late', 'sha-late-corrected', 'corrected')],
-        model_id='mellum:inventory')
+        _row(old_id, {'h': 'late'}, {'h': 'corrected'}, 'sha-late', 'sha-late-corrected', 'corrected',
+             old_communication=True)],
+        model_id='mellum:inventory', name='second-correction')
     result, summary = apply_source_correction(training, second, model_id='mellum:inventory', stage_id='native_full_sft',
         current_source_receipt=second_current,
         current_bindings={'ordinary': {'h': 'o'}, old_id: {'h': 'corrected'}}, current_order=['ordinary', old_id],
@@ -181,6 +233,36 @@ def test_pending_row_can_be_corrected_later_without_losing_original_debt(tmp_pat
     assert result['exposure_counts'][old_id] == 0
     assert result['required_visits'][old_id] == 1
     assert result['options']['source_correction_history'][0]['deferred_rows'] == [old_id]
+    assert result['options']['source_correction_history'][1]['corrected_rows'][0]['prior_exposure'] == 1
+    assert result['sft_progress']['native_supervised-carried']['pending_source_rows'] == {}
+    assert result['sft_progress']['native_dpo'] == unrelated_dpo
+    assert all(torch.equal(result['weights'][key], value) for key, value in before_numeric.items())
+    assert torch.equal(result['optimizer']['state']['exp_avg'], before_optimizer)
+    assert torch.equal(result['rng']['cpu'], before_rng)
+
+
+def test_pending_ordinary_row_cannot_be_reclassified_as_communication(tmp_path):
+    old_id = 'ordinary:late'
+    prior = _receipt('/old/all.json', 'old-all', ['ordinary', old_id], ['sha-o', 'sha-late'])
+    reduced = _receipt('/new/partial.json', 'new-partial', ['ordinary'], ['sha-o'])
+    training = {'source_receipts':[prior], 'source_row_bindings':{'ordinary':{'h':'o'}, old_id:{'h':'late'}},
+        'source_row_order':['ordinary',old_id], 'exposure_counts':{'ordinary':1,old_id:2},
+        'required_visits':{'ordinary':1,old_id:3}, 'pending_source_rows':{},
+        'options':{'stage_id':'native_full_sft','epochs':1,'_communication_ids':[]}, 'sft_progress':{}}
+    first = _write_proof(tmp_path, prior, reduced, [
+        _row(old_id, {'h':'late'}, None, 'sha-late', None, 'deferred', 'pending ordinary source')])
+    training,_=apply_source_correction(training,first,model_id='lfm2:inventory',stage_id='native_full_sft',
+        current_source_receipt=reduced,current_bindings={'ordinary':{'h':'o'}},current_order=['ordinary'],
+        current_communication_ids=[])
+    assert training['pending_source_rows'][old_id]['communication'] is False
+    restored = _receipt('/new/repaired.json','repaired',['ordinary',old_id],['sha-o','sha-late-new'])
+    second = _write_proof(tmp_path,reduced,restored,[
+        _row(old_id,{'h':'late'},{'h':'new'},'sha-late','sha-late-new','corrected',
+             old_communication=False)], name='second-ordinary-correction')
+    with pytest.raises(ValueError,match='replacement is not an exact changed communication row'):
+        apply_source_correction(training,second,model_id='lfm2:inventory',stage_id='native_full_sft',
+            current_source_receipt=restored,current_bindings={'ordinary':{'h':'o'},old_id:{'h':'new'}},
+            current_order=['ordinary',old_id],current_communication_ids=[old_id])
 
 
 @pytest.mark.parametrize('mutate', ['ordinary-change', 'missing-proof-row', 'reordered'])
@@ -230,11 +312,14 @@ def test_source_correction_does_not_rebind_a_frame_from_another_source(tmp_path)
     old_frame = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
         'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
         'options': {'epochs': 1, '_communication_ids': ['edge']}}
+    unrelated_frame = {**old_frame, 'source_receipts': [unrelated],
+        'options': {'stage_id':'native_dpo','objective':{'beta':0.3},'marker':{'keep':True}},
+        'metrics': {'held':{'loss':8.75},'task_eval':{'successes':2},'marker':'untouched'}}
+    unrelated_before = copy.deepcopy(unrelated_frame)
     training = {'source_receipts': [prior], 'source_row_bindings': {'edge': {'h': 'old'}},
         'source_row_order': ['edge'], 'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1},
         'options': {'epochs': 1, '_communication_ids': ['edge']},
-        'sft_progress': {'native_full_sft': old_frame, 'other-source-stage': {
-            **old_frame, 'source_receipts': [unrelated]}}}
+        'sft_progress': {'native_full_sft': old_frame, 'other-source-stage': unrelated_frame}}
 
     result, _ = apply_source_correction(training, proof, model_id='lfm2:inventory',
         stage_id='native_full_sft', current_source_receipt=current,
@@ -242,10 +327,10 @@ def test_source_correction_does_not_rebind_a_frame_from_another_source(tmp_path)
         current_communication_ids=['edge'])
 
     untouched = result['sft_progress']['other-source-stage']
-    assert untouched['source_receipts'] == [unrelated]
-    assert untouched['source_row_bindings'] == {'edge': {'h': 'old'}}
-    with pytest.raises(ValueError, match='carried communication row changed'):
-        raw_communication_rows(result['sft_progress'])
+    assert untouched == unrelated_before
+    active_rows = raw_communication_rows(result['sft_progress'])
+    assert set(active_rows) == {'edge'}
+    assert active_rows['edge']['binding'] == {'h': 'new'}
 
 
 def test_source_correction_rejects_replacement_that_is_no_longer_a_communication_graph(tmp_path):
@@ -263,6 +348,8 @@ def test_source_correction_rejects_replacement_that_is_no_longer_a_communication
 
 
 def test_protected_held_correction_keeps_membership_groups_and_exposure_unchanged(tmp_path):
+    from natlang_neuralese.train.native_held import held_selection
+
     prior_train = _receipt('/old/train.json', 'old-train', ['edge'], ['old-train-leaf'])
     current_train = _receipt('/new/train.json', 'new-train', ['edge'], ['new-train-leaf'])
     old_held = _receipt('/old/held.json', 'old-held', ['held:a', 'held:b'],
@@ -271,6 +358,18 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
                         ['new-held-a', 'old-held-b'])
     bindings = {'edge': {'sha': 'new-train'}}
     held_bindings = {'held:a': {'sha': 'new-held'}, 'held:b': {'sha': 'old-held-b'}}
+    prior_entries = [
+        {'id':'held:a','binding':{'sha':'old-held'},'groups':['world:held-a'],
+         'communication':False,'forward_tokens':3},
+        {'id':'held:b','binding':{'sha':'old-held-b'},'groups':['world:held-b'],
+         'communication':False,'forward_tokens':3},]
+    current_entries = [
+        {'id':'held:a','binding':{'sha':'new-held'},'groups':['world:held-a'],
+         'communication':False,'forward_tokens':5},
+        {'id':'held:b','binding':{'sha':'old-held-b'},'groups':['world:held-b'],
+         'communication':False,'forward_tokens':3},]
+    _, carried_coverage, _ = held_selection(prior_entries, source_sha256='old-held', final=True)
+    assert carried_coverage['forward_token_visits'] == 6
     protected = {'prior': old_held, 'current': new_held, 'rows': [
         {'id': 'held:a', 'old_binding': {'sha': 'old-held'}, 'new_binding': {'sha': 'new-held'},
          'old_source_sha256': 'old-held-a', 'new_source_sha256': 'new-held-a',
@@ -279,7 +378,7 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
         [_row('edge', {'sha': 'old-train'}, {'sha': 'new-train'}, 'old-train-leaf', 'new-train-leaf', 'corrected')],
         protected_held=protected)
     proof_doc = json.loads(proof.read_text())
-    proof_doc['row_bindings_path'] = 'rows.jsonl'
+    proof_doc['row_bindings_path'] = 'source-correction-rows.jsonl'
     proof_doc['protected_held_correction']['row_bindings_path'] = 'held-rows.jsonl'
     evidence_dir = tmp_path / 'evidence'
     evidence_dir.mkdir()
@@ -287,6 +386,12 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
     evidence_file.write_text('{"authenticated":true}')
     proof_doc['evidence'] = [{'path': 'evidence/provenance.json', 'sha256': _sha(evidence_file)}]
     proof.write_text(json.dumps(proof_doc, sort_keys=True))
+    carried_frame = {'source_receipts':[prior_train,old_held],
+        'source_row_bindings':{'edge':{'sha':'old-train'}},'source_row_order':['edge'],
+        'held_row_bindings':{'held:a':{'sha':'old-held'},'held:b':{'sha':'old-held-b'}},
+        'exposure_counts':{'edge':2},'required_visits':{'edge':3},
+        'options':{'objective':'separate-but-same-source'},
+        'metrics':{'held':{'loss':1.0},'held_coverage':carried_coverage}}
     training = {'source_receipts': [prior_train, old_held],
         'source_row_bindings': {'edge': {'sha': 'old-train'}}, 'source_row_order': ['edge'],
         'held_row_bindings': {'held:a': {'sha': 'old-held'}, 'held:b': {'sha': 'old-held-b'}},
@@ -295,13 +400,15 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
         'sft_progress': {'native_full_sft': {'source_receipts': [prior_train, old_held],
             'source_row_bindings': {'edge': {'sha': 'old-train'}}, 'source_row_order': ['edge'],
             'held_row_bindings': {'held:a': {'sha': 'old-held'}, 'held:b': {'sha': 'old-held-b'}},
-            'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1}, 'options': {}}}}
+            'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1}, 'options': {}},
+            'carried-same-source': carried_frame}}
     held_context = {'prior_receipt': old_held, 'current_receipt': new_held,
         'prior_bindings': training['held_row_bindings'], 'current_bindings': held_bindings,
         'prior_order': ['held:a', 'held:b'], 'current_order': ['held:a', 'held:b'],
         'prior_groups': {'world:held-a', 'world:held-b'}, 'current_groups': {'world:held-a', 'world:held-b'},
         'prior_groups_by_id': {'held:a': ['world:held-a'], 'held:b': ['world:held-b']},
-        'current_groups_by_id': {'held:a': ['world:held-a'], 'held:b': ['world:held-b']}}
+        'current_groups_by_id': {'held:a': ['world:held-a'], 'held:b': ['world:held-b']},
+        'prior_entries':prior_entries, 'current_entries':current_entries}
     result, summary = apply_source_correction(training, proof, model_id='lfm2:inventory',
         stage_id='native_full_sft', current_source_receipt=current_train,
         current_bindings=bindings, current_order=['edge'], current_communication_ids=['edge'],
@@ -310,6 +417,16 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
     assert result['held_row_bindings'] == held_bindings
     assert result['source_receipts'][1] == new_held
     assert result['sft_progress']['native_full_sft']['held_row_bindings'] == held_bindings
+    rebound_coverage = result['sft_progress']['carried-same-source']['metrics']['held_coverage']
+    assert rebound_coverage['source_sha256'] == 'new-held'
+    assert rebound_coverage['classes']['ordinary']['visits'] == [0, 1]
+    assert rebound_coverage['graph_visits'] == 1
+    assert rebound_coverage['forward_token_visits'] == 3
+    assert rebound_coverage['retired_target_visit_history'] == [{
+        'id':'held:a','class':'ordinary','old_binding_sha256':
+            __import__('natlang_neuralese.common.hashing',fromlist=['canonical_json_sha256_hex']).canonical_json_sha256_hex({'sha':'old-held'}),
+        'visits':1,'forward_tokens_per_visit':3,'retired_forward_token_visits':3,
+        'reason':'held target binding changed'}]
     assert result['exposure_counts'] == {'edge': 0}
     assert result['required_visits']['edge'] == 2
     assert len(source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})) == 4
@@ -402,6 +519,7 @@ def test_protected_held_coverage_rebinds_only_after_exact_same_class_rows():
     assert rebound['forward_token_visits']==4
     assert rebound['retired_target_visit_history']==[{'id':'h1','class':'communication',
         'old_binding_sha256':canonical_json_sha256_hex('old'),'visits':4,
+        'forward_tokens_per_visit':3,'retired_forward_token_visits':12,
         'reason':'held target binding changed'}]
     moved=[{'id':'h1','binding':'new','communication':False},
            {'id':'h2','binding':'same','communication':False}]
