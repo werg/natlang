@@ -199,7 +199,7 @@ tarball, with the package lock recording its integrity. The `owned-tracing-smoke
 workflow installs that package with `npm ci` and runs these tests through its
 public selected-execution and training exports. No sibling checkout is needed.
 The final roadmap integration pins tracer revision
-[`866e7045de3a01c56de93154b2cfd2c7b47ed35b`](https://github.com/werg/tracing-js-self/commit/866e7045de3a01c56de93154b2cfd2c7b47ed35b).
+[`360d42b15537bed1a749261108c5c94b7562f323`](https://github.com/werg/tracing-js-self/commit/360d42b15537bed1a749261108c5c94b7562f323).
 Its public selected prefixes include the checked source and retained-state
 context used by both the teacher and executing model. Native orchestration,
 child completion, callback ownership and context-eviction verification use that
