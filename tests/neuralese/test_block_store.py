@@ -267,3 +267,34 @@ def test_prompt_rendering_mismatch_is_a_request_error():
     with pytest.raises(RequestError) as caught:
         Engine.render_request(engine, [{"role": "system", "content": [{"type": "text", "text": "x"}]}])
     assert caught.value.code == "prompt-rendering"
+
+
+def test_http_refuses_retired_fields_and_mismatched_uploads():
+    from natlang_neuralese.serve.chat import RequestError, _reject_projected_parts
+    from natlang_neuralese.serve.http import serve
+
+    store = TensorStore()
+    httpd = serve(_FakeEngine(store))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        for field in ("neuralese_temperature", "neuralese_max_length", "neuralese_length", "neuralese_passes", "x_natlang_forced"):
+            status, raw = _call(base, "POST", "/v1/chat/completions", {"messages": [], field: 1})
+            assert status == 400 and json.loads(raw)["error"]["code"] == "unsupported-request-field", field
+        # An upload whose content hashes to another ID than its path is refused and nothing is stored.
+        state = _state(1)
+        other = "nzs1_" + "b" * 52
+        status, raw = _call(base, "PUT", f"/v1/neuralese/native-states/{other}", encode_native_state(state))
+        assert status == 400 and json.loads(raw)["error"]["code"] == "neuralese-id-mismatch"
+        assert store.get_native_state(native_state_id(state)) is None and store.get_native_state(other) is None
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join()
+        store.close()
+    # A part of the retired projected type anywhere in a message is refused.
+    with pytest.raises(RequestError) as caught:
+        _reject_projected_parts([{"role": "user", "content": [{"type": "text", "text": "x"},
+                                                              {"type": "neuralese", "id": "nz1_abc"}]}])
+    assert caught.value.code == "neuralese-retired-part"

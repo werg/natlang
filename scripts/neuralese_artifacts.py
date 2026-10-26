@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Register, verify, resolve and transfer directly trained Neuralese artifacts (.nz prompt banks, standard
-libraries, operators, soft skills, data blocks, adapters, projections).
+"""Register, verify, resolve and transfer directly trained Neuralese artifacts (native .nz prompt banks, standard
+libraries, operators, soft skills, data blocks, adapters).
 
 Registry: training/neuralese_artifacts.json; immutable manifests: training/artifact-manifests/<id>.json; bytes:
 data/neuralese/artifacts/<id>/ (gitignored, moved between machines by `push`/`pull`, never by Git). Library:
 training/neuralese/natlang_neuralese/artifacts.py.
 
-    scripts/neuralese_artifacts.py register --id ID --kind prompt-bank --dialect nd:natlang@1 \\
+    scripts/neuralese_artifacts.py register --id ID --kind prompt-bank --dialect native-state/lfm2 \\
         --backbone-model LiquidAI/LFM2.5-350M --backbone-revision REV --init-method text \\
         --init-source ts-host/src/native/system-prompts.ts --file bank.nz=/path/to/bank.nz
     scripts/neuralese_artifacts.py register-run --id ID --run-dir RUN [--backbone-revision REV]
@@ -53,7 +53,6 @@ def cmd_register(args):
     sources = parse_files(args.file)
     item = {
         "id": args.id, "kind": args.kind, "owner": args.owner, "dialect": args.dialect,
-        **({"extra_dialects": args.extra_dialect} if args.extra_dialect else {}),
         "backbone": {"model": args.backbone_model, "revision": args.backbone_revision,
                      **({"family": args.backbone_family} if args.backbone_family else {})},
         "init": {"method": args.init_method,
@@ -127,7 +126,6 @@ def main(argv=None):
     parser.add_argument("--kind", choices=sorted(artifacts.KINDS))
     parser.add_argument("--owner", choices=["dgx", "pop"], default="dgx")
     parser.add_argument("--dialect")
-    parser.add_argument("--extra-dialect", action="append", help="adapter dialect (adapter/…) of blocks in the file")
     parser.add_argument("--backbone-model")
     parser.add_argument("--backbone-revision")
     parser.add_argument("--backbone-family")
