@@ -36,6 +36,17 @@ export type FamilyVersion = { readonly family: string; readonly version: string;
 /** A static per-binding family membership with its learned, bounded gate. */
 export type FamilyMembership = { readonly binding: string; readonly family: string; readonly version: string; readonly gate: number };
 
+/**
+ * Directly tuned native state of a binding (plan §3.3): its instructions or one bound skill document, initialized by
+ * writing the exact text with the executing reader, then optimized as a parameter. Consumed in place of that text
+ * only when the text still hashes to `textSha256`.
+ */
+export type SoftState = { readonly binding: string; readonly kind: 'instructions' | 'skill';
+  /** For a skill: its disclosure target (`skills.<name>` or `skills.<name>/<file>`); null for instructions. */
+  readonly target: string | null;
+  /** The tuned `nzs1` native-state ID (bound to the manifest base). */
+  readonly state: string; readonly textSha256: string; readonly tokens: number };
+
 export type WeightManifest = {
   readonly schema: typeof WEIGHTS_SCHEMA;
   readonly program: { readonly id: string; readonly buildHash: string };
@@ -46,6 +57,8 @@ export type WeightManifest = {
   readonly artifacts: readonly WeightArtifact[];
   readonly families: readonly FamilyVersion[];
   readonly memberships: readonly FamilyMembership[];
+  /** Tuned instruction and skill states per binding. */
+  readonly softStates: readonly SoftState[];
   /** Fixed deployment/ablation scale per node (normally 1 or 0); absent means 1. */
   readonly scales: Readonly<Record<string, number>>;
   /** Reduced stacks (sorted artifact IDs) validated as usable when some artifacts are unavailable. */
@@ -139,6 +152,18 @@ export function validateManifest(value: unknown): asserts value is WeightManifes
     if (!bindings.has(membership.binding)) fail(`membership for unknown binding ${membership.binding}`);
     if (!families.has(membership.family + '@' + membership.version)) fail(`membership names unpublished family ${membership.family}@${membership.version}`);
     if (!Number.isFinite(membership.gate) || membership.gate < 0) fail(`family gate for ${membership.binding} must be finite and nonnegative`);
+  }
+  const softKeys = new Set<string>();
+  for (const soft of manifest.softStates ?? fail('softStates missing')) {
+    if (!bindings.has(soft.binding)) fail(`soft state for unknown binding ${soft.binding}`);
+    if (soft.kind !== 'instructions' && soft.kind !== 'skill') fail(`soft state kind ${soft.kind} is unknown`);
+    if ((soft.kind === 'skill') !== (typeof soft.target === 'string' && soft.target.startsWith('skills.')))
+      fail('a skill soft state names its skills.<name> target; an instruction state has none');
+    if (!/^nzs1_[a-z2-7]{52}$/.test(soft.state) || !/^[0-9a-f]{64}$/.test(soft.textSha256) || !Number.isInteger(soft.tokens) || soft.tokens < 1)
+      fail(`soft state of ${soft.binding} needs an nzs1 state ID, its text sha256 and token count`);
+    const key = JSON.stringify([soft.binding, soft.kind, soft.target]);
+    if (softKeys.has(key)) fail(`two soft states for ${soft.binding} ${soft.kind} ${soft.target ?? ''}`);
+    softKeys.add(key);
   }
   for (const [node, scale] of Object.entries(manifest.scales ?? fail('scales missing')))
     if (!nodes.has(node) || !Number.isFinite(scale)) fail(`scale for ${node} must name a node and be finite`);

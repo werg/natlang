@@ -24,9 +24,15 @@ export type ResolvedWeightStack = {
   readonly requested: readonly StackEntry[]; readonly effective: readonly StackEntry[];
   readonly skipped: readonly { readonly artifact: string; readonly node: string; readonly reason: string }[];
   readonly status: WeightStatus | 'untuned'; readonly reason?: string;
+  /** Directly tuned instruction/skill states this call consumes in place of their exact texts (plan §3.3). */
+  readonly soft?: { readonly instructions?: SoftUse; readonly skills: Readonly<Record<string, SoftUse>> };
   /** Canonical identity of the effective stack over the exact base; equal stacks share it. */
   readonly identity: string;
+  /** The identity of the untuned base executor for this release (what a fallback runs). */
+  readonly baseIdentity: string;
 };
+
+export type SoftUse = { readonly state: string; readonly textSha256: string };
 
 export class WeightBindingError extends Error {
   constructor(readonly code: 'weights-incompatible' | 'weights-unavailable' | 'weights-stale', message: string) {
@@ -45,10 +51,19 @@ export type WeightBindingOptions = {
   readonly strict?: boolean;
   /** The serving backend found the release incompatible (for example its GGUF exports bind another base file). */
   readonly incompatible?: string;
+  /** Whether the serving backend imports stored native state; soft instruction/skill states need it. */
+  readonly nativeState?: boolean;
 };
 
-export function stackIdentity(base: NativeModelIdentity, stack: readonly StackEntry[]): string {
-  return fingerprint({ base, stack: stack.map(entry => ({ id: entry.id, scale_hex: scaleHex(entry.scale) })) }, 'natlang.weights-stack/v1');
+export function stackIdentity(base: NativeModelIdentity, stack: readonly StackEntry[], soft?: ResolvedWeightStack['soft']): string {
+  return fingerprint({ base, stack: stack.map(entry => ({ id: entry.id, scale_hex: scaleHex(entry.scale) })), ...(soft ? { soft } : {}) },
+    'natlang.weights-stack/v1');
+}
+
+/** The same call run untuned (a soft text no longer matches its trained text): base executor, marked degraded. */
+export function untunedStack(stack: ResolvedWeightStack, reason: string): ResolvedWeightStack {
+  const { soft: _soft, ...rest } = stack;
+  return { ...rest, effective: [], status: 'degraded', reason, identity: stack.baseIdentity };
 }
 
 /** Exact float text, matching Python's float.hex() for the identity hash. */
@@ -115,7 +130,7 @@ export class WeightBinding {
   private base(binding: string | null, requested: readonly StackEntry[], skipped: ResolvedWeightStack['skipped'],
     status: ResolvedWeightStack['status'], reason?: string): ResolvedWeightStack {
     return { release: this.release, program: this.programId, binding, requested, effective: [], skipped, status,
-      ...(reason ? { reason } : {}), identity: stackIdentity(this.manifest.base, []) };
+      ...(reason ? { reason } : {}), identity: stackIdentity(this.manifest.base, []), baseIdentity: stackIdentity(this.manifest.base, []) };
   }
 
   private resolveEntry(entry: WeightBindingEntry | undefined, contextId: string | null): ResolvedWeightStack {
@@ -157,16 +172,28 @@ export class WeightBinding {
         dropped.add(item.id); skipped.push({ artifact: item.id, node: item.node, reason: 'requires a dropped parent version' }); changed = true;
       }
     }
+    const softStates = this.manifest.softStates.filter(item => item.binding === entry.id);
+    if (softStates.length && !this.options.nativeState) {
+      // A soft-state binding was trained with its states; without them it is an unvalidated mixture.
+      const reason = 'this definition was tuned with soft instruction/skill states and the serving backend cannot import native state';
+      if (this.options.strict) throw new WeightBindingError('weights-unavailable', reason);
+      return this.base(entry.id, requested, softStates.map(item => ({ artifact: item.state, node: `soft:${item.kind}`, reason: 'backend has no native-state import' })), 'degraded', reason);
+    }
+    const soft = softStates.length ? { ...(softStates.find(item => item.kind === 'instructions')
+      ? { instructions: (({ state, textSha256 }) => ({ state, textSha256 }))(softStates.find(item => item.kind === 'instructions')!) } : {}),
+      skills: Object.fromEntries(softStates.filter(item => item.kind === 'skill').map(item => [item.target!, { state: item.state, textSha256: item.textSha256 }])) } : undefined;
     if (!dropped.size)
       return { release: this.release, program: this.programId, binding: entry.id, requested, effective: requested, skipped,
-        status: this.status, ...(this.reason ? { reason: this.reason } : {}), identity: stackIdentity(this.manifest.base, requested) };
+        status: this.status, ...(this.reason ? { reason: this.reason } : {}), ...(soft ? { soft } : {}),
+        identity: stackIdentity(this.manifest.base, requested, soft), baseIdentity: stackIdentity(this.manifest.base, []) };
     if (this.options.strict)
       throw new WeightBindingError('weights-unavailable', `binding ${entry.id} cannot be served: ${skipped.map(item => `${item.node} (${item.reason})`).join(', ')}`);
+    // A reduced stack never keeps soft states trained jointly with the dropped residuals.
     const reduced = requested.filter(item => !dropped.has(item.id));
     const reducedKey = JSON.stringify(reduced.map(item => item.id).sort());
     if (reduced.length && this.manifest.validatedReductions.some(item => JSON.stringify([...item].sort()) === reducedKey))
       return { release: this.release, program: this.programId, binding: entry.id, requested, effective: reduced, skipped,
-        status: 'degraded', reason: 'running a validated reduced stack', identity: stackIdentity(this.manifest.base, reduced) };
+        status: 'degraded', reason: 'running a validated reduced stack', identity: stackIdentity(this.manifest.base, reduced), baseIdentity: stackIdentity(this.manifest.base, []) };
     return this.base(entry.id, requested, skipped, 'degraded', 'adapters unavailable; running the base model');
   }
 }

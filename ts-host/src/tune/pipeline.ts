@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
-import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership } from '../adaptation/weights/manifest.js';
+import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
 import { WeightBinding, type ResolvedWeightStack } from '../adaptation/weights/binding.js';
 import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
 import { createNatlangRuntime, type ModelDriver } from '../runtime/runtime.js';
@@ -33,7 +33,9 @@ export type TuneOptions = {
   /** The authorized teacher's driver and identity. */
   teacher: ModelDriver; teacherId: string;
   /** Serves a release for validation: returns a driver that applies the release's adapters, and its loaded set. */
-  serve: (release: { manifest: WeightManifest; directory: string }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>; close(): Promise<void> }>;
+  serve: (release: { manifest: WeightManifest; directory: string }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>;
+    /** Whether the backend imports stored native state (soft instruction/skill states). */
+    nativeState?: boolean; close(): Promise<void> }>;
   examplesPath?: string; log?: (line: string) => void;
 };
 
@@ -59,7 +61,7 @@ function runTrainer(student: StudentSettings, plan: string, out: string, log: (l
 }
 
 /** What the trainer writes to `<out>/result.json`: trained node artifacts with exports relative to `<out>`. */
-type TrainerResult = { artifacts: WeightArtifact[]; families?: FamilyVersion[]; memberships?: FamilyMembership[];
+type TrainerResult = { artifacts: WeightArtifact[]; families?: FamilyVersion[]; memberships?: FamilyMembership[]; softStates?: SoftState[];
   validatedReductions?: string[][]; receipt: Record<string, unknown> };
 
 async function runRoots(root: string, program: ProgramDescriptor, driver: ModelDriver, weights: readonly WeightBinding[], examples: readonly SplitExample[]) {
@@ -132,14 +134,16 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
         writeFileSync(plan, JSON.stringify({ schema: 'natlang.tune-plan/v1', manifest: scaffold, base: student.base, rows: rowsPath,
           student: { name: student.name, moduleMap: student.moduleMap, checkpoint: student.checkpoint, engine: student.engine ?? {}, ...(student.hfConfigDir ? { hfConfigDir: student.hfConfigDir } : {}),
             ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
-          exports: options.settings.backend === 'managed-local' ? ['gguf'] : [], recipe: { seed: 0 } }, null, 2));
+          exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
+          // Soft instruction/skill states only where the backend can import native state (plan §3.3).
+          softStates: options.settings.backend === 'native', recipe: { seed: 0 } }, null, 2));
         await runTrainer(student, plan, out, log);
       }
       return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
     }, reusedTraining);
     // 4. Release: content-addressed manifest plus its export files.
     const manifest = await timed(timings, 'export', log, () => {
-      const sealed = sealManifest({ ...scaffold, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [],
+      const sealed = sealManifest({ ...scaffold, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [], softStates: result.softStates ?? [],
         validatedReductions: result.validatedReductions ?? [], receipts: { data: dataKey, training: result.receipt } } as Omit<WeightManifest, 'digest'>);
       storeRelease(root, sealed);
       const directory = dirname(releaseFile(root, sealed.digest));
@@ -157,7 +161,7 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
     try {
       const development = examples.filter(example => example.partition === 'development');
       const probe = development.length ? development : examples.filter(example => example.partition === 'train').slice(0, 1);
-      const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, strict: true });
+      const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
       const validation = await timed(timings, 'validate', log, async () => {
         const tuned = await runRoots(root, program, served.driver, [tunedBinding], probe);
         const base = await runRoots(root, program, served.driver, [], probe);

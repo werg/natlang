@@ -184,6 +184,38 @@ bit-identical outputs across backends.
 Family adapters are model-specific artifacts. LFM and Mellum share family labels,
 data and policy, not tensor coordinates, factors or native states.
 
+### 3.3 Soft instructions and soft skills (owner, 2026-10-26)
+
+The tunable state of a lambda is not only its weight residuals. Its **instructions** and the **skill documents
+bound to it** (its companion folder's skills, as disclosed to that invocation) also become directly tuned native
+state: positional KV and hybrid (LFM convolution/linear) state spans in the existing `nzs1` native-state format.
+
+| Element | Initialization | Tuned parameters | Where it is consumed |
+| --- | --- | --- | --- |
+| Soft instructions | The lambda's instruction text written by the exact executing reader (base plus the binding's lexical stack at initialization) | Every KV/hybrid tensor of the state span, directly | In place of the instruction text in the call's rendered prompt, at its exact position |
+| Soft skill | The skill document's text written the same way, one state per bound skill file | Same | Wherever that skill's text would enter the invocation (listing or read), at its position |
+
+Rules:
+
+1. A soft state is a parameter, not a cache: after initialization it is optimized directly with the shared
+   native-state optimizer (`native_state_derivation.optimize_state`), keeping its immutable parent lineage. It is
+   never silently recomputed from text.
+2. It retains its source text, tokenizer and initializing actor so it can be **re-initialized** from text when the
+   executing base/checkpoint or tokenizer changes; tuned values do not transfer across bases (§5.7 rebuild).
+3. It is part of the binding's release: the manifest binds instruction/skill states per binding (bound to the
+   exact base), their text digests and initialization receipts. Changing the instruction text or skill file makes
+   that state stale exactly like the binding (§8).
+4. Training updates soft states jointly with the binding's weight residuals in the same logical update: gradients
+   flow through the actual consumption positions in each trajectory. A state shared by several calls of one
+   binding receives every occurrence's gradient once per occurrence.
+5. Serving requires a backend that imports native state (native reference server, the llama.cpp fork's Neuralese
+   server). A release declares whether its bindings require soft state. On a backend without native-state import,
+   a soft-state binding is not served as tuned: it runs the declared fallback (text instructions with the base, or
+   a separately validated text-instruction reduction) and is reported degraded. `natlang tune` for such a backend
+   trains the text-instruction form instead.
+6. Soft states are model-facing changes: the measurement rules for model-facing changes apply to the instruction
+   text used for initialization, and task success is measured with the tuned states, not inferred from loss.
+
 ## 4. Data generation and evidence
 
 ### 4.1 Split before expansion
@@ -797,6 +829,10 @@ independent work; a checked item needs its artifact and actual evidence.
 - [ ] Rank/penalty/capacity sweeps and development-only defaults/student selection
 - [ ] Verified stack/data distillation into each base followed by adapter rebuilds
 - [ ] LFM and Mellum coverage with shared recipes and declared architecture differences
+
+- [ ] Soft instructions and soft skills (§3.3): text-initialized native states per binding and bound skill,
+  manifest binding, joint state/weight updates through actual consumption positions, re-initialization on base
+  change, runtime substitution in prompts and skill disclosure, and backend capability fallback
 
 **Runtime and serving**
 

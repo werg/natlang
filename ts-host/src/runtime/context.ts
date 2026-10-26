@@ -51,6 +51,9 @@ export type Frame = Readonly<{
   /** The lexical weight stack of the invocation that created this frame, resolved from the callee's binding
    * (tuning/binding.ts). Each call replaces it; it is never inherited by a callee. */
   weights?: ResolvedWeightStack;
+  /** The exact instruction and disclosed skill texts of that invocation, filled when its node is prepared; tuning
+   * records them so training can put each binding's soft state at their positions (plan §3.3). */
+  invocationTexts?: { instructions?: string; skills?: Readonly<Record<string, string>> };
 }>;
 
 /** One active call of an authored TypeScript function, linked to the calls active above it. */

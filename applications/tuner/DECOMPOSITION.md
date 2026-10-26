@@ -69,6 +69,16 @@ Decisions: **fn** (its own natural-language function), **inline** (one instructi
 | Rank/penalty sweep scheduling | host | shared recipe scheduler | Operational. |
 | Distillation into each base | crisp + existing recipe | shared production SFT recipe admission | Uses the existing admission/exposure mechanism. |
 
+### Soft instructions and soft skills (plan §3.3)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Which bindings and skills get soft state | crisp default (all bindings with model turns on a native-state backend) + fn `proposeSoftState.nl` later | tune plan | Whether soft state pays off is measured; the default is exact and the NL proposal is policy over measurements. |
+| Initialize a state from text | crisp | native writer (`memetic_program.write_state` path / engine writer) | Exact model computation with recorded actor, text and tokenizer. |
+| Consume a state in place of text | crisp | kernel substitutes the instruction body / skill text with its state sentinel; driver materializes the state part | Exact substitution; no judgment. |
+| Tune a state | crisp | trainer external-state rows + `optimize_state` | Autodiff and the shared optimizer. |
+| Re-initialize on base change | crisp | invalidation matrix | Rule over identities. |
+
 ### Serving
 
 | Part | Decision | Unit | Why |

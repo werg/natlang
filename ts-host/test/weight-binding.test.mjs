@@ -29,7 +29,7 @@ function release(program, { scales = {}, requires = {}, reductions = [], members
   return host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings, artifacts,
     families: [{ family: 'classify', version: 'v1', artifact: 'nnt1:family-classify', amplitudeHex: '0x1.0000000000000p+0' }],
     memberships: memberships ? [{ binding: outer.id, family: 'classify', version: 'v1', gate: 0.5 }] : [],
-    scales, validatedReductions: reductions, fallback: 'base', receipts: {} });
+    softStates: [], scales, validatedReductions: reductions, fallback: 'base', receipts: {} });
 }
 /** Runs the program, recording the adapters each model request carried, per instruction. */
 async function run(app, weights, options = {}) {
@@ -147,4 +147,49 @@ test('release store: immutable releases, compare-before-activate, rollback', () 
     assert.equal(host.tuneStatus(root, { executor: base, program }).status, 'ready');
     assert.throws(() => host.activateRelease(root, a.digest, { ...receipts, readiness: { ...receipts.readiness, ok: false } }, a.digest), /readiness probe/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('soft instruction states replace exactly their trained text, need native-state import, and fall back when text changes', async () => {
+  const { hexDigest } = await import('../dist/native/hash.js');
+  const app = compile(files), program = app.manifest.adaptation;
+  const plain = release(program);
+  const inner = plain.bindings.find(binding => binding.component.endsWith('outer/inner.nl::instructions'));
+  const state = 'nzs1_' + 'a'.repeat(52);
+  const withSoft = text => host.sealManifest({ ...Object.fromEntries(Object.entries(plain).filter(([key]) => key !== 'digest')),
+    softStates: [{ binding: inner.id, kind: 'instructions', target: null, state, textSha256: hexDigest(text), tokens: 7 }] });
+  const manifest = withSoft('Return value in uppercase.\n'); // the exact body text, as collection records it
+  // Without native-state import the soft binding is not served as tuned.
+  const noImport = new host.WeightBinding(manifest, { executor: base });
+  assert.equal(noImport.resolve('', inner.component, null).status, 'degraded');
+  assert.throws(() => new host.WeightBinding(manifest, { executor: base, strict: true }).resolve('', inner.component, null), /weights-unavailable/);
+  const prompts = [];
+  const runWith = async (binding, project = app) => {
+    const model = scriptedModel(opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()');
+    const traces = [];
+    const runtime = host.createNatlangRuntime({ program: project.manifest.adaptation, weights: [binding], trace: trace => traces.push(trace),
+      // A transport that carries content parts (native state); it records what each prompt carried.
+      model: Object.assign(async (request, ...rest) => {
+        const content = request.messages[1].content;
+        prompts.push(typeof content === 'string' ? content : JSON.stringify(content));
+        return model.driver({ ...request, messages: request.messages.map(message => Array.isArray(message.content)
+          ? { ...message, content: message.content.map(part => part.type === 'text' ? part.text : `[${part.id}]`).join('') } : message) }, ...rest);
+      }, { neuralese: true }) });
+    await runtime.run(() => project.require('main.ts').default('hi'));
+    return traces;
+  };
+  // The stand-in model answers whatever it sees; the point is what the prompt carried.
+  const soft = new host.WeightBinding(manifest, { executor: base, nativeState: true });
+  prompts.length = 0;
+  // The inner call asks for its state in place of the text (resolving the artifact needs a native store; with none
+  // the call stops rather than running on text it was not trained with).
+  await assert.rejects(runWith(soft), new RegExp(`${state} is unavailable`));
+  assert.ok(!prompts.some(prompt => prompt.includes('Return value in uppercase.')), 'the trained text was never sent');
+  // The trained text no longer matches (the release says another text): the call runs untuned, with its text.
+  const drifted = new host.WeightBinding(withSoft('Return value in lowercase.\n'), { executor: base, nativeState: true });
+  prompts.length = 0;
+  const traces = await runWith(drifted);
+  assert.ok(prompts.some(prompt => prompt.includes('Return value in uppercase.')));
+  const innerTrace = traces.find(trace => trace.adaptation?.weights?.binding === inner.id);
+  assert.equal(innerTrace.adaptation.weights.status, 'degraded');
+  assert.deepEqual(innerTrace.adaptation.weights.effective, []);
 });

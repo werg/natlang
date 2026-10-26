@@ -33,6 +33,8 @@ export type CollectedTurn = {
   readonly binding: string | null; readonly definition: string | null; readonly call: string | null; readonly turn: number;
   readonly messages: unknown[]; readonly tools: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
   readonly teacher: string; readonly source: 'real' | 'synthetic';
+  /** The invocation's exact instruction text and disclosed skill documents, where training places soft states. */
+  readonly texts: { readonly instructions?: string; readonly skills?: Readonly<Record<string, string>> };
   /** Separate evidence (§4.3); never collapsed into one flag. */
   readonly evidence: { readonly rootOracle: boolean | null; readonly enclosingSuccess: boolean; readonly callOutcome: string | null };
 };
@@ -77,7 +79,7 @@ export function splitExamples(examples: readonly RootExample[]): SplitExample[] 
 export function scaffoldManifest(program: ProgramDescriptor, base: NativeModelIdentity, scopes: ScopeOptions = {}): WeightManifest {
   const { tree, bindings } = compileScopeTree(program, scopes);
   return sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
-    artifacts: [], families: [], memberships: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
+    artifacts: [], families: [], memberships: [], softStates: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
 }
 
 const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
@@ -106,7 +108,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
         messages: structuredClone(request.messages), tools: structuredClone(request.tools),
         reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
           ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
-        teacher: options.teacherId, source: example.source ?? 'real' });
+        teacher: options.teacherId, source: example.source ?? 'real', texts: structuredClone(frame?.invocationTexts ?? {}) });
       return reply;
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding],

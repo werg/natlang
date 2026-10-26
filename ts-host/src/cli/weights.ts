@@ -49,7 +49,8 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
       loaded.push({ id: item.artifact, path });
     }
   }
-  const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: new Set(loaded.map(item => item.id)),
+  // The managed upstream llama-server has no native-state import: soft-state bindings run degraded there.
+  const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: new Set(loaded.map(item => item.id)), nativeState: false,
     ...(incompatible ? { incompatible } : {}) });
   return { weights: [binding], ...(loaded.length ? { loraAdapters: () => loaded } : {}),
     ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
