@@ -169,7 +169,7 @@ def _mellum_status(policy):
                 receipt_path = pointer.get('receipt') or pointer.get('private_receipt')
                 entry['private_receipt'] = receipt_path
                 if isinstance(digest, str) and len(digest) == 64:
-                    pin = Path('/mnt/external/natlang-active-lineage/mellum-resume-20261025') / f'mellum-{digest}.pt'
+                    pin = Path(policy['mellum_cache_root']) / f'mellum-{digest}.pt'
                     if pin.exists():
                         result['protected_paths'].append(str(pin))
                     entry['matching_local_pin_present'] = pin.is_file() and pin.stat().st_size == size

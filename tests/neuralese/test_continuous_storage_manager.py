@@ -192,11 +192,11 @@ def test_archive_apply_is_opt_in_and_revalidates_current_owner_head_and_mount(tm
 def test_archive_apply_command_is_explicit_and_keeps_exact_exclusions(tmp_path):
     policy, _, _ = _fixture(tmp_path)
     policy.update(project_python='/project/python', archive_script='/repo/scripts/archive_to_external.py',
-                  archive_root='/home/data/lfm/rl/cycles', archive_destination='/mnt/external/archive',
+                  archive_root='/home/data/lfm/rl/cycles', archive_destination='/storage/archive',
                   external_floor_bytes=80*1024**3)
     command = manager._archive_command(policy, 3*1024**3, ['/active/cycle'], apply=True)
     assert '--apply' in command
-    assert command[command.index('--archive')+1] == '/mnt/external/archive'
+    assert command[command.index('--archive')+1] == '/storage/archive'
     assert command[command.index('--exclude')+1] == '/active/cycle'
     assert command[command.index('--root')+1] == '/home/data/lfm/rl/cycles'
 
