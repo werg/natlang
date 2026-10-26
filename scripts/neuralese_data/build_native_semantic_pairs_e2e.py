@@ -351,6 +351,16 @@ def writer_payload(record, write_name, expected_sha):
     found = [item for item in metadata.get('occurrences', [])
              if item.get('role') == 'producer' and item.get('reference') == write_name and
              item.get('body_sha256') == expected_sha]
+    if not metadata:
+        # Historical admitted trajectories predate occurrence sidecars. Their
+        # exact return-result tool arguments still carry the typed `$write`
+        # descriptor, which is bound by both the record and edge inventories.
+        found = [value for path, value in _walk_paths(record)
+                 if path.startswith('/target/') and isinstance(value, dict) and value.get('type') == 'Neuralese<string>'
+                 and value.get('name') == write_name and isinstance(value.get('source'), str)
+                 and sha256_bytes(value['source'].encode()) == expected_sha]
+        if len(found) == 1:
+            return found[0]['source']
     if len(found) != 1:
         raise ValueError(f'writer target has {len(found)} exact native producer occurrences for {write_name}')
     body = found[0].get('body')
@@ -394,11 +404,35 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
                if writer_occurrence_id is None or item.get('id') == writer_occurrence_id]
     readers = [item for item in collect(reader_record, 'consumer')
                if reader_occurrence_id is None or item.get('id') == reader_occurrence_id]
+    writer_source_kind = None
+    if not (writer_record.get('native_source_conversion') or {}):
+        descriptor_paths = [path for path, value in _walk_paths(writer_record)
+            if path.startswith('/target/') and isinstance(value, dict) and value.get('type') == 'Neuralese<string>'
+            and value.get('name') == write_name and value.get('source') == body]
+        if len(descriptor_paths) == 1:
+            path = descriptor_paths[0]
+            writers = [{'id': 'nso_' + sha256_bytes(json.dumps(
+                {'record': writer_record.get('id'), 'path': path, 'write': write_name,
+                 'sha256': expected_sha}, sort_keys=True, separators=(',', ':')).encode()),
+                'path': path.split('/')[1:], 'source_kind': 'target-write-descriptor'}]
+            writer_source_kind = 'target-write-descriptor'
+        reader_paths = [path for path, item in _walk_paths(reader_record)
+            if isinstance(item, dict) and item.get('type') == 'read'
+            and item.get('name') == write_name and item.get('source') == body]
+        reader_occurrence_ids = [
+            'nso_' + sha256_bytes(json.dumps(
+                {'record': reader_record.get('id'), 'path': path, 'write': write_name,
+                 'sha256': expected_sha}, sort_keys=True, separators=(',', ':')).encode())
+            for path in reader_paths]
+        readers = [{'id': occurrence_id, 'path': path.split('/')[1:],
+                    'source_kind': 'target-read-reference'}
+                   for occurrence_id, path in zip(reader_occurrence_ids, reader_paths)]
     if len(writers) != 1 or not readers or sha256_bytes(body.encode()) != expected_sha:
         raise ValueError(f'communication occurrence is ambiguous or disagrees with payload SHA: writes={len(writers)} reads={len(readers)}')
     pointer = lambda path: '/' + '/'.join(_pointer_part(part) for part in path)
     return {'writer_json_pointer': pointer(writers[0]['path']),
             'writer_occurrence_id': writers[0]['id'],
+            'writer_source_kind': writer_source_kind or writers[0].get('source_kind'),
             'write_name': write_name,
             'reader_json_pointers': [pointer(item['path']) for item in readers],
             'reader_occurrence_ids': [item['id'] for item in readers],
@@ -411,6 +445,10 @@ def reader_has_payload(record, write_name, body, expected_sha):
     matches = [item for item in metadata.get('occurrences', [])
                if item.get('role') == 'consumer' and item.get('reference') == write_name and
                item.get('body') == body and item.get('body_sha256') == expected_sha]
+    if not metadata:
+        matches = [item for _, item in _walk_paths(record)
+            if isinstance(item, dict) and item.get('type') == 'read'
+            and item.get('name') == write_name and item.get('source') == body]
     return bool(matches) and sha256_bytes(body.encode()) == expected_sha
 
 
@@ -572,6 +610,104 @@ def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
     return row
 
 
+def _replace_source_target_span(target, occurrence, payload, role_markers):
+    """Replace one authenticated writer value inside its original assistant target.
+
+    Pair graphs train the complete assistant/tool result.  Only the exact
+    authenticated write value becomes a producer span; the source return
+    wrapper and every sibling result field remain part of the target.
+    """
+    import copy
+    target = copy.deepcopy(target)
+    marker_text = role_markers[0] + payload + role_markers[1]
+    pointer = occurrence.get('writer_json_pointer')
+    if not isinstance(pointer, str) or not pointer.startswith('/target/'):
+        raise ValueError('producer occurrence is not bound to the original assistant target')
+
+    def decode(part):
+        return part.replace('~1', '/').replace('~0', '~')
+
+    parts = [decode(part) for part in pointer.split('/')[1:]]
+    if not parts or parts[0] != 'target':
+        raise ValueError('producer occurrence pointer is outside the assistant target')
+    parts = parts[1:]
+
+    def rewrite(parent, remaining):
+        if not remaining:
+            raise ValueError('producer occurrence pointer has no target value')
+        key = remaining[0]
+        if key.endswith('<json>'):
+            field = key[:-6]
+            raw = parent.get(field) if isinstance(parent, dict) else None
+            if not isinstance(raw, str):
+                raise ValueError('producer occurrence JSON argument is missing')
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ValueError('producer occurrence JSON argument is malformed') from exc
+            replacement = rewrite(parsed, remaining[1:])
+            parent[field] = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
+            return parent
+        if not isinstance(parent, (dict, list)):
+            raise ValueError('producer occurrence traverses a scalar target value')
+        try:
+            child = parent[int(key)] if isinstance(parent, list) else parent[key]
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ValueError('producer occurrence pointer does not resolve in the source target') from exc
+        if len(remaining) == 1:
+            if key == '$write' and isinstance(child, dict):
+                descriptor = child
+                if (descriptor.get('type') != 'Neuralese<string>'
+                        or descriptor.get('source') != payload
+                        or descriptor.get('name') != occurrence.get('write_name')):
+                    raise ValueError('producer descriptor differs from the authenticated communication edge')
+                if not isinstance(parent, dict) or len(parent) != 1:
+                    raise ValueError('typed producer value has unexpected sibling metadata around its write')
+                # `$write` is source-side capture metadata, not the declared
+                # function result. Emit the actual declared string field while
+                # preserving its containing record and assistant/tool wrapper.
+                return marker_text
+            elif isinstance(child, str) and child == payload:
+                value = marker_text
+            else:
+                raise ValueError('producer occurrence is not the exact authenticated payload value')
+            if isinstance(parent, list):
+                parent[int(key)] = value
+            else:
+                parent[key] = value
+            return parent
+        replacement = rewrite(child, remaining[1:])
+        if isinstance(parent, list):
+            parent[int(key)] = replacement
+        else:
+            parent[key] = replacement
+        return parent
+
+    rewrite(target, parts)
+    return target
+
+
+def _assistant_text_target(writer_record, payload, role_markers):
+    """Preserve the full assistant text result and mark only its exact body."""
+    import copy
+    native = writer_record.get('native_source_conversion') or {}
+    source_target = native.get('source_target') or {}
+    proof = source_target.get('assistant_text_result') if isinstance(source_target, dict) else None
+    content = source_target.get('content') if isinstance(source_target, dict) else None
+    if not isinstance(proof, dict) or not isinstance(content, str):
+        raise ValueError('assistant text producer is missing its authenticated source target')
+    start, stop = proof.get('body_start'), proof.get('body_end')
+    if (type(start) is not int or type(stop) is not int or start < 0 or stop < start
+            or content[start:stop] != payload or proof.get('body_source') != payload
+            or proof.get('body_sha256') != sha256_bytes(payload.encode())):
+        raise ValueError('assistant text producer span differs from its authenticated source target')
+    target = copy.deepcopy(writer_record.get('target'))
+    if not isinstance(target, dict) or target.get('content') != content:
+        raise ValueError('assistant text source target differs from the original assistant target')
+    target['content'] = content[:start] + role_markers[0] + payload + role_markers[1] + content[stop:]
+    return target
+
+
 def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, payload,
                          occurrence, role_markers, tokenizer_sha256, source_records=None):
     """Authenticate original endpoints, then derive explicit native role spans."""
@@ -590,17 +726,38 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
     replacements=[]
     for pointer, occurrence_id in zip(occurrence['reader_json_pointers'], occurrence['reader_occurrence_ids']):
         source_value=source_values.get(pointer)
-        if not isinstance(source_value,dict) or source_value.get('type')!='text' or source_value.get('text')!=payload:
+        text_occurrence = (isinstance(source_value, dict) and source_value.get('type') == 'text'
+                           and source_value.get('text') == payload)
+        typed_read_occurrence = (isinstance(source_value, dict) and source_value.get('type') == 'read'
+            and source_value.get('name') == occurrence['write_name'] and source_value.get('source') == payload)
+        if not (text_occurrence or typed_read_occurrence):
             raise ValueError('native occurrence path does not point to its exact text consumer source')
         replacements.append({'pointer':pointer,'occurrence_id':occurrence_id,
             'source_value_sha256':digest(source_value),
             'payload_sha256':sha256_bytes(payload.encode()),'writer_source':{'record_id':writer_record['id'],
                 'record_sha256':digest(writer_record),'write_name':occurrence['write_name'],
-                'occurrence_id':occurrence['writer_occurrence_id']},'replacement':{'type':'text',
+                'occurrence_id':occurrence['writer_occurrence_id'],
+                'source_pointer':occurrence['writer_json_pointer'],
+                'source_kind':occurrence.get('writer_source_kind')},'replacement':{'type':'text',
                 'text':role_markers[2]+payload+role_markers[3]}})
+    writer_native = writer_record.get('native_source_conversion') or {}
+    writer_occurrences = [item for item in writer_native.get('occurrences', [])
+        if item.get('role') == 'producer' and item.get('reference') == occurrence['write_name']
+        and item.get('body') == payload and item.get('body_sha256') == occurrence['payload_sha256']
+        and item.get('id') == occurrence['writer_occurrence_id']]
+    writer_source_kind = occurrence.get('writer_source_kind')
+    if writer_occurrences and len(writer_occurrences) != 1:
+        raise ValueError('writer target span lacks one exact source occurrence')
+    if writer_source_kind == 'assistant-text-return':
+        writer_target = _assistant_text_target(writer_record, payload, role_markers)
+    else:
+        writer_target = _replace_source_target_span(writer_record['target'], occurrence, payload, role_markers)
     derivations={writer_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
         'source_record_sha256':digest(writer_record),'source_target_sha256':digest(writer_record['target']),
-        'target':{'role':'assistant','content':role_markers[0]+payload+role_markers[1]}},
+        'producer_occurrence_id':occurrence['writer_occurrence_id'],
+        'producer_source_pointer':occurrence['writer_json_pointer'],
+        'producer_payload_sha256':occurrence['payload_sha256'],
+        'target':writer_target},
         reader_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
             'source_record_sha256':digest(reader_record),'context_replacements':replacements}}
     rows,_,omitted,_=gold_text_rows(records,pieces,tokenizer=tokenizer,

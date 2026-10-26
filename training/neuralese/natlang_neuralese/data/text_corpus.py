@@ -1469,8 +1469,39 @@ def _static_context_replacements(record, replacements, bodies, read_bodies, sour
             candidates=[occ for occ in metadata.get("occurrences", [])
                 if occ.get("id")==writer_binding.get("occurrence_id") and occ.get("role")=="producer"
                 and occ.get("reference")==writer_binding.get("write_name")]
-            if len(candidates)!=1:raise ValueError("static native read derivation needs one exact producer occurrence")
-            writer_body=candidates[0].get("body")
+            if len(candidates)==1:
+                writer_body=candidates[0].get("body")
+            elif not metadata and writer_binding.get("source_kind")=="target-write-descriptor":
+                # Historical admitted records predate native occurrence
+                # sidecars. Bind their original typed `$write` descriptor by
+                # the exact target pointer plus the full source-record digest;
+                # never infer a producer from a matching body elsewhere.
+                pointer=writer_binding.get("source_pointer")
+                if not isinstance(pointer,str) or not pointer.startswith("/target/"):
+                    raise ValueError("historical native producer lacks its exact target pointer")
+                value=writer
+                parts=[part.replace("~1","/").replace("~0","~") for part in pointer.split("/")[1:]]
+                try:
+                    for part in parts:
+                        if part.endswith("<json>"):
+                            field=part[:-6]
+                            value=json.loads(value[field])
+                        else:
+                            value=value[int(part)] if isinstance(value,list) else value[part]
+                except (KeyError,IndexError,TypeError,ValueError,json.JSONDecodeError) as exc:
+                    raise ValueError("historical native producer pointer does not resolve") from exc
+                if (not isinstance(value,dict) or value.get("type")!="Neuralese<string>"
+                        or value.get("name")!=writer_binding.get("write_name")
+                        or not isinstance(value.get("source"),str)):
+                    raise ValueError("historical native producer pointer is not its exact typed write")
+                expected_occurrence="nso_"+_sha(_canonical({"record":writer.get("id"),
+                    "path":pointer,"write":writer_binding.get("write_name"),
+                    "sha256":item["payload_sha256"]}).encode())
+                if writer_binding.get("occurrence_id")!=expected_occurrence:
+                    raise ValueError("historical native producer occurrence identity differs")
+                writer_body=value["source"]
+            else:
+                raise ValueError("static native read derivation needs one exact producer occurrence")
             if not isinstance(writer_body,str) or _sha(writer_body.encode())!=item["payload_sha256"]:
                 raise ValueError("static native read derivation body differs from exact producer occurrence")
         if old.get("type")=="text" and isinstance(old.get("text"),str):
