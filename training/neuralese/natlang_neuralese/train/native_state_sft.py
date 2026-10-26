@@ -1860,6 +1860,7 @@ def _main(argv=None, *, requested_refresh):
         from .native_source_correction import validate_held_correction_history
         held_correction_history, held_correction_binding = validate_held_correction_history(
             held_options, held_receipt=source_receipts[1])
+        del held_options
         checkpoint_options['held_correction_history'] = held_correction_history
         checkpoint_options['held_correction_binding'] = held_correction_binding
         held_quality_excluded_ids = set()

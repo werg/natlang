@@ -1,7 +1,6 @@
 """Production coefficient learning uses the existing graph and named optimizers."""
 import pytest
 import torch
-from natlang_neuralese.common.paths import root as logical_root
 from test_native_serving_adapters import engine_fixture
 from test_native_invocation_actors import adapters
 from natlang_neuralese.serve.native_grad import native_graph_gradient,native_coefficient_gradients
@@ -332,7 +331,7 @@ def test_real_task_collector_receives_current_coefficient_policy(tmp_path,monkey
     # Bound this mechanism fixture's output and resource demand. The action has
     # its real actual-model probability; this is no task-quality/lift claim.
     monkeypatch.setattr(engine,'_native_token',lambda sequence:(2,float(sequence.logits[0].float().log_softmax(-1)[2])))
-    original_packet=logical_root('repo')/'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
+    original_packet=Path(__file__).resolve().parents[1]/'fixtures/native-coefficient-held-case.jsonl'
     packet=tmp_path/'held-case.jsonl';packet.write_text(original_packet.open().readline())
     spec=parse_task_eval({'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),
