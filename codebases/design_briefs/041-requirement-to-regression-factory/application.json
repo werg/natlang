@@ -8,6 +8,16 @@
       "name": "compileRegressionPlan",
       "path": "compileRegressionPlan.nl",
       "purpose": "Compile a traceable regression proposal from requirements, independent oracles, isolated execution constraints, and seeded-defect qualification."
+    },
+    {
+      "name": "reconcileRegressionExecution",
+      "path": "reconcileRegressionExecution.nl",
+      "purpose": "Record actual test-run outcomes against exact suite/source revisions and separate product defects from oracle, fixture, harness, environment, and flaky execution.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "regression-execution-ledger"
     }
   ],
   "coverage": {
@@ -78,7 +88,9 @@
     ]
   },
   "persistence": {
-    "suite": "versioned assertion-to-requirement traceability, prior suite versions, and retained repaired-bug cases"
+    "state": "append-only test run receipts and interpreted results keyed by suite revision",
+    "history": "stale runs remain evidence but cannot update current coverage; disagreeing repeated outcomes remain flaky",
+    "qualification": "passing executions alone never qualify a suite without the separate seeded-defect and assertion-retention evidence"
   },
   "effects": {
     "execution": "sandbox eligibility decision only until an approved harness submits a bounded run",
@@ -95,6 +107,8 @@
     "compileRegressionPlan/invalidateChangedAssertions.nl",
     "compileRegressionPlan/recoverObservableContracts.nl",
     "qualification/recoverBehavior.nl",
+    "reconcileRegressionExecution.nl",
+    "reconcileRegressionExecution/interpretRunReceipt.nl",
     "types.ts"
   ]
 }

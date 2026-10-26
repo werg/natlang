@@ -1,3 +1,8 @@
 # Executed-edition amendment impact engine
 
 The engine starts with an executed-edition hash and resolves each amendment target against that edition's clause map. Effective scope is represented as an interval/entity/exclusion set; overlapping edits are compared by signed precedence and conflicting operations become a question. Obligation composition applies operation-specific edits against the baseline while running a preservation comparison over every untouched condition and exception. The impact walk follows dependency edges from changed facets to open tasks, scheduled work, approvals, and artifacts; completed historical actions stay attached to the rules that applied when they occurred. Cutover receipts trigger revalidation for unexecuted tasks. Retroactive billing correction is represented as a proposed linked adjustment, never an edit of historical invoices. Release freezes the exact diff and migration decisions only after target, scope, precedence, preservation, and review gates pass.
+
+
+## Review completion and blocked-state construction (2026-10-26)
+
+Resolve amendment targets even when mapping is ambiguous so the typed target map preserves the missing mappings. Composition, impact and release remain null until their prerequisite evidence is established; the persisted checkpoint records those specific unresolved boundaries.

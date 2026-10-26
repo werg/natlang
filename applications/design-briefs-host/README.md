@@ -146,3 +146,8 @@ separate. Live model accuracy, deployed external connectors and each program's
 operational acceptance still require their own evidence. Do not infer training
 admission or production qualification from successful packaging or a scripted
 driver. The corpus's source release records those outstanding measurements.
+
+
+### Concurrent callers and cancellation
+
+Identical requests in one host process share one inference while keeping separate caller cancellation. A pre-aborted caller is rejected immediately. Disconnecting one caller leaves any other waiter running; disconnecting the last aborts the shared invocation and prevents a late result from committing. The same key can then be retried. A result committed before disconnection remains readable through its durable invocation receipt.

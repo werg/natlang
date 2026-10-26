@@ -7,7 +7,15 @@
     {
       "name": "harmonizeMeasures",
       "path": "harmonizeMeasures.nl",
-      "purpose": "Build a comparable study slice only from source-compatible constructs, explicit missingness semantics, exact row-version transforms, and audited sensitivity."
+      "purpose": "Build a comparable study slice only from source-compatible constructs, explicit missingness semantics, exact row-version transforms, and audited sensitivity.",
+      "stateParameter": "corpus",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "measurement-harmonization"
     }
   ],
   "persistence": [
@@ -108,6 +116,8 @@
     "measureHarmonizer/buildValidatedSlice.nl",
     "measureHarmonizer/probeMappingSensitivity.nl",
     "measureHarmonizer/invalidateRevisedMapping.nl",
-    "measureHarmonizer/selectHarmonizationPolicy.nl"
+    "measureHarmonizer/selectHarmonizationPolicy.nl",
+    "harmonizeMeasures/reconcileHarmonization.nl",
+    "measureHarmonizer/compareConstructDefinitions/compareOneConstructPair.nl"
   ]
 }

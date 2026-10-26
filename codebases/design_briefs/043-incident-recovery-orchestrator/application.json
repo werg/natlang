@@ -8,6 +8,16 @@
       "name": "recoverIncident",
       "path": "recoverIncident.nl",
       "purpose": "Scope observed user impact, maintain provisional causes, bound diagnostics, sequence authorized runbooks, and verify user outcomes."
+    },
+    {
+      "name": "reconcileIncidentActionReceipt",
+      "path": "reconcileIncidentActionReceipt.nl",
+      "purpose": "Reconcile actual runbook command execution, renewed commander authority, preconditions, and postcondition evidence before retry or closure.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "incident-recovery-action-ledger"
     }
   ],
   "coverage": {
@@ -85,7 +95,9 @@
     ]
   },
   "persistence": {
-    "incident": "append-only observed impact, hypothesis evidence, action idempotency, authority changes, and restoration checks"
+    "state": "per-action execution, postcondition, and authority history",
+    "history": "unknown and partial outcomes block automatic retry; every receipt is idempotent by external receipt identity",
+    "closure": "command completion does not establish user-outcome restoration or incident closure"
   },
   "effects": {
     "diagnostics": "allowlisted and budget checked; intrusive checks require commander approval",
@@ -93,6 +105,8 @@
   },
   "source_files": [
     "qualification/frameImpact.nl",
+    "reconcileIncidentActionReceipt.nl",
+    "reconcileIncidentActionReceipt/verifyRunbookExecution.nl",
     "recoverIncident.nl",
     "recoverIncident/compareCausalExplanations.nl",
     "recoverIncident/compareCausalExplanations/separateEvidenceByHypothesis.nl",

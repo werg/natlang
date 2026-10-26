@@ -8,6 +8,16 @@
       "name": "adaptWorkInstruction",
       "path": "adaptWorkInstruction.nl",
       "purpose": "Adapt an approved procedure while resolving equipment aliases, preserving warning semantics, replaying interruptions, and withdrawing superseded floor copies."
+    },
+    {
+      "name": "reconcileFloorCopyWithdrawal",
+      "path": "reconcileFloorCopyWithdrawal.nl",
+      "purpose": "Reconcile actual physical retrieval, failed searches, and replacement postings for controlled floor instruction copies.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "work-instruction-floor-copy-ledger"
     }
   ],
   "coverage": {
@@ -77,8 +87,9 @@
     ]
   },
   "persistence": {
-    "state": "versioned instruction variant and copy withdrawal tasks",
-    "writes": "approval-gated proposal only"
+    "state": "versioned floor-copy inventory and append-only withdrawal/posting receipts",
+    "history": "unavailable and unknown copies remain active until witnessed withdrawal",
+    "release": "new text does not replace an old posted copy unless the replacement is authorized and physically posted"
   },
   "effects": [
     "withdrawal task",
@@ -98,6 +109,8 @@
     "adaptWorkInstruction/replayRestartAndExceptions/verifyRestartAndGuardCoverage.nl",
     "adaptWorkInstruction/resolveFloorTerminology.nl",
     "qualification/recoverProcedure.nl",
+    "reconcileFloorCopyWithdrawal.nl",
+    "reconcileFloorCopyWithdrawal/assessCopyDisposition.nl",
     "types.ts"
   ]
 }

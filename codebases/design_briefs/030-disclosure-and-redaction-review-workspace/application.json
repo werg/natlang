@@ -7,7 +7,15 @@
     {
       "name": "prepareDisclosure",
       "path": "prepareDisclosure.nl",
-      "purpose": "Construct purpose-limited disclosure artifacts with verified redaction, hidden-text sanitation, recipient authorization and source-span audit mapping."
+      "purpose": "Construct purpose-limited disclosure artifacts with verified redaction, hidden-text sanitation, recipient authorization and source-span audit mapping.",
+      "stateParameter": "evidence",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "disclosure-review"
     }
   ],
   "persistence": [
@@ -105,6 +113,9 @@
     "disclosureDesk/preserveQualifierContext.nl",
     "disclosureDesk/verifyRenderedArtifact.nl",
     "disclosureDesk/checkRecipientApproval.nl",
-    "disclosureDesk/mapChallengeToSources.nl"
+    "disclosureDesk/mapChallengeToSources.nl",
+    "prepareDisclosure/reconcileDisclosureCheckpoint.nl",
+    "disclosureDesk/selectContestedSpans/selectResponsiveSpans.nl",
+    "disclosureDesk/mapCombinedInference/traceCombinedInference.nl"
   ]
 }

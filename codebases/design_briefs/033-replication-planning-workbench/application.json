@@ -7,7 +7,15 @@
     {
       "name": "planReplication",
       "path": "planReplication.nl",
-      "purpose": "Recover a versioned method, resolve dependencies, pin data and seeds, compile only executable tasks, and compare exact complete run receipts."
+      "purpose": "Recover a versioned method, resolve dependencies, pin data and seeds, compile only executable tasks, and compare exact complete run receipts.",
+      "stateParameter": "evidence",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "replication-workbench"
     }
   ],
   "persistence": [
@@ -109,6 +117,8 @@
     "replicationDesk/pinDatasetVersion.nl",
     "replicationDesk/compileExecutablePlan.nl",
     "replicationDesk/verifyArtifactCompleteness.nl",
-    "replicationDesk/compareCompletedRuns.nl"
+    "replicationDesk/compareCompletedRuns.nl",
+    "planReplication/reconcileReplicationCheckpoint.nl",
+    "replicationDesk/compareCompletedRuns/compareOneCompletedRun.nl"
   ]
 }

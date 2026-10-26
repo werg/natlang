@@ -79,6 +79,9 @@ test('native checkpoint resumes after restart; exact invocation replay avoids ne
   const p=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'first'});
   const before=e.scripted.openings.length;
   const reopened=e.reopen();
+  const canceledReplay=new AbortController();canceledReplay.abort();
+  await assert.rejects(reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'first'},
+    {signal:canceledReplay.signal}),codeIs('invocation_cancelled'));
   assert.equal((await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'first'})).hash,p.hash);
   assert.equal(e.scripted.openings.length,before);
   const resumed=await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:2,idempotencyKey:'saved-source-resume'});
@@ -195,6 +198,61 @@ test('cancellation after inference or adapter completion cannot commit a partial
     {signal:controller.signal}),codeIs('invocation_cancelled'));
   assert.equal(e.store.readCase(op,key).version,1);
   assert.deepEqual(e.store.listEvents(op,key).items.map(e=>e.operation),['case.created']);
+});
+
+test('canceling one coalesced caller leaves the remaining invocation waiter intact', async t => {
+  let release, started;const ready=new Promise(resolve=>{started=resolve;});
+  const e=await environment(t,{execute:async({signal})=>{
+    assert.equal(signal.aborted,false);started();return await new Promise(resolve=>{release=resolve;});
+  }});create(e.service);
+  const request={interface:'postLedger',expectedVersion:1,idempotencyKey:'shared-cancel'};
+  const firstAbort=new AbortController(),secondAbort=new AbortController();
+  const first=e.service.invoke(op,'001',key.caseId,request,{signal:firstAbort.signal});
+  await ready;
+  const alreadyAborted=new AbortController();alreadyAborted.abort();
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,request,{signal:alreadyAborted.signal}),codeIs('invocation_cancelled'));
+  assert.equal(firstAbort.signal.aborted,false,'a pre-canceled joiner cannot cancel the active execution');
+  const second=e.service.invoke(op,'001',key.caseId,request,{signal:secondAbort.signal});
+  secondAbort.abort();
+  await assert.rejects(second,codeIs('invocation_cancelled'));
+  release({next:{balance:10},posting:3});
+  const committed=await first;
+  assert.equal(committed.version,2);
+  assert.equal(e.store.readCase(op,key).domainRecords[0].value.state.balance,10);
+});
+
+test('last waiter cancellation aborts shared execution, blocks an abort-ignoring executor, and frees retry key', async t => {
+  let releaseFirst, started, calls=0, sharedSignal;
+  const ready=new Promise(resolve=>{started=resolve;});
+  const e=await environment(t,{execute:async({signal})=>{
+    calls++;
+    if(calls===1){sharedSignal=signal;started();return await new Promise(resolve=>{releaseFirst=resolve;});}
+    return {next:{balance:11},posting:4};
+  }});create(e.service);
+  const request={interface:'postLedger',expectedVersion:1,idempotencyKey:'retry-after-cancel'};
+  const firstAbort=new AbortController(),secondAbort=new AbortController();
+  const first=e.service.invoke(op,'001',key.caseId,request,{signal:firstAbort.signal});
+  await ready;
+  const second=e.service.invoke(op,'001',key.caseId,request,{signal:secondAbort.signal});
+  firstAbort.abort();
+  await assert.rejects(first,codeIs('invocation_cancelled'));
+  assert.equal(sharedSignal.aborted,false,'one remaining waiter keeps shared execution alive');
+  secondAbort.abort();
+  await assert.rejects(second,codeIs('invocation_cancelled'));
+  assert.equal(sharedSignal.aborted,true,'the last waiter cancels shared execution');
+
+  // The executor deliberately ignores the aborted signal and still returns a valid result.
+  releaseFirst({next:{balance:10},posting:3});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(e.store.readCase(op,key).version,1,'canceled execution must not commit');
+  assert.deepEqual(e.store.listEvents(op,key).items.map(event=>event.operation),['case.created']);
+
+  const retried=await e.service.invoke(op,'001',key.caseId,request);
+  assert.equal(calls,2,'a canceled entry must not trap the same idempotency key');
+  assert.equal(retried.version,2);
+  assert.equal(e.store.readCase(op,key).domainRecords[0].value.state.balance,11);
+  assert.equal((await e.service.invoke(op,'001',key.caseId,request)).hash,retried.hash,
+    'a non-canceled retry can read the durable invocation receipt');
 });
 
 test('JSON custody rejects lossy values and adapters cannot modify the checked result', async t => {

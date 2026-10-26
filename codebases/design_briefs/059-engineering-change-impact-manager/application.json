@@ -8,6 +8,16 @@
       "name": "planConfigurationChange",
       "path": "planConfigurationChange.nl",
       "purpose": "Partition effect by approved configuration, disposition coexisting revisions, preserve grandfathered units, and fence partial retrofits until exact verification."
+    },
+    {
+      "name": "reconcileUnitRetrofit",
+      "path": "reconcileUnitRetrofit.nl",
+      "purpose": "Reconcile per-unit installation, verification, mixed-configuration, and reversal receipts against approved target revision and work steps.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "engineering-retrofit-ledger"
     }
   ],
   "coverage": {
@@ -77,8 +87,9 @@
     ]
   },
   "persistence": {
-    "state": "configuration-specific inventory and unit retrofit state",
-    "writes": "engineering proposal only"
+    "state": "unit-scoped configuration and verified retrofit step histories",
+    "history": "mixed and unknown units remain fenced; verified rollback restores only that unit\u2019s evidenced baseline",
+    "promotion": "target configuration requires every approved per-unit step and target revision verification"
   },
   "effects": [
     "supplier stock disposition request",
@@ -95,6 +106,8 @@
     "planConfigurationChange/propagateAffectedInterfaces.nl",
     "planConfigurationChange/reconcileUnitRetrofitStates.nl",
     "qualification/interpretChange.nl",
+    "reconcileUnitRetrofit.nl",
+    "reconcileUnitRetrofit/assessUnitTransition.nl",
     "types.ts"
   ]
 }

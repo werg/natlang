@@ -7,7 +7,15 @@
     {
       "name": "coordinateGrantReport",
       "path": "coordinateGrantReport.nl",
-      "purpose": "Reconcile grant-specific conditions, costs, activity evidence, reporting claims and submission receipts."
+      "purpose": "Reconcile grant-specific conditions, costs, activity evidence, reporting claims and submission receipts.",
+      "stateParameter": "ledger",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "grant-reporting"
     }
   ],
   "persistence": [
@@ -102,6 +110,8 @@
     "grantDesk/reconcileSharedActivity.nl",
     "grantDesk/reviewParticipantDisclosure.nl",
     "grantDesk/amendSubmittedReport.nl",
-    "runCase/extractGrantRules/audit/qualify.nl"
+    "runCase/extractGrantRules/audit/qualify.nl",
+    "coordinateGrantReport/reconcileGrantReportState.nl",
+    "grantDesk/reconcileSharedActivity/evaluateOneSharedActivity.nl"
   ]
 }

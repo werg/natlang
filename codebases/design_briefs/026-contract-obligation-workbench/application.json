@@ -7,7 +7,15 @@
     {
       "name": "analyzeContract",
       "path": "analyzeContract.nl",
-      "purpose": "Map versioned contract clauses into actor, trigger, deadline, performance and evidence of discharge without flattening dispute or confidentiality."
+      "purpose": "Map versioned contract clauses into actor, trigger, deadline, performance and evidence of discharge without flattening dispute or confidentiality.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "contract-obligations"
     }
   ],
   "persistence": [
@@ -103,6 +111,8 @@
     "contractDesk/branchDisputedClause.nl",
     "contractDesk/minimizeConfidentialInstruction.nl",
     "runCase/parseObligations/audit/qualify.nl",
-    "contractDesk/frameContract.nl"
+    "contractDesk/frameContract.nl",
+    "analyzeContract/reconcileContractObligations.nl",
+    "obligationWorkbench/linkClauseRelations/classifyOneDutyRelation.nl"
   ]
 }

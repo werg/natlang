@@ -7,7 +7,15 @@
     {
       "name": "reviewAmendment",
       "path": "reviewAmendment.nl",
-      "purpose": "Map amendments onto an executed contract baseline, determine effective scope, trace dependent work, and gate revision release."
+      "purpose": "Map amendments onto an executed contract baseline, determine effective scope, trace dependent work, and gate revision release.",
+      "stateParameter": "executed",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "amendment-impact"
     }
   ],
   "persistence": [
@@ -103,6 +111,8 @@
     "amendmentEngine/revalidateCutover.nl",
     "amendmentEngine/testExceptionPreservation.nl",
     "runCase/identifyTargets/audit/qualify.nl",
-    "amendmentEngine/frameBaseline.nl"
+    "amendmentEngine/frameBaseline.nl",
+    "reviewAmendment/reconcileAmendmentCheckpoint.nl",
+    "amendmentEngine/resolveTargets/resolveOneAmendmentTarget.nl"
   ]
 }

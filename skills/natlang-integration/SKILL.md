@@ -636,3 +636,10 @@ self-hosted teacher; it does not change ordinary runtime or compiler semantics.
 When the declared result is `Neuralese<string>`, route a terminal plain-text assistant reply through the existing typed Neuralese writer before completing the invocation. Keep the target as the original assistant text and bind the writer receipt to that exact model turn, body hash, and captured invocation result. A no-call reply followed by another turn in the same invocation is not a completed result.
 
 A completed reply cut off before any executable action consumes an explicitly configured repair budget. Recover with the existing instruction to take the next step with one tool call; return the actual typed result when ready. `model_incomplete: truncated_without_action` records exhausted repairs, separately from transport errors. Successful executed actions/results can establish progress; an emitted rejected proposal cannot. One still-pending long decode is not a failed continuation.
+
+
+### Invocation cancellation and complete application results
+
+Identical in-flight native requests may share one execution, but each caller owns its cancellation. An aborted waiter receives `invocation_cancelled`; other waiters remain attached. When the final waiter cancels, abort the execution, reject a later result before commit and release the in-flight key so the caller can retry. An already committed request is recoverable by its durable invocation identity; read its receipt before deciding whether an outside-world effect needs reconciliation. Cancellation alone supplies no external delivery evidence.
+
+Validate domain checkpoints and complete return records on all branches, including blocked discovery and partial execution. Keep source-native result construction and branch decisions in Natlang. Host tests with scripted engineering drivers exercise persistence, isolation, cancellation and transport; they do not qualify model behavior or real external adapters.

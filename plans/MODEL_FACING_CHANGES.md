@@ -24,6 +24,14 @@ out, preserve failures, and require real external-adapter qualification before
 claiming deployed production behavior. Both authoring and integration skills
 now state these boundaries and the required type-compatible resume mapping.
 
+The subsequent review repairs incomplete blocked/result construction and actual
+child argument/result flow in the authored programs. Operational reconciliations
+retain distinct domain state transitions, and inherited unused scaffold types
+are being removed by exact source/type reachability. Mechanical regressions also
+cover per-caller cancellation of coalesced requests, Node worker startup and
+terminal EOF. These engineering tests add no sampled trajectories or semantic
+qualification; the above measurement debt remains open.
+
 ### 2026-10-18 — terminal Neuralese text results are written as typed values
 
 A final assistant text reply to a function declared as `Neuralese<string>` is

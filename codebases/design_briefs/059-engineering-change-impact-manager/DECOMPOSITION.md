@@ -62,3 +62,5 @@ Contract: ``GoalContract + PolicySelection + Relevant<ChangeWorkPackage>[] + Evi
 - `proposeRevision.nl` — Identify the smallest task or instruction change that addresses a concrete failure. State affected contracts, expected benefit, regression risks, and needed tests. Return a proposal for a staged revision; never modify live authority or silently replace an approved baseline.
 
 Missing, contradictory, superseded, or unauthorized evidence stays explicit. The root consumes actual child results; the audit returns a finite verdict for training and review.
+
+`reconcileUnitRetrofit.nl` advances one fielded unit only from actual installation and verification receipts for its approved serial/configuration. Mixed or unknown units remain fenced, and evidence from one unit never promotes the rest of the fleet.

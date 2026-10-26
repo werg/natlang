@@ -8,6 +8,16 @@
       "name": "planDebtCampaign",
       "path": "planDebtCampaign.nl",
       "purpose": "Convert observed workflow friction into bounded, dependency-aware improvement waves and verify results against preserved exposure."
+    },
+    {
+      "name": "reconcileDebtOutcome",
+      "path": "reconcileDebtOutcome.nl",
+      "purpose": "Record actual before/after operational measurements against the same workflow denominator, metric and observation window.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "technical-debt-outcome-ledger"
     }
   ],
   "coverage": {
@@ -78,7 +88,9 @@
     ]
   },
   "persistence": {
-    "campaign": "versioned symptom/mechanism links, package scope baselines, dependency waves, and outcome denominators"
+    "state": "package-scoped measurement receipts and contradictory outcome history",
+    "history": "changed denominators and observation windows remain incomparable; persistent workaround symptoms remain open even when a metric improves",
+    "authorization": "measured outcome does not automatically authorize the next implementation wave"
   },
   "effects": {
     "workPackages": "proposal only until named interface owners and sponsor authorize the campaign",
@@ -93,6 +105,8 @@
     "planDebtCampaign/sequenceByDependenciesAndCapacity.nl",
     "planDebtCampaign/testDebtMechanisms.nl",
     "qualification/collectSymptoms.nl",
+    "reconcileDebtOutcome.nl",
+    "reconcileDebtOutcome/compareMeasurementContext.nl",
     "types.ts"
   ]
 }

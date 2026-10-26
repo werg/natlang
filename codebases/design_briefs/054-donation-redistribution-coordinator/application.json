@@ -8,6 +8,16 @@
       "name": "coordinateDonationRound",
       "path": "coordinateDonationRound.nl",
       "purpose": "Qualify confirmed donations, fit complete bundles to recipient-stated constraints, allocate under supplied fairness rules, and plan consented delivery."
+    },
+    {
+      "name": "reconcileDonationFulfillment",
+      "path": "reconcileDonationFulfillment.nl",
+      "purpose": "Reconcile reserved, collected, delivered, accepted, declined, returned, unknown, and quarantined donation inventory from actual stock and consent receipts.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "donation-fulfillment-ledger"
     }
   ],
   "coverage": {
@@ -77,7 +87,9 @@
     ]
   },
   "persistence": {
-    "allocation": "confirmed quantities, policy version, unmet needs, and distinct delivery/acceptance states"
+    "state": "offer/bundle/recipient fulfillment state and append-only receipt history",
+    "history": "unknown and declined quantities stay unavailable until exact return and stock-conservation evidence",
+    "reallocation": "returned stock re-enters allocation only after the same fairness policy is rerun"
   },
   "effects": {
     "delivery": "consent-bound proposal only until availability recheck and coordinator dispatch",
@@ -94,6 +106,10 @@
     "coordinateDonationRound/qualifyConfirmedDonationStock/reconcileCollectionDayQuantity.nl",
     "coordinateDonationRound/quarantineRestrictedOffers.nl",
     "qualification/normalizeDonations.nl",
+    "reconcileDonationFulfillment.nl",
+    "reconcileDonationFulfillment/assessDonationReceipt.nl",
+    "reconcileDonationFulfillment/assessDonationReceipt/matchDonationAllocation.nl",
+    "reconcileDonationFulfillment/assessDonationReceipt/verifyDonationStageProgression.nl",
     "types.ts"
   ]
 }

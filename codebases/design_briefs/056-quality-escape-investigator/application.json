@@ -8,6 +8,16 @@
       "name": "investigateQualityEscape",
       "path": "investigateQualityEscape.nl",
       "purpose": "Trace escaped defects through preserved rework genealogy, compare inspection regimes, scope containment by unit, and reopen recurrence failures."
+    },
+    {
+      "name": "reconcileQualityDisposition",
+      "path": "reconcileQualityDisposition.nl",
+      "purpose": "Record actual lot/unit hold, release, partial and unknown physical disposition receipts against containment and effectiveness evidence.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "quality-escape-disposition-ledger"
     }
   ],
   "coverage": {
@@ -77,8 +87,9 @@
     ]
   },
   "persistence": {
-    "caseState": "prior closure and unit-specific hold disposition",
-    "writes": "proposal only"
+    "state": "unit-scoped quality holds and append-only disposition receipts",
+    "history": "physical release outside qualified containment records as released-unverified and triggers urgent containment; it is not rewritten as held",
+    "closure": "a lot disposition receipt does not close effectiveness review or causal corrective actions"
   },
   "effects": [
     "lot-specific hold/release proposal",
@@ -98,6 +109,8 @@
     "investigateQualityEscape/traceReworkedLotExposure/expandValidatedLotBranches.nl",
     "investigateQualityEscape/traceReworkedLotExposure/validateGenealogyEdges.nl",
     "qualification/normalizeDefects.nl",
+    "reconcileQualityDisposition.nl",
+    "reconcileQualityDisposition/qualifyLotRelease.nl",
     "types.ts"
   ]
 }

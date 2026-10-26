@@ -8,6 +8,16 @@
       "name": "coordinateReleaseTransition",
       "path": "coordinateReleaseTransition.nl",
       "purpose": "Evaluate behavioral compatibility per consumer, pair replays, stage migration, and reconcile rollback and communications against exact revisions."
+    },
+    {
+      "name": "reconcileReleaseWave",
+      "path": "reconcileReleaseWave.nl",
+      "purpose": "Advance, hold, and roll back one migration wave from actual consumer acceptance, replay, and candidate-write rollback evidence.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "release-rollout-ledger"
     }
   ],
   "coverage": {
@@ -78,7 +88,9 @@
     ]
   },
   "persistence": {
-    "releaseIdentity": "exact baseline and candidate revision pair, pinned customer window, and migration-wave lineage"
+    "state": "baseline/candidate revisions, per-wave outcomes, and append-only consumer evidence",
+    "history": "old versions remain active for pinned consumers until all planned waves complete",
+    "activation": "the candidate is marked active only when every wave has actual acceptance and compatibility replay evidence; ambiguous rollout blocks further waves"
   },
   "effects": {
     "migration": "plan only; owner-controlled execution after wave-specific rollback qualification",
@@ -95,6 +107,10 @@
     "coordinateReleaseTransition/testRollbackDataCompatibility.nl",
     "coordinateReleaseTransition/traceBehaviorConsumers.nl",
     "qualification/interpretChanges.nl",
+    "reconcileReleaseWave.nl",
+    "reconcileReleaseWave/assessReleaseWaveReceipt.nl",
+    "reconcileReleaseWave/assessReleaseWaveReceipt/auditCandidateWriteRollback.nl",
+    "reconcileReleaseWave/assessReleaseWaveReceipt/qualifyConsumerWave.nl",
     "types.ts"
   ]
 }

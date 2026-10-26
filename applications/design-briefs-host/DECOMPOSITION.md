@@ -39,8 +39,13 @@ version, persists the checked result, checkpoint, outbox and audit together, and
 records the durable invocation identity. A retry returns the original receipt
 before inference. Two concurrent completions for the same request return the
 winning receipt; distinct requests on the same old snapshot conflict. No model
-or network call runs inside the write transaction. Cancellation before commit
-leaves state untouched. Cancellation after commit is recovered by idempotent read.
+or network call runs inside the write transaction. Concurrent local callers for
+one idempotency key share execution but retain separate cancellation subscriptions:
+one caller can leave without canceling the others, while cancellation of the last
+waiter aborts execution and blocks commit even when an executor ignores abort.
+Canceled callers are removed from the in-flight entry, so a later retry can start.
+Cancellation before commit leaves state untouched. Cancellation after commit is
+recovered by idempotent read, provided the caller itself has not canceled.
 
 The host rejects a nonempty declared `effectsPath` without an installed exact
 adapter. An adapter serializes the application's decided intentions; it does not

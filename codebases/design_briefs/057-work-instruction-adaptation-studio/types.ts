@@ -96,3 +96,7 @@ export type InstructionReleasePacket = { variant: WorkfloorInstructionDraft; rep
 export type WarningStepBinding = { stepId: ID; translationRefs: Ref[]; missingHazards: string[]; missingConditions: string[]; safeToRelease: boolean };
 export type InspectionGuardMap = { stepId: ID; mandatoryInspections: string[]; waivedConstraint: string | null; authorityRef: Ref | null };
 export type RestartProtocol = { stepId: ID; resumeState: string; isolationChecks: string[]; repeatVerifications: string[]; incomplete: boolean };
+export type FloorCopyReceipt = { receiptId: ID; caseId: ID; copyId: ID; sourceVersion: string; outcome: "withdrawn" | "unavailable" | "replaced" | "unknown"; observedLocation: string; witnessRef: Ref | null; replacementCopy: FloorCopy | null; replacementPostedRef: Ref | null; receivedAt: DateTime };
+export type FloorCopyLedger = { revision: number; copies: FloorCopy[]; receipts: FloorCopyReceipt[]; consumedReceiptIds: ID[] };
+export type FloorCopyReconciliation = { ledger: FloorCopyLedger; disposition: "recorded" | "replayed" | "held"; activeOldCopyIds: ID[]; followUp: string[] };
+export type CopyDispositionAssessment = { valid: boolean; oldCopyWithdrawn: boolean; replacementMayBeAdded: boolean; reasons: string[] };

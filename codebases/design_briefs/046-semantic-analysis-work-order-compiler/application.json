@@ -8,6 +8,16 @@
       "name": "compileAnalysisWorkOrder",
       "path": "compileAnalysisWorkOrder.nl",
       "purpose": "Compile a semantics-first typed analysis graph that respects access policy and declared row grain."
+    },
+    {
+      "name": "reconcileAnalysisMaterialization",
+      "path": "reconcileAnalysisMaterialization.nl",
+      "purpose": "Reconcile actual result rows, schema snapshot, graph grain, rubric lineage, and requester disclosure before publishing an analysis artifact.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "semantic-analysis-run-ledger"
     }
   ],
   "coverage": {
@@ -80,7 +90,9 @@
     ]
   },
   "persistence": {
-    "analysisRun": "typed work graph, access-filtered universe, output grain, rubric version, and row disposition lineage"
+    "state": "versioned materialized analysis runs and their graph, schema, rubric, and access identities",
+    "history": "held or reclassification-required artifacts remain stored but cannot replace the current run",
+    "publication": "only a complete grain-preserving, rubric-current, authorized result becomes visible to its request audience"
   },
   "effects": {
     "restrictedRows": "excluded before semantic processing",
@@ -98,6 +110,11 @@
     "compileAnalysisWorkOrder/reconcileAnalysisPartitions.nl",
     "compileAnalysisWorkOrder/reconcileAnalysisPartitions/pinRubricVersionForReclassification.nl",
     "qualification/formalizeQuestion.nl",
+    "reconcileAnalysisMaterialization.nl",
+    "reconcileAnalysisMaterialization/verifyMaterializedAnalysis.nl",
+    "reconcileAnalysisMaterialization/verifyMaterializedAnalysis/auditRowCoverage.nl",
+    "reconcileAnalysisMaterialization/verifyMaterializedAnalysis/auditRubricLineage.nl",
+    "reconcileAnalysisMaterialization/verifyMaterializedAnalysis/discloseToAuthorizedAudience.nl",
     "types.ts"
   ]
 }

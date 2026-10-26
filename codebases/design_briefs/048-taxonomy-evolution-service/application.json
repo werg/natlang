@@ -8,6 +8,16 @@
       "name": "evolveTaxonomyVersion",
       "path": "evolveTaxonomyVersion.nl",
       "purpose": "Evaluate category fit under pinned definitions, propose evidence-supported structural revisions, replay affected records, and qualify promotion against consumers."
+    },
+    {
+      "name": "reconcileTaxonomyPromotion",
+      "path": "reconcileTaxonomyPromotion.nl",
+      "purpose": "Apply versioned publication, affected-record replay and consumer acknowledgement receipts while retaining historical taxonomy definitions.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "taxonomy-release-ledger"
     }
   ],
   "coverage": {
@@ -79,7 +89,9 @@
     ]
   },
   "persistence": {
-    "taxonomy": "immutable definition versions, category identity lineage, affected record IDs, and coarse historical bridges"
+    "state": "active taxonomy version and append-only publisher/replay receipts",
+    "history": "prior category definitions and historical mappings remain addressable after promotion or reversal",
+    "activation": "candidate becomes current only after digest/version match, every invalidated record replay, required approvals, and consumer acknowledgements"
   },
   "effects": {
     "promotion": "steward-approved version proposal only; downstream compatibility and affected cache invalidation required"
@@ -94,6 +106,8 @@
     "evolveTaxonomyVersion/replayOnlyAffectedRecords.nl",
     "evolveTaxonomyVersion/testMembershipAgainstVersionedDefinitions.nl",
     "qualification/assessFit.nl",
+    "reconcileTaxonomyPromotion.nl",
+    "reconcileTaxonomyPromotion/verifyPromotedState.nl",
     "types.ts"
   ]
 }

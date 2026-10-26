@@ -622,3 +622,8 @@ declared result type after completing the original task. The fresh TRAIN
 self-hosted teacher; it does not change ordinary runtime or compiler semantics.
 
 A completed reply cut off before any executable action consumes an explicitly configured repair budget. Recover with the existing instruction to take the next step with one tool call; return the actual typed result when ready. `model_incomplete: truncated_without_action` records exhausted repairs, separately from transport errors. Successful executed actions/results can establish progress; an emitted rejected proposal cannot. One still-pending long decode is not a failed continuation.
+
+
+### Complete source-level branches
+
+A public Natlang operation must construct its complete declared result on blocked, replayed, partial and successful paths. Initialize nullable downstream values before conditional work, retain the exact missing evidence and checkpoint on blocked paths, and consume each child's actual declared result. Review argument types and field names against the child declaration: an array of sanitization receipts is not a redaction plan, and a string array has no named status fields. Static potential-call and interface checks do not establish this semantic data flow. Preserve distinct domain reasoning trees; remove unused inherited scaffold types instead of carrying old run/stage abstractions into every program.

@@ -7,7 +7,15 @@
     {
       "name": "simulatePolicyChange",
       "path": "simulatePolicyChange.nl",
-      "purpose": "Compare exact policy replay artifacts across a frozen case cohort; preserve indeterminate cases, cohort changes and rare safeguard regressions."
+      "purpose": "Compare exact policy replay artifacts across a frozen case cohort; preserve indeterminate cases, cohort changes and rare safeguard regressions.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "policy-simulation"
     }
   ],
   "persistence": [
@@ -107,6 +115,8 @@
     "policySimulator/traceBoundaryCases.nl",
     "policySimulator/proposePolicyOption.nl",
     "policySimulator/forkEditedSnapshot.nl",
-    "policySimulator/bindAdoptedVersion.nl"
+    "policySimulator/bindAdoptedVersion.nl",
+    "simulatePolicyChange/reconcilePolicyScenario.nl",
+    "policySimulator/compareExactOutcomes/compareOnePolicyReplayPair.nl"
   ]
 }

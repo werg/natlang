@@ -39,6 +39,35 @@ function freeze(value) {
 export function createApplicationService({ catalog, store, execute, capabilities, effectAdapters = {} }) {
   if (!(catalog instanceof Map) || !store || typeof execute !== 'function') error('invalid_configuration');
   const inflight = new Map();
+  const canceled = () => new ApplicationError('invocation_cancelled');
+  function join(running, signal) {
+    if (signal?.aborted) return Promise.reject(canceled());
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject, signal, onAbort: null };
+      const cleanup = () => signal?.removeEventListener('abort', waiter.onAbort);
+      waiter.onAbort = () => {
+        if (!running.waiters.delete(waiter)) return;
+        cleanup(); reject(canceled());
+        if (running.waiters.size === 0) {
+          running.controller.abort();
+          if (inflight.get(running.key) === running) inflight.delete(running.key);
+        }
+      };
+      running.waiters.add(waiter);
+      signal?.addEventListener('abort', waiter.onAbort, { once: true });
+      // Close the small race between the initial check and listener registration.
+      if (signal?.aborted) waiter.onAbort();
+    });
+  }
+  function finish(running, outcome, value) {
+    if (inflight.get(running.key) === running) inflight.delete(running.key);
+    for (const waiter of running.waiters) {
+      running.waiters.delete(waiter);
+      waiter.signal?.removeEventListener('abort', waiter.onAbort);
+      if (outcome === 'fulfilled') waiter.resolve(value);
+      else waiter.reject(value);
+    }
+  }
   function application(id) { const app = catalog.get(id); if (!app) error('application_not_found'); return app; }
   function ifaceFor(app, name) { const iface = app.interfaces.get(name); if (!iface) error('interface_not_found'); return iface; }
   function authorize(p, appId, operation) {
@@ -72,6 +101,7 @@ export function createApplicationService({ catalog, store, execute, capabilities
       return store.listCases(p, { tenantId: p.tenantId, appId, after, limit });
     },
     async invoke(p, appId, caseId, { interface: name, inputs, expectedVersion, idempotencyKey }, { signal } = {}) {
+      if (signal?.aborted) error('invocation_cancelled');
       const app = application(appId), iface = ifaceFor(app, name);
       authorize(p, appId, 'invoke:' + name);
       if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$/.test(idempotencyKey)) error('invalid_idempotency_key');
@@ -85,13 +115,21 @@ export function createApplicationService({ catalog, store, execute, capabilities
       try {
         const old = store.readInvocation(p, key, invocationId);
         if (old.requestHash !== requestHash || old.requester !== p.id) error('idempotency_conflict');
+        if (signal?.aborted) error('invocation_cancelled');
         return old;
       } catch (e) { if (e.code !== 'not_found') throw e; }
       const runningKey = hash({ key, idempotencyKey });
       const running = inflight.get(runningKey);
-      if (running) { if (running.requestHash !== requestHash) error('idempotency_conflict'); return running.promise; }
-      const promise = (async () => {
-        if (signal?.aborted) error('invocation_cancelled');
+      if (running) {
+        if (running.requestHash !== requestHash) error('idempotency_conflict');
+        return await join(running, signal);
+      }
+      const entry = { key: runningKey, requestHash, controller: new AbortController(), waiters: new Set() };
+      inflight.set(runningKey, entry);
+      const response = join(entry, signal);
+      const task = (async () => {
+        const executionSignal = entry.controller.signal;
+        if (executionSignal.aborted) error('invocation_cancelled');
         const snapshot = store.readCase(p, key); if (!snapshot) error('not_found');
         if (snapshot.version !== expectedVersion) error('stale_version');
         const saved = snapshot.initial?.interface === name ? snapshot.initial.inputs : undefined;
@@ -107,8 +145,8 @@ export function createApplicationService({ catalog, store, execute, capabilities
           putPath(args, path, structuredClone(prior.value.state));
         }
         validateArguments(iface, args);
-        const returned = await execute({ app, iface, inputs: jsonCopy(args), signal });
-        if (signal?.aborted) error('invocation_cancelled');
+        const returned = await execute({ app, iface, inputs: jsonCopy(args), signal: executionSignal });
+        if (executionSignal.aborted) error('invocation_cancelled');
         const result = jsonCopy(returned);
         validateResult(iface, result);
         const carriesState = iface.stateParameter !== undefined || iface.stateResultPath !== undefined;
@@ -128,7 +166,7 @@ export function createApplicationService({ catalog, store, execute, capabilities
           principal: jsonCopy(p), caseId, sourceHash: app.sourceHash })) : [];
         if (!Array.isArray(packet)) error('invalid_effect_adapter');
         const outbox = jsonCopy(packet);
-        if (signal?.aborted) error('invocation_cancelled');
+        if (executionSignal.aborted) error('invocation_cancelled');
         const invocation = { interface: name, nativePath: iface.path, inputs: args, result, effectAdapter: !!adapter };
         const writes = carriesState ? [{ recordType: 'NativeCheckpoint', recordId,
           expectedVersion: prior?.version ?? null,
@@ -137,8 +175,10 @@ export function createApplicationService({ catalog, store, execute, capabilities
           snapshotVersion: snapshot.version, snapshotHash: snapshot.snapshotHash,
           sourceHash: app.sourceHash, interfaceHash: app.interfaceHash, invocation, writes, outbox });
       })();
-      inflight.set(runningKey, { requestHash, promise });
-      try { return await promise; } finally { inflight.delete(runningKey); }
+      // Attach both handlers immediately so a task that outlives its canceled waiters
+      // cannot produce an unhandled rejection.
+      task.then(value => finish(entry, 'fulfilled', value), cause => finish(entry, 'rejected', cause));
+      return await response;
     },
     invocation(p, appId, caseId, id) { return store.readInvocation(p, keyFor(p, appId, caseId), id); },
     events(p, appId, caseId, page) { return store.listEvents(p, keyFor(p, appId, caseId), page); },

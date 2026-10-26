@@ -3,3 +3,8 @@
 The close is modeled as an assertion ledger with source lineage, not as a sequence of generic review packets. First pin the entity, period, accounts, assertion, and exact report editions. Break classification then partitions unmatched lines by demonstrated cause and keeps offsetting differences distinct. The owner queue is built only from material breaks and preserves the departing preparer's authorship. Formula-derived amounts enter the reconciliation only when a validation receipt binds formula, input range, and output. The conclusion separates source facts, management explanations, and unexplained residuals. Signoff is a terminal, independent act bound to the precise source-line set and conclusion digest.
 
 Change handling walks dependencies from changed source rows to affected assertions. A late journal reopens only those workpapers; regenerated reports are compared line by line even when totals agree. Deadline events are append-only. No process in this program posts a journal or creates a signature.
+
+
+## Review completion and blocked-state construction (2026-10-26)
+
+Close workpapers retain a complete blocked path: unresolved scope or formula evidence leaves break classification, task queue, conclusion and signoff null. A clean account set can yield an explicitly empty completed queue; an unexamined account set cannot. Only a complete residual schedule reaches independent signoff.

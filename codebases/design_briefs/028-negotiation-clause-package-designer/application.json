@@ -7,7 +7,15 @@
     {
       "name": "designClausePackage",
       "path": "designClausePackage.nl",
-      "purpose": "Develop coherent clause alternatives from party positions and clause dependencies, preserving conditional acceptance and exact-draft approval."
+      "purpose": "Develop coherent clause alternatives from party positions and clause dependencies, preserving conditional acceptance and exact-draft approval.",
+      "stateParameter": "vault",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "clause-package"
     }
   ],
   "persistence": [
@@ -102,6 +110,8 @@
     "clauseDesk/bindApprovalToHash.nl",
     "clauseDesk/rejectUndefinedTerm.nl",
     "runCase/recoverPositions/audit/qualify.nl",
-    "clauseDesk/frameNegotiation.nl"
+    "clauseDesk/frameNegotiation.nl",
+    "designClausePackage/reconcileClausePackage.nl",
+    "clauseWorkbench/composeTradeoffPackages/composeOneWholePackage.nl"
   ]
 }
