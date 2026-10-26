@@ -52,27 +52,31 @@ export function readRootExamples(root: string, path = join(root, 'tune.examples.
   });
 }
 
+/** A persisted split receipt: component -> partition. Once assigned, a component never moves (plan §4.1). */
+export type SplitReceipt = { readonly schema: 'natlang.tune-split/v1'; readonly components: Readonly<Record<string, Partition>> };
+
 /**
  * Partition by connected component before expansion: the component is the declared group, else the example itself.
- * Deterministic in the component ID. Protected examples are excluded here and stay out of every later stage.
+ * Components already in `receipt` keep their partition, so adding examples never moves a development root into
+ * training. New components get a stable hash draw (about 70/20/10); while no development component exists, the first
+ * new one goes to development so selection never has to use training roots. Protected examples are excluded here
+ * and stay out of every later stage. Returns the examples and the extended receipt to persist.
  */
-export function splitExamples(examples: readonly RootExample[]): SplitExample[] {
+export function splitExamples(examples: readonly RootExample[], receipt?: SplitReceipt): SplitExample[] & { receipt: SplitReceipt } {
   const usable = examples.filter(example => !example.protected);
-  const components = [...new Set(usable.map(example => example.group ?? digest([example.function, example.input])))].sort();
-  const ranked = components.map(component => ({ component, key: digest(['natlang.tune-split/v1', component]) }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-  const partitionOf = new Map<string, Partition>();
-  // About 70/20/10, but with few components development comes first so selection never runs on training roots.
-  ranked.forEach(({ component }, index) => {
-    const n = ranked.length;
-    const development = Math.max(n >= 2 ? 1 : 0, Math.round(n * 0.2)), confirmation = n >= 5 ? Math.max(1, Math.round(n * 0.1)) : 0;
-    partitionOf.set(component, index < development ? 'development' : index < development + confirmation ? 'confirmation' : 'train');
-  });
-  return usable.map(example => {
-    const component = example.group ?? digest([example.function, example.input]);
-    return { ...example, id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16), component,
-      partition: partitionOf.get(component)! };
-  });
+  const componentOf = (example: RootExample) => example.group ?? digest([example.function, example.input]);
+  const assigned: Record<string, Partition> = { ...(receipt?.components ?? {}) };
+  const fresh = [...new Set(usable.map(componentOf))].filter(component => !(component in assigned))
+    .sort((a, b) => digest(['natlang.tune-split/v1', a]).localeCompare(digest(['natlang.tune-split/v1', b])));
+  for (const component of fresh) {
+    const draw = Number.parseInt(digest(['natlang.tune-split/v1', component]).slice(0, 8), 16) / 2 ** 32;
+    const hasDevelopment = Object.values(assigned).includes('development');
+    const anyOther = Object.keys(assigned).length > 0;
+    assigned[component] = !hasDevelopment && anyOther ? 'development' : draw < 0.7 ? 'train' : draw < 0.9 ? 'development' : 'confirmation';
+  }
+  const split = usable.map(example => ({ ...example, id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16),
+    component: componentOf(example), partition: assigned[componentOf(example)]! }));
+  return Object.assign(split, { receipt: { schema: 'natlang.tune-split/v1' as const, components: assigned } });
 }
 
 /** Protected roots for final reporting only (never collected, trained on or used for selection). */

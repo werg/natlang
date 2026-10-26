@@ -57,7 +57,12 @@ test('splits happen per component before expansion and protected roots are exclu
   assert.equal(split.length, 3);
   assert.equal(split[0].partition, split[1].partition, 'one world stays on one side');
   assert.ok(split.some(item => item.partition === 'development'));
-  assert.deepEqual(splitExamples(examples), split, 'deterministic');
+  assert.deepEqual([...splitExamples(examples)], [...split], 'deterministic');
+  // Adding examples never moves an assigned component; the receipt carries the assignment forward.
+  const more = [...examples, ...Array.from({ length: 20 }, (_, index) => ({ function: 'f.nl', input: 100 + index }))];
+  const extended = splitExamples(more, split.receipt);
+  for (const item of split) assert.equal(extended.find(other => other.id === item.id).partition, item.partition);
+  assert.ok(new Set(extended.map(item => item.partition)).size >= 2);
 });
 
 test('natlang tune collects per-binding trajectories, trains, validates through the engine and activates', async () => {
@@ -70,8 +75,8 @@ test('natlang tune collects per-binding trajectories, trains, validates through 
     assert.equal(report.activated, true, report.reason);
     assert.equal(report.data.protected, 1);
     assert.ok(!teacherCalls.some(opening => opening.includes('held')), 'the teacher never saw a protected root');
-    const turns = readFileSync(join(root, '.natlang/tune/data', readdirOne(join(root, '.natlang/tune/data')), 'turns.jsonl'), 'utf8')
-      .split('\n').filter(Boolean).map(line => JSON.parse(line));
+    const rootsDir = join(root, '.natlang/tune/data/roots');
+    const turns = readdirSync(rootsDir).flatMap(file => JSON.parse(readFileSync(join(rootsDir, file), 'utf8')).turns);
     assert.equal(new Set(turns.map(turn => turn.binding)).size, 2, 'outer and inner turns carry their own bindings');
     assert.ok(turns.every(turn => turn.evidence.enclosingSuccess && turn.evidence.rootOracle === true));
     assert.ok(seen.some(adapters => adapters.length === 1), 'validation calls ran with their own lambda stack');
@@ -132,3 +137,35 @@ test('OpenAI-compatible requests carry the calling invocation\'s tuned fields, t
 });
 
 function readdirOne(path) { return readdirSync(path)[0]; }
+
+test('an edit invalidates exactly its dependency closure and recollects only affected roots', async () => {
+  const { invalidation } = await import('../dist/tune/keys.js');
+  const { scaffoldManifest } = await import('../dist/tune/collect.js');
+  const root = project();
+  try {
+    // A second root function in its own folder, untouched by the edit below.
+    mkdirSync(join(root, 'other'));
+    writeFileSync(join(root, 'other', 'echo.nl'), named('Return value in uppercase too.'));
+    const examples = readFileSync(join(root, 'tune.examples.jsonl'), 'utf8').trim().split('\n');
+    writeFileSync(join(root, 'tune.examples.jsonl'), [...examples, ...['one', 'two', 'three', 'four'].map(value =>
+      JSON.stringify({ function: 'other/echo.nl', input: { value }, expected: value.toUpperCase() }))].join('\n') + '\n');
+    const asked = [];
+    const teacher = scriptedModel(opening => { asked.push(opening); return opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()'; });
+    const options = { root, program: program(root), settings, student: student(root), teacher: teacher.driver, teacherId: 'teacher:test', serve: serve([]) };
+    const first = await tuneProgram(options);
+    assert.equal(first.activated, true, first.reason);
+    const before = host.currentManifest(root);
+    writeFileSync(join(root, 'outer', 'inner.nl'), named('Return value in uppercase, please.'));
+    const edited = program(root);
+    const change = invalidation(before, scaffoldManifest(edited, base));
+    const inner = before.bindings.find(entry => entry.component.endsWith('outer/inner.nl::instructions'));
+    assert.deepEqual(change.changed, [inner.id]);
+    assert.ok(change.dirty.includes('folder:outer') && change.dirty.includes('tree:') && change.dirty.includes(inner.ancestry.at(-1)));
+    assert.ok(change.dependents.some(node => node.includes('other')), 'residuals below the dirty root depend on its new version');
+    asked.length = 0;
+    const second = await tuneProgram({ ...options, program: edited });
+    assert.equal(second.activated, true, second.reason);
+    assert.ok(asked.length > 0, 'roots that reached the edited lambda were recollected');
+    assert.ok(!asked.some(opening => opening.includes('uppercase too')), 'roots that only reached unchanged lambdas reused their data');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

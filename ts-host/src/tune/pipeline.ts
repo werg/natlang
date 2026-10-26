@@ -15,7 +15,8 @@ import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVers
 import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
 import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
-import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample } from './collect.js';
+import { sharedSourceHash, rootDataValid } from './keys.js';
+import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample, type SplitReceipt } from './collect.js';
 import { evaluateRoots, type ArmResult } from './evaluate.js';
 import type { ScopeOptions } from '../adaptation/weights/scopes.js';
 import type { StudentSettings, TuneSettings } from './settings.js';
@@ -82,27 +83,57 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   const { root, program, student } = options;
   const scaffold = await timed(timings, 'discover', log, () => scaffoldManifest(program, student.base, scopes));
   const all = readRootExamples(root, options.examplesPath);
-  const examples = splitExamples(all);
+  // The persisted split receipt keeps every component on the side it was first assigned (plan §4.1).
+  const splitPath = join(tuneDirectory(root), 'splits.json');
+  const previousSplit = existsSync(splitPath) ? JSON.parse(readFileSync(splitPath, 'utf8')) as SplitReceipt : undefined;
+  const examples = splitExamples(all, previousSplit);
+  mkdirSync(tuneDirectory(root), { recursive: true });
+  writeFileSync(splitPath, JSON.stringify(examples.receipt, null, 1) + '\n');
   if (!examples.some(example => example.partition === 'train'))
     throw new Error('no training roots: add root invocations to tune.examples.jsonl (one JSON object per line: {"function", "input", "expected"?, "group"?})');
-  const dataKey = sha(['natlang.tune-data/v1', program.buildHash, examples, options.teacherId]).slice(0, 24);
-  const dataDir = join(tuneDirectory(root), 'data', dataKey), turnsPath = join(dataDir, 'turns.jsonl');
-  const reusedData = existsSync(join(dataDir, 'receipt.json'));
-  const turns = await timed(timings, 'data', log, async () => {
-    if (reusedData) return readFileSync(turnsPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as CollectedTurn);
-    mkdirSync(dataDir, { recursive: true });
-    // Only training and development roots are executed by the teacher here; confirmation stays for evaluation.
-    const collected = await collect({ root, program, scaffold, examples, teacher: options.teacher, teacherId: options.teacherId,
-      partitions: ['train', 'development'] });
-    const failures = collected.roots.filter(item => !item.ok);
+  // Per-root records: raw evidence survives edits; a root is recollected only when a binding it reached changed
+  // semantics or the shared (non-instruction) sources changed (keys.ts).
+  const shared = sharedSourceHash(program);
+  const rootsDir = join(tuneDirectory(root), 'data', 'roots');
+  const recordPath = (example: SplitExample) => join(rootsDir, sha(['natlang.tune-root/v1', example.function, example.input,
+    example.expected ?? null, example.group ?? null, options.teacherId]).slice(0, 24) + '.json');
+  type RootRecord = { schema: 'natlang.tune-root/v1'; root: string; teacher: string; sharedSources: string;
+    bindings: Record<string, string>; outcome: { ok: boolean; oracle: boolean | null }; turns: CollectedTurn[] };
+  const collectable = examples.filter(example => example.partition === 'train' || example.partition === 'development');
+  const records = new Map<string, RootRecord>();
+  for (const example of collectable) {
+    const path = recordPath(example);
+    if (!existsSync(path)) continue;
+    const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
+    if (rootDataValid(record, scaffold, shared)) records.set(example.id, record);
+  }
+  const missing = collectable.filter(example => !records.has(example.id));
+  const reusedData = missing.length === 0;
+  await timed(timings, 'data', log, async () => {
+    if (!missing.length) return;
+    mkdirSync(rootsDir, { recursive: true });
+    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId });
+    const failures = collected.roots.filter(item => !item.ok && item.error);
     if (failures.length === collected.roots.length)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
       throw new Error(`every root invocation failed with the teacher; first error: ${failures[0]?.error ?? 'unknown'}`);
-    writeFileSync(turnsPath, collected.turns.map(turn => JSON.stringify(turn)).join('\n') + '\n');
-    writeFileSync(join(dataDir, 'receipt.json'), JSON.stringify({ schema: 'natlang.tune-data-receipt/v1', key: dataKey, roots: collected.roots,
-      turns: collected.turns.length, teacher: options.teacherId, program: program.buildHash }, null, 2));
-    return collected.turns;
+    const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
+    for (const example of missing) {
+      const outcome = collected.roots.find(item => item.id === example.id)!;
+      // A root that raised (teacher or infrastructure error) is retried next time; a wrong answer is a valid outcome.
+      if (!outcome.ok && outcome.error && outcome.oracle === null) continue;
+      const turns = collected.turns.filter(turn => turn.root === example.id);
+      const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))]
+        .map(id => [id, semantic.get(id) ?? '']));
+      const record: RootRecord = { schema: 'natlang.tune-root/v1', root: example.id, teacher: options.teacherId, sharedSources: shared,
+        bindings, outcome: { ok: outcome.ok, oracle: outcome.oracle }, turns };
+      writeFileSync(recordPath(example), JSON.stringify(record));
+      records.set(example.id, record);
+    }
   }, reusedData);
+  const turns = collectable.flatMap(example => records.get(example.id)?.turns ?? []);
+  const dataKey = sha(['natlang.tune-data/v2', collectable.map(example => [example.id, example.partition, records.has(example.id)
+    ? sha(records.get(example.id)) : null])]).slice(0, 24);
   // Binding IDs depend on program, component and context only, so rows stay valid for any tree-root variant.
   const trainRows = turns.filter(turn => turn.partition === 'train' && turn.binding && turn.evidence.enclosingSuccess && !turn.reply.truncated);
   return { scaffold, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
