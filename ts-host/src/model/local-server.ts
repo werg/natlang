@@ -1,6 +1,6 @@
 import { activeNativeAdapters } from '../native/model-recording.js';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -80,6 +80,17 @@ export async function managedModelSha256(environment: NodeJS.ProcessEnv = proces
   const hash = await fileHash(path);
   mkdirSync(dirname(cache), { recursive: true }); writeFileSync(cache, `${stamp}\n${hash}`);
   return hash;
+}
+
+const perSequenceLora = new Map<string, boolean>();
+/** Whether a llama-server binary batches different per-request LoRA stacks (`--lora-per-sequence`). */
+function supportsPerSequenceLora(executable: string): boolean {
+  let known = perSequenceLora.get(executable);
+  if (known === undefined) {
+    const help = spawnSync(executable, ['--help'], { encoding: 'utf8', timeout: 20000 });
+    perSequenceLora.set(executable, known = `${help.stdout ?? ''}${help.stderr ?? ''}`.includes('--lora-per-sequence'));
+  }
+  return known;
 }
 
 async function verifiedDefault(path: string): Promise<boolean> {
@@ -230,8 +241,9 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       loraIndex.clear();
       const adapters = runtimeOptions.loraAdapters?.() ?? [];
       if (adapters.length) {
-        // Loaded off; each request sets its own stack's scales.
-        args.push('--lora-init-without-apply');
+        // Loaded off; each request sets its own stack's scales. A server with per-sequence scales (the llama.cpp
+        // fork) also batches requests whose stacks differ; others serialize them.
+        args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(prerequisites.executable) ? ['--lora-per-sequence'] : []));
         for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
       }
       error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
