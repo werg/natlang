@@ -10,4 +10,4 @@ A changed estimate invalidates allocations consuming that lot, not unrelated gro
 
 ## Exact boundary
 
-Language handles evidence interpretation, quality suitability, and customer-facing alternatives. Exact helpers own quantity arithmetic, interval overlap, resource capacities, and reconciliation identities. Store operations own versioning and idempotency. A proposal is never a committed harvest or fulfilled delivery.
+Language handles evidence interpretation, quality suitability, and customer-facing alternatives. `sumMovementQuantities.ts` and `verifyQuantityLimits.ts` own exact decimal summation, unit equality, duplicate assignment detection and lot, commitment or typed resource-capacity comparisons using integer-scaled `BigInt` values. Natural Language still interprets evidence, decides which eligible flows to propose, compares source-backed time windows, rejects overlapping resource use, and keeps absent capacity limits unresolved. The movement reconciliation consumes the exact totals before assessing physical transitions. Store operations own versioning and idempotency. A proposal is never a committed harvest or fulfilled delivery.

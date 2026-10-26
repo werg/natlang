@@ -85,6 +85,10 @@
     "runNegotiationArena/chooseBoundedCounterpartAction.nl",
     "runNegotiationArena/debriefObservedNegotiation.nl",
     "runNegotiationArena/parseIssueLevelOffer.nl",
+    "runNegotiationArena/reconcileArenaCheckpoint.nl",
+    "runNegotiationArena/assembleArenaRunResult.nl",
+    "runNegotiationArena/validateArenaResume.nl",
+    "runNegotiationArena/holdArenaResume.nl",
     "types.ts"
   ]
 }

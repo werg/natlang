@@ -47,7 +47,6 @@
         "stage": "replanDelivery",
         "paths": [
           "coordinateHarvest/reconcilePhysicalMovement.nl",
-          "coordinateHarvest/reconcilePhysicalMovement/sumMovementReceipts.nl",
           "coordinateHarvest/reconcilePhysicalMovement/comparePlannedAndObserved.nl"
         ]
       }
@@ -101,9 +100,11 @@
     "coordinateHarvest/reconcileCommitments.nl",
     "coordinateHarvest/reconcilePhysicalMovement.nl",
     "coordinateHarvest/reconcilePhysicalMovement/comparePlannedAndObserved.nl",
-    "coordinateHarvest/reconcilePhysicalMovement/sumMovementReceipts.nl",
     "coordinateHarvest/refreshReadiness.nl",
     "coordinateHarvest/verifyReadiness.nl",
-    "types.ts"
+    "types.ts",
+    "coordinateHarvest/exactHarvestArithmetic/sumMovementQuantities.ts",
+    "natlang.json",
+    "coordinateHarvest/exactHarvestArithmetic/verifyQuantityLimits.ts"
   ]
 }

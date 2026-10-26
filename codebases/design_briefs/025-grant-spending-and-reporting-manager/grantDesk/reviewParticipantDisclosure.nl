@@ -1,5 +1,5 @@
 ---
 args: { request: GrantCycleRequest, disclosures: EvidencePage[] }
-returns: GrantGuardrail
+returns: ParticipantDisclosureReview
 ---
-Before disclosing participant-level information to a funder, check consent, allowed purpose, data minimization and requester authority. If any condition is missing, withhold identifiable data and propose aggregate or redacted evidence where sufficient.
+For each participant disclosure request, bind the participant identifier, consent, allowed purpose, minimization and requester authority. Return only participants whose complete permission chain matches the current funder and report. Put every other identifier in withheldParticipantIds. Include permitted aggregate evidence references separately; do not treat a missing consent record as permission.

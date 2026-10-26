@@ -82,6 +82,7 @@
   "source_files": [
     "developMenu.nl",
     "developMenu/composeServiceMenu.nl",
+    "developMenu/assembleKitchenProposal.nl",
     "developMenu/designDishConcepts.nl",
     "developMenu/exactKitchen.ts",
     "developMenu/interpretKitchenBrief.nl",

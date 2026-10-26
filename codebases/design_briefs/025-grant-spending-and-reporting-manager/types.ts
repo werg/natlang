@@ -42,6 +42,7 @@ export type GrantPeriodSlice = { sliceId: string; expenseId: string; periodId: s
 export type PeriodAllocationResult = { slices: GrantPeriodSlice[]; unresolvedExpenseIds: string[]; approvedBasisIds: string[] };
 export type PeriodConservationResult = { verifiedSlices: GrantPeriodSlice[]; withheldExpenseIds: string[]; blockers: string[] };
 export type SharedActivityResult = { acceptedActivityLinks: string[]; withheldLinks: string[]; blockers: string[]; evidenceRefs: Ref[] };
+export type ParticipantDisclosureReview = { allowedParticipantIds: string[]; withheldParticipantIds: string[]; allowedAggregateRefs: Ref[]; blockers: string[]; evidenceRefs: Ref[] };
 export type GrantAllocationResult = { allocations: GrantAllocation[]; verifiedSlices: GrantPeriodSlice[]; withheldExpenseIds: string[]; conservationBlockers: string[]; unresolvedBasis: string[] };
 export type GrantActivityRegister = { accepted: ActivityEvidence[]; partialMilestoneIds: string[]; unsupportedClaims: string[]; evidenceRefs: Ref[] };
 export type GrantNarrativeDraft = { narrative: GrantNarrative | null; blockedClaims: string[]; limitation: string[] };

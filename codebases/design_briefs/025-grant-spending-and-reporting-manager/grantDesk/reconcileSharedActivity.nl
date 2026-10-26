@@ -1,5 +1,5 @@
 ---
 args: { request: GrantCycleRequest, links: EvidencePage[] }
-returns: GrantGuardrail
+returns: SharedActivityResult
 ---
-Match an activity and its cost allocation across grant IDs. Prevent duplicate full attribution; allow documented shared funding only with a stated allocation basis, distinct eligible cost shares and nonduplicated outcome claims.
+Match each activity and its cost allocation across grant IDs. Return acceptedActivityLinks only when each funded share has its own documented basis, distinct eligible cost amounts and nonduplicated outcome attribution. Put unsupported or duplicated links in withheldLinks; preserve exact source references and explain every blocker. Prevent duplicate full attribution.

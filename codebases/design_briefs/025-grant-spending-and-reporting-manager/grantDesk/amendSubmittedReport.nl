@@ -1,5 +1,5 @@
 ---
 args: { request: GrantCycleRequest, submissions: EvidencePage[] }
-returns: GrantGuardrail
+returns: GrantCorrectionPlan
 ---
-Bind a correction to the original submitted artifact, approval hash, funder portal receipt and changed claims. Create a traceable amended version that explains the correction; never replace or erase the original submission history.
+Bind a correction to the original submitted artifact, approval hash, funder portal receipt and changed claims. Return amendment only when the linked old submission and correction evidence are exact; otherwise leave it null and carry blockers. Preserve prior receipt references in oldReceiptRefs. Never replace or erase the original submission history.

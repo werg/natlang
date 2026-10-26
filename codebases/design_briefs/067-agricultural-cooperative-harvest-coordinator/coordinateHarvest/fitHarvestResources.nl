@@ -2,5 +2,6 @@
 description: Fit eligible lot allocations into labor, machinery, storage and transport time windows.
 args: { desk: HarvestDeskState; delta: FieldDelta; allocation: LotAllocation }
 returns: CapacityFit
+uses: [coordinateHarvest/exactHarvestArithmetic/verifyQuantityLimits]
 ---
-Call `enumerateHarvestWindows(desk, delta, allocation)` and bind the resulting exact resource intervals. Call `verifyCapacityAndOperators(desk, windows, allocation)`. Equipment without a qualified named operator is unavailable. Reject overlapping use of a vehicle, storage bay or labor slot and retain the bottleneck that caused each rejection. Do not alter accepted commitments to hide infeasibility.
+Bind windows = `enumerateHarvestWindows(desk, delta, allocation)` and timeFit = `verifyCapacityAndOperators(desk, windows, allocation)` for exclusive-window conflicts and operator qualifications. When the source provides `delta.resourceQuantityLimits`, bind exactCapacityChecks = `verifyQuantityLimits(delta.resourceQuantityLimits)`; otherwise retain capacity as unresolved wherever a limit is required. Return CapacityFit with timeFit's plan and overlaps, exactCapacityChecks, quantityConserved only when all supply and resource checks pass, feasible only when both timeFit and every exact check pass, and blockers for each unsupported or exceeded resource limit. Equipment without a qualified named operator is unavailable. Do not alter accepted commitments to hide infeasibility.

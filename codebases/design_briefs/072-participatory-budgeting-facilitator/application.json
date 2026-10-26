@@ -93,6 +93,8 @@
     "facilitateBudgetRound/reconcileEnablingWork.nl",
     "facilitateBudgetRound/reconcileEnablingWork/identifySharedWork.nl",
     "facilitateBudgetRound/verifyProposalIntent.nl",
-    "types.ts"
+    "types.ts",
+    "natlang.json",
+    "facilitateBudgetRound/constructRuleBoundPortfolios/sumPortfolioCosts/exactMoneySum.ts"
   ]
 }
