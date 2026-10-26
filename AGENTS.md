@@ -1,5 +1,15 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Luna generation resumed (owner, 2026-10-26)
+
+Start and supervise six parallel Luna data-generation workers. This explicit
+owner instruction supersedes the earlier prohibitions on Luna/external-teacher
+generation. Preserve each actor, runtime, source and split identity; verify full
+trajectories and convert/admit useful results into both native training recipes.
+Keep these workers separate from engineering helpers and retain protected held
+data. Local LFM and the authorized one-cloud-Mellum learner continue training.
+This does not restart the paused CoreWeave teacher or evaluators.
+
 ## Recovery and limited compute credit (owner, 2026-10-24)
 
 Remaining CoreWeave access is opaque: $500 is an upper bound and actual remaining

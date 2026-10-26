@@ -118,8 +118,8 @@ def validate_plan(plan_path, expected_sha256):
     if plan.get('model_concurrency') != 1:
         raise ValueError('Each Luna slot must remain limited to one provider request')
     slots = plan.get('slots')
-    if type(slots) is not int or not 1 <= slots <= 5:
-        raise ValueError('slots must be an integer from one through five')
+    if type(slots) is not int or not 1 <= slots <= 6:
+        raise ValueError('slots must be an integer from one through six')
     if plan.get('reasoning_effort', 'low') not in ALLOWED_REASONING:
         raise ValueError('Invalid reasoning effort')
     if plan.get('execution_plans') is not True:
