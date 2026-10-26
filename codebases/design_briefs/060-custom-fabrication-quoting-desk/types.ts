@@ -89,7 +89,7 @@ export type MaterialOffer = { materialId: ID; unitCost: string; currency: string
 export type FinishReference = { referenceId: Ref; physicalSample: boolean; customerAccepted: boolean; appearanceDescription: string };
 export type CertificateRequirement = { scope: string; requiredStandard: string; evidenceRef: Ref | null };
 export type FabricationRevision = { revisionId: ID; changedFeatureIds: ID[]; toolingAffected: boolean; customerApproved: boolean };
-export type QuoteFeasibility = { missingMeasurements: string[]; conceptBlockers: string[]; capabilityGaps: string[]; finishAcceptanceGaps: string[]; certificationGaps: string[]; provisional: boolean };
+export type QuoteFeasibility = { missingMeasurements: string[]; conceptBlockers: string[]; capabilityGaps: string[]; finishAcceptanceGaps: string[]; certificationGaps: string[]; expiredMaterialIds: ID[]; provisional: boolean };
 export type CustomQuoteProposal = { caseId: ID; selectedConceptId: ID | null; feasibility: QuoteFeasibility; productionRoute: string[]; materialCostBasis: string[]; toolingCostChanges: string[]; quoteExpiry: string; quoteStatus: string; scopeConfirmation: string[]; commitAllowed: boolean };
 export type MeasurementQualification = { acceptedMeasurements: ShopMeasurement[]; missingMeasurements: string[]; unverifiedMeasurementIds: ID[]; toleranceConflicts: string[] };
 export type ConceptSelection = { conceptId: ID | null; blockers: string[]; finishAcceptanceGaps: string[]; concept: ShopConcept | null };
@@ -102,3 +102,17 @@ export type CapabilityMatch = { supportedProcesses: string[]; unsupportedProcess
 export type CertificationMatch = { acceptedScopes: string[]; missingScopes: string[]; specialistTasks: string[] };
 export type CurrentMaterialOffers = { acceptedOffers: MaterialOffer[]; expiredMaterialIds: ID[]; incompatibleOfferIds: ID[] };
 export type ToolingRevisionImpact = { toolingChanges: string[]; routeChanges: string[]; staleCostLineIds: ID[] };
+
+// A client response is reconciled against a revisioned quote book. The
+// response itself is evidence; it cannot replace the authorized commercial
+// terms or establish a quote that is stale, incomplete, or provisional.
+export type QuoteDecisionBook = { revision: number; quotes: QuoteDecisionRecord[]; responseEvents: CustomerQuoteResponse[]; consumedResponseIds: ID[] };
+export type QuoteDecisionRecord = { quoteId: ID; quoteRevision: string; issuedTermDigest: string; status: "issued" | "accepted" | "declined" | "change-requested" | "superseded" | "uncertain"; acceptedTermDigest: string | null; customerResponseId: ID | null; responseEvidence: Ref[]; pendingChanges: string[] };
+export type CustomerQuoteResponse = { responseId: ID; quoteId: ID; quoteRevision: string; respondingPartyId: ID; response: "accept" | "decline" | "request-change"; presentedTermDigest: string; evidenceRef: Ref; authorityEvidence: Ref; receivedAt: DateTime };
+export type QuoteCurrentFacts = { quoteId: ID; currentRevision: string; currentTermDigest: string; validity: "current" | "expired" | "unknown"; feasibility: "ready" | "blocked" | "unknown"; feasibilityEvidence: Ref[]; allRequiredApprovalsPresent: boolean; approvalRefs: Ref[]; authorizedRespondingPartyIds: ID[]; responseAuthority: "verified" | "invalid" | "unknown" };
+export type QuoteDecisionReview = { book: QuoteDecisionBook; outcome: "accepted" | "declined" | "change-requested" | "replayed" | "held"; reasons: string[]; nextTasks: string[] };
+export type QuoteApprovalEvidence = { approvalKind: string; evidenceRef: Ref };
+export type FabricationQuoteIssue = { quoteId: ID; quoteRevision: string; termDigest: string; renderedAt: DateTime; proposal: CustomQuoteProposal; current: QuoteCurrentFacts; requiredApprovalKinds: string[]; approvalEvidence: QuoteApprovalEvidence[] };
+export type QuoteIssueReview = { book: QuoteDecisionBook; outcome: "issued" | "replayed" | "held"; reasons: string[]; nextTasks: string[] };
+export type QuoteIssueReadiness = { issuable: boolean; reasons: string[]; approvalRefs: Ref[]; evidenceRefs: Ref[] };
+export type QuoteResponseReadiness = { decisionMayBeRecorded: boolean; acceptanceMayBeRecorded: boolean; reasons: string[] };

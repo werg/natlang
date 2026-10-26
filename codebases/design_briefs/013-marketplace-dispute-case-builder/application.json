@@ -7,7 +7,12 @@
     {
       "name": "marketplaceDispute",
       "path": "adjudicateDispute.nl",
-      "purpose": "Prepare a transaction-bound, balanced dispute recommendation with conditional outcomes, protected evidence provenance, and a scoped appeal record."
+      "purpose": "Prepare a transaction-bound, balanced dispute recommendation with conditional outcomes, protected evidence provenance, and a scoped appeal record.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "marketplace-dispute"
     }
   ],
   "persistence": [
@@ -101,7 +106,9 @@
     "adjudicateDispute/applyConditionalDisposition.nl",
     "adjudicateDispute/assembleContestableDossier.nl",
     "runCase/reconstructTimeline/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "adjudicateDispute/reconcileDisputeReview.nl",
+    "adjudicateDispute/evaluateQuestionEvidence/assessOneQuestionEvidence.nl"
   ],
   "uses": []
 }

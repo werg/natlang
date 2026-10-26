@@ -7,7 +7,15 @@
     {
       "name": "facilitateBudgetRound",
       "path": "facilitateBudgetRound.nl",
-      "purpose": "Compose rule-bound project portfolios with shared work counted once and prepare a traceable deliberation packet."
+      "purpose": "Compose rule-bound project portfolios with shared work counted once and prepare a traceable deliberation packet.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "participatory-budgeting-checkpoint"
     }
   ],
   "coverage": {

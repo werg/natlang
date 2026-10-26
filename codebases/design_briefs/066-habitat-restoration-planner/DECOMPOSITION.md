@@ -3,3 +3,5 @@
 The planner treats sensitive location access as an independent boundary from ecological interpretation: exact coordinates remain in an authorized conservation view, while volunteer and public views are coarsened. Survey comparisons retain season and method so seasonal turnover cannot masquerade as restoration change. Volunteer counts include effort duration and observer count. Field interventions stop when access permission expires for their particular area and action, and unexpected effects suspend only the implicated intervention pending a qualified ecological review.
 
 The proposal preserves restricted records and adverse observations, and it does not claim field work or expert review has taken place.
+
+`reconcileHabitatFieldOutcome.nl` records actual work, access, and impact receipts per intervention. Expired or unknown permission keeps the affected scope stopped, an unexpected effect invokes the scoped expert-review judgment, and work completion remains separate from measured ecological improvement.

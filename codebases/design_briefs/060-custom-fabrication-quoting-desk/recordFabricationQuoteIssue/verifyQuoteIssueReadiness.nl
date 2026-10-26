@@ -1,0 +1,5 @@
+---
+args: { issue: FabricationQuoteIssue }
+returns: QuoteIssueReadiness
+---
+Judge issue readiness only from the supplied proposal, current assessment, and approval records. Require the issue quote ID, revision, and term digest to match current.quoteId, current.currentRevision, and current.currentTermDigest. Current validity and feasibility must both be "current" and "ready" respectively, with nonempty feasibility evidence; allRequiredApprovalsPresent must be true. The proposal must be "review-required" and non-provisional, and every missing measurement, concept blocker, capability gap, finish gap, certification gap, and expired material list must be empty. For every requiredApprovalKinds entry, require a matching approvalEvidence record with an evidence reference. Do not infer authority from a customer request or an absent blocker. Return issuable false with the exact failed conditions and missing approval kinds; when all conditions hold, return issuable true with the supplied approval and feasibility evidence references.

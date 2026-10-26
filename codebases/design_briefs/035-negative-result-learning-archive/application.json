@@ -33,6 +33,16 @@
       "name": "reviseScopedLessons",
       "path": "negativeResultDossier/reviseScopedLessons.nl",
       "purpose": "Version lessons by tested conditions and preserve contradictory and superseding evidence."
+    },
+    {
+      "name": "reconcileFollowupExecution",
+      "path": "reconcileFollowupExecution.nl",
+      "purpose": "Classify and preserve actual preregistered follow-up outcomes, including invalid, incomplete, unknown, and contradictory runs.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "negative-result-followup-ledger"
     }
   ],
   "coverage": {
@@ -111,9 +121,11 @@
       "NegativeFinding",
       "FailureExplanation",
       "DiscriminatingExperiment",
-      "ResearchLesson"
+      "ResearchLesson",
+      "FollowupExecutionReceipt"
     ],
-    "history": "append-only attempt and lesson revisions with supersession links"
+    "history": "follow-up prediction references, actual run receipts, and inference limits are append-only and replay-safe",
+    "publication": "a directional result opens scoped lesson review; it never rewrites or erases prior evidence automatically"
   },
   "effects": {
     "proposed": [
@@ -151,6 +163,8 @@
     "negativeResultDossier/reviseScopedLessons/contractLessonApplicability.nl",
     "negativeResultDossier/reviseScopedLessons/linkContradictoryAndSupersedingRuns.nl",
     "negativeResultDossier/reviseScopedLessons/preserveKnowledgeHistory.nl",
+    "reconcileFollowupExecution.nl",
+    "reconcileFollowupExecution/classifyObservedFollowup.nl",
     "types.ts"
   ]
 }

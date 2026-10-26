@@ -11,7 +11,8 @@
       "stateParameter": "localeLedger",
       "stateResultPath": [
         "localeLedger"
-      ]
+      ],
+      "stateKey": "localization-edition-ledger"
     }
   ],
   "source_files": [

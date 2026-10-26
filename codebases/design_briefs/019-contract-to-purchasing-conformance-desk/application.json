@@ -7,7 +7,12 @@
     {
       "name": "reviewProcurement",
       "path": "reviewProcurement.nl",
-      "purpose": "Route line-item purchases through entity-scoped agreement coverage, bundle terms, cumulative commitment thresholds, current catalog revisions, and expiry checks."
+      "purpose": "Route line-item purchases through entity-scoped agreement coverage, bundle terms, cumulative commitment thresholds, current catalog revisions, and expiry checks.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "procurement-review"
     }
   ],
   "coverage": {
@@ -101,6 +106,8 @@
     "procurementDesk/verifyEntityCoverage.nl",
     "qualification/interpretRequest.nl",
     "reviewProcurement.nl",
-    "types.ts"
+    "types.ts",
+    "reviewProcurement/reconcileProcurementCheckpoint.nl",
+    "procurementDesk/constructCompliantOptions/constructOptionForRequestLine.nl"
   ]
 }

@@ -7,7 +7,12 @@
     {
       "name": "assembleTenderResponse",
       "path": "assembleTenderResponse.nl",
-      "purpose": "Prepare a supported, internally consistent tender response and a hash-bound review bundle for authorized submission."
+      "purpose": "Prepare a supported, internally consistent tender response and a hash-bound review bundle for authorized submission.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "tender-response"
     }
   ],
   "persistence": [
@@ -106,6 +111,8 @@
     "assembleTenderResponse/checkPortalLimits.nl",
     "assembleTenderResponse/freezeTenderBundlePreview.nl",
     "runCase/parseObligations/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "assembleTenderResponse/reconcileTenderCheckpoint.nl",
+    "assembleTenderResponse/parseTenderObligations/interpretOneTenderSource.nl"
   ]
 }

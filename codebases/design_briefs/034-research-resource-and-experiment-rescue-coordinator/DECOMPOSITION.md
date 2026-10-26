@@ -11,3 +11,5 @@ Cancellation is a separate reconciliation path. It preserves the prepared bookin
 ## Regressions
 
 The five exact fixture roots remain under the moved `coordinateResearchWindow/requirements|resources|slots|rescue|readiness/audit/qualify.nl` paths. Inputs and expected verdicts are unchanged. The native procedures do not infer a protocol deviation, operator qualification, or execution receipt from a calendar booking.
+
+`reconcileResearchReservation.nl` is the return path for the external booking service. It matches a receipt against the exact experiment, instrument, operator and time interval selected by the plan; unknown, rejected and cancelled outcomes remain separate. Confirmed booking still does not assert day-of readiness or that an experiment ran.

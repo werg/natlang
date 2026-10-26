@@ -7,7 +7,15 @@
     {
       "name": "coordinateCareTransition",
       "path": "coordinateCareTransition.nl",
-      "purpose": "Coordinate a transition task graph from verified equipment, accepted caregiver roles, time windows and handoff receipts."
+      "purpose": "Coordinate a transition task graph from verified equipment, accepted caregiver roles, time windows and handoff receipts.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "care-transition-checkpoint"
     }
   ],
   "coverage": {

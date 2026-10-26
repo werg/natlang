@@ -7,7 +7,15 @@
     {
       "name": "curateExhibition",
       "path": "curateExhibition.nl",
-      "purpose": "Build an evidence-backed exhibition argument and qualify every physical and digital projection against current constraints."
+      "purpose": "Build an evidence-backed exhibition argument and qualify every physical and digital projection against current constraints.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "museum-exhibition-checkpoint"
     }
   ],
   "coverage": {

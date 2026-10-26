@@ -7,7 +7,15 @@
     {
       "name": "prepareAppointment",
       "path": "prepareAppointment.nl",
-      "purpose": "Compile approved appointment requirements into versioned reminders, questions and consent-bounded delivery tracking."
+      "purpose": "Compile approved appointment requirements into versioned reminders, questions and consent-bounded delivery tracking.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "appointment-preparation-checkpoint"
     }
   ],
   "coverage": {

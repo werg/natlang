@@ -13,6 +13,16 @@
       "name": "reconcileAppealEvidence",
       "path": "freezeAssessmentEdition/reconcileAppealEvidence.nl",
       "purpose": "Trace one learner response against the exact frozen rubric and route unfamiliar valid reasoning to semantic moderation."
+    },
+    {
+      "name": "reconcileAssessmentRelease",
+      "path": "reconcileAssessmentRelease.nl",
+      "purpose": "Freeze or retire an assessment edition only against a current compiler plan and actual authorized moderator receipt, preserving historical response and appeal records.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "assessment-edition-ledger"
     }
   ],
   "coverage": {
@@ -86,8 +96,14 @@
     ]
   },
   "persistence": {
-    "editionIdentity": "assessmentId plus immutable rubricVersion",
-    "historicalResponses": "retained by edition and original score"
+    "recordFamilies": [
+      "AssessmentEdition",
+      "AssessmentReleaseReceipt",
+      "AssessmentResponse",
+      "RegradeRecord"
+    ],
+    "history": "immutable edition versions, release receipts, response history, and moderation/regrade lineage",
+    "release": "freeze requires ready edition evidence and applied authorized regrades; retirement only stops future administration"
   },
   "effects": {
     "gradeChanges": "proposal only; requires exact-cohort moderator authorization",
@@ -120,6 +136,8 @@
     "qualification/constructRubrics.nl",
     "qualification/generateItems.nl",
     "qualification/moderateAndAppeal.nl",
+    "reconcileAssessmentRelease.nl",
+    "reconcileAssessmentRelease/verifyEditionFreezeReadiness.nl",
     "types.ts"
   ]
 }

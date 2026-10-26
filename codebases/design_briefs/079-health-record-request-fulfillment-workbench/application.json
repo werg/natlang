@@ -7,7 +7,15 @@
     {
       "name": "fulfillHealthRecordRequest",
       "path": "fulfillHealthRecordRequest.nl",
-      "purpose": "Prepare an authorization-bounded record packet, review only affected disclosure spans, sanitize the rendered derivative and reconcile exact delivery."
+      "purpose": "Prepare an authorization-bounded record packet, review only affected disclosure spans, sanitize the rendered derivative and reconcile exact delivery.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "health-record-fulfillment-checkpoint"
     }
   ],
   "coverage": {

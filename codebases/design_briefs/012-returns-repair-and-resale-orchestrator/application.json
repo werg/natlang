@@ -7,7 +7,12 @@
     {
       "name": "manageDeviceReturn",
       "path": "manageDeviceReturn.nl",
-      "purpose": "Route a specific returned device through evidence-based condition assessment, purchase-date entitlement, safe repair, serial-verified custody, data erasure, and truthful resale disclosure."
+      "purpose": "Route a specific returned device through evidence-based condition assessment, purchase-date entitlement, safe repair, serial-verified custody, data erasure, and truthful resale disclosure.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "device-lifecycle"
     }
   ],
   "persistence": [
@@ -112,6 +117,7 @@
     "manageDeviceReturn/prepareVerifiedResale.nl",
     "manageDeviceReturn/prepareVerifiedResale/verifyResalePrerequisites.nl",
     "runCase/assessCondition/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "manageDeviceReturn/reconcileDeviceLifecycle.nl"
   ]
 }

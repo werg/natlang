@@ -78,3 +78,7 @@ export type BehaviorDelta = { instrumentId: string; protocolBehavior: string; me
 export type ReadinessEvidenceReview = { status: 'pass' | 'block' | 'uncertain'; blockers: string[]; currentRefs: Ref[] };
 export type MaterialTrace = { cancellations: CancellationEvent[]; materials: PreparedMaterial[] };
 export type DependencyImpact = { experimentIds: string[]; dependencyRefs: Ref[] };
+export type ResearchReservationReceipt = { receiptId: ID; operationId: ID; reservationId: ID; caseId: ID; experimentId: ID; instrumentId: ID; operatorId: ID; startsAt: DateTime; endsAt: DateTime; outcome: "reserved" | "rejected" | "unknown" | "cancelled"; evidenceRefs: Ref[] };
+export type ResearchReservationLedger = { revision: number; receipts: ResearchReservationReceipt[]; consumedReceiptIds: ID[] };
+export type ReservationReceiptReview = { ledger: ResearchReservationLedger; outcome: "recorded" | "replayed" | "held"; status: "reserved" | "rejected" | "unknown" | "cancelled"; followUp: string[] };
+export type ReservationProposalMatch = { matches: boolean; reasons: string[] };

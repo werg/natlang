@@ -7,7 +7,15 @@
     {
       "name": "archiveOralHistory",
       "path": "archiveOralHistory.nl",
-      "purpose": "Reconcile speaker-attributed accounts under source-span consent and prepare a privacy-reviewed, traceable edition."
+      "purpose": "Reconcile speaker-attributed accounts under source-span consent and prepare a privacy-reviewed, traceable edition.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "oral-history-checkpoint"
     }
   ],
   "coverage": {

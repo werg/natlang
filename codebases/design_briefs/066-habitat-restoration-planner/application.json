@@ -8,6 +8,16 @@
       "name": "planHabitatStewardship",
       "path": "planHabitatStewardship.nl",
       "purpose": "Restrict sensitive species locations, compare seasonal surveys only under supported methods, record sampling effort, stop expired-permission field tasks, and escalate adverse intervention effects to qualified experts."
+    },
+    {
+      "name": "reconcileHabitatFieldOutcome",
+      "path": "reconcileHabitatFieldOutcome.nl",
+      "purpose": "Record intervention receipts against current permission, suspend affected work on adverse ecological effects, and preserve unresolved or incomplete field outcomes.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "habitat-stewardship-action-book"
     }
   ],
   "coverage": {
@@ -77,8 +87,9 @@
     ]
   },
   "persistence": {
-    "state": "seasonal monitoring and permission-scoped field tasks",
-    "writes": "management and monitoring proposals only"
+    "state": "seasonal observation records and intervention-specific action status with receipt history",
+    "history": "actual field receipts are append-only; unknown outcomes and permission mismatches remain unresolved",
+    "adaptation": "adverse effects suspend only the implicated intervention pending qualified ecological review; completion alone proves no ecological benefit"
   },
   "effects": [
     "expert ecological review",
@@ -93,6 +104,10 @@
     "planHabitatStewardship/respondToUnexpectedRestorationEffect.nl",
     "planHabitatStewardship/restrictSensitiveSpeciesLocations.nl",
     "qualification/interpretBaseline.nl",
+    "reconcileHabitatFieldOutcome.nl",
+    "reconcileHabitatFieldOutcome/assessEcologicalIncident.nl",
+    "reconcileHabitatFieldOutcome/assessEcologicalIncident/linkImpactToIntervention.nl",
+    "reconcileHabitatFieldOutcome/assessEcologicalIncident/routeToQualifiedExpert.nl",
     "types.ts"
   ]
 }

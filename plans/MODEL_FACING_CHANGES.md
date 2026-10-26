@@ -1443,3 +1443,13 @@ interactive sessions, state restoration, disputed receipts, evidence corrections
 and branch-specific child-result use. Record actual actor/runtime/source identities
 and complete trajectories; retain the approximately 48-sample convention per
 measured variant. `training_admission` stays false and generation remains paused.
+
+The second publication extends domain checkpoints across commercial/service and
+community/cultural applications and introduces typed follow-up operations for
+research reservations, negative-result follow-up, assessment release, migration
+cutover, identity correction, maintenance work, quote decisions, building handover,
+facility visits and ecological field outcomes. The retired crisp research-window
+search is removed; the existing Natlang frontier remains the scheduler. Nested
+authority, evidence and physical-readback judgments carry their actual findings
+into parent state updates. These additions have the same live-measurement debt;
+no new independent expected answer or sampled model trajectory is authored here.

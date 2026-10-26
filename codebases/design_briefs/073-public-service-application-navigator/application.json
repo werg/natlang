@@ -7,7 +7,15 @@
     {
       "name": "navigateServiceApplication",
       "path": "navigateServiceApplication.nl",
-      "purpose": "Map an applicant's situation to permitted evidence routes, truthful tasks and safe receipt recovery."
+      "purpose": "Map an applicant's situation to permitted evidence routes, truthful tasks and safe receipt recovery.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "public-service-navigation-checkpoint"
     }
   ],
   "coverage": {

@@ -11,7 +11,8 @@
       "stateParameter": "caseFile",
       "stateResultPath": [
         "caseFile"
-      ]
+      ],
+      "stateKey": "expense-appeal-case"
     }
   ],
   "source_files": [

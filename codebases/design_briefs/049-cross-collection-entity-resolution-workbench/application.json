@@ -8,6 +8,16 @@
       "name": "resolveCrossCollectionIdentities",
       "path": "resolveCrossCollectionIdentities.nl",
       "purpose": "Generate access-bound candidates, judge identity with positive and cannot-link evidence, reconcile constrained clusters, and prepare reversible canonical identity revisions."
+    },
+    {
+      "name": "reconcileIdentityCorrection",
+      "path": "reconcileIdentityCorrection.nl",
+      "purpose": "Reconcile actual apply, partial, unknown, and rollback receipts against a versioned identity graph and downstream consumer acknowledgements.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "cross-collection-identity-graph"
     }
   ],
   "coverage": {
@@ -78,7 +88,9 @@
     ]
   },
   "persistence": {
-    "identityGraph": "source-preserving graph versions, interval-bound identities, cannot-link evidence, and reversible correction history"
+    "state": "versioned canonical graph and append-only correction receipts",
+    "history": "partial, unknown, and rolled-back operations retain original record attribution and evidence",
+    "promotion": "advance graph version only after every planned edge, revocation effect, and downstream acknowledgement is evidenced"
   },
   "effects": {
     "mergeOrSplit": "proposal only until steward approval and downstream consumer migration proof",
@@ -86,6 +98,8 @@
   },
   "source_files": [
     "qualification/constructCandidates.nl",
+    "reconcileIdentityCorrection.nl",
+    "reconcileIdentityCorrection/assessAppliedGraph.nl",
     "resolveCrossCollectionIdentities.nl",
     "resolveCrossCollectionIdentities/attributeFieldClaims.nl",
     "resolveCrossCollectionIdentities/generateAccessBoundIdentityCandidates.nl",

@@ -62,3 +62,5 @@ Contract: ``GoalContract + PolicySelection + Relevant<MaintenanceProgress>[] + E
 - `proposeRevision.nl` — Identify the smallest task or instruction change that addresses a concrete failure. State affected contracts, expected benefit, regression risks, and needed tests. Return a proposal for a staged revision; never modify live authority or silently replace an approved baseline.
 
 Missing, contradictory, superseded, or unauthorized evidence stays explicit. The root consumes actual child results; the audit returns a finite verdict for training and review.
+
+`reconcileMaintenanceExecution.nl` closes the shift loop from actual work receipts. It checks each task against the official asset, procedure-required verification, and compatible part revisions, while keeping partial work and live isolation visible in a revisioned execution ledger.

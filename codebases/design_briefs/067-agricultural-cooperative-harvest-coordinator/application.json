@@ -7,7 +7,15 @@
     {
       "name": "coordinateHarvest",
       "path": "coordinateHarvest.nl",
-      "purpose": "Revise one perishable harvest allocation against current lot, customer and physical movement evidence."
+      "purpose": "Revise one perishable harvest allocation against current lot, customer and physical movement evidence.",
+      "stateParameter": "desk",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "cooperative-harvest-checkpoint"
     }
   ],
   "coverage": {

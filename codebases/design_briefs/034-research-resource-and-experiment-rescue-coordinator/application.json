@@ -38,6 +38,16 @@
       "name": "recheckDayOfReadiness",
       "path": "coordinateResearchWindow/recheckDayOfReadiness.nl",
       "purpose": "Revalidate current facts immediately before execution while preserving bookings."
+    },
+    {
+      "name": "reconcileResearchReservation",
+      "path": "reconcileResearchReservation.nl",
+      "purpose": "Reconcile exact external booking, rejection, unknown, and cancellation receipts against the proposed experiment windows.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "research-reservation-ledger"
     }
   ],
   "mechanisms": [
@@ -120,9 +130,11 @@
       "ExperimentRequirement",
       "ExperimentSlot",
       "RescueOption",
-      "ReadinessCheck"
+      "ReadinessCheck",
+      "ResearchReservationReceipt"
     ],
-    "history": "append-only booking, cancellation, consumption, and reschedule lineage"
+    "history": "reservation responses and cancellations are append-only and idempotent by receipt ID; unknown outcomes block a duplicate request",
+    "dispatch": "only a matching reservation receipt confirms a booking; readiness is checked again immediately before execution"
   },
   "effects": {
     "proposed": [
@@ -135,7 +147,6 @@
   "source_files": [
     "coordinateResearchWindow.nl",
     "coordinateResearchWindow/collectResearchQuestions.nl",
-    "coordinateResearchWindow/findOpenSlots.ts",
     "coordinateResearchWindow/parseProtocolConstraints.nl",
     "coordinateResearchWindow/parseProtocolConstraints/extractProtocolPredicates.nl",
     "coordinateResearchWindow/parseProtocolConstraints/locateApprovedProtocols.nl",
@@ -173,6 +184,8 @@
     "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility.nl",
     "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts.nl",
     "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
+    "reconcileResearchReservation.nl",
+    "reconcileResearchReservation/verifyReceiptAgainstAssignment.nl",
     "types.ts",
     "walkScheduleFrontier/chooseBestProtocolSchedule.nl"
   ]

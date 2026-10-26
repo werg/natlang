@@ -228,6 +228,8 @@ export function checkApplicationInterfaces(files, manifest, metadata) {
     const definition = programDefinition({ semantics: { root: item.path, files } });
     if (item.stateParameter !== undefined && !definition.params.some(param => param.name === item.stateParameter))
       throw new Error(`${item.name}: stateParameter is not a declared native parameter`);
+    if (['__proto__', 'constructor', 'prototype'].includes(item.stateParameter))
+      throw new Error(`${item.name}: stateParameter must be a safe property name`);
     for (const key of ['stateInputPath', 'stateResultPath', 'effectsPath']) if (item[key] !== undefined &&
         (!Array.isArray(item[key]) || item[key].some(part => typeof part !== 'string' || !part ||
           ['__proto__', 'constructor', 'prototype'].includes(part))))

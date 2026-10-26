@@ -5,3 +5,5 @@
 The causal view connects one demonstrated process defect to all affected attempts without counting it as repeated scientific evidence. Untested mechanisms remain plausible rivals. Follow-up design declares rival-specific predictions before execution and blocks unsafe or unapproved variants. Lesson revision versions the knowledge state and conditions applicability on the actual protocol and valid measurement context. Attribution restrictions affect the general view while authorized method reviewers retain scoped access.
 
 Five exact gate roots retain their original typed input and finite verdict, relocated to `negativeResultDossier/{attempt,inference,causes,followups,lessons}/audit/qualify.nl`. Case inputs, observed records, and expected verdicts are preserved; only root paths change.
+
+`reconcileFollowupExecution.nl` accepts the independent run receipt against the registered prediction reference. It compares the observed result to both forecasts under actual conditions, carries invalid and incomplete runs without directional inference, and opens lesson review only for a valid discriminating result. The archive never rewrites previous lessons from one follow-up.

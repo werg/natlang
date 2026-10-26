@@ -8,6 +8,16 @@
       "name": "rehearseDomainMigration",
       "path": "rehearseDomainMigration.nl",
       "purpose": "Recover field meanings, declare mapping losses, rehearse record conservation, and hold cutover on exact deltas and mapping versions."
+    },
+    {
+      "name": "reconcileMigrationCutover",
+      "path": "reconcileMigrationCutover.nl",
+      "purpose": "Advance, hold, or roll back a migration target version from actual applied-record and target-write receipts.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "domain-migration-cutover-ledger"
     }
   ],
   "coverage": {
@@ -79,7 +89,9 @@
     ]
   },
   "persistence": {
-    "migration": "mapping version, extraction snapshot, deltas, quarantined identities, conservation report, and target-write lineage"
+    "state": "current target version and append-only migration cutover receipts",
+    "history": "partial or unknown target state becomes null and blocks further writes until reconciled",
+    "cutover": "switch only after the frozen mapping, every accepted source record, replayed deltas, and concurrent target writes reconcile"
   },
   "effects": {
     "cutover": "proposal only; switch held until every source row and delta is accounted",
@@ -87,6 +99,8 @@
   },
   "source_files": [
     "qualification/recoverSourceMeaning.nl",
+    "reconcileMigrationCutover.nl",
+    "reconcileMigrationCutover/verifyCutoverReceipt.nl",
     "rehearseDomainMigration.nl",
     "rehearseDomainMigration/checkMigrationConservation.nl",
     "rehearseDomainMigration/classifySourceRecords.nl",

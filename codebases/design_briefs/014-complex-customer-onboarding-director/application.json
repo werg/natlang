@@ -7,7 +7,12 @@
     {
       "name": "directOnboarding",
       "path": "directOnboarding.nl",
-      "purpose": "Convert customer onboarding goals into approved outcomes, verified environment constraints, an executable task graph, measured progress, and controlled replanning."
+      "purpose": "Convert customer onboarding goals into approved outcomes, verified environment constraints, an executable task graph, measured progress, and controlled replanning.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "customer-onboarding"
     }
   ],
   "persistence": [
@@ -110,6 +115,7 @@
     "directOnboarding/measureEvidenceBackedProgress.nl",
     "directOnboarding/replanOnboardingDependencies.nl",
     "runCase/clarifyOutcomes/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "directOnboarding/reconcileOnboardingCheckpoint.nl"
   ]
 }

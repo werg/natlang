@@ -11,7 +11,8 @@
       "stateParameter": "edition",
       "stateResultPath": [
         "edition"
-      ]
+      ],
+      "stateKey": "plain-language-edition-state"
     }
   ],
   "source_files": [

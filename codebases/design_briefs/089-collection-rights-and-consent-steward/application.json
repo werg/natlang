@@ -7,7 +7,15 @@
     {
       "name": "stewardCollectionUse",
       "path": "stewardCollectionUse.nl",
-      "purpose": "Test a proposed collection use against every item's rights, channel, audience, attribution and duration scope."
+      "purpose": "Test a proposed collection use against every item's rights, channel, audience, attribution and duration scope.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "collection-rights-checkpoint"
     }
   ],
   "coverage": {

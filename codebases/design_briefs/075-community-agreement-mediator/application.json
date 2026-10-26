@@ -7,7 +7,15 @@
     {
       "name": "mediateAgreement",
       "path": "mediateAgreement.nl",
-      "purpose": "Prepare bounded agreement options and trials while preserving participant-specific accounts, consent and outcomes."
+      "purpose": "Prepare bounded agreement options and trials while preserving participant-specific accounts, consent and outcomes.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "community-agreement-checkpoint"
     }
   ],
   "coverage": {

@@ -78,6 +78,8 @@ export function createApplicationService({ catalog, store, execute, capabilities
       if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) error('invalid_version');
       // Take an immutable request copy before the first await; callers and adapters cannot mutate its binding.
       const supplied = inputs === undefined ? undefined : jsonCopy(inputs);
+      if (supplied !== undefined && (!supplied || typeof supplied !== 'object' || Array.isArray(supplied)))
+        error('invalid_arguments');
       const key = keyFor(p, appId, caseId), requestHash = hash({ actor: p.id, name, inputs: supplied ?? null, expectedVersion });
       const invocationId = 'call:' + hash({ tenant: p.tenantId, appId, caseId, idempotencyKey }).slice(0,48);
       try {

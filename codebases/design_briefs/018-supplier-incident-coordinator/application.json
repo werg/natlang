@@ -7,7 +7,12 @@
     {
       "name": "coordinateSupplierIncident",
       "path": "coordinateSupplierIncident.nl",
-      "purpose": "Cluster supplier incident reports by supported mechanism, trace exact lot/order exposure, contain only evidenced stock, test corrective claims against rivals, and reopen recurring causal failures."
+      "purpose": "Cluster supplier incident reports by supported mechanism, trace exact lot/order exposure, contain only evidenced stock, test corrective claims against rivals, and reopen recurring causal failures.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "supplier-incident"
     }
   ],
   "coverage": {
@@ -101,6 +106,7 @@
     "incidentDesk/traceIncidentExposure/partitionSplitStock.nl",
     "natlang.json",
     "qualification/linkReports.nl",
-    "types.ts"
+    "types.ts",
+    "coordinateSupplierIncident/reconcileIncidentCheckpoint.nl"
   ]
 }

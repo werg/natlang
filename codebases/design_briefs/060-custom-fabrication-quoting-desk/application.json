@@ -8,6 +8,26 @@
       "name": "composeFabricationQuote",
       "path": "composeFabricationQuote.nl",
       "purpose": "Build a provisional fabrication quote from verified dimensions, accepted finish references, certified shop capability, and current material pricing."
+    },
+    {
+      "name": "reconcileFabricationQuoteResponse",
+      "path": "reconcileFabricationQuoteResponse.nl",
+      "purpose": "Reconcile customer acceptance, decline, or scope-change evidence against the exact issued quote revision and persist replay-safe commercial decision state.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "fabrication-quote-decisions"
+    },
+    {
+      "name": "recordFabricationQuoteIssue",
+      "path": "recordFabricationQuoteIssue.nl",
+      "purpose": "Persist an exact rendered and approved commercial quote revision without implying customer acceptance or production authorization.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "fabrication-quote-decisions"
     }
   ],
   "coverage": {
@@ -77,12 +97,15 @@
     ]
   },
   "persistence": {
-    "state": "quote revision and customer acceptance evidence",
-    "writes": "provisional quote only"
+    "state": "revisioned quote decision book keyed by issued quote identity",
+    "history": "customer responses and approval evidence are append-only; exact duplicate responses replay without a second revision",
+    "acceptance": "only an unexpired, fully approved, non-provisional quote with matching revision and term digest can become accepted; acceptance does not start production"
   },
   "effects": [
     "scope confirmation request",
-    "specialist capability referral"
+    "specialist capability referral",
+    "quote refresh or approval task",
+    "production handoff only after separately authorized acceptance processing"
   ],
   "source_files": [
     "composeFabricationQuote.nl",
@@ -98,6 +121,10 @@
     "composeFabricationQuote/validateMaterialPricing/reconcileToolingRevisionImpact.nl",
     "composeFabricationQuote/validateMaterialPricing/separateCurrentMaterialOffers.nl",
     "qualification/recoverRequirements.nl",
+    "reconcileFabricationQuoteResponse.nl",
+    "reconcileFabricationQuoteResponse/qualifyCustomerQuoteDecision.nl",
+    "recordFabricationQuoteIssue.nl",
+    "recordFabricationQuoteIssue/verifyQuoteIssueReadiness.nl",
     "types.ts"
   ]
 }

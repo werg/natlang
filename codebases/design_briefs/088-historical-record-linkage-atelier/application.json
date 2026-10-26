@@ -7,7 +7,15 @@
     {
       "name": "reconcileHistoricalLinkage",
       "path": "reconcileHistoricalLinkage.nl",
-      "purpose": "Build a reversible historical identity network using uncertainty-aware chronology and time-specific geography."
+      "purpose": "Build a reversible historical identity network using uncertainty-aware chronology and time-specific geography.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "historical-linkage-checkpoint"
     }
   ],
   "coverage": {

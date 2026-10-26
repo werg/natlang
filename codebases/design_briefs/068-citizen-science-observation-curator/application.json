@@ -7,7 +7,12 @@
     {
       "name": "curateObservations",
       "path": "curateObservations.nl",
-      "purpose": "Curate a submission batch while retaining raw observer provenance, identity ambiguity and privacy-limited public derivatives."
+      "purpose": "Curate a submission batch while retaining raw observer provenance, identity ambiguity and privacy-limited public derivatives.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "observation-curation-checkpoint"
     }
   ],
   "coverage": {

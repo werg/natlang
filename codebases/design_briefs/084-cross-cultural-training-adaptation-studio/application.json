@@ -7,7 +7,15 @@
     {
       "name": "adaptTrainingScenario",
       "path": "adaptTrainingScenario.nl",
-      "purpose": "Adapt scenario context while preserving competency, decision complexity and versioned learner-test evidence."
+      "purpose": "Adapt scenario context while preserving competency, decision complexity and versioned learner-test evidence.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "training-adaptation-checkpoint"
     }
   ],
   "coverage": {

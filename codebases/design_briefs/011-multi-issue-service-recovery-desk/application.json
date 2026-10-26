@@ -7,7 +7,12 @@
     {
       "name": "recoverServiceCase",
       "path": "recoverServiceCase.nl",
-      "purpose": "Resolve linked service issues against purchase-date entitlements, joint remedy constraints, customer choice, idempotent operation receipts, and partial closure."
+      "purpose": "Resolve linked service issues against purchase-date entitlements, joint remedy constraints, customer choice, idempotent operation receipts, and partial closure.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "service-recovery"
     }
   ],
   "persistence": [
@@ -111,6 +116,7 @@
     "recoverServiceCase/compareIssueClosure.nl",
     "recoverServiceCase/compareIssueClosure/compareAgreedIssueOutcomes.nl",
     "runCase/decomposeCase/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "recoverServiceCase/reconcileRecoveryCheckpoint.nl"
   ]
 }

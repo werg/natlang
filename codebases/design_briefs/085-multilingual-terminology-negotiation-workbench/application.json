@@ -7,7 +7,15 @@
     {
       "name": "negotiateTerminology",
       "path": "negotiateTerminology.nl",
-      "purpose": "Resolve concept-scoped terminology, preserve regional forms and stage coherent versioned migrations."
+      "purpose": "Resolve concept-scoped terminology, preserve regional forms and stage coherent versioned migrations.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "terminology-negotiation-checkpoint"
     }
   ],
   "coverage": {

@@ -7,7 +7,12 @@
     {
       "name": "evaluateSubstitute",
       "path": "evaluateSubstitute.nl",
-      "purpose": "Evaluate functional substitutions through revision-bound evidence, exact unit comparison, lot acceptance, adapter total cost, and machine-specific approval."
+      "purpose": "Evaluate functional substitutions through revision-bound evidence, exact unit comparison, lot acceptance, adapter total cost, and machine-specific approval.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "substitution-sourcing"
     }
   ],
   "coverage": {
@@ -108,6 +113,7 @@
     "sourcingDesk/selectSourcingPolicy.nl",
     "sourcingDesk/validateUnitConversion.nl",
     "sourcingDesk/verifyLotAcceptance.nl",
-    "types.ts"
+    "types.ts",
+    "evaluateSubstitute/reconcileSubstitutionCheckpoint.nl"
   ]
 }

@@ -45,4 +45,5 @@ export type ExitGuardrail = { decisions: string[]; blockers: string[]; evidenceR
 
 
 
-export type ExitProgramResult={caseId:string;scope:GoalContract;policy:PolicySelection;intent:ChangeIntent|null;consequences:ChangeConsequence[];choices:ChangeOption[];operation:SubscriptionOperation|null;receipt:ExitReceipt|null;guardrails:ExitGuardrail[];unresolved:string[];commitAllowed:boolean};
+export type ExitProgramResult={caseId:string;scope:GoalContract;policy:PolicySelection;intent:ChangeIntent|null;consequences:ChangeConsequence[];choices:ChangeOption[];operation:SubscriptionOperation|null;receipt:ExitReceipt|null;guardrails:ExitGuardrail[];unresolved:string[];checkpoint:ExitCheckpoint;commitAllowed:boolean};
+export type ExitCheckpoint={caseId:string;revision:number;requestedSubscriptionIds:string[];consentReceiptRefs:string[];operationReceiptRefs:string[];billingReceiptRefs:string[];completedChanges:string[];unknownOperationIds:string[];pendingRefundRefs:string[];historicalChoices:ChangeOption[]};

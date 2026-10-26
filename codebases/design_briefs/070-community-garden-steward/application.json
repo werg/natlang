@@ -7,7 +7,15 @@
     {
       "name": "stewardGardenSeason",
       "path": "stewardGardenSeason.nl",
-      "purpose": "Reconcile one garden season without turning preferences into duties or unaccepted allocations."
+      "purpose": "Reconcile one garden season without turning preferences into duties or unaccepted allocations.",
+      "stateParameter": "garden",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "community-garden-checkpoint"
     }
   ],
   "coverage": {

@@ -11,7 +11,8 @@
       "stateParameter": "studyState",
       "stateResultPath": [
         "studyState"
-      ]
+      ],
+      "stateKey": "patient-experience-study-state"
     }
   ],
   "source_files": [

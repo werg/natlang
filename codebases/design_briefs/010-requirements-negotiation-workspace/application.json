@@ -7,7 +7,12 @@
     {
       "name": "negotiateRequirements",
       "path": "negotiateRequirements.nl",
-      "purpose": "Reconcile stakeholder outcomes and constraints into a phased, source-linked specification with explicit pending agreements and replayed acceptance cases."
+      "purpose": "Reconcile stakeholder outcomes and constraints into a phased, source-linked specification with explicit pending agreements and replayed acceptance cases.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "requirements-negotiation"
     }
   ],
   "persistence": [
@@ -114,6 +119,7 @@
     "negotiateRequirements/replayRequirementAcceptance.nl",
     "negotiateRequirements/replayRequirementAcceptance/deriveRequirementScenarios.nl",
     "runCase/extractPositions/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "negotiateRequirements/reconcileNegotiationState.nl"
   ]
 }

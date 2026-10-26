@@ -11,7 +11,8 @@
       "stateParameter": "mediaState",
       "stateResultPath": [
         "mediaState"
-      ]
+      ],
+      "stateKey": "accessible-media-production-state"
     }
   ],
   "source_files": [

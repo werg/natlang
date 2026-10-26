@@ -8,6 +8,16 @@
       "name": "prepareMaintenanceHandover",
       "path": "prepareMaintenanceHandover.nl",
       "purpose": "Resolve official asset identity, sequence approved maintenance prerequisites, retain unverified work, and transfer live isolation and recurrence watch between shifts."
+    },
+    {
+      "name": "reconcileMaintenanceExecution",
+      "path": "reconcileMaintenanceExecution.nl",
+      "purpose": "Reconcile exact maintenance task and live-isolation handover receipts while retaining unverified work and lock state.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "maintenance-execution-ledger"
     }
   ],
   "coverage": {
@@ -77,8 +87,9 @@
     ]
   },
   "persistence": {
-    "state": "task verification, asset identity, isolation checkpoints, recurring fault watch",
-    "writes": "maintenance proposal only"
+    "state": "append-only task receipts, completed task IDs, unresolved work, and isolation handover evidence",
+    "history": "duplicate receipts replay; partial, not-done, and unknown outcomes never become completed work",
+    "safety": "live isolation remains in place until a separate authorized de-isolation procedure"
   },
   "effects": [
     "maintenance dispatch proposal",
@@ -93,6 +104,10 @@
     "prepareMaintenanceHandover/resolveOfficialAsset.nl",
     "prepareMaintenanceHandover/verifyReportedCompletion.nl",
     "qualification/interpretObservations.nl",
+    "reconcileMaintenanceExecution.nl",
+    "reconcileMaintenanceExecution/assessTaskReceipt.nl",
+    "reconcileMaintenanceExecution/assessTaskReceipt/qualifyInstalledPartRevision.nl",
+    "reconcileMaintenanceExecution/assessTaskReceipt/verifyTaskPrerequisites.nl",
     "types.ts"
   ]
 }

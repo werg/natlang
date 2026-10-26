@@ -1,0 +1,9 @@
+---
+args: { book: RestorationActionBook, planning: RestorationPlanningInput, plan: HabitatActionPlan, receipt: RestorationFieldReceipt, permission: FieldAccessPermission | null, permissionStatusAtEvent: "valid" | "expired" | "unknown" }
+returns: RestorationFieldReconciliation
+---
+1. If receipt.receiptId is already consumed, replay the stored result only when every field matches; a reused ID with changed contents is held and cannot overwrite monitoring history.
+2. Bind the intervention by receipt.interventionId in planning.interventions and plan.permittedActions. Bind its permitted area and action to the exact permission record, permissionStatusAtEvent, and receipt evidence. If an action occurred with missing, expired, mismatched, or unknown permission, record the event as held and stop further field work for the affected scope; do not erase the observed action.
+3. Bind ecologicalReview = assessEcologicalIncident(receipt.impacts, planning.interventions, planning.expertRoster). Each reported impact remains attached to its intervention and observation evidence. A suspended intervention stays suspended until qualified review resolves it.
+4. Record partial or paused work as paused; record an unknown field outcome as unknown. Mark an action permitted to continue only when the receipt reports completed work, permissionStatusAtEvent is valid, the exact task and area are covered, and ecologicalReview does not suspend it.
+5. Append the actual receipt once, update only this intervention's status, preserve all unrelated action states and sensitive location controls, increment book.revision once, and return expertEscalations plus follow-up for permission renewal, field verification, or monitoring. This records field evidence; it does not manufacture ecological benefit from task completion.

@@ -103,6 +103,7 @@ test('source refresh during inference rejects the stale result without committin
 
 test('invalid native data and wrong operation authority cannot mutate state', async t => {
   const e=await environment(t,{execute:async()=>({next:{balance:'invalid'},posting:3})});create(e.service);
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:null,expectedVersion:1,idempotencyKey:'null'}),codeIs('invalid_arguments'));
   await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'invalid'}),codeIs('invalid_result'));
   await assert.rejects(e.service.invoke(reviewer,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'forbidden'}),codeIs('forbidden'));
   assert.throws(()=>e.service.create(op,'002','wrong',{interface:'inspectPassages',inputs:{ledger:{}},idempotencyKey:'wrong'}),codeIs('unknown_argument'));

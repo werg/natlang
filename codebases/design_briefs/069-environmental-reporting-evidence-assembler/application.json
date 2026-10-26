@@ -7,7 +7,15 @@
     {
       "name": "assembleEnvironmentalReport",
       "path": "assembleEnvironmentalReport.nl",
-      "purpose": "Assemble an immutable evidence-backed report edition with boundary-scoped measures, reconciled attribution and qualified claims."
+      "purpose": "Assemble an immutable evidence-backed report edition with boundary-scoped measures, reconciled attribution and qualified claims.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "environmental-reporting-checkpoint"
     }
   ],
   "coverage": {

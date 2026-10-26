@@ -7,7 +7,15 @@
     {
       "name": "synthesizeConsultation",
       "path": "synthesizeConsultation.nl",
-      "purpose": "Trace consultation arguments to themes and options while reporting participant counts separately from campaign templates."
+      "purpose": "Trace consultation arguments to themes and options while reporting participant counts separately from campaign templates.",
+      "stateParameter": "docket",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "consultation-synthesis-checkpoint"
     }
   ],
   "coverage": {
