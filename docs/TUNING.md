@@ -37,7 +37,11 @@ No adapter manifest, adapter IDs, export, conversion or server-loading step is p
    `.natlang/tune/releases/<digest>/`, loads it, runs development roots through the normal engine with strict
    resolution, and only then activates it by atomically replacing `.natlang/tune/active.json`.
 
-Rerunning the same command reuses collected data and training receipts. The report prints the time from invoking
+Rerunning the same command reuses collected data and training receipts. Splits are persisted
+(`.natlang/tune/splits.json`), so later edits never move an example between partitions. Collected data is kept per
+root and recollected only when a definition that root reached changed, or when non-instruction sources (helpers,
+services, types) changed; `--incremental` prints which bindings changed and which shared nodes and dependents must
+be refit. The report prints the time from invoking
 `tune` to the first tuned call, split by stage.
 
 ## How calls use a release
@@ -98,7 +102,8 @@ reference server applies the stack through its exact native adapter path.
 | Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
 | llama.cpp fork (`--lora-per-sequence`) | Same | Through its Neuralese server (not yet wired here) | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
-| vLLM, wllama | Not yet implemented | Not yet implemented | Not yet implemented |
+| vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
+| wllama | Not yet implemented | Not yet implemented | Not yet implemented |
 
 The managed runtime accepts the fork's server only once the fork is rebased onto a build the runtime check accepts
 (currently `>= b10964`).
@@ -115,6 +120,6 @@ explicit `withNativeAdapters` scopes. Programs without a release are unaffected.
 Implemented: scope compilation, per-call resolution with requested/effective identities and coherent fallback,
 release store with compare-before-activate and rollback, `natlang tune` (collect, split, train, export, validate,
 activate, report, watch), managed llama.cpp serving with per-request stacks, the joint trainer with nested shared
-bases and free LoRA factors, and per-node GGUF export. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. Not yet
-implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, vLLM and wllama serving, on-policy repair
-rounds and dependency-closure incremental training. These remain required work in the plan.
+bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. Not yet
+implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, wllama serving, on-policy repair
+rounds and refitting only dirty nodes (data reuse is incremental; training still refits the whole tree). These remain required work in the plan.
