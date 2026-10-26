@@ -627,10 +627,12 @@ def _exposure_complete(phases, source, participants, exposure):
     return not missing, missing
 
 
-def measure_tasks(participants, export, config, out, step, device, vae=None, stop_requested=None):
+def measure_tasks(participants, export, config, out, step, device, vae=None, stop_requested=None,
+                  source_baseline=False):
     """Serve the same live trained weights; do not allocate a second backbone."""
     from ..eval.native_state import task_execution_receipt
-    from ..eval.task_cadence import TaskEval, parse_task_eval
+    from ..eval.task_cadence import (TaskEval, parse_task_eval, task_eval_policy_identity,
+        task_eval_runtime_identity)
     from ..model.shared_state import RoleTokens
     from ..serve.engine import Engine
     from ..serve.store import TensorStore
@@ -651,8 +653,18 @@ def measure_tasks(participants, export, config, out, step, device, vae=None, sto
                 declaration = config.get('models', {}).get(name, {}).get('task_eval', config.get('task_eval'))
                 if not declaration:
                     continue
+                declaration=dict(declaration)
+                if source_baseline:
+                    # TaskEval's receipt requires an eligible complete score.
+                    # Use zero only as the evaluator's absolute comparison
+                    # floor; the measured count is separately bound below and
+                    # this is never a model-quality/readiness claim.
+                    declaration['reference_successes']=0
+                    declaration.pop('reference_provenance',None)
                 spec = parse_task_eval(json.dumps(declaration))
-                identity = export['models'][name]['native_identity']
+                task_runtime_before=task_eval_runtime_identity(spec)
+                identity = (participant.identity if source_baseline
+                    else export['models'][name]['native_identity'])
                 mode = participant.model.training
                 participant.model.eval()
                 try:
@@ -666,11 +678,23 @@ def measure_tasks(participants, export, config, out, step, device, vae=None, sto
                     if channel is not None:
                         from ..serve import bind_native_semantic_channel
                         bind_native_semantic_channel(engine,channel,name)
-                    directory = Path(out)/('participant-' + canonical_json_sha256_hex(name))
+                    directory_key=(canonical_json_sha256_hex({'participant':name,'identity':identity,
+                        'task_eval_policy_sha256':task_eval_policy_identity(spec)}) if source_baseline
+                        else canonical_json_sha256_hex(name))
+                    directory = Path(out)/(('source-baseline-' if source_baseline else 'participant-')+directory_key)
                     evaluator = TaskEval(spec, directory, engine, prompt_rendering=spec.get('prompt_rendering', 'full'), stop_requested=stop_requested)
                     summary = evaluator.cadence(step)
+                    task_runtime_after=task_eval_runtime_identity(spec)
+                    if task_runtime_after!=task_runtime_before:
+                        raise ValueError('TaskEval executable files changed during baseline/measurement')
                     receipt = task_execution_receipt(summary, identity,
-                        checkpoint_sha256=export['checkpoint']['sha256'])
+                        checkpoint_sha256=(identity['checkpoint_sha256'] if source_baseline
+                            else export['checkpoint']['sha256']))
+                    receipt['task_eval_policy_sha256'] = task_eval_policy_identity(spec)
+                    receipt['task_runtime_identity'] = task_runtime_after
+                    receipt['source_baseline'] = bool(source_baseline)
+                    if source_baseline:
+                        receipt['baseline_comparison_floor'] = 0
                     if channel is not None:
                         receipt.update(communication='shared-semantic-state-deltas',semantic_adapter_sha256=channel.adapter_sha256)
                     path = directory/'native-task-execution-receipt.json'
@@ -683,6 +707,30 @@ def measure_tasks(participants, export, config, out, step, device, vae=None, sto
         if vae is not None:vae.train(vae_mode)
         restore_training_rng_state(rng, device)
     return results
+
+
+def _overlay_source_task_baselines(config,training,participants):
+    """Apply only current-identity baseline rows from the saved training state."""
+    from ..eval.task_cadence import task_eval_policy_identity
+    result=json.loads(json.dumps(config));result.setdefault('models',{})
+    for name,participant in participants.items():
+        baseline=(training.get('source_task_baselines')or{}).get(name)
+        if not isinstance(baseline,dict) or baseline.get('native_identity')!=participant.identity:
+            continue
+        model_spec=result['models'].setdefault(name,{})
+        spec=model_spec.get('task_eval')
+        if spec is None and result.get('task_eval') is not None:
+            spec=model_spec['task_eval']=json.loads(json.dumps(result['task_eval']))
+        if not isinstance(spec,dict) or task_eval_policy_identity(spec)!=baseline.get('task_eval_policy_sha256'):
+            continue
+        spec['reference_successes']=baseline['task_successes']
+        spec['reference_provenance']={'kind':'native-source-task-baseline/1',
+            'source_identity':baseline['native_identity'],
+            'task_eval_policy_sha256':baseline['task_eval_policy_sha256'],
+            'task_runtime_identity':baseline['task_runtime_identity'],
+            'task_execution_receipt':baseline['task_execution_receipt'],'score':baseline['score'],
+            'superseded_declared_reference':baseline['superseded_declared_reference']}
+    return result
 
 
 def run(config_path, participants_path, out, *, resume=None, max_updates=None, device='cuda', refresh_participants=False, stop=None):
@@ -816,6 +864,12 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         vae = SemanticStateVAE({name: _layout(train, participants, name, resolver) for name in participants},
             latent_width=config.get('latent_width', 128), hidden_width=config.get('hidden_width', 512)).to(device)
         optimizer = _vae_optimizer(vae, config)
+    policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'],
+        every_seconds=config['checkpoint_seconds'], prune_best=False)
+    if stop is None:
+        policy.install_signal_handlers()
+    else:
+        policy.stop = stop
     if config.get('snapshot_preparation'):
         if any(training.get('model_updates',{}).values()):
             raise ValueError('snapshot preparation requires a genuinely frozen-backbone parent')
@@ -823,12 +877,74 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             _qualified_snapshot(name,binding)
         training['snapshot_preparation']={'participants':{name:entry.identity for name,entry in participants.items()},
             'participant_optimizer_updates':0,'consumption':'vae-only; descendant handoff required before backbone updates'}
-    policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'],
-        every_seconds=config['checkpoint_seconds'], prune_best=False)
-    if stop is None:
-        policy.install_signal_handlers()
-    else:
-        policy.stop = stop
+        # Measure each owner's actual task baseline at the frozen source-weight
+        # boundary before any shared-stage update. A stale or absent baseline
+        # can therefore never become an activation-time guess.
+        from ..eval.task_cadence import task_eval_policy_identity
+        declarations={name:config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval'))
+            for name in participants}
+        if any(declarations.values()) and not all(declarations.values()):
+            raise ValueError('source TaskEval baseline requires an exact task policy for every participant')
+        baselines=training.setdefault('source_task_baselines',{})
+        current={}
+        missing=[]
+        for name,participant in participants.items():
+            declaration=declarations[name]
+            if not declaration:
+                continue  # Diagnostic-only callers cannot release an executable joint stage.
+            policy_sha=task_eval_policy_identity(declaration)
+            prior_baseline=baselines.get(name)
+            if (isinstance(prior_baseline,dict)
+                    and prior_baseline.get('native_identity')==participant.identity
+                    and prior_baseline.get('task_eval_policy_sha256')==policy_sha):
+                from ..eval.native_state import validate_task_execution_receipt
+                ref=prior_baseline.get('task_execution_receipt')
+                try:
+                    prior_path=_bound(ref);prior_receipt=json.loads(prior_path.read_text())
+                    valid=(sha256_file_hex_cached(prior_path)==ref.get('sha256')
+                        and validate_task_execution_receipt(prior_receipt,participant.identity)
+                        and prior_receipt.get('source_baseline') is True
+                        and prior_receipt.get('baseline_comparison_floor')==0
+                        and prior_receipt.get('task_eval_policy_sha256')==policy_sha
+                        and prior_receipt.get('task_runtime_identity')==prior_baseline.get('task_runtime_identity')
+                        and prior_receipt.get('task_successes')==prior_baseline.get('task_successes'))
+                except (OSError,ValueError,TypeError,KeyError):
+                    valid=False
+                if valid:current[name]=prior_baseline
+                else:missing.append(name)
+            else:
+                missing.append(name)
+        if missing:
+            measured=measure_tasks({name:participants[name] for name in missing},
+                {'models':{name:{'native_identity':participants[name].identity} for name in missing}},
+                config,out/'source-task-baseline',training['step'],device,
+                source_baseline=True,stop_requested=lambda:policy.signaled)
+            for name in missing:
+                result=measured.get(name)
+                if not isinstance(result,dict) or result.get('passed') is not True:
+                    if policy.signaled:break
+                    raise ValueError('source-weight TaskEval baseline is incomplete: '+name)
+                receipt_path=Path(result['path'])
+                receipt=json.loads(receipt_path.read_text())
+                if (receipt.get('source_baseline') is not True
+                        or receipt.get('native_identity')!=participants[name].identity
+                        or receipt.get('task_eval_policy_sha256')!=task_eval_policy_identity(
+                            config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval')))):
+                    raise ValueError('source-weight TaskEval baseline lost its exact identity: '+name)
+                baseline={'native_identity':participants[name].identity,
+                    'task_eval_policy_sha256':receipt['task_eval_policy_sha256'],
+                    'task_runtime_identity':receipt['task_runtime_identity'],
+                    'superseded_declared_reference':{'reference_successes':
+                        config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval')).get('reference_successes'),
+                        'reference_provenance':config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval')).get('reference_provenance')},
+                    'task_successes':receipt['task_successes'],
+                    'task_execution_receipt':{'path':str(receipt_path.resolve()),
+                        'sha256':sha256_file_hex_cached(receipt_path)},
+                    'score':{'path':receipt['score_path'],'sha256':receipt['score_sha256']}}
+                baselines[name]=baseline;current[name]=baseline
+        if any(declarations.values()) and set(current)!=set(participants) and not policy.signaled:
+            raise ValueError('source task baseline omitted an actual participant')
+        training['source_task_baselines']=current
     started_step, started = training['step'], time.time()
     trainable = {name: {key for key, value in entry.model.named_parameters() if value.requires_grad}
                  for name, entry in participants.items()}
@@ -844,6 +960,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     metrics = {}
     while not policy.signaled:
         updated = validate_config(json.loads(config_path.read_text()))
+        updated=_overlay_source_task_baselines(updated,training,participants)
         if (updated.get('snapshot_preparation',False)!=config.get('snapshot_preparation',False)
                 or updated.get('snapshot_adoption')!=config.get('snapshot_adoption')):
             raise ValueError('snapshot ownership changes require checkpointed explicit adoption and resume')
@@ -878,6 +995,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if manifest['signature'] != previous_manifest:
             cursors = {}
             previous_manifest = manifest['signature']
+        source_baseline_candidates=set(changed_models)
         for name, binding in bindings.items():
             if name in initial_bindings and binding != initial_bindings[name]:
                 raise ValueError('ready model changed while joint optimizer was active: ' + name)
@@ -885,9 +1003,56 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 participants[name] = load_participant(name, binding, config, device)
                 initial_bindings[name] = binding
                 trainable[name] = {key for key, value in participants[name].model.named_parameters() if value.requires_grad}
+                source_baseline_candidates.add(name)
             if name not in vae.layouts:
                 added = vae.add_model(name, _layout(train, participants, name, resolver))
                 optimizer.add_param_group({'params': [value for _, value in added], 'lr': config['vae_lr']})
+        if source_baseline_candidates:
+            from ..eval.task_cadence import task_eval_policy_identity
+            baselines=training.setdefault('source_task_baselines',{})
+            missing=[]
+            for name in source_baseline_candidates:
+                participant=participants[name]
+                declaration=config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval'))
+                if not declaration:
+                    if config.get('task_eval') or any((row or {}).get('task_eval') for row in config.get('models',{}).values()):
+                        raise ValueError('refreshed participant needs an exact current-weight task baseline: '+name)
+                    continue  # This run has no TaskEval policy and cannot later release a joint stage.
+                row=baselines.get(name)
+                if not (isinstance(row,dict) and row.get('native_identity')==participant.identity
+                        and row.get('task_eval_policy_sha256')==task_eval_policy_identity(declaration)):
+                    missing.append(name)
+            if missing:
+                measured=measure_tasks({name:participants[name]for name in missing},
+                    {'models':{name:{'native_identity':participants[name].identity}for name in missing}},
+                    config,out/'source-task-baseline',training['step'],device,source_baseline=True,
+                    stop_requested=lambda:policy.signaled)
+                for name in missing:
+                    result=measured.get(name)
+                    if not isinstance(result,dict)or result.get('passed')is not True:
+                        if policy.signaled:break
+                        raise ValueError('refreshed source-weight task baseline is incomplete: '+name)
+                    receipt_path=Path(result['path']);receipt=json.loads(receipt_path.read_text())
+                    declaration=config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval'))
+                    if (receipt.get('native_identity')!=participants[name].identity
+                            or receipt.get('task_eval_policy_sha256')!=task_eval_policy_identity(declaration)):
+                        raise ValueError('refreshed source baseline changed participant/task identity: '+name)
+                    old_spec=declaration
+                    baselines[name]={'native_identity':participants[name].identity,
+                        'task_eval_policy_sha256':receipt['task_eval_policy_sha256'],
+                        'task_runtime_identity':receipt['task_runtime_identity'],
+                        'superseded_declared_reference':{'reference_successes':old_spec.get('reference_successes'),
+                            'reference_provenance':old_spec.get('reference_provenance')},
+                        'task_successes':receipt['task_successes'],
+                        'task_execution_receipt':{'path':str(receipt_path.resolve()),
+                            'sha256':sha256_file_hex_cached(receipt_path)},
+                        'score':{'path':receipt['score_path'],'sha256':receipt['score_sha256']}}
+            config=_overlay_source_task_baselines(config,training,participants)
+            config_sha=canonical_json_sha256_hex(config)
+            if config_sha!=last_config:
+                training['config_history'].append({'step':training['step'],'sha256':config_sha,'config':config})
+                last_config=config_sha
+            if policy.signaled:break
         if set(participants) - set(bindings):
             raise ValueError('ready-model manifest removed an active semantic participant')
         from . import native_semantic_refresh as refresh_schedule
@@ -1169,7 +1334,36 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         numerics_ready=all(value['passed'] for value in certificates.values())
         complete = bool(not policy.signaled and exposure_complete and policy_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
     configuration = out/'completed-curriculum.json'
+    effective_config=config
+    resolved_configuration=None
+    if config.get('snapshot_preparation'):
+        baseline_rows=training.get('source_task_baselines') or {}
+        if set(baseline_rows)==set(participants):
+            effective_config=json.loads(json.dumps(config))
+            effective_config['snapshot_preparation']=False
+            effective_config.setdefault('models',{})
+            for name in participants:
+                model_spec=effective_config['models'].setdefault(name,{})
+                spec=model_spec.get('task_eval')
+                if spec is None and effective_config.get('task_eval') is not None:
+                    spec=model_spec['task_eval']=json.loads(json.dumps(effective_config['task_eval']))
+                if spec is None:
+                    raise ValueError('completed VAE preparation lacks a task policy for '+name)
+                spec['reference_successes']=baseline_rows[name]['task_successes']
+                spec['reference_provenance']={'kind':'native-source-task-baseline/1',
+                    'source_identity':baseline_rows[name]['native_identity'],
+                    'task_eval_policy_sha256':baseline_rows[name]['task_eval_policy_sha256'],
+                    'task_runtime_identity':baseline_rows[name]['task_runtime_identity'],
+                    'task_execution_receipt':baseline_rows[name]['task_execution_receipt'],
+                    'score':baseline_rows[name]['score'],
+                    'superseded_declared_reference':{'reference_successes':
+                        config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval')).get('reference_successes'),
+                        'reference_provenance':config.get('models',{}).get(name,{}).get('task_eval',config.get('task_eval')).get('reference_provenance')}}
+            resolved_configuration=out/'resolved-curriculum.json'
+            write_json_durable(resolved_configuration,effective_config)
     write_json_durable(configuration, config)
+    resolved_curriculum_path=(resolved_configuration if resolved_configuration is not None else
+        configuration if set(training.get('source_task_baselines',{}))==set(participants) else None)
     current_checks=bool(not policy.signaled and certificates and all(value['passed'] for value in certificates.values())
         and set(export['tokenizers'])==set(participants) and set(tasks)==set(participants)
         and all(value['passed'] for value in tasks.values())
@@ -1191,6 +1385,10 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         'runtime_certificates': certificates,
         'semantic_runtime_certificate':semantic_certificate,
         'task_execution_receipts': tasks,
+        'source_task_baselines':training.get('source_task_baselines',{}),
+        'source_task_baselines_complete':set(training.get('source_task_baselines',{}))==set(participants),
+        'resolved_curriculum':({'path':str(resolved_curriculum_path.resolve()),
+            'sha256':sha256_file_hex_cached(resolved_curriculum_path)}if resolved_curriculum_path is not None else None),
         'production_ready':bool((complete or refresh_reached) and current_checks),
         'task_lift': 'not-claimed', 'metrics': metrics}
     if training.get('policy_training_phase'):

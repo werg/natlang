@@ -139,12 +139,52 @@ def prepared_snapshot(tmp_path):
         handoff_lease_seconds=180)
     config=json.loads(Path(result['controller']['path']).read_text())
     directory=Path(config['semantic_out']);directory.mkdir(parents=True)
-    models=[{'model_id':name+':base','native_identity':{'fixture':'protocol only'}}for name in plans]
+    models=[{'model_id':name+':base','native_identity':{'checkpoint_sha256':('c' if name=='lfm' else 'd')*64,
+        'tokenizer_fingerprint':('e' if name=='lfm' else 'f')*64,
+        'embedding_weight_sha256':('1' if name=='lfm' else '2')*64,'architecture':name}}
+        for name in plans]
     manifest={'models':models,'signature':canonical_json_sha256_hex(models)}
     write(directory/'participants.json',manifest)
     checkpoint=directory/'checkpoint.json';write(checkpoint,{'fixture':'no model/no readiness'})
     snapshot=json.loads(Path(config['curriculum']).read_text())
     exported=directory/'completed-curriculum.json';write(exported,snapshot)
+    resolved=copy.deepcopy(snapshot);resolved['snapshot_preparation']=False
+    resolved_path=directory/'resolved-curriculum.json'
+    from natlang_neuralese.eval.native_state import task_execution_receipt
+    from natlang_neuralese.eval.task_cadence import task_eval_policy_identity,task_eval_runtime_identity
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    baselines={}
+    for row in models:
+        model_id=row['model_id'];identity=row['native_identity']
+        spec=snapshot['models'][model_id]['task_eval'];case_indices=spec['cases']
+        run=directory/('baseline-'+model_id.replace(':','-'));run.mkdir()
+        counts={outcome:0 for outcome in TASK_OUTCOMES};counts['invalid_action']=len(case_indices)
+        score={'schema':'natlang.in-run-task-eval/1','step':0,'run':str(run),'cases':len(case_indices),
+            'case_indices':case_indices,'packet_sha256':spec['packet']['sha256'],
+            'outcome_counts':counts,'complete':True,'eligible':True,'task_successes':0,
+            'cases_detail':[{'id':f'{model_id}:{index}','outcome':'invalid_action'}for index in case_indices]}
+        score_path=run/'task-score.json';write(score_path,score)
+        receipt=task_execution_receipt({key:value for key,value in score.items()if key!='cases_detail'},identity,
+            checkpoint_sha256=identity['checkpoint_sha256'])
+        policy_sha=task_eval_policy_identity(spec)
+        runtime_identity=task_eval_runtime_identity(spec)
+        receipt.update(source_baseline=True,baseline_comparison_floor=0,task_eval_policy_sha256=policy_sha,
+            task_runtime_identity=runtime_identity)
+        receipt_path=run/'native-task-execution-receipt.json';write(receipt_path,receipt)
+        baseline={'native_identity':identity,'task_eval_policy_sha256':policy_sha,
+            'task_runtime_identity':runtime_identity,'task_successes':0,
+            'task_execution_receipt':binding(receipt_path),'score':binding(score_path)}
+        baselines[model_id]=baseline
+        resolved_spec=resolved['models'][model_id]['task_eval']
+        resolved_spec['reference_successes']=0
+        resolved_spec['reference_provenance']={'kind':'native-source-task-baseline/1',
+            'source_identity':identity,'task_eval_policy_sha256':policy_sha,
+            'task_execution_receipt':baseline['task_execution_receipt'],
+            'task_runtime_identity':runtime_identity,'score':baseline['score'],
+            'superseded_declared_reference':{'reference_successes':spec.get('reference_successes'),
+                'reference_provenance':spec.get('reference_provenance')}}
+    write(resolved_path,resolved)
+    completion_task_baselines=baselines
     adapter=directory/'semantic-adapter.json';write(adapter,{'schema':'natlang.native-semantic-adapter/1',
         'checkpoint':binding(checkpoint)})
     completion=directory/'shared-stage-completion.json';write(completion,{
@@ -152,7 +192,8 @@ def prepared_snapshot(tmp_path):
         'preparation_complete':True,'snapshot_preparation':{'participant_optimizer_updates':0,
             'participants':{row['model_id']:row['native_identity']for row in models}},
         'participants_signature':manifest['signature'],'curriculum_signature':canonical_json_sha256_hex(snapshot),
-        'checkpoint':binding(checkpoint),'curriculum':binding(exported),'adapter':binding(adapter)})
+        'checkpoint':binding(checkpoint),'curriculum':binding(exported),'adapter':binding(adapter),
+        'source_task_baselines':completion_task_baselines,'resolved_curriculum':binding(resolved_path)})
     return config,completion,plans
 
 
@@ -167,6 +208,9 @@ def test_preparation_requests_real_descendants_then_uses_existing_adoption_resum
     plan=json.loads(Path(config['raw_rl_bootstrap']['path']).read_text())
     request=json.loads(Path(waiting['awaiting_descendant_handoff']['path']).read_text())
     assert roles.validate_handoff_request(plan,request)==request
+    handoff_curriculum=roles._evidence(request['joint_curriculum'])
+    assert handoff_curriculum['models']['lfm:base']['task_eval']['reference_successes']==0
+    assert handoff_curriculum['models']['mellum:base']['task_eval']['reference_successes']==0
     # The independent role protocol tests validate real releases. This assertion
     # measures exact executable resume plumbing, not a synthetic release claim.
     descendants=[{'model_id':name+':base','source_role_release':binding(Path(ref['path']))}for name,ref in plans.items()]
@@ -180,6 +224,7 @@ def test_preparation_requests_real_descendants_then_uses_existing_adoption_resum
     assert adopted['rl_bootstrap']==config['snapshot_successor']['rl_bootstrap']
     full=json.loads(Path(adopted['curriculum']).read_text())
     assert full['snapshot_preparation'] is False
+    assert full['models']['lfm:base']['task_eval']['reference_successes']==0
     assert full['snapshot_adoption']['releases']==[row['source_role_release']for row in descendants]
     assert full['phases']==json.loads(Path(config['snapshot_successor']['curriculum']['path']).read_text())['phases']
     assert completion.is_file()  # No overwrite/adoption of historical optimizer state.
@@ -230,7 +275,9 @@ def test_two_provider_handoff_lease_expiry_cancels_hold_without_any_training_cre
     with pytest.raises(ValueError):roles.renew_handoff(plan,request,{'mellum':offers['mellum']},expires_at=time.time()+180,attempt=attempt)
     roles.cancel_handoff(plan,request)
     assert roles.handoff_active(plan)is None and not roles.handoff_hold(plan)
-    roles.renew_handoff(plan,request,offers,expires_at=time.time()+.01,attempt=attempt)
+    # Baseline evidence is revalidated on every renewal; allow that exact
+    # read-only verification to finish before testing expiry.
+    roles.renew_handoff(plan,request,offers,expires_at=time.time()+60,attempt=attempt)
     later=time.time()+300
     monkeypatch.setattr(roles.time,'time',lambda:later)
     assert roles.handoff_active(plan)is None and not roles.handoff_hold(plan)
@@ -312,6 +359,19 @@ def test_joint_task_specs_preserve_distinct_declared_floors_and_reject_global_su
     with pytest.raises(ValueError,match='explicit participant'):validate_joint_task_specs(value,['lfm:base','mellum:base'])
     value=copy.deepcopy(before);value['models']['mellum:base']['task_eval']['reference_successes']=None
     with pytest.raises(ValueError,match='undeclared'):validate_joint_task_specs(value,['lfm:base','mellum:base'])
+
+
+def test_prepare_only_task_policy_allows_only_explicit_unmeasured_baseline(tmp_path):
+    from natlang_neuralese.train.native_deployment import validate_joint_task_specs
+    _,_,path,_,_,_=source(tmp_path);value=json.loads(path.read_text())
+    value['models']['mellum:base']['task_eval'].update(reference_successes=None,min_successes=0)
+    assert validate_joint_task_specs(value,['lfm:base','mellum:base'],
+        allow_pending_baseline=True)==value
+    with pytest.raises(ValueError,match='undeclared'):
+        validate_joint_task_specs(value,['lfm:base','mellum:base'])
+    del value['models']['mellum:base']['task_eval']['min_successes']
+    with pytest.raises(ValueError,match='undeclared'):
+        validate_joint_task_specs(value,['lfm:base','mellum:base'],allow_pending_baseline=True)
 
 
 def test_preparation_relay_checks_complete_semantic_closure_before_requesting_consumer_release(tmp_path,monkeypatch):

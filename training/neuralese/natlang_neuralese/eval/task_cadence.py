@@ -207,6 +207,45 @@ def parse_task_eval(value):
     return spec
 
 
+def task_eval_runtime_identity(value):
+    """Bind the actual task collector, built TS entry and executing Python modules."""
+    from ..common.paths import root as logical_root
+    from ..common.hashing import sha256_file_hex_cached
+    repo=logical_root('repo').resolve(strict=True)
+    runtime=Path(value.get('runtime') or repo/'ts-host').resolve(strict=True)
+    paths=[repo/'scripts/run_bonsai_queue.py',runtime/'dist/teacher/cli.js',
+        Path(__file__).resolve(),Path(__file__).resolve().parent/'native_state.py',
+        Path(__file__).resolve().parents[1]/'train/native_semantic_stage.py',
+        Path(__file__).resolve().parents[1]/'serve/engine.py',
+        Path(__file__).resolve().parents[1]/'serve/http.py',
+        Path(__file__).resolve().parents[1]/'model/shared_state.py']
+    files=[]
+    for path in paths:
+        path=path.resolve(strict=True)
+        files.append({'path':str(path),'bytes':path.stat().st_size,
+            'sha256':sha256_file_hex_cached(path)})
+    return {'schema':'natlang.task-eval-runtime-identity/1','repo':str(repo),
+        'runtime':str(runtime),'code_commit':_git_head(),'files':files}
+
+
+def task_eval_policy_identity(value):
+    """Hash the exact task execution contract, excluding only its comparison baseline.
+
+    A baseline is meaningful only for the same packet, selected cases, prompt
+    policy, collector budgets and runtime options. The reference count and its
+    provenance are outputs of baseline measurement, so they are excluded.
+    """
+    from ..common.hashing import canonical_json_sha256_hex
+    spec = parse_task_eval(value)
+    if spec is None:
+        raise ValueError('task evaluation policy identity requires a task_eval declaration')
+    normalized = dict(spec)
+    normalized.pop('reference_successes', None)
+    normalized.pop('reference_provenance', None)
+    normalized['runtime_identity']=task_eval_runtime_identity(spec)
+    return canonical_json_sha256_hex(normalized)
+
+
 def node_path_env() -> dict:
     """Environment with a ``node`` on PATH (training containers mount the host's /home but ship no node)."""
     env = dict(os.environ)

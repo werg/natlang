@@ -254,7 +254,9 @@ class FileProtocolIO:
         self.config={'sandboxes':{}}
         self.collector_assets={}
         for name,row in rows.items():
-            runtime=Path(row['path'])/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
+            root=Path(row['path'])
+            runtime=(root.parent/'runtime') if root.is_file() else root/'runtime'
+            script=runtime/'scripts/run_bonsai_queue.py'
             script.parent.mkdir(parents=True,exist_ok=True);script.write_text('# fixture collector\n')
             self.config['sandboxes'][name+'-actual-sid']={'runtime':str(runtime)}
             self.collector_assets[name]={'path':str(script),'kind':'task-source-file',
@@ -670,6 +672,63 @@ def test_historical_eligibility_cannot_release_and_fresh_descendant_pause_needs_
         torch.save({'model':actors[name].model.state_dict(),'optimizer':optimizers[name].state_dict(),
             'rng':torch.get_rng_state(),'earned_updates':0},path)
         install_checkpoint(row,path)
+    # The actual role contract in this test uses full model IDs, so bind the
+    # prepared task baseline to those exact source identities before validating
+    # the rendezvous. This remains protocol evidence, not numerical readiness.
+    preparation=roles._evidence(request['preparation'])
+    from natlang_neuralese.train.native_readiness import _bound
+    source_path=_bound(preparation['curriculum'])
+    source_config=json.loads(source_path.read_text())
+    resolved_path=_bound(preparation['resolved_curriculum'])
+    resolved_config=json.loads(resolved_path.read_text())
+    source_models={};resolved_models={};baseline_rows={};snapshot_participants={}
+    from natlang_neuralese.eval.native_state import task_execution_receipt
+    from natlang_neuralese.eval.task_cadence import task_eval_policy_identity,task_eval_runtime_identity
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    for name,row in rows.items():
+        model_id=next(item for item in row['plan']['models']if item['model']==name)['handoff_requirement']['model_id']
+        identity=row['receipt']['native_identity']
+        source_spec=copy.deepcopy(source_config['models'][name+':base']['task_eval'])
+        resolved_spec=copy.deepcopy(resolved_config['models'][name+':base']['task_eval'])
+        source_models[model_id]={'task_eval':source_spec}
+        run=tmp_path/('rebased-baseline-'+name);run.mkdir()
+        indices=source_spec['cases'];counts={outcome:0 for outcome in TASK_OUTCOMES}
+        counts['invalid_action']=len(indices)
+        score={'schema':'natlang.in-run-task-eval/1','step':0,'run':str(run),'cases':len(indices),
+            'case_indices':indices,'packet_sha256':source_spec['packet']['sha256'],
+            'outcome_counts':counts,'complete':True,'eligible':True,'task_successes':0,
+            'cases_detail':[{'id':f'{model_id}:{index}','outcome':'invalid_action'}for index in indices]}
+        score_path=run/'task-score.json';write_json_durable(score_path,score)
+        summary={key:value for key,value in score.items()if key!='cases_detail'}
+        receipt=task_execution_receipt(summary,identity,checkpoint_sha256=identity['checkpoint_sha256'])
+        policy_sha=task_eval_policy_identity(source_spec);runtime=task_eval_runtime_identity(source_spec)
+        receipt.update(source_baseline=True,baseline_comparison_floor=0,
+            task_eval_policy_sha256=policy_sha,task_runtime_identity=runtime)
+        receipt_path=run/'native-task-execution-receipt.json';write_json_durable(receipt_path,receipt)
+        baseline={'native_identity':identity,'task_eval_policy_sha256':policy_sha,
+            'task_runtime_identity':runtime,'task_successes':0,
+            'task_execution_receipt':roles.binding(receipt_path),'score':roles.binding(score_path)}
+        baseline_rows[model_id]=baseline;snapshot_participants[model_id]=identity
+        resolved_spec['reference_successes']=0
+        resolved_spec['reference_provenance']={'kind':'native-source-task-baseline/1',
+            'source_identity':identity,'task_eval_policy_sha256':policy_sha,
+            'task_execution_receipt':baseline['task_execution_receipt'],
+            'task_runtime_identity':runtime,'score':baseline['score'],
+            'superseded_declared_reference':{'reference_successes':source_spec.get('reference_successes'),
+                'reference_provenance':source_spec.get('reference_provenance')}}
+        resolved_models[model_id]={'task_eval':resolved_spec}
+    source_config['models']=source_models;resolved_config['models']=resolved_models
+    source_path.write_text(json.dumps(source_config,sort_keys=True)+'\n')
+    resolved_path.write_text(json.dumps(resolved_config,sort_keys=True)+'\n')
+    preparation['curriculum']=roles.binding(source_path)
+    preparation['resolved_curriculum']=roles.binding(resolved_path)
+    preparation['source_task_baselines']=baseline_rows
+    preparation['snapshot_preparation']['participants']=snapshot_participants
+    # Rebind the inline preparation after changing its proof files.
+    prep_path=tmp_path/'rebased-preparation.json';write_json_durable(prep_path,preparation)
+    request['preparation']=roles._inline(roles.binding(prep_path))
+    request['joint_curriculum']=roles._inline(roles.binding(resolved_path))
+    request['joint_controller']['curriculum']=request['joint_curriculum']['source']
     monkeypatch.setattr(roles,'pin_checkpoint',lambda reference,directory:roles.binding(reference['path']))
     for name,row in rows.items():
         row['plan']['snapshot_preparation']=True
@@ -780,6 +839,8 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
     consumer['config']['raw_rl_bootstrap']=raw.binding(consumer['plan_path'])
     _,_,curriculum,_,_,_=source(tmp_path/'semantic-inputs')
     config=json.loads(curriculum.read_text());config['snapshot_preparation']=True
+    config['models']={row['handoff_requirement']['model_id']:{'task_eval':
+        config['models'][row['model']+':base']['task_eval']}for row in plan['models']}
     from natlang_neuralese.train.native_semantic_stage import validate_config
     config=validate_config(config)
     write_json_durable(curriculum,config)
@@ -856,20 +917,58 @@ def test_consumer_allocation_handoff_requires_staged_snapshots_and_dead_owner_th
         active=roles.arm_preparation_handoff(plan,request,binding(curriculum))
         assert active
         full=json.loads(curriculum.read_text());full['snapshot_preparation']=False
-        full['models']={row['handoff_requirement']['model_id']:{'task_eval':{
-            **full['models'][row['model']+':base']['task_eval']}}for row in plan['models']}
+        full['models']={row['handoff_requirement']['model_id']:{'task_eval':
+            full['models'][row['handoff_requirement']['model_id']]['task_eval']}for row in plan['models']}
         joint=tmp_path/'actual-joint.json';write_json_durable(joint,full)
         checkpoint=tmp_path/'vae.pt';checkpoint.write_text('protocol VAE checkpoint')
         adapter=tmp_path/'vae-adapter.json';write_json_durable(adapter,{
             'schema':'natlang.native-semantic-adapter/1','checkpoint':binding(checkpoint)})
+        resolved=copy.deepcopy(config);resolved['snapshot_preparation']=False
+        participant_identities={}
+        for name,value in request['participants'].items():
+            participant_identities[name]={'checkpoint_sha256':value['checkpoint']['sha256'],
+                'tokenizer_fingerprint':('a' if name=='lfm:base' else 'b')*64,
+                'embedding_weight_sha256':('c' if name=='lfm:base' else 'd')*64,
+                'architecture':name.split(':',1)[0]}
+        from natlang_neuralese.eval.native_state import task_execution_receipt
+        from natlang_neuralese.eval.task_cadence import task_eval_policy_identity,task_eval_runtime_identity
+        from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+        task_baselines={}
+        for name,identity in participant_identities.items():
+            spec=config['models'][name]['task_eval'];run=tmp_path/('baseline-'+name.replace(':','-'));run.mkdir()
+            indices=spec['cases'];counts={outcome:0 for outcome in TASK_OUTCOMES};counts['invalid_action']=len(indices)
+            score={'schema':'natlang.in-run-task-eval/1','step':0,'run':str(run),'cases':len(indices),
+                'case_indices':indices,'packet_sha256':spec['packet']['sha256'],'outcome_counts':counts,
+                'complete':True,'eligible':True,'task_successes':0,
+                'cases_detail':[{'id':f'{name}:{index}','outcome':'invalid_action'}for index in indices]}
+            score_path=run/'task-score.json';write_json_durable(score_path,score)
+            receipt=task_execution_receipt({key:value for key,value in score.items()if key!='cases_detail'},identity,
+                checkpoint_sha256=identity['checkpoint_sha256'])
+            policy_sha=task_eval_policy_identity(spec)
+            runtime_identity=task_eval_runtime_identity(spec)
+            receipt.update(source_baseline=True,baseline_comparison_floor=0,task_eval_policy_sha256=policy_sha,
+                task_runtime_identity=runtime_identity)
+            receipt_path=run/'native-task-execution-receipt.json';write_json_durable(receipt_path,receipt)
+            baseline={'native_identity':identity,'task_eval_policy_sha256':policy_sha,
+                'task_runtime_identity':runtime_identity,
+                'task_successes':0,'task_execution_receipt':binding(receipt_path),'score':binding(score_path)}
+            task_baselines[name]=baseline
+            resolved_spec=resolved['models'][name]['task_eval'];resolved_spec['reference_successes']=0
+            resolved_spec['reference_provenance']={'kind':'native-source-task-baseline/1',
+                'source_identity':identity,'task_eval_policy_sha256':policy_sha,
+                'task_execution_receipt':baseline['task_execution_receipt'],
+                'task_runtime_identity':runtime_identity,'score':baseline['score'],
+                'superseded_declared_reference':{'reference_successes':spec.get('reference_successes'),
+                    'reference_provenance':spec.get('reference_provenance')}}
+        resolved_path=tmp_path/'resolved-curriculum.json';write_json_durable(resolved_path,resolved)
         complete=tmp_path/'frozen-complete.json';write_json_durable(complete,{
             'schema':'natlang.native-shared-stage-completion/1','completed':False,
             'production_ready':False,'preparation_complete':True,
             'snapshot_preparation':{'participant_optimizer_updates':0,'participants':{
-                name:{'checkpoint_sha256':value['checkpoint']['sha256']}
-                for name,value in request['participants'].items()}},
+                name:identity for name,identity in participant_identities.items()}},
             'participants_signature':'fixture','curriculum_signature':canonical_json_sha256_hex(config),
-            'curriculum':binding(curriculum),'checkpoint':binding(checkpoint),'adapter':binding(adapter)})
+            'curriculum':binding(curriculum),'checkpoint':binding(checkpoint),'adapter':binding(adapter),
+            'source_task_baselines':task_baselines,'resolved_curriculum':binding(resolved_path)})
         post=roles.post_vae_request(plan,binding(complete),{'curriculum':binding(joint)})
         handoff=json.loads(Path(post['path']).read_text())
         assert roles.handoff_matches_preparation_work(plan,handoff,binding(curriculum))

@@ -28,7 +28,7 @@ def binding(path, expected=None):
     return value
 
 
-def validate_joint_task_specs(curriculum, model_ids):
+def validate_joint_task_specs(curriculum, model_ids, *, allow_pending_baseline=False):
     """Never substitute one participant's task baseline for another's policy."""
     from ..eval.task_cadence import parse_task_eval
     for name in model_ids:
@@ -37,7 +37,9 @@ def validate_joint_task_specs(curriculum, model_ids):
             raise ValueError('joint curriculum requires explicit participant task policy: '+name)
         spec=parse_task_eval(json.dumps(declaration))
         if spec['reference_successes'] is None:
-            raise ValueError('joint participant task reference/floor is undeclared: '+name)
+            declaration_floor=declaration.get('min_successes')
+            if not (allow_pending_baseline and type(declaration_floor)is int and declaration_floor>=0):
+                raise ValueError('joint participant task reference/floor is undeclared: '+name)
         _bound(spec['packet'])
     return curriculum
 
@@ -81,16 +83,27 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
         sid=exchange['roles'][name]['source_host_id']
         if sid not in provider_hosts:
             raise ValueError('role scheduler cannot allocate or substitute a source host')
-        control_path=Path(binding(controls[name]['path'],controls[name])['path'])
-        spec=json.loads(control_path.read_text())
-        if spec.get('model')!=name or not spec.get('controller'):
-            raise ValueError('role scheduling lost its actual publishing controller')
-        binding(spec['controller']['path'],spec['controller'])
-        package=Path(spec['numerical_package']).resolve(strict=True)
-        if provider_hosts[sid]['runtime']!=str(package.parents[2]):
-            raise ValueError('role provider runtime differs from its actual publishing controls')
-        provider_hosts[sid]['role_controls']={**controls[name],
-            'bytes':control_path.stat().st_size}
+        control_ref=controls[name]
+        if control_ref is None:
+            # Current local-cycle owners publish directly through the exact
+            # source runtime's native_role_release validators. They have no
+            # sealed role-controller/publisher overlay to bind. Keep this
+            # explicit path distinct from raw-round owners, which still need
+            # their independently reviewed controller closure.
+            if not plan.get('local_cycle_source'):
+                raise ValueError('only a fully bound local-cycle owner may omit role controls')
+            provider_hosts[sid].pop('role_controls',None)
+        else:
+            control_path=Path(binding(control_ref['path'],control_ref)['path'])
+            spec=json.loads(control_path.read_text())
+            if spec.get('model')!=name or not spec.get('controller'):
+                raise ValueError('role scheduling lost its actual publishing controller')
+            binding(spec['controller']['path'],spec['controller'])
+            package=Path(spec['numerical_package']).resolve(strict=True)
+            if provider_hosts[sid]['runtime']!=str(package.parents[2]):
+                raise ValueError('role provider runtime differs from its actual publishing controls')
+            provider_hosts[sid]['role_controls']={**control_ref,
+                'bytes':control_path.stat().st_size}
         state=Path(raw_states[name])
         if not state.is_absolute() or '..'in state.parts:
             raise ValueError('role scheduler needs each explicit actual RAW state path')
@@ -102,7 +115,8 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     if semantic.get('policy_training'):
         raise ValueError('new snapshot preparation cannot inherit an unrelated policy episode batch')
     for key in ('pairs','held_pairs'):_bound(semantic[key])
-    validate_joint_task_specs(semantic,[row['handoff_requirement']['model_id']for row in owned_rows.values()])
+    validate_joint_task_specs(semantic,[row['handoff_requirement']['model_id']for row in owned_rows.values()],
+        allow_pending_baseline=True)
     if not semantic.get('task_eval') or not semantic.get('policy_schedule'):
         raise ValueError('joint scheduling needs actual task checks and whole-graph policy cadence')
     if type(handoff_lease_seconds)not in(int,float) or not 30<handoff_lease_seconds:
@@ -165,12 +179,15 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     if any(local_cycle_sources):
         if not all(local_cycle_sources):
             raise ValueError('shared semantic return requires both actual local-cycle source owners')
-        directories={plan['role_exchange']['directory']for plan in loaded.values()}
-        if len(directories)!=1:
-            raise ValueError('local-cycle owners need one exact shared return exchange namespace')
+        directories={role:plan['role_exchange']['directory']for role,plan in loaded.items()}
         local_cycle_returns={'schema':'natlang.native-local-cycle-return-transport/1',
             'consumer':consumer,'completion_path':str(out/'semantic'/'joint'/'shared-stage-completion.json'),
-            'directory':next(iter(directories)),'role_plans':source_plans}
+            # Each current owner writes proof and return pointers into its own
+            # filesystem namespace. The relay already addresses each host's
+            # path through that role's plan; a single shared pathname is not
+            # valid across DGX and CoreWeave.
+            'directory':directories[consumer],'role_directories':directories,
+            'role_plans':source_plans}
     write_json_durable(controller,{'schema':'natlang.native-shared-stage-controller/1',
         'out':str(out/'semantic'),'semantic_out':str(out/'semantic/preparation'),
         'curriculum':str(curriculum),'poll_seconds':60,

@@ -102,6 +102,43 @@ def test_asset_preflight_verifies_content_not_directory_existence(tmp_path):
     with pytest.raises(ValueError,match='asset content differs'):
         deps.verify_assets(closure['assets'])
 
+
+def test_shared_checkpoint_custodies_current_source_task_baseline_and_runtime(tmp_path):
+    import torch
+    from natlang_neuralese.eval.native_state import task_execution_receipt
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    identity={'checkpoint_sha256':'a'*64,'tokenizer_fingerprint':'b'*64,
+        'embedding_weight_sha256':'c'*64,'architecture':'lfm2'}
+    run=tmp_path/'baseline';run.mkdir()
+    packet='d'*64;counts={name:0 for name in TASK_OUTCOMES};counts['invalid_action']=1
+    score={'schema':'natlang.in-run-task-eval/1','step':0,'run':str(run),'cases':1,'case_indices':[0],
+        'packet_sha256':packet,'outcome_counts':counts,'complete':True,'eligible':True,'task_successes':0,
+        'cases_detail':[{'id':'case-0','outcome':'invalid_action'}]}
+    score_path=run/'task-score.json';write(score_path,score)
+    receipt=task_execution_receipt({key:value for key,value in score.items()if key!='cases_detail'},identity,
+        checkpoint_sha256=identity['checkpoint_sha256'])
+    runtime_file=write(tmp_path/'runtime-module.py','runtime code bytes\n')
+    runtime={'schema':'natlang.task-eval-runtime-identity/1','repo':str(tmp_path),
+        'runtime':str(tmp_path/'ts-host'),'code_commit':'e'*40,'files':[runtime_file]}
+    receipt.update(source_baseline=True,baseline_comparison_floor=0,
+        task_eval_policy_sha256='f'*64,task_runtime_identity=runtime)
+    receipt_path=run/'native-task-execution-receipt.json';write(receipt_path,receipt)
+    baseline={'native_identity':identity,'task_successes':0,'task_eval_policy_sha256':'f'*64,
+        'task_runtime_identity':runtime,'task_execution_receipt':write(receipt_path,receipt),
+        'score':write(score_path,score)}
+    checkpoint=tmp_path/'checkpoint.pt'
+    torch.save({'schema':'natlang.neuralese-native-checkpoint/1',
+        'training':{'source_task_baselines':{'lfm:base':baseline}}},checkpoint)
+    checkpoint_ref={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint),
+        'bytes':checkpoint.stat().st_size}
+    closure=deps.dependency_closure({'parent_checkpoint':checkpoint_ref},namespace=str(tmp_path))
+    files={row['path']:row for row in closure['files']}
+    assert receipt_path.as_posix() in files and score_path.as_posix() in files
+    assert runtime_file['path'] in files
+    runtime_path=Path(runtime_file['path']);runtime_path.write_text('runtime changed\n')
+    with pytest.raises(ValueError,match='hash changed'):
+        deps.dependency_closure({'parent_checkpoint':checkpoint_ref},namespace=str(tmp_path))
+
 def test_config_cycle_and_external_payloads_fail_before_launch(tmp_path):
     path=tmp_path/'config.json';config=write(path,{'semantic_refresh_config':str(path)})
     with pytest.raises(ValueError,match='cycle'):

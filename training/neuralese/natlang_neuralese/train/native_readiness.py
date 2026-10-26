@@ -369,6 +369,8 @@ def snapshot_successor(config,out):
         'workdir':config.get('workdir'),'out':str(Path(out)/'joint')}
     reference=roles.post_vae_request(plan,{'path':str(completion.resolve()),
         'sha256':sha256_file_hex_cached(completion)},controller)
+    handoff=json.loads(_bound(reference).read_text())
+    full=roles._evidence(handoff['joint_curriculum'])
     _,exchange=roles.ownership(plan)
     write_json_durable(Path(exchange['directory'])/'post-vae-handoff.json',reference)
     # The relay now arms both real owners. Historical preparation is not a
