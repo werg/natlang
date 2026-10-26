@@ -26,28 +26,37 @@ LLAMA_CPP = Path(__file__).resolve().parents[4] / 'vendor' / 'llama.cpp'
 
 @dataclass(frozen=True)
 class ModuleTarget:
-    hf_module: str           # may contain '{expert}' for a batched expert bank
+    # May contain '{expert}' for a batched expert bank. A tuple names the HF modules of a fused native matrix whose
+    # output rows are their equal-size concatenation (Mellum gate_up = [gate_proj; up_proj]); each part keeps the
+    # shared A, so the split is exact.
+    hf_module: str | tuple[str, ...]
     orientation: str = 'out_in'  # native weight layout: 'out_in' (nn.Linear) or 'in_out'
 
 
 def _modules(name, factors, target):
-    """Yield ``(hf_module, lora_A (r, in), lora_B (out, r))`` per expert."""
+    """Yield ``(hf_module, lora_A (r, in), lora_B (out, r))`` per expert and fused part."""
     B, A = factors.B.detach().float().cpu(), factors.A.detach().float().cpu()
     if target.orientation == 'in_out':
         B, A = A.transpose(-2, -1), B.transpose(-2, -1)
     elif target.orientation != 'out_in':
         raise TuneMathError(f'unknown orientation for {name}: {target.orientation}')
-    if B.ndim == 2:
-        if '{expert}' in target.hf_module:
-            raise TuneMathError(f'{name} is a single matrix but its module template is per expert')
-        yield target.hf_module, A, B
-    elif B.ndim == 3:
-        if '{expert}' not in target.hf_module:
-            raise TuneMathError(f'{name} is an expert bank; its module template needs an {{expert}} field')
-        for expert in range(B.shape[0]):
-            yield target.hf_module.format(expert=expert), A[expert], B[expert]
-    else:
-        raise TuneMathError(f'unsupported target rank layout for {name}')
+    templates = target.hf_module if isinstance(target.hf_module, tuple) else (target.hf_module,)
+    if not templates or B.shape[-2] % len(templates):
+        raise TuneMathError(f'{name} rows do not split evenly into its fused HF modules')
+    part = B.shape[-2] // len(templates)
+    for index, template in enumerate(templates):
+        rows = B[..., index * part:(index + 1) * part, :]
+        if B.ndim == 2:
+            if '{expert}' in template:
+                raise TuneMathError(f'{name} is a single matrix but its module template is per expert')
+            yield template, A, rows
+        elif B.ndim == 3:
+            if '{expert}' not in template:
+                raise TuneMathError(f'{name} is an expert bank; its module template needs an {{expert}} field')
+            for expert in range(B.shape[0]):
+                yield template.format(expert=expert), A[expert], rows[expert]
+        else:
+            raise TuneMathError(f'unsupported target rank layout for {name}')
 
 
 def export_peft(stack, module_map, out_dir, *, base_identity, base_model_name_or_path, lora_alpha=1.0, stack_identity=None):

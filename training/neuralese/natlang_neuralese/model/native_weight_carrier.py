@@ -417,8 +417,10 @@ class ParameterCotangentScope:
                     delta, coefficient = item
                 else:
                     delta, coefficient = item, None
+                # A free-LoRA delta names both of its factors; it is routed if either is targeted.
+                sources = coefficient if isinstance(coefficient, tuple) else (coefficient,)
                 if (coefficient is not None and self.auxiliary_target_ids is not None
-                        and id(coefficient) not in self.auxiliary_target_ids):
+                        and not any(id(source) in self.auxiliary_target_ids for source in sources)):
                     continue
                 if delta.requires_grad:
                     delta_entries.append(self._register_auxiliary(f'effective-delta-{index}', delta))
