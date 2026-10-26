@@ -222,6 +222,9 @@ test('a tuned release loads into the in-page model and each request applies only
     assert.ok(requests.every(request => request.lora.length === tree.length), 'every loaded adapter is listed on every request');
     assert.deepEqual(on(outer).sort(), ['tree:', lambda('outer.nl')].sort());
     assert.deepEqual(on(inner).sort(), ['folder:outer', 'tree:', lambda('outer/inner.nl')].sort(), 'the callee runs its own stack, not the caller\'s');
+    // After the task finished, a direct model call outside any task runs the base: no adapter scale leaks from it.
+    await model.turn({ messages: [{ role: 'user', content: 'direct' }], tools: [], temperature: 0, seed: null, max_tokens: 4 });
+    assert.deepEqual(on(requests.at(-1)), []);
   } finally { runtime.close(); await model.close(); }
 
   // A wllama build that cannot load LoRA blobs refuses the adapters instead of loading them as model shards.
@@ -288,4 +291,59 @@ test('tuned release adapters are cached in OPFS by content hash and re-fetched w
   assert.deepEqual(new Uint8Array(stored.get(key)), familyBytes);
   await removeCachedModelFiles([{ url: 'x', sha256: hexDigest(familyBytes) }], { storage });
   assert.equal(stored.has(key), false);
+});
+
+test('a tuned release\'s soft states load into the in-page model as native state spans and prompts carry them as parts', async () => {
+  const api = await browserApi();
+  const host = await import('../dist/index.js');
+  const { hexDigest } = await import('../dist/native/hash.js');
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
+  const project = api.compileVirtualProject({ files: { 'echo.nl': named('Return value.'), 'main.ts': "import echo from './echo.nl'; export default echo;" } }, api);
+  const program = project.manifest.adaptation;
+  const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+  const baseGguf = 'b'.repeat(64), state = 'nzs1_' + 'a'.repeat(52);
+  const { tree, bindings } = host.compileScopeTree(program);
+  const files = new Map([[`exports/${state}.state.gguf`, new TextEncoder().encode('span')]]);
+  const gguf = (file, bind = baseGguf) => ({ file, sha256: hexDigest(files.get(file)), baseGgufSha256: bind });
+  const binding = bindings.find(item => item.component.endsWith('echo.nl::instructions'));
+  const sealed = bind => host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
+    artifacts: [], families: [], memberships: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {},
+    softStates: [{ binding: binding.id, kind: 'instructions', target: null, state, textSha256: hexDigest('Return value.\n'), tokens: 3,
+      exports: { gguf: gguf(`exports/${state}.state.gguf`, bind) } }] });
+  let manifest = sealed(baseGguf);
+  const fetch = async url => { const path = new URL(url).pathname.replace('/release/', '');
+    const bytes = path === 'natlang.adapters.json' ? new TextEncoder().encode(JSON.stringify(manifest)) : files.get(path);
+    return bytes ? new Response(bytes) : new Response('missing', { status: 404 }); };
+  const release = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
+  assert.deepEqual(release.nativeStates.map(item => item.id), [state]);
+  assert.equal(await release.nativeStates[0].blob.text(), 'span');
+  assert.equal(release.weights[0].resolve('', binding.component, null).soft.instructions.state, state, 'the binding is served with its state');
+
+  let params; const requests = [];
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { loraBlobs: true, nativeStates: true },
+    async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
+    async createChatCompletion(request) { requests.push(request); return { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }; } };
+  const engine = { engine: fake, gpuProbe: async () => ({ usable: false, reason: 'test' }) };
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine, gpuLayers: 0, nativeStates: release.nativeStates });
+  assert.deepEqual(params.native_states, [{ blob: release.nativeStates[0].blob }]);
+  try {
+    await model.turn({ messages: [{ role: 'system', content: `Rules: ${nativeStateSentinel(state)} end` }, { role: 'user', content: 'plain' }],
+      tools: [], temperature: 0, seed: null, max_tokens: 4 });
+    assert.deepEqual(requests[0].messages[0].content, [{ type: 'text', text: 'Rules: ' }, { type: 'native_state', id: state }, { type: 'text', text: ' end' }]);
+    assert.equal(requests[0].messages[1].content, 'plain');
+    // A state the page did not load is never sent as text.
+    await assert.rejects(model.turn({ messages: [{ role: 'user', content: nativeStateSentinel('nzs1_' + 'b'.repeat(52)) }],
+      tools: [], temperature: 0, seed: null, max_tokens: 4 }), /weights-unavailable: native state/);
+  } finally { await model.close(); }
+
+  // A wllama build without native-state import refuses the states; a release whose states bind another base runs degraded.
+  await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine: { ...engine, engine: { ...fake, capabilities: { loraBlobs: true }, isModelLoaded: () => false } }, gpuLayers: 0, nativeStates: release.nativeStates }),
+  /weights-unavailable: this wllama build cannot load native states/);
+  manifest = sealed('d'.repeat(64));
+  const other = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base, storage: null });
+  assert.equal(other.nativeStates.length, 0);
+  assert.equal(other.weights[0].resolve('', binding.component, null).status, 'degraded');
 });

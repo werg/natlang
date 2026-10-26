@@ -11,7 +11,7 @@ import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import type { NativeReviewOptions } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
-import { NatlangContextError, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
+import { NatlangContextError, SlotContextStore, contextStore, currentFrame, runInFrame, type DecisionReadout, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 import type { CallStoreLike } from '../calls/recorder.js';
 import { CompilationCache } from '../calls/compilations.js';
@@ -168,10 +168,12 @@ export function setDefaultCallStoreFactory(factory: () => CallStoreLike | undefi
 /** Installed by the Node and browser entry points. */
 export function setDefaultEnvironmentFactory(factory: (options: NatlangRuntimeOptions) => EvalEnvironment): void { defaultEnvironment = factory; }
 
-// Model drivers read the current invocation's tuned stack from its frame (Node and browser alike).
+// Model drivers read the current invocation's tuned stack from its frame (Node and browser alike). A finished task's
+// frame left in the browser's slot never lends its stack to later model calls.
+const liveFrame = () => { const frame = currentFrame(); return frame && !frame.task.isClosed ? frame : undefined; };
 const lexicalAdapters = new WeakMap<object, readonly NativeAdapterBinding[]>();
 setLexicalNativeAdapterSource(() => {
-  const stack = currentFrame()?.weights;
+  const stack = liveFrame()?.weights;
   if (!stack?.effective.length) return undefined;
   let adapters = lexicalAdapters.get(stack);
   if (!adapters) lexicalAdapters.set(stack, adapters = Object.freeze(stack.effective.map(({ id, scale }) => Object.freeze({ id, scale }))));
@@ -179,7 +181,7 @@ setLexicalNativeAdapterSource(() => {
 });
 
 setLexicalSoftStateSource(() => {
-  const soft = currentFrame()?.weights?.soft;
+  const soft = liveFrame()?.weights?.soft;
   return soft ? [...(soft.instructions ? [soft.instructions.state] : []), ...Object.values(soft.skills).map(use => use.state)] : undefined;
 });
 
@@ -469,8 +471,13 @@ export class NatlangRuntime {
     if (this.closed) throw new Error('natlang runtime is closed');
     const task = new NatlangTask(this, options);
     activeTasks.add(task);
+    const caller = currentFrame(), store = contextStore();
     try { return await runInFrame(task.frame, fn); }
-    finally { await task.drain(); task.close(); }
+    finally {
+      await task.drain(); task.close();
+      // Browsers: compiled code leaves its last frame in the slot; the caller continues in its own.
+      if (store instanceof SlotContextStore) store.restore(caller);
+    }
   }
 
   /**
