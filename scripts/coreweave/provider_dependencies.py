@@ -99,9 +99,47 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         for item in classification_proof_dependencies({'path':str(path),'sha256':sha256_file_hex_cached(path)}):
             bound(item)
 
+    def foundation_inputs(options):
+        if not isinstance(options, dict):
+            return
+        header = options.get('foundation_native_graphs_binding')
+        recovery = options.get('foundation_declaration_recovery_binding')
+        active = bool(options.get('communication_foundation'))
+        selected_header = options.get('foundation_native_graphs')
+        selected_recovery = options.get('foundation_declaration_recovery')
+        if active and not isinstance(header, dict):
+            raise ValueError('active communication foundation lacks its exact source-header binding')
+        if active and not selected_header:
+            raise ValueError('active communication foundation lacks its selected source-header path')
+        if selected_header and not isinstance(header, dict):
+            raise ValueError('selected foundation source lacks its exact header binding')
+        if selected_recovery and not isinstance(recovery, dict):
+            raise ValueError('selected foundation recovery lacks its exact proof binding')
+        if selected_header:
+            if Path(selected_header).resolve() != Path(header['path']).resolve():
+                raise ValueError('selected foundation source and header binding paths differ')
+            from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings
+            actual = native_graph_bindings(header)
+            expected = header.get('dependencies')
+            if not isinstance(expected, list):
+                raise ValueError('foundation source header lacks its exact dependency inventory')
+            actual_dependencies = [item for item in actual if item['path'] != str(Path(header['path']).resolve())]
+            if actual_dependencies != expected:
+                raise ValueError('foundation source dependency inventory changed')
+            for reference in actual:
+                bound(reference)
+        if selected_recovery:
+            if Path(selected_recovery).resolve() != Path(recovery['path']).resolve():
+                raise ValueError('selected foundation recovery and proof binding paths differ')
+            from natlang_neuralese.train.native_foundation_recovery import dependency_bindings
+            for reference in dependency_bindings(recovery):
+                bound(reference)
+
     def training_inputs(training):
         if not isinstance(training, dict):
             return
+        foundation_inputs(training.get('options') or {})
+        foundation_inputs(training.get('training_options') or {})
         policy_sources(training.get('policy_source_history', []))
         history = training.get('config_history') or []
         supervision = (history[-1].get('config') or {}).get('ce_supervision_policy') if history else None
@@ -117,6 +155,9 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         from natlang_neuralese.train.native_continuation import collect_sft_progress, sft_frame_complete
         progress = collect_sft_progress(training, borrow_frames=True)
         for name, frame in progress.items():
+            # Foundation declarations are checkpoint dependencies even for a
+            # completed carried frame; inspect before the source-frame skip.
+            foundation_inputs(frame.get('options') or {})
             supervision = (frame.get('options') or {}).get('ce_supervision_policy_binding')
             if supervision is not None:
                 ce_policy_input(supervision)
@@ -477,6 +518,18 @@ def verify_assets(assets, *, readonly_input_roots=(), namespace='/work/native-pr
                     or path.stat().st_size != item['bytes']
                     or sha256_file_hex_cached(path) != item['sha256']):
                 raise ValueError('provider pre-staged input file content differs: ' + str(path))
+            continue
+        if item['kind'] == 'task-source-file':
+            if (type(item.get('bytes')) is not int or item['bytes'] < 0
+                    or not path.is_absolute() or '..' in path.parts):
+                raise ValueError('provider TaskEval source file has no exact safe binding')
+            cursor=path
+            while cursor!=cursor.parent:
+                if cursor.is_symlink():raise ValueError('provider TaskEval source traverses a symlink')
+                cursor=cursor.parent
+            if (not path.is_file() or path.stat().st_size!=item['bytes']
+                    or sha256_file_hex_cached(path)!=item['sha256']):
+                raise ValueError('provider TaskEval source file differs from its exact runtime binding: '+str(path))
             continue
         if item['kind'] == 'base':
             from natlang_neuralese.model.native_model import base_inventory

@@ -497,6 +497,7 @@ class MuonSR(LionSR):
         torch.optim.Optimizer.__init__(self, params, dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
                                                           ns_steps=ns_steps, idle_fraction=idle_fraction))
         self.chunk, self.fused, self.ns = None, False, ns
+        self.state_storage = 'device'
         self._hooks, self._gated, self._armed = [], False, None
         for group in self.param_groups:
             for p in group["params"]:
@@ -528,11 +529,37 @@ class MuonSR(LionSR):
         for index, values in saved.items():
             for key, value in values.items():
                 self.state[parameters[index]][key] = value.to(parameters[index].device, copy=True)
+        self.set_state_storage(self.state_storage)
+
+    def set_state_storage(self, storage):
+        """Keep idle momentum on the CPU; materialize only the updating matrix."""
+        if storage not in ('device','cpu'):
+            raise ValueError('MuonSR state storage must be device or cpu')
+        if self._armed is not None:
+            raise ValueError('MuonSR state storage may change only at an idle update boundary')
+        self.state_storage=storage
+        for parameter in self.state:
+            self._move_parameter_state(parameter,torch.device('cpu') if storage=='cpu' else parameter.device)
+
+    def _move_parameter_state(self, parameter, device):
+        state=self.state[parameter]
+        for key,value in tuple(state.items()):
+            if torch.is_tensor(value) and value.device!=device:
+                # Blocking copies preserve exact values and complete before a
+                # checkpoint or another parameter update may observe the state.
+                state[key]=value.to(device=device,copy=True,non_blocking=False)
 
     @torch.no_grad()
     def _update(self, p, group):
         with region("optim/muonsr"):
-            self._muon_update(p, group)
+            if self.state_storage=='cpu' and p.is_cuda:
+                self._move_parameter_state(p,p.device)
+                try:
+                    self._muon_update(p,group)
+                finally:
+                    self._move_parameter_state(p,torch.device('cpu'))
+            else:
+                self._muon_update(p, group)
 
     def _muon_update(self, p, group):
         state = self.state[p]

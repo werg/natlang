@@ -28,7 +28,7 @@ SOURCE_ARGUMENTS = {
     'native_graphs': ('--native-graphs', 'seed_native_graphs'),
     'held_native_graphs': ('--held-native-graphs', 'held_native_graphs'),
     **{role: ('--'+role.replace('_','-'), role) for role in
-       ('foundation_native_graphs', 'pending_native_sources', 'continued_native_graphs',
+       ('foundation_native_graphs', 'foundation_declaration_recovery', 'pending_native_sources', 'continued_native_graphs',
         'continued_held_native_graphs', 'withdrawn_native_graphs', 'unavailable_native_sources',
         'ce_supervision_policy', 'source_classification_migration', 'foundation_qualification_request')},
 }
@@ -267,6 +267,46 @@ def prepare_seed_command(config,directory,values,state,state_path,*,parameters=N
     return command
 
 
+def qualified_foundation_handoff(config, checkpoint, report_path):
+    """Accept an actually qualified finite foundation without inventing SGD work."""
+    from ..train.native_resident import binding
+    from ..train.recipe import load_recipe, resolve_stage_inputs, native_recipe_binding, effective_stage_parameters
+    from ..train.native_readiness import validate_ready
+    report_path=Path(report_path);report=json.loads(report_path.read_text())
+    if report.get('foundation_ready') is not True or report.get('completed') is True:
+        return False
+    parameters=config.get('trainer_parameters') or {}
+    if parameters.get('communication_foundation') is not True:
+        raise ValueError('foundation handoff requires its declared communication stage')
+    recipe=load_recipe(config['production_recipe'])
+    stages=[stage for stage in recipe['stages']if stage['id']==config['production_stage']]
+    if len(stages)!=1 or stages[0]['kind']!='native_state_sft':
+        raise ValueError('foundation handoff lost its exact supervised stage')
+    declared_parameters=effective_stage_parameters(stages[0],[],recipe)
+    if (declared_parameters.get('communication_foundation') is not True
+            or declared_parameters.get('epochs',1.)!=parameters.get('epochs',1.)):
+        raise ValueError('foundation handoff changed its declared objective or exposure quota')
+    sources=resolve_stage_inputs(recipe,stages[0],{})
+    foundation=sources.get('foundation_native_graphs')
+    if not foundation or Path(foundation['path']).resolve()!=Path(config.get('foundation_native_graphs','')).resolve():
+        raise ValueError('foundation handoff differs from its declared finite source')
+    receipt_path=report_path.parent/'native-training-receipt.json'
+    receipt=json.loads(receipt_path.read_text())
+    declared=native_recipe_binding(config['production_recipe'],config['recipe_lineage_sha256'])
+    requirement={'model_id':receipt['model_id'],'recipe_sha256':declared['sha256'],
+        'recipe_lineage_sha256':config['recipe_lineage_sha256'],
+        'stage_ids':[config['production_stage']],'readiness_boundary':'communication-foundation',
+        'foundation_sources':foundation,'foundation_epochs':parameters.get('epochs',1.),
+        'forward_atol':parameters.get('forward_atol',1e-4),
+        'gradient_atol':parameters.get('gradient_atol',1e-5)}
+    ready=validate_ready(receipt_path,requirement)
+    actual=binding(checkpoint)
+    if (ready is None or ready['checkpoint']['sha256']!=actual['sha256']
+            or ready['readiness_boundary']!='communication-foundation'):
+        raise ValueError('foundation handoff lacks qualification for the actual saved checkpoint')
+    return True
+
+
 def execute(config,state,state_path,control):
     """Existing bridge kind=round enters here without starting a rollout actor."""
     from .production import run_command
@@ -307,7 +347,10 @@ def execute(config,state,state_path,control):
         and declared_sha is not None and declared_sha in (admission.get('declarations') or [])
         and any(declared_sha in (stage.get('pending_source_declarations') or {})
             for stage in ((report.get('mandatory_sft') or {}).get('stages') or {}).values()))
-    usable=(metadata_admitted or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
+    from ..train.native_operation_report import active_stage_handoff
+    active_complete=active_stage_handoff(report,{'sha256':sha256_file_hex_cached(checkpoint)},stage_id=config.get('production_stage'))
+    foundation_ready=qualified_foundation_handoff(config,checkpoint,report_path)
+    usable=(metadata_admitted or active_complete or foundation_ready or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
         and boundary.get('reached') is True and boundary.get('new_optimizer_updates',0)>0))
     from ..train.native_operation_report import supervised_progress_numerics_ok
     numerics_ok = supervised_progress_numerics_ok(report,

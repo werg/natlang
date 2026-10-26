@@ -11,6 +11,79 @@ def test_round_publication_before_cursor_commit_is_not_repeated():
         lc.round_target(6,5)
 
 
+def test_legacy_completed_round_markers_normalize_only_with_current_report_and_rollouts(tmp_path):
+    from natlang_neuralese.rl.production import normalize_legacy_completed_update
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.common.jsonio import write_json_durable
+    checkpoint=tmp_path/'checkpoint.pt';checkpoint.write_bytes(b'exact current full checkpoint')
+    round_dir=tmp_path/'round-000010';round_dir.mkdir()
+    rollouts=round_dir/'rollouts.jsonl';rollouts.write_text('{"sealed":true}\n')
+    report=round_dir/'learner'/'report.json';report.parent.mkdir()
+    digest=sha256_file_hex(checkpoint)
+    write_json_durable(report,{'completed':True,'numerics_ok':True,'checkpoint_sha256':digest,
+        'progress_numerics':{'passed':True}})
+    state_path=tmp_path/'state.json'
+    state={'phase':'collect','round':11,'trained_rounds':11,'checkpoint':str(checkpoint),
+        'active_update_round':str(round_dir),'update_mode':'actor-learner',
+        'update_rollouts':str(rollouts),'update_stages':['policy'],
+        'last_learner_progress':{'completed':True,'checkpoint_sha256':digest,
+            'full_report':{'path':str(report),'sha256':sha256_file_hex(report),'bytes':report.stat().st_size}}}
+    write_json_durable(state_path,state)
+    assert normalize_legacy_completed_update(state,state_path) is True
+    assert not any(key.startswith(('active_update_','partial_update_'))for key in state)
+    audit=state['last_completed_update']
+    assert audit['legacy_marker_recovery'] is True and audit['round']==10
+    assert audit['checkpoint']['sha256']==digest
+
+
+def test_legacy_completed_round_accepts_only_reported_current_sft_descendant(tmp_path):
+    from natlang_neuralese.rl.production import normalize_legacy_completed_update
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.common.jsonio import write_json_durable
+    parent=tmp_path/'round-parent.pt';parent.write_bytes(b'completed round checkpoint')
+    child=tmp_path/'sft-child.pt';child.write_bytes(b'published SFT descendant')
+    round_dir=tmp_path/'round-000010';(round_dir/'learner').mkdir(parents=True)
+    rollouts=round_dir/'rollouts.jsonl';rollouts.write_text('sealed\n')
+    parent_sha=sha256_file_hex(parent);child_sha=sha256_file_hex(child)
+    old_report=round_dir/'learner/report.json'
+    write_json_durable(old_report,{'completed':True,'numerics_ok':True,'checkpoint_sha256':parent_sha,
+        'progress_numerics':{'passed':True}})
+    latest_report=tmp_path/'cycle-11/sft/report.json';latest_report.parent.mkdir(parents=True)
+    write_json_durable(latest_report,{'completed':False,'numerics_ok':True,'checkpoint_sha256':child_sha,
+        'continuation':{'checkpoint_sha256':parent_sha},'progress_numerics':{'passed':True}})
+    state_path=tmp_path/'state.json'
+    state={'phase':'collect','round':11,'trained_rounds':11,'checkpoint':str(child),
+        'active_update_round':str(round_dir),'update_mode':'grpo','update_rollouts':str(rollouts),
+        'last_learner_progress':{'completed':False,'checkpoint_sha256':child_sha,
+            'full_report':{'path':str(latest_report),'sha256':sha256_file_hex(latest_report),
+                'bytes':latest_report.stat().st_size}}}
+    write_json_durable(state_path,state)
+    assert normalize_legacy_completed_update(state,state_path) is True
+    assert state['last_completed_update']['checkpoint']['sha256']==child_sha
+    assert state['last_completed_update']['completion_report']['sha256']==sha256_file_hex(old_report)
+
+
+@pytest.mark.parametrize('mutation',[
+    {'phase':'unknown-corrupt-state'}, {'pending_native_checkpoint':'/tmp/uncommitted.pt'},
+])
+def test_legacy_round_marker_refuses_partial_or_noncollection_state(tmp_path,mutation):
+    from natlang_neuralese.rl.production import normalize_legacy_completed_update
+    state_path=tmp_path/'state.json';state_path.write_text('{}')
+    state={'phase':'collect','round':11,'trained_rounds':11,'active_update_round':str(tmp_path/'round-000010'),**mutation}
+    with pytest.raises(ValueError,match='clean completed collection boundary'):
+        normalize_legacy_completed_update(state,state_path)
+
+
+def test_active_round_phase_is_preserved_for_exact_state_machine_resume(tmp_path):
+    from natlang_neuralese.rl.production import normalize_legacy_completed_update
+    for phase in ('updating','publishing','learner_pending','awaiting_semantic_refresh'):
+        state={'phase':phase,'round':3,'trained_rounds':2,
+            'active_update_round':str(tmp_path/'round-000002'),'update_mode':'grpo'}
+        before=dict(state)
+        assert normalize_legacy_completed_update(state,tmp_path/'state.json') is False
+        assert state==before
+
+
 def test_supervised_publication_retries_exact_child_but_rejects_foreign_successor(tmp_path,monkeypatch):
     state=tmp_path/'state.json';parent=tmp_path/'parent.pt';child=tmp_path/'child.pt';foreign=tmp_path/'foreign.pt'
     for p in (parent,child,foreign):p.write_bytes(p.name.encode())
@@ -136,3 +209,120 @@ def test_reload_rejects_owner_runtime_and_pending_stage_replacement(tmp_path,mon
         lc.reload_schedule(plan_path,plan,config,stages,cursor={'cycle':0,'stage_index':0})
     with pytest.raises(ValueError,match='visited stage prefix'):
         lc.reload_schedule(plan_path,plan,config,stages,cursor={'cycle':0,'stage_index':1})
+
+
+def test_semantic_return_recovers_interrupted_pointer_commit_without_losing_debts(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import local_cycle_semantic_return as returned
+    from natlang_neuralese.rl import native_role_release as roles
+    from natlang_neuralese.common.jsonio import write_json_durable
+
+    exchange_dir=tmp_path/'exchange';exchange_dir.mkdir()
+    role_plan=tmp_path/'role-plan.json';role_plan.write_text('{}')
+    role_release={'path':str(exchange_dir/'lfm-proof.json'),'sha256':'a'*64}
+    (exchange_dir/'lfm-status.json').write_text(json.dumps(role_release))
+    monkeypatch.setattr(roles,'ownership',lambda plan:( {'lfm'},
+        {'role':'lfm','directory':str(exchange_dir),'roles':{'lfm':{} }}))
+
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    child=tmp_path/'returned.pt';child.write_bytes(b'returned full-state child')
+    adapter=tmp_path/'semantic-adapter.json';adapter.write_text('{}')
+    receipt_dir=tmp_path/'returns';receipt_dir.mkdir()
+    receipt_path=receipt_dir/'lfm-return.json'
+    receipt_path.write_text(json.dumps({'role_plan':__import__(
+        'natlang_neuralese.rl.native_raw_handoff',fromlist=['binding']).binding(role_plan)}))
+    plan={'semantic_return':{'return_directory':str(receipt_dir),'role_plan':str(role_plan),'role':'lfm'}}
+    config={'native_participant':'lfm'}
+    state_path=tmp_path/'production-state.json';cursor_path=tmp_path/'cursor.json'
+    state={'schema':'natlang.rl-production-state/1','round':9,'offset':7,
+        'checkpoint':str(parent),'trained_task_ids':['earned-task'],'trained_supervised_tokens':123}
+    cursor={'cycle':3,'phase':'supervised','stage_index':2,'rl_round_target':10,
+        'failed_stages':{'old-stage':{'completed':False}}}
+    write_json_durable(state_path,state);write_json_durable(cursor_path,cursor)
+    checkpoint={'path':str(child.resolve()),'sha256':__import__('hashlib').sha256(child.read_bytes()).hexdigest()}
+    semantic={'path':str(adapter.resolve()),'sha256':__import__('hashlib').sha256(adapter.read_bytes()).hexdigest()}
+    from natlang_neuralese.train.native_resident import binding as file_binding
+    pointer={'schema':'natlang.native-local-cycle-return-pointer/1','participant':'lfm',
+        'receipt':file_binding(receipt_path),'checkpoint':checkpoint,'previous':None,'ordinal':1,'training_credit':0}
+    write_json_durable(receipt_dir/'lfm-return-current.json',pointer)
+    monkeypatch.setattr(returned,'validate_return',lambda *args,**kwargs:{
+        'checkpoint':checkpoint,'semantic_adapter':semantic,'parent':{'path':str(parent),
+            'sha256':__import__('hashlib').sha256(parent.read_bytes()).hexdigest()},
+        'completion':{'path':'completion.json','sha256':'b'*64},
+        'semantic_refresh_config':{'path':'refresh.json','sha256':'c'*64},'role':'lfm'})
+    original=returned.write_json_durable
+    def interrupted(path,value):
+        if Path(path)==cursor_path:
+            raise OSError('simulated crash between durable owner-state and cursor writes')
+        return original(path,value)
+    monkeypatch.setattr(returned,'write_json_durable',interrupted)
+    with pytest.raises(OSError,match='simulated crash'):
+        returned.adopt_at_boundary(config,plan,cursor,state_path=state_path,cursor_path=cursor_path)
+    committed=json.loads(state_path.read_text())
+    assert committed['checkpoint']==checkpoint['path'] and committed['semantic_adapter']==semantic['path']
+    assert committed['round']==9 and committed['trained_task_ids']==['earned-task']
+
+    monkeypatch.setattr(returned,'write_json_durable',original)
+    resumed=returned.adopt_at_boundary(config,plan,cursor,state_path=state_path,cursor_path=cursor_path)
+    assert resumed['training_credit']==0
+    adopted_cursor=json.loads(cursor_path.read_text())
+    assert adopted_cursor['checkpoint']==checkpoint and adopted_cursor['semantic_adapter']==semantic
+    assert adopted_cursor['cycle']==3 and adopted_cursor['stage_index']==2
+    assert adopted_cursor['failed_stages']==cursor['failed_stages']
+    assert returned.adopt_at_boundary(config,plan,adopted_cursor,state_path=state_path,cursor_path=cursor_path) is None
+
+
+def test_return_checkpoint_reader_normalizes_original_full_native_parent(tmp_path):
+    import torch
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.rl.local_cycle_semantic_return import _checkpoint_state
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+
+    rng={'torch_cpu':torch.get_rng_state().clone()}
+    optimizer={'param_groups':[{'param_names':['native.test'],'params':[0]}],
+        'state':{0:{'step':torch.tensor(4.),'exp_avg':torch.tensor([1.]),
+            'exp_avg_sq':torch.tensor([2.])}}}
+    state={'schema':CHECKPOINT_SCHEMA,'model_config':{'architecture':'lfm',
+            'base_inventory_sha256':'a'*64},'model_state':{},
+        'training':{'optimizer':optimizer,'rng':rng,'source_receipts':[{'sha256':'b'*64}],
+            'options':{'native_snapshot_ancestors':['c'*64]},'global_step':4,
+            'sft_progress':{'schema':'natlang.native-sft-progress/1','stages':[]}}}
+    policy=CheckpointPolicy(tmp_path,every_steps=1)
+    policy.save(state)
+    participant,training=_checkpoint_state(policy.slot,'lfm')
+    assert participant['optimizer']['state'][0]['step'].item()==4
+    assert participant['global_step']==4
+    assert training['source_rng']['torch_cpu'].equal(rng['torch_cpu'])
+    assert training['training_options']['native_snapshot_ancestors']==['c'*64]
+    assert training['sft_progress']==state['training']['sft_progress']
+
+
+def test_role_snapshot_plan_is_only_exact_two_flag_successor(tmp_path):
+    from natlang_neuralese.rl.native_role_release import _local_cycle_role_plan_predecessor
+    from natlang_neuralese.rl.native_raw_handoff import binding
+
+    old={'schema':'natlang.native-source-host-plan/1','snapshot_preparation':False,
+        'consumer_preparation_handoff':False,'role_exchange':{'role':'lfm'},
+        'local_cycle_source':{'cycles_plan':str(tmp_path/'cycles.json')}}
+    old_path=tmp_path/'old.json';old_path.write_text(json.dumps(old))
+    new={**old,'snapshot_preparation':True,'consumer_preparation_handoff':True}
+    new_path=tmp_path/'new.json';new_path.write_text(json.dumps(new))
+    cycle={'local_cycle_role_plan':binding(old_path)}
+    assert _local_cycle_role_plan_predecessor(cycle,old['local_cycle_source'],new_path)==binding(old_path)
+    changed={**new,'role_exchange':{'role':'mellum'}}
+    changed_path=tmp_path/'changed.json';changed_path.write_text(json.dumps(changed))
+    with pytest.raises(ValueError,match='exact pinned plan'):
+        _local_cycle_role_plan_predecessor(cycle,old['local_cycle_source'],changed_path)
+
+
+def test_returned_shared_route_bootstraps_a_bare_cycle_config(tmp_path):
+    from natlang_neuralese.rl.local_cycles import bind_state_semantic_route
+    from natlang_neuralese.common.hashing import sha256_file_hex
+
+    curriculum=tmp_path/'curriculum.json';curriculum.write_text('{"schema":"fixture"}\n')
+    state={'native_participant':'lfm','semantic_refresh_config':{
+        'path':str(curriculum.resolve()),'sha256':sha256_file_hex(curriculum)}}
+    resolved=bind_state_semantic_route({'native_participant':None,'semantic_refresh_config':None},state)
+    assert resolved['native_participant']=='lfm'
+    assert resolved['semantic_refresh_config']==str(curriculum.resolve())
+    with pytest.raises(ValueError,match='changed its adopted semantic refresh curriculum'):
+        bind_state_semantic_route({'native_participant':None,'semantic_refresh_config':'/tmp/other.json'},state)

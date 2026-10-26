@@ -587,3 +587,14 @@ def test_registered_artifacts_bind_by_id_and_are_hash_checked(tmp_path,monkeypat
     recipe['input_bindings']={'bank':{'artifact':'missing-artifact-v1'}}
     with pytest.raises(ValueError,match='unknown artifact'):
         resolve_stage_inputs(recipe,recipe['stages'][0],{})
+
+
+@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference','native_state_rl'])
+def test_native_optimizer_history_storage_is_explicit_and_validated(kind):
+    from natlang_neuralese.train import recipe
+    recipe.validate_stage_parameters(kind,{'optimizer_state_storage':'cpu'})
+    assert recipe.stage_parameter_args({'optimizer_state_storage':'cpu'})==['--optimizer-state-storage','cpu']
+    with pytest.raises(ValueError,match='optimizer_state_storage must be device or cpu'):
+        recipe.validate_stage_parameters(kind,{'optimizer_state_storage':'automatic'})
+    assert 'optimizer_state_storage' in recipe.OPERATIONAL_STAGE_PARAMETERS
+    assert 'optimizer_state_storage' in recipe.HANDLERS['native_state_sft']['parameters']

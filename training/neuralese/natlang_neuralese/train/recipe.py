@@ -37,11 +37,11 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
+                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage'}, 'result': 'checkpoint.pt'},
 
 }
 
@@ -93,6 +93,8 @@ def validate_stage_parameters(kind, parameters):
             from ..model.native_precision import NATIVE_ATTENTION_PRECISIONS
             if parameters['native_attention_precision'] not in NATIVE_ATTENTION_PRECISIONS:
                 raise ValueError('unsupported native attention precision')
+        if parameters.get('held_final_policy','budgeted')not in ('budgeted','full'):
+            raise ValueError('unsupported terminal held evaluation policy')
         from .native_optimizer_migration import validate_native_optimizer_migration
         validate_native_optimizer_migration(parameters.get('native_optimizer_migration'))
         from .native_learning_rates import validate_learned_row_rate
@@ -106,6 +108,9 @@ def validate_stage_parameters(kind, parameters):
         cotangent_backend = parameters.get('cotangent_accumulator_backend')
         if cotangent_backend is not None and cotangent_backend not in ('cpu_file', 'device_fp32'):
             raise ValueError('cotangent_accumulator_backend must be cpu_file or device_fp32')
+        storage=parameters.get('optimizer_state_storage')
+        if storage is not None and storage not in ('device','cpu'):
+            raise ValueError('optimizer_state_storage must be device or cpu')
         direct=parameters.get('checkpoint_direct_token_limit',0)
         if type(direct) is not int or direct<0:
             raise ValueError('checkpoint_direct_token_limit must be a nonnegative integer')
@@ -242,7 +247,7 @@ def binding_path(value):
     return (path if path.is_absolute() else root('repo') / path).resolve()
 
 
-def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
+def resolve_stage_inputs(recipe, stage, defaults, overrides=None, *, source_route=None):
     """Return hashed, exact inputs for one stage; overrides change location, never identity."""
     selected = stage.get('inputs')
     if selected is None:
@@ -255,7 +260,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         missing = missing_stage_inputs(stage['kind'], result)
         if missing:
             raise ValueError('missing required stage input(s): ' + ', '.join(sorted(missing)))
-        return _bind_native_source_dependencies(result)
+        return _bind_native_source_dependencies(result, source_route=source_route)
     catalog = recipe.get('input_bindings', {})
     overrides = overrides or {}
     unknown = set(overrides) - set(catalog)
@@ -279,10 +284,10 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         if actual_sha != spec['sha256']:
             raise ValueError('input binding content hash mismatch: ' + name)
         result[role] = {'binding': name, 'path': str(path), 'sha256': actual_sha}
-    return _bind_native_source_dependencies(result)
+    return _bind_native_source_dependencies(result, source_route=source_route)
 
 
-def native_source_dependencies(path, *, parents=()):
+def native_source_dependencies(path, *, parents=(), source_route=None):
     """Validate portable immutable graph manifests and enumerate every actual input."""
     path = Path(path).resolve()
     if path.suffix != '.json':
@@ -299,19 +304,19 @@ def native_source_dependencies(path, *, parents=()):
         child = Path(source['path'])
         child = child if child.is_absolute() else path.parent / child
         from ..data.native_source_tree import _staged_path
-        child = _staged_path(path, child)
+        child = (source_route or _staged_path)(path, child)
         child = child.resolve()
         digest = sha(child)
         if digest != source.get('sha256'):
             raise ValueError('native graph manifest dependency content hash mismatch: ' + str(child))
         dependencies[str(child)] = digest
         if source['kind'] == 'native-graphs':
-            for value in native_source_dependencies(child, parents=(*parents, path)):
+            for value in native_source_dependencies(child, parents=(*parents, path), source_route=source_route):
                 dependencies[value['path']] = value['sha256']
     return [{'path': child, 'sha256': digest} for child, digest in dependencies.items()]
 
 
-def _bind_native_source_dependencies(inputs):
+def _bind_native_source_dependencies(inputs, *, source_route=None):
     if 'ce_supervision_policy' in inputs:
         from .native_supervision import ce_policy_dependencies
         reference=inputs['ce_supervision_policy']
@@ -338,7 +343,7 @@ def _bind_native_source_dependencies(inputs):
         inputs['withdrawn_native_graphs']['dependencies']=[{'path':str(path),'sha256':evidence['sha256']}]
     for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'):
         if role in inputs:
-            dependencies = native_source_dependencies(inputs[role]['path'])
+            dependencies = native_source_dependencies(inputs[role]['path'], source_route=source_route)
             if dependencies:
                 inputs[role]['dependencies'] = dependencies
     return inputs
@@ -377,7 +382,7 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs',
-                 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_qualification_request',
+                 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
                  'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
@@ -688,6 +693,7 @@ def write_json(path, value):
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
 OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory'})
+OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy','optimizer_state_storage'}
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):
     """Allow only current native trainers' explicit resume-safe parameter changes."""

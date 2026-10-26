@@ -123,6 +123,19 @@ def validate_config(config):
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
             if name in declaration:
                 validate_learned_row_rate(declaration[name],name=name)
+        participant_rates=declaration.get('participant_optimizer_options') or {}
+        if not isinstance(participant_rates,dict):
+            raise ValueError('participant_optimizer_options must map model IDs to explicit rate overrides')
+        for model_id, rates in participant_rates.items():
+            if (not isinstance(model_id,str) or not isinstance(rates,dict)
+                    or set(rates)-{'lr','learned_row_lr','interface_row_lr'}):
+                raise ValueError('participant optimizer override must declare only lr and learned/interface row rates')
+            if ('lr' in rates and (type(rates['lr']) not in (int,float)
+                    or not math.isfinite(rates['lr']) or rates['lr']<=0)):
+                raise ValueError('participant optimizer lr override must be finite and positive')
+            from .native_learning_rates import validate_learned_row_rate
+            for key in ('learned_row_lr','interface_row_lr'):
+                if key in rates:validate_learned_row_rate(rates[key],name=key)
     for key in ('backbone_lr', 'vae_lr'):
         value = config.get(key)
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
@@ -172,6 +185,50 @@ def _adjust_lr(optimizer, lr, learned_row_lr=None, interface_row_lr=None):
             group['qat_latent_lr'] = lr
 
 
+def _inherited_optimizer_options(inherited, *, participant):
+    """Recover the exact optimizer construction policy that owns these moments."""
+    identity = inherited.get('identity') or {}
+    options = identity.get('optimizer_options')
+    if options is None:
+        saved_options = inherited.get('options') or inherited.get('training_options') or {}
+        options = saved_options.get('optimizer_options')
+        if options is None:
+            # A previous semantic checkpoint stores its effective execution
+            # config in the bound history. This is a historical binding, not
+            # the current generic curriculum defaults.
+            history = inherited.get('config_history') or []
+            if history:
+                config = history[-1].get('config') or {}
+                options = config.get('participant_optimizer_options', {}).get(participant)
+    if not isinstance(options, dict):
+        raise ValueError('semantic participant checkpoint omitted its exact optimizer construction settings: '+participant)
+    required = ('lr', 'weight_decay', 'latent_ns')
+    if any(key not in options for key in required):
+        raise ValueError('semantic participant optimizer settings lack lr/weight_decay/latent_ns: '+participant)
+    lr, decay, latent_ns = options['lr'], options['weight_decay'], options['latent_ns']
+    if (type(lr) not in (int,float) or not math.isfinite(lr) or lr <= 0
+            or type(decay) not in (int,float) or not math.isfinite(decay) or decay < 0
+            or not isinstance(latent_ns, str) or not latent_ns):
+        raise ValueError('semantic participant optimizer settings are invalid: '+participant)
+    from .native_learning_rates import validate_learned_row_rate
+    validate_learned_row_rate(options.get('learned_row_lr'))
+    validate_learned_row_rate(options.get('interface_row_lr'), name='interface_row_learning_rate')
+    return dict(options)
+
+
+def _apply_optimizer_state_storage(optimizer, training_options, *, participant):
+    """Apply the source checkpoint's MuonSR history placement exactly."""
+    storage = (training_options or {}).get('optimizer_state_storage', 'device')
+    if storage not in ('device', 'cpu'):
+        raise ValueError('semantic participant checkpoint has unknown optimizer state storage: '+participant)
+    latent = getattr(optimizer, 'latent', optimizer)
+    setter = getattr(latent, 'set_state_storage', None)
+    if not callable(setter):
+        raise ValueError('semantic participant optimizer omitted its history storage mechanism: '+participant)
+    setter(storage)
+    return storage
+
+
 def _qualified_snapshot(name,binding):
     from .native_readiness import validate_ready
     if binding.get('source_role_plan'):
@@ -199,6 +256,13 @@ def _source_readiness(name,binding):
         _qualified_snapshot(name,binding)
         proof=json.loads(_bound(binding['source_role_release']).read_text())
         evidence=next(item for item in proof['models'].values() if item['ready']['model_id']==name)
+        if evidence.get('semantic_evidence'):
+            ready=evidence['ready'];semantic=evidence['semantic_evidence']
+            adapter=roles._evidence(semantic['adapter'])
+            model=adapter['models'][name]
+            return {'recipe':ready['recipe'],'native_identity':ready['native_identity'],
+                'checkpoint':ready['checkpoint'],'stage_id':ready['stage_id'],
+                'mandatory_sft':model.get('mandatory_sft')}
         return roles._evidence(evidence['readiness'])
     return json.loads(_bound(binding['readiness']).read_text())
 
@@ -237,18 +301,39 @@ def load_participant(name, binding, config, device):
     identity = native_identity(model, model_config, checkpoint_sha256=binding['checkpoint']['sha256'])
     if identity != binding['native_identity']:
         raise ValueError('semantic participant actual checkpoint/tokenizer/embedding identity differs: ' + name)
+    inherited = state.get('training') or state.get('shared_training') or {}
+    source_identity = inherited.get('identity') or {}
+    inherited_options = inherited.get('options') or inherited.get('training_options') or {}
+    source_fp8 = source_identity.get('fp8') or inherited_options.get('fp8_profile')
     backend = None
-    kind = declaration.get('fp8_training', 'triton-experts' if model_config['architecture'] in {'mellum', 'maple'} else 'off')
+    default_fp8 = 'triton-experts' if model_config['architecture'] in {'mellum', 'maple'} else 'off'
+    kind = source_fp8.get('kind') if isinstance(source_fp8,dict) else None
+    kind = kind or declaration.get('fp8_training',default_fp8)
+    if declaration.get('fp8_training') is not None and declaration['fp8_training']!=kind:
+        raise ValueError('semantic participant FP8 kind differs from the actual checkpoint: '+name)
+    if isinstance(source_fp8,dict):
+        for key,declared_key in (('recipe','fp8_recipe'),('amax_history_len','fp8_amax_history_len')):
+            if declaration.get(declared_key) is not None and declaration[declared_key]!=source_fp8.get(key):
+                raise ValueError('semantic participant FP8 setting differs from the actual checkpoint: '+name)
     if kind != 'off':
         from .fp8_backend import make_backend
-        backend = make_backend(kind, model.port.hf, device=device, recipe=declaration.get('fp8_recipe', 'delayed'),
-                               amax_history_len=declaration.get('fp8_amax_history_len', 16))
+        fp8_profile={'kind':kind,
+            'recipe':(source_fp8 or {}).get('recipe',declaration.get('fp8_recipe','delayed')),
+            'amax_history_len':(source_fp8 or {}).get('amax_history_len',declaration.get('fp8_amax_history_len',16))}
+        backend = make_backend(kind, model.port.hf, device=device, recipe=fp8_profile['recipe'],
+                               amax_history_len=fp8_profile['amax_history_len'])
         model.port.activation_checkpoint = backend.checkpoint
     elif model_config['architecture'] in {'mellum', 'maple'}:
         raise ValueError('native Mellum semantic training requires the shared triton-experts memory path')
-    optimizer, _ = make_native_optimizer(model, lr=config['backbone_lr'],
-        weight_decay=config.get('weight_decay', .1), latent_ns=config.get('latent_ns', 'quintic'), in_backward=False)
-    inherited = state.get('training') or state.get('shared_training') or {}
+    else:
+        fp8_profile={'kind':'off','recipe':(source_fp8 or {}).get('recipe',declaration.get('fp8_recipe','delayed')),
+            'amax_history_len':(source_fp8 or {}).get('amax_history_len',declaration.get('fp8_amax_history_len',16))}
+    optimizer_options = _inherited_optimizer_options(inherited, participant=name)
+    optimizer, _ = make_native_optimizer(model, lr=optimizer_options['lr'],
+        weight_decay=optimizer_options['weight_decay'], latent_ns=optimizer_options['latent_ns'], in_backward=False,
+        learned_row_lr=optimizer_options.get('learned_row_lr'),
+        interface_row_lr=optimizer_options.get('interface_row_lr'))
+    optimizer_state_storage = _apply_optimizer_state_storage(optimizer, inherited_options, participant=name)
     from .recipe import training_recipe_binding,native_recipe_provenance
     recipe_binding=training_recipe_binding(state)
     declared=native_recipe_provenance(binding.get('recipe'))
@@ -276,15 +361,29 @@ def load_participant(name, binding, config, device):
         recipe_binding=declared
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):
         optimizer.load_state_dict(inherited['optimizer'],native_optimizer_migration=migration)
+        # Optimizer state_dict loading materializes state on each parameter's
+        # device. Restore the source's declared idle-state placement only after
+        # the exact moments have been loaded.
+        optimizer_state_storage = _apply_optimizer_state_storage(optimizer, inherited_options, participant=name)
     if backend is not None and inherited.get('fp8') is not None:
         backend.restore_extra_state(inherited['fp8'])
-    _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')),
-        declaration.get('interface_row_learning_rate',config.get('interface_row_learning_rate')))
+    # Loading moments must not silently replace the rates and MuonSR policy
+    # that produced them. An explicit participant-level continuation override
+    # is allowed and remains part of the stage declaration/history.
+    overrides = declaration.get('optimizer_overrides') or {}
+    if not isinstance(overrides, dict) or set(overrides) - {'lr','learned_row_lr','interface_row_lr'}:
+        raise ValueError('semantic participant optimizer_overrides has unsupported fields: '+name)
+    effective_optimizer_options = {**optimizer_options, **overrides}
+    _adjust_lr(optimizer, effective_optimizer_options['lr'], effective_optimizer_options.get('learned_row_lr'),
+        effective_optimizer_options.get('interface_row_lr'))
     from ..common.checkpoint_offload import configure_checkpoint_storage_options
     configure_checkpoint_storage_options(model.port,declaration,config,inherited.get('options') or {})
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend,recipe_binding=recipe_binding)
+    result.optimizer_options = effective_optimizer_options
+    result.optimizer_state_storage = optimizer_state_storage
+    result.fp8_profile = fp8_profile
     from .native_continuation import collect_sft_progress
     result.sft_progress = collect_sft_progress(inherited)
     result.global_step = int(inherited.get('global_step', inherited.get('step', 0)))
@@ -400,15 +499,37 @@ def _native_modules(participants):
     return stack
 
 
+def _participant_execution_binding(entry, *, name):
+    optimizer_options = entry.optimizer_options
+    fp8_profile = entry.fp8_profile
+    storage = entry.optimizer_state_storage
+    if (not isinstance(optimizer_options, dict) or
+            any(key not in optimizer_options for key in ('lr', 'weight_decay', 'latent_ns'))):
+        raise ValueError('semantic participant cannot be saved without exact optimizer construction settings: '+name)
+    if (not isinstance(fp8_profile, dict) or set(fp8_profile) != {'kind', 'recipe', 'amax_history_len'} or
+            fp8_profile.get('kind') not in {'off', 'triton-experts'} or
+            not isinstance(fp8_profile.get('recipe'), str) or
+            type(fp8_profile.get('amax_history_len')) is not int or fp8_profile['amax_history_len'] < 1):
+        raise ValueError('semantic participant cannot be saved without an exact FP8 execution profile: '+name)
+    if storage not in {'device', 'cpu'}:
+        raise ValueError('semantic participant cannot be saved without its exact optimizer state placement: '+name)
+    return dict(optimizer_options), storage, dict(fp8_profile)
+
+
 def save_shared(policy, participants, vae, optimizer, *, training, device):
     from ..common.checkpoint_offload import checkpoint_input_storage_options
     with _native_modules(participants):
+        participant_options = {name: _participant_execution_binding(entry, name=name)
+                               for name, entry in participants.items()}
         state = {'schema': SHARED_CHECKPOINT_SCHEMA,
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
                 'source_rng':getattr(entry,'source_rng',None),
                 'training_options': {**checkpoint_input_storage_options(entry.model.port),
+                    'optimizer_options':participant_options[name][0],
+                    'optimizer_state_storage':participant_options[name][1],
+                    'fp8_profile':participant_options[name][2],
                     'native_snapshot_ancestors':list(getattr(entry,'snapshot_ancestors',[])),
                     **({'ce_supervision_policy_binding':training['config_history'][-1]['config']['ce_supervision_policy']}
                        if (training.get('config_history') or [{}])[-1].get('config',{}).get('ce_supervision_policy') else {}),
@@ -631,6 +752,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             same_source = participant.identity == saved['source_identity']
             same_export = (bindings[name]['checkpoint']['sha256'] == prior_sha
                            and bindings[name]['checkpoint'].get('participant') == name)
+            saved_fp8_profile=(saved.get('training_options')or{}).get('fp8_profile')
+            if saved_fp8_profile is not None and saved_fp8_profile!=participant.fp8_profile:
+                raise ValueError('semantic continuation changed the participant FP8 execution profile: '+name)
             if participant.recipe_binding is None and previous_recipe is not None:
                 if not same_source and not same_export:
                     raise ValueError('updated semantic participant lost its current recipe provenance: '+name)
@@ -662,6 +786,12 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 from .native_optimizer_migration import native_optimizer_migration_option
                 migration=native_optimizer_migration_option(config,name)
                 participant.optimizer.load_state_dict(saved['optimizer'],native_optimizer_migration=migration)
+                participant.optimizer_state_storage = _apply_optimizer_state_storage(
+                    participant.optimizer, saved.get('training_options') or {}, participant=name)
+                saved_optimizer_options=(saved.get('training_options')or{}).get('optimizer_options')
+                if saved_optimizer_options is not None:
+                    participant.optimizer_options=_inherited_optimizer_options(
+                        {'training_options':{'optimizer_options':saved_optimizer_options}},participant=name)
                 participant.sft_progress = saved.get('sft_progress', participant.sft_progress)
                 participant.source_rng = saved.get('source_rng',getattr(participant,'source_rng',None))
                 participant.global_step = saved.get('global_step', participant.global_step)
@@ -842,11 +972,21 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         for name, participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
             if name in active:participant.model.port.checkpoint_layers=True
-            _adjust_lr(participant.optimizer, options.get('backbone_lr', config['backbone_lr']),
-                       options.get('learned_row_learning_rate',config.get('models',{}).get(name,{}).get(
-                           'learned_row_learning_rate',config.get('learned_row_learning_rate'))),
-                       options.get('interface_row_learning_rate',config.get('models',{}).get(name,{}).get(
-                           'interface_row_learning_rate',config.get('interface_row_learning_rate'))))
+            # Generic curriculum backbone_lr is not an optimizer migration:
+            # preserve each participant's inherited backbone rate. Declared
+            # row-rate defaults and per-model overrides are applied explicitly.
+            current_optimizer_options = participant.optimizer_options
+            participant_override=(options.get('participant_optimizer_options') or {}).get(name,{})
+            lr = participant_override.get('lr', current_optimizer_options['lr'])
+            learned_lr = participant_override.get('learned_row_lr',
+                options.get('learned_row_learning_rate',config.get('learned_row_learning_rate',
+                    current_optimizer_options.get('learned_row_lr'))))
+            interface_lr = participant_override.get('interface_row_lr',
+                options.get('interface_row_learning_rate',config.get('interface_row_learning_rate',
+                    current_optimizer_options.get('interface_row_lr'))))
+            _adjust_lr(participant.optimizer, lr, learned_lr, interface_lr)
+            participant.optimizer_options = {**current_optimizer_options,
+                'lr':lr, 'learned_row_lr':learned_lr, 'interface_row_lr':interface_lr}
             from ..common.checkpoint_offload import configure_checkpoint_storage_options
             configure_checkpoint_storage_options(participant.model.port,options,
                 config.get('models',{}).get(name,{}),config)

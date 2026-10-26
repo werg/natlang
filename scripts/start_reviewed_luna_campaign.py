@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run an immutable, reviewed fresh campaign with up to five Luna workers."""
+"""Run an immutable, reviewed fresh campaign with up to six Luna workers."""
 import argparse
 import json
 import os
@@ -165,8 +165,8 @@ def main():
     reasoning_effort = plan.get('reasoning_effort', 'low')
     if reasoning_effort not in {'low', 'medium', 'high'}:
         raise ValueError('Invalid reviewed reasoning effort')
-    if plan.get('root_approved') is not True or not 1 <= len(workers) <= 5:
-        raise ValueError('Requires approval for one to five Luna workers')
+    if plan.get('root_approved') is not True or not 1 <= len(workers) <= 6:
+        raise ValueError('Requires approval for one to six Luna workers')
     for path, expected in plan['artifact_hashes'].items():
         if digest(path) != expected:
             raise ValueError(f'Reviewed artifact changed: {path}')

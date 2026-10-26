@@ -601,7 +601,8 @@ def scheduled_indices(examples, *, seed, epoch, prior_ids=None):
     return old + new
 
 
-def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None, objective=None):
+def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None, objective=None,
+              stop_requested=None):
     from ..data.native_graph import graph_loss
     previous_mode = model.training
     model.eval()
@@ -614,10 +615,14 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
     classes = {}
     evaluation_metrics = {}
     evaluation_bindings = {}
+    evaluated_ids=[];interrupted=False
     try:
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
             for example in examples:
+                if stop_requested is not None and stop_requested():
+                    interrupted=True
+                    break
                 if objective is not None:
                     loss,detail=objective.evaluate(model,example,checkpoint_layers=checkpoint_layers,
                         chunk_tokens=chunk_tokens,boundary_ids=boundary_ids)
@@ -661,8 +666,12 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
                 total_tokens += detail['supervised_tokens']
                 total_graphs += 1
                 forward_tokens += example.plan.token_count
+                evaluated_ids.append(example.id)
     finally:
         model.train(previous_mode)
+    if interrupted and not evaluated_ids:
+        return {'loss':None,'examples':0,'forward_tokens':0,'weight':0.,
+                'operationally_interrupted':True,'_evaluated_ids':[]}
     if not math.isfinite(total_loss) or total_weight <= 0:
         raise FloatingPointError('native held evaluation is nonfinite or empty')
     def summarize_boundaries(values):
@@ -673,6 +682,7 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
         for token, sums in values.items()}
     boundaries = summarize_boundaries(boundary_sums)
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
+            **({'operationally_interrupted':interrupted,'_evaluated_ids':evaluated_ids}if stop_requested is not None else{}),
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
             'forward_tokens': forward_tokens, 'boundaries': boundaries,
             'ce_metric_kind': 'original-corpus-weighted-token-mean',
@@ -703,20 +713,34 @@ def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
     return sorted(indices, key=lambda i: (i-position) % len(entries)), state['cursor']
 
 
+def _full_held_requested(args):
+    return (getattr(args,'held_final_policy','budgeted')=='full'
+            or getattr(args,'foundation_qualification_request',None)is not None)
+
+
 def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None,
-                      previous_result=None, objective=None):
+                      previous_result=None, objective=None, stop_requested=None):
     from .native_held import held_selection
     coverage = coverage or {}
     indices, next_coverage, selection = held_selection(source.entries, coverage,
         source_sha256=source.file_sha256, token_budget=args.held_eval_tokens,
-        graph_budget=args.held_eval_graphs, final=final, previous_result=previous_result)
+        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args), previous_result=previous_result)
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
                        chunk_tokens=args.chunk_tokens, backend=backend, objective=objective,
+                       **({'stop_requested':stop_requested}if stop_requested is not None else{}),
                        graph_classes={source.entries[i]['id']: ('communication' if source.entries[i].get('communication')
                                       else 'ordinary') for i in indices})
-    result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
+    observed=result.pop('_evaluated_ids',None)
+    if observed is not None:
+        from .native_held import commit_held_observations
+        next_coverage,selection=commit_held_observations(source.entries,coverage,next_coverage,selection,observed)
+        actual_count=len(observed);cursor=next_coverage['cursor']
+    else:actual_count=len(indices)
+    result.update(scope='full' if actual_count == len(source) else 'cadence-subset',
+                  terminal_policy=getattr(args,'held_final_policy','budgeted'),
+                  full_sweep_requested=bool(final and _full_held_requested(args)),
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
                   cursor_after=cursor, seconds=time.monotonic()-started,
@@ -893,6 +917,8 @@ def build_parser():
     parser.add_argument('--ce-supervision-policy', type=Path,
         help='explicit source-bound balanced CE continuation; preserves raw row credits and optimizer/RNG')
     parser.add_argument('--foundation-native-graphs', type=Path)
+    parser.add_argument('--foundation-declaration-recovery', type=Path,
+                        help='Exact ancestor-bound recovery of an unavailable historical foundation declaration; grants no exposure or qualification')
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
@@ -959,6 +985,8 @@ def build_parser():
     parser.add_argument('--held-eval-tokens', type=int, default=0,
         help='rotating whole-graph held-token budget per cadence; final evaluation always covers all held data')
     parser.add_argument('--held-eval-graphs', type=int, default=0)
+    parser.add_argument('--held-final-policy', choices=('budgeted','full'), default='budgeted',
+        help='Keep the declared rotating held budget at component-stage ends; full explicitly requests a whole-source sweep. Shared foundation qualification requests also require a full sweep.')
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
     parser.add_argument('--async-checkpoint', action=argparse.BooleanOptionalAction, default=False,
@@ -998,6 +1026,8 @@ def build_parser():
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
     parser.add_argument('--objective-spec', type=Path, default=None)
+    parser.add_argument('--optimizer-state-storage',choices=('device','cpu'),default=None,
+                        help='Keep MuonSR history on device or page each complete matrix update from CPU storage.')
     parser.add_argument('--preference-beta',type=float)
     parser.add_argument('--preference-margin',type=float)
     return parser
@@ -1032,6 +1062,26 @@ def _foundation_readiness_boundary(foundation, prior_foundations, *, completed,
     # operational stops carry the old cohort unchanged without repeating the
     # full task/runtime qualification.
     return bool(completed and new_optimizer_updates > 0 and not policy_operation)
+
+
+def _cotangent_transition_capacity_request(args):
+    """Route a storage transition through the actual objective's pre-SGD check."""
+    if args.memory_qualification:
+        return args.memory_qualification
+    request=getattr(args,'policy_capacity_request',None)
+    objective_path=getattr(args,'objective_spec',None)
+    if request and objective_path and json.loads(Path(objective_path).read_text()).get('kind')=='native-policy':
+        from .native_resident import bound
+        from ..rl.native_replay import NativePolicyObjective
+        value=json.loads(bound(json.loads(request)).read_text())
+        if (value.get('schema')!='natlang.native-policy-capacity-request/1'
+                or value.get('objective')!=NativePolicyObjective(objective_path).binding()):
+            raise ValueError('cotangent transition policy capacity request differs from its actual objective')
+        # qualify_policy_objective validates every actual graph and packed
+        # maximum, executes its backward pass and restores RNG/optimizer state
+        # before the training loop. A request itself grants no capacity credit.
+        return request
+    raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
 
 
 def main(argv=None):
@@ -1210,26 +1260,39 @@ def _main(argv=None, *, requested_refresh):
         if loaded_snapshot not in snapshot_ancestors:
             snapshot_ancestors.append(loaded_snapshot)
     checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
+    checkpoint_options['foundation_declaration_recovery_history'] = list(
+        saved_options.get('foundation_declaration_recovery_history') or [])
     previous_cotangent_backend = saved_options.get('cotangent_accumulator_backend', 'cpu_file')
     args.cotangent_accumulator_backend = (previous_cotangent_backend
         if args.cotangent_accumulator_backend is None else args.cotangent_accumulator_backend)
     if args.cotangent_accumulator_backend not in ('cpu_file', 'device_fp32'):
         raise ValueError('native checkpoint declares an unknown cotangent accumulator backend')
     if saved_training and args.cotangent_accumulator_backend != previous_cotangent_backend:
-        if not args.memory_qualification:
-            raise ValueError('cotangent accumulator transition requires fresh exact-parent capacity qualification')
+        transition_capacity_request=_cotangent_transition_capacity_request(args)
         history = list(saved_options.get('cotangent_accumulator_history') or [])
         history.append({'from': previous_cotangent_backend,
             'to': args.cotangent_accumulator_backend,
             'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
             'weights_optimizer_rng_exposure': 'preserved',
-            'capacity_request': args.memory_qualification})
+            'capacity_request': transition_capacity_request})
         checkpoint_options['cotangent_accumulator_history'] = history
     else:
         checkpoint_options['cotangent_accumulator_history'] = list(
             saved_options.get('cotangent_accumulator_history') or [])
     checkpoint_options['cotangent_accumulator_backend'] = args.cotangent_accumulator_backend
     model.native_cotangent_accumulator_backend = args.cotangent_accumulator_backend
+    previous_state_storage=saved_options.get('optimizer_state_storage','device')
+    args.optimizer_state_storage=args.optimizer_state_storage or previous_state_storage
+    if args.optimizer_state_storage not in ('device','cpu'):
+        raise ValueError('native checkpoint declares unknown optimizer state storage')
+    storage_history=list(saved_options.get('optimizer_state_storage_history')or[])
+    if saved_training and args.optimizer_state_storage!=previous_state_storage:
+        storage_history.append({'from':previous_state_storage,'to':args.optimizer_state_storage,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+            'weights_optimizer_rng_exposure':'preserved',
+            'capacity_request':_cotangent_transition_capacity_request(args)})
+    checkpoint_options['optimizer_state_storage']=args.optimizer_state_storage
+    checkpoint_options['optimizer_state_storage_history']=storage_history
     previous_recipe=(saved_training.get('options') or {}).get('recipe_binding')
     if previous_recipe is not None:
         old_recipe=json.loads(previous_recipe) if isinstance(previous_recipe,str) else previous_recipe
@@ -1340,6 +1403,32 @@ def _main(argv=None, *, requested_refresh):
     foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint,
                                            required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
+    # Persist the exact inputs that are actively consumed by this stage. These
+    # bindings are part of checkpoint metadata even when the run makes no
+    # optimizer update, so provider recovery can reconstruct its full closure.
+    if args.foundation_native_graphs:
+        foundation_binding = {
+            'path': str(foundation_source.path.resolve()),
+            'sha256': foundation_source.file_sha256,
+            'bytes': foundation_source.path.stat().st_size,
+        }
+        from .native_foundation_recovery import native_graph_bindings
+        foundation_binding['dependencies'] = [item for item in native_graph_bindings(foundation_binding)
+            if item['path'] != foundation_binding['path']]
+        checkpoint_options['foundation_native_graphs_binding'] = foundation_binding
+    else:
+        checkpoint_options.pop('foundation_native_graphs_binding', None)
+    if args.foundation_declaration_recovery:
+        recovery_path = args.foundation_declaration_recovery.resolve(strict=True)
+        checkpoint_options['foundation_declaration_recovery_binding'] = {
+            'path': str(recovery_path), 'sha256': sha256_file_hex_cached(recovery_path),
+            'bytes': recovery_path.stat().st_size,
+        }
+    else:
+        checkpoint_options.pop('foundation_declaration_recovery_binding', None)
+    foundation_dependencies_changed = any(
+        checkpoint_options.get(key) != saved_options.get(key)
+        for key in ('foundation_native_graphs_binding', 'foundation_declaration_recovery_binding'))
     if args.foundation_communication_batches is not None and args.foundation_native_graphs is None:
         raise ValueError('foundation scheduling requires the exact declared foundation source')
     if args.communication_foundation and args.foundation_native_graphs is None:
@@ -1348,11 +1437,29 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('foundation-readiness refresh requires its exact declared communication cohort')
     if args.foundation_qualification_request and (not args.communication_foundation or args.foundation_readiness_policy != 'on-shared-request'):
         raise ValueError('shared qualification request requires its explicit foundation readiness policy')
+    foundation_declaration_changed = False
     if args.communication_foundation:
         from .native_continuation import verify_initial_foundation_cohort
         foundation_frame = carried_progress.get(args.stage_id or 'native-graph-ce') or {}
+        recovered_declaration = False
+        if args.foundation_declaration_recovery:
+            from .native_foundation_recovery import restore_declaration
+            record = restore_declaration(args.foundation_declaration_recovery,
+                model_config=config, stage_id=args.stage_id or 'native-graph-ce',
+                training_frame=foundation_frame, snapshot_ancestors=snapshot_ancestors,
+                foundation=foundation_source, active_bindings=train.bindings, epochs=args.epochs)
+            history = checkpoint_options['foundation_declaration_recovery_history']
+            if not any(item.get('recovery') == record['recovery'] for item in history):
+                history.append(record)
+                foundation_declaration_changed = True
+            if saved_options.get('communication_foundation') != args.communication_foundation:
+                foundation_declaration_changed = True
+            recovered_declaration = True
         verify_initial_foundation_cohort(train, foundation_source,
-            already_declared=bool((foundation_frame.get('options') or {}).get('communication_foundation')))
+            already_declared=recovered_declaration or bool(
+                (foundation_frame.get('options') or {}).get('communication_foundation')))
+    elif args.foundation_declaration_recovery:
+        raise ValueError('foundation declaration recovery requires active communication foundation tracking')
     objective = None
     objective_binding = None
     if args.objective_spec is not None:
@@ -1391,6 +1498,7 @@ def _main(argv=None, *, requested_refresh):
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
                 'cotangent_accumulator_backend': args.cotangent_accumulator_backend,
+                'optimizer_state_storage':args.optimizer_state_storage,
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
@@ -1685,6 +1793,9 @@ def _main(argv=None, *, requested_refresh):
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
+    if optimizer.latent is None or not callable(getattr(optimizer.latent,'set_state_storage',None)):
+        raise ValueError('native MuonSR optimizer omitted its explicit history storage mechanism')
+    optimizer.latent.set_state_storage(args.optimizer_state_storage)
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -1805,6 +1916,8 @@ def _main(argv=None, *, requested_refresh):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or foundation_declaration_changed
+        or foundation_dependencies_changed
         or args.native_shared_execution is not None and args.native_shared_execution!=previous_shared_declaration
         or config.get('native_shared_execution','source-v1')!=previous_shared_execution
         or args.native_norm_execution is not None and args.native_norm_execution != previous_norm_declaration
@@ -2047,7 +2160,7 @@ def _main(argv=None, *, requested_refresh):
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
                     held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
+                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
                 except Exception as error:
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
@@ -2198,7 +2311,7 @@ def _main(argv=None, *, requested_refresh):
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
+                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -2208,10 +2321,10 @@ def _main(argv=None, *, requested_refresh):
               fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
-    if completed and not policy_operation and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
+    if completed and not policy_operation and not policy.signaled and _full_held_requested(args) and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
         metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective)
+            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective,stop_requested=lambda:policy.signaled)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
@@ -2221,6 +2334,13 @@ def _main(argv=None, *, requested_refresh):
             rng=capture_training_rng_state(args.device), metrics=metrics,
             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+    held_measurement=metrics.get('held')or{}
+    active_stage_complete=bool(completed and not policy.signaled
+        and held_measurement.get('source_sha256')==held.file_sha256
+        and held_measurement.get('examples',0)>0
+        and not held_measurement.get('operationally_interrupted')
+        and isinstance(held_measurement.get('loss'),(int,float))
+        and math.isfinite(held_measurement['loss']))
     completed = (completed and (policy_operation or metrics.get('held', {}).get('scope') == 'full')
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     foundation = foundation_exposure() if args.communication_foundation else None
@@ -2236,7 +2356,7 @@ def _main(argv=None, *, requested_refresh):
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if not policy.signaled and task_eval is not None and ((completed and not policy_operation) or foundation_boundary) and (
+    if not policy.signaled and task_eval is not None and (((completed or active_stage_complete) and not policy_operation) or foundation_boundary) and (
             not metrics.get('task_checkpoint_sha256') or
             metrics['task_checkpoint_sha256'] != sha256_file_hex_cached(policy.slot)):
         current_sha = sha256_file_hex_cached(policy.slot)
@@ -2272,8 +2392,8 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request' and not completed and not foundation_boundary)
-    if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary):
+    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request' and not completed and not foundation_boundary and not active_stage_complete)
+    if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
@@ -2336,8 +2456,16 @@ def _main(argv=None, *, requested_refresh):
               'qualification_profile':qualification_profile,
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
+              'active_stage_complete':active_stage_complete,
+              'active_stage_completion':{'schema':'natlang.native-active-stage-completion/1',
+                  'stage_id':args.stage_id,'checkpoint_sha256':checkpoint_sha,
+                  'train_source_sha256':source_receipts[0]['sha256'],'held_source_sha256':held.file_sha256,
+                  'required_graph_visits':sum(required_visits.values()),
+                  'graph_visits':sum(exposure_counts[key]for key in required_visits),
+                  'remaining_graph_visits':sum(max(0,count-exposure_counts[key])for key,count in required_visits.items()),
+                  'held_scope':held_measurement.get('scope'),'full_held_qualification_complete':held_measurement.get('scope')=='full'},
               'completion_scope':'policy-operation' if policy_operation else 'supervised-exposure',
-              'held_qualification':{'required_scope':'cadence' if policy_operation else 'full',
+              'held_qualification':{'required_scope':'cadence' if policy_operation or not _full_held_requested(args) else 'full',
                   'observed_scope':metrics.get('held',{}).get('scope'),
                   'source_sha256':metrics.get('held',{}).get('source_sha256')},
               'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,

@@ -44,7 +44,13 @@ def _fixture(tmp_path, monkeypatch):
             # The tiny fixture uses dense experts/attention in FP32 for CPU
             # exactness. Select the dense latent policy, never ternary codes.
             fresh.model.port.hf.natlang_precision = 'bf16'
-        fresh.optimizer = make_native_optimizer(fresh.model, lr=config['backbone_lr'], in_backward=False)[0]
+        source_lr=3e-4 if name=='lfm' else 7e-5
+        source_ns='cubic5' if name=='lfm' else 'quintic'
+        fresh.optimizer = make_native_optimizer(fresh.model, lr=source_lr, latent_ns=source_ns, in_backward=False)[0]
+        fresh.optimizer_options = {'lr':source_lr,'weight_decay':.1,'latent_ns':source_ns,
+            'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None}
+        fresh.optimizer_state_storage = 'device'
+        fresh.fp8_profile = {'kind':'off','recipe':'delayed','amax_history_len':16}
         return fresh
     monkeypatch.setattr(stage, 'load_participant', load)
     return config_path, manifest, config, row
@@ -65,6 +71,42 @@ def _assert_same(left, right):
         assert left == right
 
 
+def test_inherited_participant_optimizer_policy_beats_generic_curriculum_defaults():
+    from natlang_neuralese.train.native_semantic_stage import _inherited_optimizer_options
+
+    saved={'identity':{'optimizer_options':{'lr':3e-4,'learned_row_lr':2e-4,
+        'interface_row_lr':1e-4,'weight_decay':.02,'latent_ns':'cubic5',
+        'native_optimizer_migration':None}}}
+    actual=_inherited_optimizer_options(saved,participant='lfm')
+    assert actual==saved['identity']['optimizer_options']
+    shared={'training_options':{'optimizer_options':{'lr':7e-5,'weight_decay':.08,
+        'latent_ns':'quintic','learned_row_lr':None,'interface_row_lr':None}}}
+    assert _inherited_optimizer_options(shared,participant='mellum')['lr']==7e-5
+    assert _inherited_optimizer_options(shared,participant='mellum')['latent_ns']=='quintic'
+    with pytest.raises(ValueError,match='omitted its exact optimizer'):
+        _inherited_optimizer_options({'options':{'latent_ns':'quintic'}},participant='mellum')
+
+
+def test_semantic_participant_preserves_optimizer_state_storage_policy():
+    from natlang_neuralese.train.native_semantic_stage import _apply_optimizer_state_storage
+    from natlang_neuralese.train.optim import MuonSR
+
+    parameter=torch.nn.Parameter(torch.ones(3,3))
+    optimizer=MuonSR([parameter],lr=1e-4)
+    # The regular optimizer load path materializes tensors on the parameter
+    # device, so semantic continuation reapplies the bound storage policy after
+    # loading rather than treating serialized tensor placement as authority.
+    optimizer.state[parameter]['momentum']=torch.ones_like(parameter)
+    state=copy.deepcopy(optimizer.state_dict())
+    optimizer.load_state_dict(state)
+    assert optimizer.state_storage=='device'
+    assert _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'cpu'},participant='lfm')=='cpu'
+    assert optimizer.state_storage=='cpu'
+    assert torch.equal(optimizer.state[parameter]['momentum'],torch.ones_like(parameter))
+    with pytest.raises(ValueError,match='unknown optimizer state storage'):
+        _apply_optimizer_state_storage(optimizer,{'optimizer_state_storage':'pinned'},participant='lfm')
+
+
 def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypatch):
     config, manifest, _, row = _fixture(tmp_path, monkeypatch)
     torch.manual_seed(1234)
@@ -83,6 +125,13 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
     for name in whole['participants']:
         _assert_same(whole['participants'][name]['model_state'], restored['participants'][name]['model_state'])
         _assert_same(whole['participants'][name]['optimizer'], restored['participants'][name]['optimizer'])
+        expected_lr=3e-4 if name=='lfm' else 7e-5
+        assert restored['participants'][name]['training_options']['optimizer_options']['lr']==expected_lr
+        assert restored['participants'][name]['training_options']['optimizer_options']['latent_ns']==(
+            'cubic5' if name=='lfm' else 'quintic')
+        assert restored['participants'][name]['training_options']['fp8_profile']=={
+            'kind':'off','recipe':'delayed','amax_history_len':16}
+        assert restored['participants'][name]['training_options']['optimizer_state_storage']=='device'
     _assert_same(whole['training']['rng'], restored['training']['rng'])
     assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
                for values in resumed['exposure'].values() for counts in values.values())
@@ -90,6 +139,50 @@ def test_complete_curriculum_and_interrupted_resume_are_exact(tmp_path, monkeypa
     assert export['checkpoint']['sha256'] == sha256_file_hex(checkpoint)
     assert {value['native_identity']['checkpoint_sha256'] for value in export['models'].values()} == {
         export['checkpoint']['sha256']}
+
+
+def test_shared_completion_exports_resumable_participant_return_bundle(tmp_path,monkeypatch):
+    from natlang_neuralese.model.native_bundle import export_bundle
+    from natlang_neuralese.rl.local_cycle_semantic_return import _checkpoint_state
+    from natlang_neuralese.common.hashing import sha256_file_hex
+
+    config_path,manifest,_,_=_fixture(tmp_path,monkeypatch)
+    from natlang_neuralese.eval import native_semantic_runtime
+    monkeypatch.setattr(native_semantic_runtime,'qualify_semantic_transport',
+        lambda *args,**kwargs:{'passed':False,'fixture_scope':'bundle-custody-only'})
+    original=stage.load_participant
+    parent=tmp_path/'source-parent.pt';parent.write_bytes(b'actual lineage anchor')
+    parent_sha=sha256_file_hex(parent)
+    def load(name,binding,config,device):
+        entry=original(name,binding,config,device)
+        entry.snapshot_ancestors=[parent_sha]
+        entry.source_rng={'torch_cpu':torch.get_rng_state().clone()}
+        def save_pretrained(directory):
+            directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
+            (directory/'tokenizer.json').write_text(json.dumps({'participant':name}))
+        entry.tokenizer.save_pretrained=save_pretrained
+        entry.tokenizer.chat_template='{{ messages }}'
+        entry.tokenizer.apply_chat_template=lambda messages,**kwargs:'fixture transcript'
+        return entry
+    monkeypatch.setattr(stage,'load_participant',load)
+    out=tmp_path/'shared'
+    result=stage.run(config_path,manifest,out,device='cpu')
+    assert result['completed']
+    completion=json.loads((out/'shared-stage-completion.json').read_text())
+    assert completion['checkpoint']['sha256']==sha256_file_hex(out/'checkpoint.pt')
+    assert completion['adapter']['sha256']==sha256_file_hex(out/'semantic-adapter.json')
+
+    for participant in ('lfm','mellum'):
+        bundle=export_bundle(out/'checkpoint.pt',tmp_path/'returns'/participant,
+            semantic_adapter=out/'semantic-adapter.json',participant=participant)
+        payload,training=_checkpoint_state(bundle['checkpoint']['resolved'],participant)
+        assert payload['optimizer'] and payload['source_rng']
+        assert payload['training_options']['native_snapshot_ancestors']==[parent_sha]
+        assert payload['sft_progress'] is not None
+        assert training['sft_progress']==payload['sft_progress']
+        adapter=json.loads(Path(bundle['semantic_adapter']['resolved']).read_text())
+        assert adapter['models'][participant]['checkpoint']['sha256']==bundle['checkpoint']['sha256']
+        assert adapter['models'][participant]['mandatory_sft'] is not None
 
 
 def test_appended_data_and_larger_epochs_are_not_mistaken_for_finished(tmp_path, monkeypatch):

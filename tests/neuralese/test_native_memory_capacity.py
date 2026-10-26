@@ -616,3 +616,26 @@ def test_request_alias_changed_after_resolution_fails_before_cached_check(tmp_pa
     with pytest.raises(ValueError,match='resident artifact changed'):
         memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
     assert len(calls)==1
+
+
+def test_capacity_oom_retains_failing_phase_stack_and_actual_offload_state(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_state_sft
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    hook=configure_checkpoint_input_offload(model.port,enabled=True,directory=tmp_path/'activation-files')
+    before=copy.deepcopy(model.state_dict());history=copy.deepcopy(optimizer.state_dict())
+    rng=torch.get_rng_state().clone()
+    def failing_actual_forward(*args,**kwargs):
+        raise torch.cuda.OutOfMemoryError('fixture allocation failure in forward')
+    monkeypatch.setattr(native_state_sft,'packed_graph_loss',failing_actual_forward)
+    report=qualify_capacity(model,optimizer,examples()[:1],checkpoint_layers=True,
+        checkpoint_sha256='a'*64,source_binding={'path':'actual-fixture','sha256':'b'*64})
+    assert not report['passed'] and report['optimizer_updates']==0
+    case=report['cases'][0]
+    assert case['failure_phase']=='forward' and case['status']=='out_of_memory'
+    assert 'failing_actual_forward' in case['failure_traceback']
+    assert 'fixture allocation failure in forward' in case['failure_traceback']
+    assert case['checkpoint_input_offload']==hook.snapshot()
+    assert_exact(before,model.state_dict());assert_exact(history,optimizer.state_dict())
+    assert torch.equal(rng,torch.get_rng_state())
+    assert all(p.grad is None for p in model.parameters())

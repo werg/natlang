@@ -48,17 +48,31 @@ def _exists_valid_source(ctx:Tranche)->bool:
 
 def _ensure_source(ctx:Tranche,target:str)->None:
     if _exists_valid_source(ctx): return
-    fetch=[sys.executable,str(CODE_ROOT/'scripts/coreweave/fetch_teacher_internal_ready_assets.py'),
-           '--batch',str(ctx.batch),'--source-cases-sha256',target]
-    _run(fetch,SPOOL/'worker-logs'/ctx.corpus_id/'fetch-ready-assets.log')
-    prepare=[sys.executable,str(CODE_ROOT/'scripts/coreweave/prepare_teacher_internal_ready_relocation.py'),
-             '--batch',str(ctx.batch),'--source-cases-sha256',target]
-    _run(prepare,SPOOL/'worker-logs'/ctx.corpus_id/'prepare-relocation.log')
-    ordinal_data=read_bound(file_binding(SPOOL/'assets/ready-packet/candidate-scan.json'))
-    matches=[i for i,row in enumerate(ordinal_data['scan']['candidates'])
-             if row.get('cases_binding',{}).get('sha256')==target]
-    if len(matches)!=1: raise ValueError('selected source cases do not bind exactly one ready packet')
-    relocation=SPOOL/'assets/ready-packet'/f'packet-{matches[0]:05d}'/'relocation.json'
+    execution=SPOOL/'source-executions'/ctx.corpus_id/'execution.json'
+    prior=read_bound(file_binding(execution))if execution.is_file()else{}
+    recovered=prior.get('ready_packet_relocation')
+    if recovered:
+        # A recovered closure is already hash-bound. Run the normal full source
+        # verifier again; do not require a dead historical sandbox to fetch it.
+        packet=read_bound(recovered)
+        if packet.get('schema')=='natlang.teacher-ready-packet-relocation-result/1':
+            recovered=packet['relocation_declaration']
+            packet=read_bound(recovered)
+        if packet.get('source_cases_sha256')!=target:
+            raise ValueError('recovered ready packet differs from the selected source cases')
+        relocation=Path(recovered['path'])
+    else:
+        fetch=[sys.executable,str(CODE_ROOT/'scripts/coreweave/fetch_teacher_internal_ready_assets.py'),
+               '--batch',str(ctx.batch),'--source-cases-sha256',target]
+        _run(fetch,SPOOL/'worker-logs'/ctx.corpus_id/'fetch-ready-assets.log')
+        prepare=[sys.executable,str(CODE_ROOT/'scripts/coreweave/prepare_teacher_internal_ready_relocation.py'),
+                 '--batch',str(ctx.batch),'--source-cases-sha256',target]
+        _run(prepare,SPOOL/'worker-logs'/ctx.corpus_id/'prepare-relocation.log')
+        ordinal_data=read_bound(file_binding(SPOOL/'assets/ready-packet/candidate-scan.json'))
+        matches=[i for i,row in enumerate(ordinal_data['scan']['candidates'])
+                 if row.get('cases_binding',{}).get('sha256')==target]
+        if len(matches)!=1: raise ValueError('selected source cases do not bind exactly one ready packet')
+        relocation=SPOOL/'assets/ready-packet'/f'packet-{matches[0]:05d}'/'relocation.json'
     cmd=[sys.executable,str(CODE_ROOT/'scripts/coreweave/teacher_internal_source.py'),
         '--original-settings',str(ORIGINAL_SETTINGS),'--original-settings-sha256',ORIGINAL_SETTINGS_SHA,
         '--publisher-config',str(PUBLISHER_CONFIG),'--publisher-sha256',PUBLISHER_SHA,
@@ -282,6 +296,38 @@ def _poll_boundary_signature(tranche:dict,private:dict,policy:list[dict],stages:
                                     sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
+def _process_verified_boundary(ctx:Tranche)->dict:
+    source_ref=file_binding(ctx.admission(SPOOL)/'canonical-source-verification.json')
+    source_proof=read_bound(source_ref)
+    from scripts.coreweave.teacher_internal_source import verified_zero_positive_source
+    empty=verified_zero_positive_source(source_proof)
+    if empty is not None:
+        result_ref=file_binding(SPOOL/'source-executions'/ctx.corpus_id/'source-result.json')
+        result=read_bound(result_ref)
+        if (result.get('source_disposition')!='verified-zero-positive-source'
+                or result.get('source_proof')!=source_ref
+                or result.get('source')!=source_proof['source']
+                or result.get('training_admission')is not False
+                or result.get('training_exposure')is not False):
+            raise ValueError('zero-positive boundary lacks its exact completed source execution')
+        return {**empty,'source_proof':source_ref,'source_result':result_ref,
+                'new_registration':False,'row_counts':{'lfm25':0,'mellum21':0}}
+    conversion=_next_conversion(ctx)
+    if conversion is None:raise RuntimeError('conversion did not produce a durable both-port receipt')
+    result=_publish_if_new_delta(ctx,conversion)
+    idempotent=isinstance(result,dict)and result.get('idempotent')is True
+    zero_delta=isinstance(result,dict)and result.get('status')=='verified-zero-delta'
+    return {'source_proof':source_ref,'conversion':file_binding(conversion/'both-port-conversion.json'),
+            'row_counts':{x['model']:read_bound(x['receipt'])['outputs']['train']['rows']
+                          for x in read_bound(file_binding(conversion/'both-port-conversion.json'))['models']},
+            'publication':result,
+            'status':('verified-zero-delta'if zero_delta else
+                      'idempotent-existing-publication'if idempotent else
+                      'registered'if result else'no-new-numeric-rows'),
+            'new_registration':bool(result)and not idempotent and not zero_delta,
+            'training_admission':bool(result)and not zero_delta,'training_exposure':False}
+
+
 def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int]|None=None)->None:
     publisher=read_bound(file_binding(PUBLISHER_CONFIG))
     if (publisher.get('schema')!='natlang.teacher-incremental-export-publisher/1'
@@ -310,29 +356,15 @@ def run(*,once:bool,poll_seconds:int,batches:set[int]|None=None,tranches:set[int
                     skipped+=1
                     continue
                 _ensure_source(ctx,target)
-                conversion=_next_conversion(ctx)
-                if conversion is None: raise RuntimeError('conversion did not produce a durable both-port receipt')
-                result=_publish_if_new_delta(ctx,conversion)
-                idempotent=isinstance(result,dict) and result.get('idempotent') is True
-                zero_delta=isinstance(result,dict) and result.get('status')=='verified-zero-delta'
-                record.update({'source_proof':file_binding(ctx.admission(SPOOL)/'canonical-source-verification.json'),
-                    'conversion':file_binding(conversion/'both-port-conversion.json'),
-                    'row_counts':{x['model']:read_bound(x['receipt'])['outputs']['train']['rows']
-                                  for x in read_bound(file_binding(conversion/'both-port-conversion.json'))['models']},
-                    'publication':result,
-                    'status':('verified-zero-delta' if zero_delta else
-                              'idempotent-existing-publication' if idempotent else
-                              'registered' if result else 'no-new-numeric-rows'),
-                    'new_registration':bool(result) and not idempotent and not zero_delta,
-                    'training_admission':bool(result) and not zero_delta,
-                    'training_exposure':False})
+                record.update(_process_verified_boundary(ctx))
             except Exception as error:
                 record.update({'status':'error','error':f'{type(error).__name__}: {error}',
                     'traceback':traceback.format_exc(),'training_admission':False,'training_exposure':False})
             worker_log.parent.mkdir(parents=True,exist_ok=True)
             with worker_log.open('a') as stream: stream.write(json.dumps(record,sort_keys=True)+'\n')
             print(json.dumps(record,sort_keys=True),flush=True)
-            if record['status'] in ('registered','idempotent-existing-publication','verified-zero-delta'):
+            if record['status'] in ('registered','idempotent-existing-publication','verified-zero-delta',
+                                     'verified-zero-positive-source'):
                 # Normal work may have created or repaired the observed stages.
                 # Store the pre-work identity: a subsequent poll rechecks any
                 # transition instead of assuming newly observed bytes passed.

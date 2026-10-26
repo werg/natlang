@@ -107,6 +107,23 @@ def test_default_owner_unchanged_partial_owner_requires_exact_partition():
         roles.ownership({**plan,'owned_models':['lfm']})
 
 
+def test_current_full_checkpoint_proof_cache_is_bound_to_exact_bytes(tmp_path,monkeypatch):
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    path=tmp_path/'checkpoint.pt';path.write_bytes(b'first full-state bytes')
+    calls=[]
+    monkeypatch.setattr(CheckpointPolicy,'load',lambda selected:(calls.append(str(selected))or{
+        'schema':'natlang.neuralese-native-checkpoint/1','model_config':{'architecture':'lfm2',
+            'base_inventory_sha256':'a'*64},'training':{'optimizer':{'real':True},'rng':{'real':True},
+                'source_receipts':[{}],'options':{'native_snapshot_ancestors':['b'*64]}}}))
+    first=roles.binding(path)
+    assert roles._local_cycle_checkpoint_proof(first)==roles._local_cycle_checkpoint_proof(first)
+    assert len(calls)==1
+    path.write_bytes(b'second exact full-state bytes')
+    second=roles.binding(path)
+    assert roles._local_cycle_checkpoint_proof(second)['model_config']['architecture']=='lfm2'
+    assert len(calls)==2
+
+
 @pytest.mark.parametrize('bad',['duplicate','missing','wrong-owner','consumer','empty-host'])
 def test_role_partition_fail_closed(tmp_path,monkeypatch,bad):
     rows=fixture(tmp_path,monkeypatch);plan=rows['lfm']['plan'];assignment=plan['role_exchange']['roles']
@@ -234,7 +251,14 @@ def _service(monkeypatch=None):
 class FileProtocolIO:
     """Exercise actual remote source helpers using isolated protocol files."""
     def __init__(self,rows):
-        self.config={'sandboxes':{name+'-actual-sid':{}for name in rows}}
+        self.config={'sandboxes':{}}
+        self.collector_assets={}
+        for name,row in rows.items():
+            runtime=Path(row['path']).parent/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
+            script.parent.mkdir(parents=True,exist_ok=True);script.write_text('# fixture collector\n')
+            self.config['sandboxes'][name+'-actual-sid']={'runtime':str(runtime)}
+            self.collector_assets[name]={'path':str(script),'kind':'task-source-file',
+                'sha256':sha256_file_hex(script),'bytes':script.stat().st_size}
         self.transfers=[];self.closures=[]
     def dependency_code(self,sid):return 'import json;'
     def read(self,sid,path):return Path(path).read_bytes()
@@ -249,14 +273,19 @@ class FileProtocolIO:
         self.closures.append((sid,request))
         return {'files':request['semantic_participants'],'assets':[]}
     def mirror_many(self,source,target,items):self.transfers.append((source,target,items))
-    def verify_assets(self,target,assets):assert assets==[]
+    def verify_assets(self,target,assets):
+        for asset in assets:
+            assert asset['kind']=='task-source-file'
+            path=Path(asset['path'])
+            assert path.is_file() and sha256_file_hex(path)==asset['sha256']
 
 
 def test_actual_role_relay_waits_for_consumption_then_transfers_only_remote_participant(tmp_path,monkeypatch):
     rows=fixture(tmp_path,monkeypatch);module=_service(monkeypatch);io=FileProtocolIO(rows)
     config={'schema':'natlang.native-role-exchange-service/1','hosts':{
         name:{'source_host_id':name+'-actual-sid','plan':raw.binding(row['plan_path']),
-              'raw_state':str(row['state_path'])}for name,row in rows.items()}}
+              'raw_state':str(row['state_path'])}for name,row in rows.items()},
+        'task_eval_collector_assets':io.collector_assets}
     first=module.tick(config,io)
     assert first['status']=='waiting-for-semantic-consumption' and not io.transfers
     assert not ready_participants(rows['mellum']['config'])[0]
@@ -284,7 +313,8 @@ def test_service_never_seals_a_live_raw_owner(tmp_path,monkeypatch):
         row['state']['owner']=process_owner();write_json_durable(row['state_path'],row['state'])
     config={'schema':'natlang.native-role-exchange-service/1','hosts':{
         name:{'source_host_id':name+'-actual-sid','plan':raw.binding(row['plan_path']),
-              'raw_state':str(row['state_path'])}for name,row in rows.items()}}
+              'raw_state':str(row['state_path'])}for name,row in rows.items()},
+        'task_eval_collector_assets':io.collector_assets}
     assert module.tick(config,io)['status']=='waiting-for-semantic-consumption'
     assert not io.transfers
     assert all(not(Path(row['plan']['role_exchange']['directory'])/(name+'-status.json')).exists()
@@ -367,7 +397,10 @@ def test_genuine_semantic_load_after_transport_recovers_original_legacy_recipe_a
     sum(parameter.float().square().sum()for parameter in model.parameters()if parameter.requires_grad).backward()
     optimizer.step();optimizer.zero_grad(set_to_none=True)
     training=progress();training.update(schema=TRAINING_SCHEMA,optimizer=optimizer.state_dict(),
-        options={'stage_id':'graph','epochs':1},fp8=None)
+        identity={'optimizer_options':{'lr':.001,'weight_decay':.1,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None},
+            'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16}},
+        options={'stage_id':'graph','epochs':1,'optimizer_state_storage':'cpu'},fp8=None)
     parent=tmp_path/'source-host/legacy.pt';parent.parent.mkdir()
     torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),'training':training},parent)
     identity=native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))
@@ -394,10 +427,26 @@ def test_genuine_semantic_load_after_transport_recovers_original_legacy_recipe_a
     roles.install_checkpoint_alias(original,pinned)
     loaded=load_participant('lfm',selected,semantic,'cpu')
     assert loaded.recipe_binding==receipt['recipe']
+    assert loaded.optimizer_state_storage=='cpu'
+    assert loaded.optimizer.latent.state_storage=='cpu'
     equal_tree(loaded.optimizer.state_dict(),optimizer.state_dict())
     assert loaded.sft_progress['graph']['exposure_counts']==training['exposure_counts']
     terminal.unlink()
     with pytest.raises(ValueError,match='qualified original readiness'):load_participant('lfm',selected,semantic,'cpu')
+
+
+def test_local_cycle_shared_descendant_requires_exact_deployment_updated_participant(tmp_path):
+    from natlang_neuralese.rl.native_role_release import _validate_current_deployment_participant
+    from natlang_neuralese.train.native_resident import binding
+    checkpoint=tmp_path/'current.pt';checkpoint.write_bytes(b'current full-state descendant')
+    actual=binding(checkpoint)
+    deployment={'updated_participants':{'lfm':actual}}
+    assert _validate_current_deployment_participant(deployment,'lfm',actual)==actual
+    with pytest.raises(ValueError,match='omitted its current participant descendant'):
+        _validate_current_deployment_participant({'updated_participants':{}},'lfm',actual)
+    with pytest.raises(ValueError,match='not the current checkpoint descendant'):
+        _validate_current_deployment_participant({'updated_participants':{'lfm':{
+            **actual,'sha256':'0'*64}}},'lfm',actual)
 
 
 def test_partial_owner_keeps_eligible_student_useful_while_peer_missing(tmp_path,monkeypatch):

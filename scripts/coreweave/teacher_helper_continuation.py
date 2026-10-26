@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
+import subprocess
 from natlang_neuralese.common import paths as machine_paths
 from typing import Any
 
@@ -106,17 +108,27 @@ def verify_helper_continuation(
                 actual_old.get("sha256") != old_ref["sha256"] or actual_old.get("bytes") != old_ref["bytes"]):
             raise ValueError(f"historical helper authority changed: {relative}")
 
-    builder_relative = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
-    builder_ref = old.get("reviewed_external_helpers", {}).get("files", {}).get(builder_relative)
-    builder_path = Path(repository_root).resolve(strict=True) / builder_relative
-    builder_actual = binding(builder_path)
-    recorded_builder = execution.get("converter")
-    if (not isinstance(builder_ref, dict) or builder_actual.get("sha256") != builder_ref.get("sha256") or
-            builder_actual.get("bytes") != builder_ref.get("bytes") or not isinstance(recorded_builder, dict) or
-            recorded_builder.get("path") != str(builder_path) or recorded_builder.get("sha256") != builder_ref.get("sha256")):
-        raise ValueError("conversion execution does not bind the reviewed trajectory graph builder")
-
     if actual_receipt == old_observation:
+        # Historical executions used the canonical builder path, but that path
+        # now names a legitimately evolved implementation. Verify the old
+        # implementation through the immutable authority's frozen file instead
+        # of comparing today's repository bytes with yesterday's receipt.
+        builder_relative = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+        builder_ref = old.get("reviewed_external_helpers", {}).get("files", {}).get(builder_relative)
+        authority_builder = authority.get("files", {}).get(builder_relative)
+        if (not isinstance(builder_ref, dict) or not isinstance(authority_builder, dict) or
+                any(builder_ref.get(key) != authority_builder.get(key) for key in ("sha256", "bytes"))):
+            raise ValueError("historical helper observation and immutable builder authority disagree")
+        frozen_builder = binding(authority_builder["path"])
+        builder_path = Path(repository_root).resolve(strict=True) / builder_relative
+        recorded_builder = execution.get("converter")
+        if (frozen_builder.get("sha256") != builder_ref["sha256"] or
+                frozen_builder.get("bytes") != builder_ref["bytes"] or
+                not isinstance(recorded_builder, dict) or
+                recorded_builder.get("path") != str(builder_path) or
+                recorded_builder.get("sha256") != builder_ref["sha256"] or
+                recorded_builder.get("bytes", builder_ref["bytes"]) != builder_ref["bytes"]):
+            raise ValueError("historical conversion does not bind its authenticated frozen trajectory builder")
         if expected_executor is not None and execution.get("converter") != expected_executor:
             raise ValueError("historical execution does not match the exact legacy converter")
         return "historical"
@@ -124,11 +136,21 @@ def verify_helper_continuation(
     transition_ref, transition_raw = _read_bound(transition_binding, expected=transition_binding)
     proof = json.loads(transition_raw)
     if (not isinstance(actual_receipt, dict) or actual_receipt != transition_ref or
-            proof.get("schema") != "natlang.teacher-helper-continuation-transition/1"):
+            proof.get("schema") != "natlang.teacher-helper-continuation-transition/2"):
         raise ValueError("execution does not name the one pinned successor helper transition")
     if (proof.get("legacy_observation") != old_observation or proof.get("legacy_authority") != authority_binding or
             proof.get("training_admission") is not False or proof.get("exposure") != 0):
         raise ValueError("successor proof does not preserve the exact historical authority and non-admission scope")
+    builder_relative = "scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py"
+    builder_path = Path(repository_root).resolve(strict=True) / builder_relative
+    successor_builder = proof.get("successor_converter")
+    recorded_builder = execution.get("converter")
+    actual_builder = binding(builder_path)
+    if (not isinstance(successor_builder, dict) or successor_builder != actual_builder or
+            not isinstance(recorded_builder, dict) or
+            any(recorded_builder.get(key) != successor_builder.get(key) for key in ("path", "sha256")) or
+            ("bytes" in recorded_builder and recorded_builder["bytes"] != successor_builder["bytes"])):
+        raise ValueError("successor conversion does not bind the exact active trajectory graph builder")
     api_binding = binding(loaded_helper_path)
     if (api_binding != successor_helper_binding or proof.get("successor_helper") != api_binding):
         raise ValueError("loaded successor helper differs from the exact proof and operator pin")
@@ -163,38 +185,60 @@ def verify_helper_continuation(
     old_inventory = old.get("reviewed_external_helpers", {}).get("files", {})
     if not isinstance(inventory, dict) or set(inventory) != set(old_inventory):
         raise ValueError("successor proof has an incomplete implementation inventory")
+    successor_inventory = proof.get("successor_implementation_files")
+    successor_relatives = set(old_inventory) - {LEGACY_API_RELATIVE}
+    if not isinstance(successor_inventory, dict) or set(successor_inventory) != successor_relatives:
+        raise ValueError("successor proof has an incomplete active implementation inventory")
+    source_revision = proof.get("successor_source_revision")
+    if not isinstance(source_revision, str) or not re.fullmatch(r"[0-9a-f]{40,64}", source_revision):
+        raise ValueError("successor proof omits the reviewed source revision")
     root = Path(repository_root).resolve(strict=True)
     for relative, new_ref in inventory.items():
         if Path(relative).is_absolute() or ".." in Path(relative).parts:
             raise ValueError("successor implementation inventory escapes the repository")
-        target = Path(loaded_helper_path).resolve(strict=True) if relative == LEGACY_API_RELATIVE else (root / relative).resolve(strict=True)
-        if relative != LEGACY_API_RELATIVE and root not in target.parents and target != root:
-            raise ValueError("successor implementation inventory escapes the repository")
+        authority_ref = authority.get("files", {}).get(relative)
+        if not isinstance(authority_ref, dict):
+            raise ValueError(f"historical implementation is absent from immutable authority: {relative}")
+        target = Path(authority_ref["path"]).resolve(strict=True)
         actual = binding(target)
-        if (not isinstance(new_ref, dict) or actual.get("sha256") != new_ref.get("sha256") or
-                actual.get("bytes") != new_ref.get("bytes")):
-            raise ValueError(f"successor implementation file changed: {relative}")
-        if relative != LEGACY_API_RELATIVE and any(
-                new_ref.get(k) != old_inventory[relative].get(k) for k in ("sha256", "bytes")):
-            raise ValueError(f"unreviewed helper changed outside the selected API: {relative}")
+        if (not isinstance(new_ref, dict) or new_ref != actual or
+                any(new_ref.get(k) != old_inventory[relative].get(k) for k in ("sha256", "bytes"))):
+            raise ValueError(f"authenticated historical implementation changed: {relative}")
+        if relative == builder_relative:
+            if inventory[relative] != actual:
+                raise ValueError("historical builder custody differs from the immutable authority")
+    for relative, new_ref in successor_inventory.items():
+        if Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValueError("active successor implementation inventory escapes the repository")
+        target = (root / relative).resolve(strict=True)
+        if root not in target.parents:
+            raise ValueError("active successor implementation inventory escapes the repository")
+        actual = binding(target)
+        if not isinstance(new_ref, dict) or new_ref != actual:
+            raise ValueError(f"active successor implementation changed: {relative}")
     review_ref = proof.get("review")
     if not isinstance(review_ref, dict):
         raise ValueError("successor proof omits independent source/test review")
     _, review_raw = _read_bound(review_ref)
     review = json.loads(review_raw)
-    if (review.get("schema") != "natlang.teacher-helper-transition-review/1" or
+    if (review.get("schema") != "natlang.teacher-helper-transition-review/2" or
             review.get("passed") is not True or review.get("full_check") is not True or
             review.get("source_commit") != SUCCESSOR_COMMIT or
             review.get("training_admission") is not False or review.get("exposure") != 0 or
-            review.get("successor_helper_sha256") != api_binding["sha256"]):
+            review.get("successor_helper_sha256") != api_binding["sha256"] or
+            review.get("successor_source_revision") != source_revision or
+            review.get("successor_converter") != successor_builder or
+            review.get("successor_implementation_files") != successor_inventory):
         raise ValueError("successor review does not prove the exact helper and full checks")
     for field in ("focused_evidence", "full_check_evidence"):
         evidence_ref = review.get(field)
         _, evidence_raw = _read_bound(evidence_ref)
         evidence = json.loads(evidence_raw)
-        if (evidence.get("schema") != "natlang.teacher-helper-transition-check-result/1" or
+        if (evidence.get("schema") != "natlang.teacher-helper-transition-check-result/2" or
                 evidence.get("status") != "passed" or evidence.get("exit_code") != 0 or
-                evidence.get("source_commit") != SUCCESSOR_COMMIT or not evidence.get("unit")):
+                evidence.get("source_commit") != SUCCESSOR_COMMIT or not evidence.get("unit") or
+                evidence.get("successor_source_revision") != source_revision or
+                evidence.get("successor_implementation_files") != successor_inventory):
             raise ValueError(f"successor review has no terminal-green {field}")
     if expected_executor is not None and execution.get("converter") != expected_executor:
         raise ValueError("successor execution does not match the exact active converter")

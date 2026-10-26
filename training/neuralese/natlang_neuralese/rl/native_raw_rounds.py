@@ -301,8 +301,11 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
 
 def _published_checkpoint_state(state,checkpoint):
     """One publication rule for ordinary bridge and owned-operation commits."""
-    return {**state,'checkpoint':str(_bound(checkpoint)),'phase':'collect',
+    from .production import invalidate_checkpoint_readiness
+    next_state={**state,'checkpoint':str(_bound(checkpoint)),'phase':'collect',
             'actor_policy_pending_load':checkpoint['sha256']}
+    invalidate_checkpoint_readiness(next_state,checkpoint,reason='completed-native-supervised-publication')
+    return next_state
 
 
 def _supervised_stage_inventory(recipe,foundation_id):

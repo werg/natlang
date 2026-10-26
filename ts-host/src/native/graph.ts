@@ -14,7 +14,7 @@ export const GRAPH_VERSION = 'natlang.exec-graph/1';
 export const GRAPH_NODE_KINDS = ['invocation', 'context_bind', 'model_turn', 'block_write', 'block_read', 'readout',
   'combinator', 'rewrite', 'effect', 'iteration_step', 'grad', 'literal'] as const;
 export type GraphNodeKind = typeof GRAPH_NODE_KINDS[number];
-export type GraphInput = { node: string; port?: string; block?: string };
+export type GraphInput = { node: string; port?: string; block?: string; source?: string; stop?: boolean };
 
 /** Manifest additions of a graph record. */
 export type GraphManifest = { version: typeof GRAPH_VERSION; model: { id: string | null; revision: string | null };
@@ -35,21 +35,55 @@ export const invocationNodeId = (callId: string): string => `call:${callId}`;
 
 /** Traces of running invocations by call ID, so host-side operations (iteration, rebinding) record into their caller. */
 const TRACES = new Map<string, NativeTraceRecorder>();
-export function registerTrace(callId: string, trace: NativeTraceRecorder): void { TRACES.set(callId, trace); }
+const TRACE_SCOPES = new WeakMap<NativeTraceRecorder, object>();
+export function registerTrace(callId: string, trace: NativeTraceRecorder, scope: object = trace): void {
+  TRACES.set(callId, trace);
+  TRACE_SCOPES.set(trace, scope);
+}
 export function releaseTrace(callId: string): void { TRACES.delete(callId); }
 export const traceFor = (callId: string | undefined): NativeTraceRecorder | undefined => callId ? TRACES.get(callId) : undefined;
 
-/** The node that produced each recent block (bounded: old entries fall out, and their producer reads as external). */
-const PRODUCERS = new Map<string, string>();
+/** Exact block-to-writer occurrences, shared only by calls with the same task-owned scope object. */
+type ProducerIndex = { byBlock: Map<string, Set<string>>; byNode: Map<string, string> };
+const PRODUCERS = new WeakMap<object, ProducerIndex>();
+const LATEST_PRODUCER = new Map<string, string>();
 const PRODUCER_LIMIT = 100_000;
-function rememberProducer(block: string, node: string): void {
-  PRODUCERS.delete(block);
-  PRODUCERS.set(block, node);
-  if (PRODUCERS.size > PRODUCER_LIMIT) PRODUCERS.delete(PRODUCERS.keys().next().value!);
+function rememberProducer(block: string, node: string, scope: object): void {
+  const index = PRODUCERS.get(scope) ?? { byBlock: new Map<string, Set<string>>(), byNode: new Map<string, string>() };
+  const previousBlock = index.byNode.get(node);
+  if (previousBlock !== undefined && previousBlock !== block)
+    throw new Error(`neuralese-native-grad-invalid: writer occurrence ${node} was reused for a different native block`);
+  if (previousBlock === block) return;
+  const occurrences = index.byBlock.get(block) ?? new Set<string>();
+  occurrences.add(node);
+  index.byBlock.set(block, occurrences);
+  index.byNode.set(node, block);
+  PRODUCERS.set(scope, index);
+  LATEST_PRODUCER.delete(block);
+  LATEST_PRODUCER.set(block, node);
+  while (LATEST_PRODUCER.size > PRODUCER_LIMIT) LATEST_PRODUCER.delete(LATEST_PRODUCER.keys().next().value!);
+  while (index.byNode.size > PRODUCER_LIMIT) {
+    const oldest = index.byNode.keys().next().value!;
+    const oldBlock = index.byNode.get(oldest)!;
+    index.byNode.delete(oldest);
+    const values = index.byBlock.get(oldBlock)!;
+    values.delete(oldest);
+    if (!values.size) index.byBlock.delete(oldBlock);
+    if (LATEST_PRODUCER.get(oldBlock) === oldest) {
+      const latest = [...values].at(-1);
+      if (latest) LATEST_PRODUCER.set(oldBlock, latest);
+      else LATEST_PRODUCER.delete(oldBlock);
+    }
+  }
+}
+/** Whether this exact occurrence was observed writing this block in the same task scope. */
+export function hasProducerOccurrence(block: string, node: string, scope: object): boolean {
+  const index = PRODUCERS.get(scope);
+  return index?.byNode.get(node) === block && (index.byBlock.get(block)?.has(node) ?? false);
 }
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
 export function blockInput(block: string, port?: string, sourceOccurrence?:string): GraphInput {
-  return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : PRODUCERS.get(block) ?? 'external'), block, ...(port ? { port } : {}) };
+  return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : LATEST_PRODUCER.get(block) ?? 'external'), block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */
 export function valueInputs(value: unknown, port: string): GraphInput[] {
@@ -75,7 +109,8 @@ export function graphNode(trace: NativeTraceRecorder | undefined, kind: GraphNod
   const node = id ?? `${callId}#${trace.events.length}`;
   trace.emit(kind, { ...data, node, inputs: [...inputs] });
   activeRecorder()?.recordGraphNode?.(structuredClone(trace.events.at(-1)!) as Record<string,unknown>);
-  if (kind === 'block_write' && typeof data.block === 'string') rememberProducer(data.block, node);
+  if (kind === 'block_write' && typeof data.block === 'string')
+    rememberProducer(data.block, node, TRACE_SCOPES.get(trace) ?? trace);
   return node;
 }
 

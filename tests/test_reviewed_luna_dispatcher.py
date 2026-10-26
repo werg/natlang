@@ -428,3 +428,16 @@ def test_spawned_runner_is_owned_before_runner_started_ledger_write(reviewed_pla
     assert len(made) == 1 and made[0].terminated
     events = [json.loads(line) for line in (campaign_root / 'dispatch/claims.jsonl').read_text().splitlines()]
     assert any(row.get('event') == 'abandoned' and row.get('index') == 0 for row in events)
+
+
+@pytest.mark.parametrize('slots,accepted', [(6, True), (7, False)])
+def test_owner_six_worker_ceiling(reviewed_plan, slots, accepted):
+    path, _, _, plan = reviewed_plan
+    plan['slots'] = slots
+    path.write_text(json.dumps(plan, sort_keys=True))
+    if accepted:
+        _, identity = dispatcher.validate_plan(path, dispatcher.digest(path))
+        assert identity['slots'] == 6
+    else:
+        with pytest.raises(ValueError, match='one through six'):
+            dispatcher.validate_plan(path, dispatcher.digest(path))

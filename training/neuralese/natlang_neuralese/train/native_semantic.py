@@ -33,6 +33,9 @@ class SemanticParticipant:
     sft_progress: dict = field(default_factory=dict)
     global_step: int = 0
     recipe_binding: dict | None = None
+    optimizer_options: dict | None = None
+    optimizer_state_storage: str | None = None
+    fp8_profile: dict | None = None
 
 
 def producer(participant, example, view, *, external_blocks=None, chunk_tokens=128, supervise=True, reference=False):

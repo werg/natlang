@@ -43,8 +43,7 @@ REGISTRY = 'training/neuralese_corpora.json'
 MANIFESTS = 'training/corpus-manifests'
 WORKTREE = Path(os.environ.get('NATLANG_REGISTER_WORKTREE', Path.home() / '.cache/natlang-register-wt'))
 LOCK = Path.home() / '.local/state/natlang/register-corpora.lock'
-TRAILERS = ('Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n'
-            'Claude-Session: https://claude.ai/code/session_01Q53kXkxDK2onzJmxGfyHnP')
+TRAILERS = 'Registration-Tool: scripts/neuralese_data/register_corpora.py'
 
 
 class Retry(Exception):

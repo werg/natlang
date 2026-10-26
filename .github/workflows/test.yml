@@ -20,6 +20,12 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Training continuation and provenance checks intentionally resolve exact
+          # historical Git objects recorded by recipes and receipts. The default
+          # shallow checkout omits those objects and makes valid recovery checks
+          # fail in CI; fetch the repository history so those checks remain strict.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
