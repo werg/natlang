@@ -13,6 +13,42 @@ from copy import deepcopy
 from ..common.hashing import canonical_json_sha256_hex
 
 
+def rebind_held_coverage_after_exact_correction(previous_entries, current_entries, coverage,
+                                                *, source_sha256):
+    """Retain visits while rebinding coverage to a proved same-membership target repair.
+
+    The caller must first validate the correction ledger against both exact
+    held receipts, row bindings, and source groups. This function independently
+    checks that the correction did not move a row between ordinary and
+    communication classes, and that the old coverage prefix matches the
+    predecessor entries before updating only its binding digest.
+    """
+    if not isinstance(coverage, dict) or not isinstance(coverage.get('classes'), dict):
+        return coverage
+    result=deepcopy(coverage)
+    for name, communication in [('communication', True), ('ordinary', False)]:
+        previous=[[e.get('id', str(i)), e.get('binding')] for i,e in enumerate(previous_entries)
+                  if bool(e.get('communication')) is communication]
+        current=[[e.get('id', str(i)), e.get('binding')] for i,e in enumerate(current_entries)
+                 if bool(e.get('communication')) is communication]
+        if [row[0] for row in previous] != [row[0] for row in current]:
+            raise ValueError('protected held correction changed class membership/order')
+        state=result['classes'].get(name)
+        if state is None:
+            if previous:
+                raise ValueError('protected held correction lacks prior class coverage')
+            continue
+        old_count=state.get('rows')
+        if type(old_count) is not int or old_count != len(previous):
+            raise ValueError('protected held correction coverage row count differs from exact predecessor')
+        if canonical_json_sha256_hex(previous) != state.get('row_prefix_sha256'):
+            raise ValueError('protected held correction predecessor differs from saved coverage binding')
+        state['row_prefix_sha256']=canonical_json_sha256_hex(current)
+        state['rows']=len(current)
+    result['source_sha256']=source_sha256
+    return result
+
+
 def commit_held_observations(entries, coverage, planned, selection, observed_ids):
     """Count only completed whole graphs when an operational stop interrupts evaluation."""
     observed=list(observed_ids)

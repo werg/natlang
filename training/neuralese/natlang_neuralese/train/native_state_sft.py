@@ -1607,11 +1607,33 @@ def _main(argv=None, *, requested_refresh):
             stage_id=args.stage_id or 'native-graph-ce')
         if args.source_correction is not None:
             from .native_source_correction import apply_source_correction
+            protected_held = None
+            correction_document = json.loads(Path(args.source_correction).read_text())
+            if correction_document.get('protected_held_correction') is not None:
+                if args.continued_held_native_graphs is None:
+                    raise ValueError('protected held correction requires its exact continued held source')
+                prior_held_source = NativeGraphSource(args.continued_held_native_graphs, fingerprint,
+                    required_split='test', role_ids=roles.ids)
+                protected_held = {
+                    'prior_receipt': source_receipt(prior_held_source),
+                    'current_receipt': source_receipts[1],
+                    'prior_bindings': prior_held_source.bindings,
+                    'current_bindings': held_row_bindings,
+                    'prior_order': prior_held_source.ordered_ids(),
+                    'current_order': held.ordered_ids(),
+                    'prior_entries': prior_held_source.entries,
+                    'current_entries': held.entries,
+                    'prior_groups': prior_held_source.groups,
+                    'current_groups': held.groups,
+                    'prior_groups_by_id': {entry['id']: entry['groups'] for entry in prior_held_source.entries},
+                    'current_groups_by_id': {entry['id']: entry['groups'] for entry in held.entries},
+                }
             resume, source_correction_result = apply_source_correction(
                 resume, args.source_correction, model_id=config['architecture'] + ':' + config['base_inventory_sha256'],
                 stage_id=args.stage_id or 'native-graph-ce', current_source_receipt=source_receipts[0],
                 current_bindings=source_row_bindings, current_order=source_order,
-                current_communication_ids=[entry['id'] for entry in train.entries if entry.get('communication')])
+                current_communication_ids=[entry['id'] for entry in train.entries if entry.get('communication')],
+                protected_held=protected_held)
             saved_training = resume
             saved_options = saved_training.get('options') or {}
             carried_progress = collect_sft_progress(saved_training)
@@ -1683,8 +1705,9 @@ def _main(argv=None, *, requested_refresh):
             # Ordinary append-only validation cannot express a same-ID row
             # whose supervised graph was explicitly replaced. Keep the held
             # source immutable even across this one authorized transition.
-            append_only_rows(resume.get('held_row_bindings') or {}, held_row_bindings,
-                             label='held-source')
+            if not source_correction_result.get('protected_held_rows'):
+                append_only_rows(resume.get('held_row_bindings') or {}, held_row_bindings,
+                                 label='held-source')
         elif restored_progress or not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
@@ -1805,6 +1828,17 @@ def _main(argv=None, *, requested_refresh):
             exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()
                                     if key in exposure_counts})
             metrics = dict(resume.get('metrics') or {})
+            if source_correction_result.get('protected_held_rows'):
+                coverage=metrics.get('held_coverage')
+                if coverage is not None:
+                    from .native_held import rebind_held_coverage_after_exact_correction
+                    metrics['held_coverage']=rebind_held_coverage_after_exact_correction(
+                        protected_held['prior_entries'], protected_held['current_entries'], coverage,
+                        source_sha256=source_receipts[1]['sha256'])
+                # Held loss/accuracy measured the old target bytes. Keep the
+                # exact per-row visit history above, but require a fresh eval
+                # before publishing any result for the corrected held source.
+                metrics.pop('held', None)
             if restored_progress and (shared_resume is not None
                     or (saved_training.get('options') or {}).get('stage_id')!=args.stage_id
                     or (saved_training.get('identity') or {}).get('objective')!=objective_binding):

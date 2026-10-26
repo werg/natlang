@@ -546,17 +546,26 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     new_manifest = source_manifest(new_dir, [ordinary], [corrected], model=family)
     held = {**graph('held-row'), 'split': 'test', 'source_groups': ['protected-held'],
             'tokenizer_fingerprint': fingerprint}
-    held_path = tmp_path / 'held.jsonl'
-    held_path.write_text(json.dumps(held) + '\n')
+    corrected_held = copy.deepcopy(held)
+    corrected_held['nodes'][0]['token_ids'] = [1, 11, 12, 13, 2]
+    corrected_held['nodes'][0]['target_weights'] = [0.0, 1.0, 1.0, 1.0, 1.0]
+    old_held_path = tmp_path / 'held-old.jsonl'
+    new_held_path = tmp_path / 'held-new.jsonl'
+    old_held_path.write_text(json.dumps(held) + '\n')
+    new_held_path.write_text(json.dumps(corrected_held) + '\n')
     old_source = NativeGraphSource(old_manifest, fingerprint, required_split='train', role_ids=roles)
     new_source = NativeGraphSource(new_manifest, fingerprint, required_split='train', role_ids=roles)
+    old_held_source = NativeGraphSource(old_held_path, fingerprint, required_split='test', role_ids=roles)
+    new_held_source = NativeGraphSource(new_held_path, fingerprint, required_split='test', role_ids=roles)
     corrected_id = family + ':corrected-edge'
     assert old_source.bindings[corrected_id] != new_source.bindings[corrected_id]
+    held_id = 'held-row'
+    assert old_held_source.bindings[held_id] != new_held_source.bindings[held_id]
 
     out = tmp_path / 'run'
     dtype = 'float32' if family == 'lfm' else 'bfloat16'
     base_argv = ['--base', str(base), '--device', 'cpu', '--dtype', dtype, '--rank', '2',
-        '--held-native-graphs', str(held_path), '--epochs', '1', '--eval-every', '100',
+        '--held-native-graphs', str(old_held_path), '--epochs', '1', '--eval-every', '100',
         '--batch-graphs', '1', '--learning-rate', '1e-3', '--seed', '29',
         '--stage-id', 'native_full_sft']
     if family == 'mellum':
@@ -575,6 +584,15 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
         'new_binding': new_source.bindings[corrected_id],
         'old_source_sha256': old_leaf['sha256'], 'new_source_sha256': new_leaf['sha256'],
         'disposition': 'corrected'}, sort_keys=True) + '\n')
+    old_held_receipt = old_held_source.receipt()
+    new_held_receipt = new_held_source.receipt()
+    held_row_ledger = tmp_path / 'protected-held-correction-rows.jsonl'
+    held_row_ledger.write_text(json.dumps({
+        'id': held_id, 'old_binding': old_held_source.bindings[held_id],
+        'new_binding': new_held_source.bindings[held_id],
+        'old_source_sha256': old_held_receipt['sha256'], 'new_source_sha256': new_held_receipt['sha256'],
+        'old_groups': ['protected-held'], 'new_groups': ['protected-held'],
+        'disposition': 'corrected'}, sort_keys=True) + '\n')
     proof = tmp_path / 'correction.json'
     proof.write_text(json.dumps({'schema': SCHEMA,
         'model_id': parent_training['identity']['config']['architecture'] + ':' +
@@ -583,10 +601,18 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
         'prior_source': {'path': old_receipt['path'], 'sha256': old_receipt['sha256']},
         'current_source': {'path': str(new_manifest.resolve()), 'sha256': new_source.file_sha256},
         'row_bindings_path': str(row_ledger.resolve()),
-        'row_bindings_sha256': sha256_file_hex(row_ledger)}, sort_keys=True))
+        'row_bindings_sha256': sha256_file_hex(row_ledger),
+        'protected_held_correction': {
+            'schema': 'natlang.native-protected-held-correction/1',
+            'prior_source': {'path': old_held_receipt['path'], 'sha256': old_held_receipt['sha256']},
+            'current_source': {'path': new_held_receipt['path'], 'sha256': new_held_receipt['sha256']},
+            'row_bindings_path': str(held_row_ledger.resolve()),
+            'row_bindings_sha256': sha256_file_hex(held_row_ledger)},
+    }, sort_keys=True))
 
-    assert main([*base_argv, '--native-graphs', str(new_manifest), '--out', str(out),
+    assert main([*base_argv, '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(out),
         '--continue-from', str(checkpoint), '--continued-native-graphs', str(old_manifest),
+        '--continued-held-native-graphs', str(old_held_path),
         '--source-correction', str(proof)]) == 0
     child = torch.load(checkpoint, map_location='cpu', weights_only=False)
     child_training = child['training']
@@ -595,6 +621,11 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     assert child_training['source_row_order'] == new_source.ordered_ids()
     assert child_training['exposure_counts']['ordinary-row'] == parent_training['exposure_counts']['ordinary-row']
     assert child_training['exposure_counts'][corrected_id] == 1
+    assert child_training['held_row_bindings'] == new_held_source.bindings
+    assert child_training['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert child_training['options']['source_correction_history'][-1]['protected_held_rows'] == 1
+    assert child_training['metrics']['held']['source_sha256'] == new_held_receipt['sha256']
+    assert child_training['metrics']['held_coverage']['source_sha256'] == new_held_receipt['sha256']
     frame = child_training['sft_progress']['native_full_sft']
     assert frame['required_visits'][corrected_id] == 1
     history = child_training['options']['source_correction_history']

@@ -7,11 +7,20 @@ corrected communication rows begin with fresh exposure debt.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from ..common.hashing import sha256_file_hex_cached
 
 SCHEMA = 'natlang.native-source-correction/1'
+
+
+def _proof_file(proof_path, reference):
+    """Resolve a dependency relative to its proof so the proof bundle can move."""
+    candidate = Path(reference)
+    if not candidate.is_absolute():
+        candidate = Path(proof_path).resolve().parent / candidate
+    return candidate.resolve(strict=True)
 
 
 def _binding(ref):
@@ -60,19 +69,135 @@ def source_correction_dependencies(reference):
     proof = json.loads(path.read_text())
     if proof.get('schema') != SCHEMA:
         raise ValueError('native source correction schema differs')
-    rows_path = Path(proof.get('row_bindings_path', '')).resolve(strict=True)
+    rows_path = _proof_file(path, proof.get('row_bindings_path', ''))
     rows_sha = sha256_file_hex_cached(rows_path)
     if rows_sha != proof.get('row_bindings_sha256'):
         raise ValueError('native source correction row ledger changed')
-    return [
+    dependencies = [
         {'path': str(path), 'sha256': digest, 'bytes': path.stat().st_size},
         {'path': str(rows_path), 'sha256': rows_sha, 'bytes': rows_path.stat().st_size},
     ]
+    evidence = proof.get('evidence') or []
+    if not isinstance(evidence, list):
+        raise ValueError('native source correction evidence must be an exact file inventory')
+    seen={str(path),str(rows_path)}
+    for reference in evidence:
+        if not isinstance(reference, dict) or not isinstance(reference.get('path'), str):
+            raise ValueError('native source correction evidence lacks an exact file reference')
+        evidence_path=_proof_file(path, reference['path'])
+        evidence_sha=sha256_file_hex_cached(evidence_path)
+        if evidence_sha != reference.get('sha256'):
+            raise ValueError('native source correction provenance evidence changed')
+        if str(evidence_path) not in seen:
+            dependencies.append({'path':str(evidence_path),'sha256':evidence_sha,
+                                 'bytes':evidence_path.stat().st_size})
+            seen.add(str(evidence_path))
+    protected = proof.get('protected_held_correction')
+    if protected is not None:
+        if protected.get('schema') != 'natlang.native-protected-held-correction/1':
+            raise ValueError('native protected held correction schema differs')
+        held_rows = _proof_file(path, protected.get('row_bindings_path', ''))
+        held_sha = sha256_file_hex_cached(held_rows)
+        if held_sha != protected.get('row_bindings_sha256'):
+            raise ValueError('native protected held correction ledger changed')
+        dependencies.append({'path': str(held_rows), 'sha256': held_sha,
+                             'bytes': held_rows.stat().st_size})
+    return dependencies
+
+
+def _fresh_quota(epochs, index, row_count, *, communication):
+    """Match pending_exposure_batches' integer and fractional epoch schedule."""
+    value = float(epochs)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError('source correction requires a finite nonnegative epoch quota')
+    whole = int(value)
+    fractional = math.ceil((value - whole) * row_count)
+    return max(int(bool(communication)), whole + int(index < fractional))
+
+
+def _apply_protected_held_correction(result, training, proof, held, proof_path):
+    """Apply exact same-membership held target replacements without train credit."""
+    protected = proof.get('protected_held_correction')
+    if protected is None:
+        return 0
+    if held is None:
+        raise ValueError('protected held correction requires exact prior and current held sources')
+    from ..common.jsonio import open_jsonl_text
+
+    old_receipts = training.get('source_receipts') or []
+    if len(old_receipts) < 2:
+        raise ValueError('protected held correction requires the earned held source receipt')
+    if (_binding(old_receipts[1]) != _binding(protected.get('prior_source'))
+            or _binding(held['prior_receipt']) != _binding(protected.get('prior_source'))
+            or _binding(held['current_receipt']) != _binding(protected.get('current_source'))):
+        raise ValueError('protected held correction source identity differs from the earned frame')
+    prior_bindings = training.get('held_row_bindings') or {}
+    current_bindings = held['current_bindings']
+    prior_order, current_order = held['prior_order'], held['current_order']
+    if (prior_bindings != held['prior_bindings'] or set(prior_bindings) != set(current_bindings)
+            or list(prior_order) != list(current_order) or set(prior_order) != set(prior_bindings)):
+        raise ValueError('protected held correction changes held membership or order')
+    if set(held['prior_groups']) != set(held['current_groups']):
+        raise ValueError('protected held correction changes held source groups')
+    if held.get('prior_entries') is not None and held.get('current_entries') is not None:
+        prior_classes={entry['id']:bool(entry.get('communication')) for entry in held['prior_entries']}
+        current_classes={entry['id']:bool(entry.get('communication')) for entry in held['current_entries']}
+        if prior_classes != current_classes:
+            raise ValueError('protected held correction changes ordinary/communication class membership')
+    prior_origins = _origins(held['prior_receipt'], prior_order)
+    current_origins = _origins(held['current_receipt'], current_order)
+    rows_path = _proof_file(proof_path, protected.get('row_bindings_path', ''))
+    if sha256_file_hex_cached(rows_path) != protected.get('row_bindings_sha256'):
+        raise ValueError('protected held correction row ledger digest differs')
+    rows = {}
+    with open_jsonl_text(rows_path) as stream:
+        for line in stream:
+            if line.strip():
+                row = json.loads(line)
+                row_id = row.get('id')
+                if not isinstance(row_id, str) or row_id in rows:
+                    raise ValueError('protected held correction repeats or omits a row id')
+                rows[row_id] = row
+    changed = {row_id for row_id, binding in prior_bindings.items()
+               if current_bindings.get(row_id) != binding}
+    if set(rows) != changed:
+        raise ValueError('protected held correction ledger does not exactly cover changed held rows')
+    old_group_by_id, new_group_by_id = held['prior_groups_by_id'], held['current_groups_by_id']
+    for row_id, row in rows.items():
+        old_groups = tuple(old_group_by_id.get(row_id) or ())
+        new_groups = tuple(new_group_by_id.get(row_id) or ())
+        if (row.get('disposition') != 'corrected'
+                or row.get('old_binding') != prior_bindings.get(row_id)
+                or row.get('new_binding') != current_bindings.get(row_id)
+                or row.get('old_source_sha256') != prior_origins.get(row_id)
+                or row.get('new_source_sha256') != current_origins.get(row_id)
+                or row.get('old_binding') == row.get('new_binding')
+                or tuple(row.get('old_groups') or ()) != old_groups
+                or tuple(row.get('new_groups') or ()) != new_groups or old_groups != new_groups):
+            raise ValueError('protected held replacement changed identity, binding, or group: ' + row_id)
+    result['held_row_bindings'] = dict(current_bindings)
+    receipts = list(result.get('source_receipts') or [])
+    if len(receipts) < 2:
+        raise ValueError('protected held correction lost source receipt pair')
+    receipts[1] = held['current_receipt']
+    result['source_receipts'] = receipts
+    progress = dict(result.get('sft_progress') or {})
+    frame = dict(progress.get(proof.get('stage_id')) or {})
+    if frame:
+        frame['held_row_bindings'] = dict(current_bindings)
+        frame_receipts = list(frame.get('source_receipts') or [])
+        if len(frame_receipts) < 2:
+            raise ValueError('protected held correction carried frame lost held receipt')
+        frame_receipts[1] = held['current_receipt']
+        frame['source_receipts'] = frame_receipts
+        progress[proof['stage_id']] = frame
+        result['sft_progress'] = progress
+    return len(changed)
 
 
 def apply_source_correction(training, proof_path, *, model_id, stage_id,
                             current_source_receipt, current_bindings, current_order,
-                            current_communication_ids):
+                            current_communication_ids, protected_held=None):
     """Apply a proof to an exact earned frame, preserving weights/optimizer/RNG.
 
     The proof's JSONL row ledger has records with ``id``, ``old_binding``,
@@ -104,6 +229,11 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                 or current_bindings != training.get('source_row_bindings')
                 or list(current_order) != training.get('source_row_order')):
             raise ValueError('source correction replay differs from its committed exact current source')
+        protected = proof.get('protected_held_correction')
+        if protected is not None and (protected_held is None
+                or _binding(protected_held['current_receipt']) != _binding(protected.get('current_source'))
+                or protected_held['current_bindings'] != training.get('held_row_bindings')):
+            raise ValueError('protected held source correction replay differs from its committed source')
         return training, {'changed': False, 'proof_sha256': proof_sha}
 
     prior_receipts = training.get('source_receipts') or []
@@ -124,7 +254,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     old_origins = _origins(prior_receipt, old_order)
     new_origins = _origins(current_source_receipt, current_order)
     pending = dict(training.get('pending_source_rows') or {})
-    row_path = Path(proof.get('row_bindings_path', '')).resolve(strict=True)
+    row_path = _proof_file(path, proof.get('row_bindings_path', ''))
     if sha256_file_hex_cached(row_path) != proof.get('row_bindings_sha256'):
         raise ValueError('source correction row ledger digest differs')
     rows = {}
@@ -143,7 +273,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     options = training.get('options') or {}
     prior_communication = set(options.get('_communication_ids') or [])
     current_communication = set(current_communication_ids)
-    epoch_quota = max(1, int(float(options.get('epochs', 1))))
+    epochs = float(options.get('epochs', 1))
+    current_positions = {row_id: index for index, row_id in enumerate(current_order)}
     for row_id, row in rows.items():
         disposition = row.get('disposition')
         old = row.get('old_binding')
@@ -186,8 +317,9 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             if row_id in current_bindings or row.get('new_binding') is not None:
                 raise ValueError('deferred source correction row remains active: ' + row_id)
             deferred.add(row_id)
-            required = max(1, int(quotas.get(row_id, epoch_quota)))
             prior = pending.get(row_id)
+            required = max(1, int(quotas.get(row_id,
+                (prior or {}).get('required_visits', math.ceil(epochs)))))
             item = {'binding': old, 'source_sha256': old_sha,
                     'required_visits': required,
                     'reason': row.get('reason')}
@@ -208,7 +340,11 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         raise ValueError('source correction ledger does not exactly cover changed/removed rows')
     if len(current_order) != len(current_bindings) or set(current_order) != set(current_bindings):
         raise ValueError('source correction current order is not a one-to-one row inventory')
-    retained_order = [key for key in old_order if key not in deferred]
+    # Explicitly corrected rows start a fresh exposure schedule, so their
+    # replacement can be appended after the unchanged old-order prefix. The
+    # row ledger binds those identities and prior exposure below; unchanged
+    # earned rows still keep their exact positional prefix.
+    retained_order = [key for key in old_order if key not in deferred and key not in corrected]
     if current_order[:len(retained_order)] != retained_order:
         raise ValueError('source correction reordered earned rows or inserted before their prefix')
     if not set(current_bindings).issuperset(set(old_bindings) - deferred):
@@ -228,10 +364,12 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     new_quotas = dict(quotas)
     for row_id in set(current_bindings) - set(old_bindings) - set(corrected):
         new_counts.setdefault(row_id, 0)
-        new_quotas.setdefault(row_id, epoch_quota)
+        new_quotas.setdefault(row_id, _fresh_quota(epochs, current_positions[row_id], len(current_order),
+                                                    communication=row_id in current_communication))
     for row_id in corrected:
         new_counts[row_id] = 0
-        new_quotas[row_id] = epoch_quota
+        new_quotas[row_id] = _fresh_quota(epochs, current_positions[row_id], len(current_order),
+                                          communication=row_id in current_communication)
     for row_id in deferred:
         new_counts.setdefault(row_id, int(counts.get(row_id, 0)))
     result['exposure_counts'] = new_counts
@@ -277,10 +415,12 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         frame_quotas = dict(frame.get('required_visits') or {})
         for row_id in set(current_bindings) - set(old_bindings) - set(corrected):
             frame_counts.setdefault(row_id, 0)
-            frame_quotas.setdefault(row_id, epoch_quota)
+            frame_quotas.setdefault(row_id, _fresh_quota(epochs, current_positions[row_id], len(current_order),
+                                                          communication=row_id in current_communication))
         for row_id in corrected:
             frame_counts[row_id] = 0
-            frame_quotas[row_id] = epoch_quota
+            frame_quotas[row_id] = _fresh_quota(epochs, current_positions[row_id], len(current_order),
+                                                communication=row_id in current_communication)
         frame['exposure_counts'] = frame_counts
         frame['required_visits'] = frame_quotas
         frame['pending_source_rows'] = dict(pending)
@@ -293,6 +433,10 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         frame['options'] = frame_options
         progress[stage_id] = frame
     result['sft_progress'] = progress
+    protected_held_rows = _apply_protected_held_correction(
+        result, training, proof, protected_held, path)
+    if protected_held_rows:
+        record['protected_held_rows'] = protected_held_rows
     return result, {'changed': True, 'proof_sha256': proof_sha,
                     'corrected_rows': len(corrected), 'deferred_rows': len(deferred),
-                    'added_rows': len(added)}
+                    'added_rows': len(added), 'protected_held_rows': protected_held_rows}
