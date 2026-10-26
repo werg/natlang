@@ -480,8 +480,27 @@ def build(model, out_root):
         'active_config_changed': False, 'optimizer_rng_exposure_credit': 0,
         'tranches': ['000001', '000002'], 'unpublished_tranche003_added': False,
         'target_runtime_paths': ({'train': str(MELLUM_REMOTE_ROOT / 'native-training-sources.json'),
-            'held': str(MELLUM_REMOTE_ROOT / 'held-native-graphs.json')} if model == 'mellum' else
-            {'train': str(train_path.resolve()), 'held': str(held_path.resolve())}),
+            'held': str(MELLUM_REMOTE_ROOT / 'held-native-graphs.json'),
+            'source_correction': str(MELLUM_REMOTE_ROOT / 'source-correction.json')} if model == 'mellum' else
+            {'train': str(train_path.resolve()), 'held': str(held_path.resolve()),
+             'source_correction': str(proof_path.resolve())}),
+        'adoption_requirements': {
+            'stage_id': 'native_full_sft',
+            'continue_from': 'latest_actual_full_state_child_at_drained_boundary',
+            'continued_native_graphs': old_train.source_identity_path.as_posix(),
+            'continued_held_native_graphs': old_held.source_identity_path.as_posix(),
+            'native_graphs': current_train.source_identity_path.as_posix(),
+            'held_native_graphs': current_held.source_identity_path.as_posix(),
+            'source_correction': (str(MELLUM_REMOTE_ROOT / 'source-correction.json') if model == 'mellum'
+                                  else str(proof_path.resolve())),
+            'preserve_weights_optimizer_rng_global_step': True,
+            'new_optimizer_rng_exposure_credit_from_correction': 0,
+            'corrected_train_rows_require_fresh_exposure': True,
+            'protected_held_rows_train_credit': 0,
+            'fresh_current_weight_qualification': 'required_after_corrected_source_exposure',
+            'active_configuration_changed': False,
+            'requires_exact_config_and_cursor_cas_at_activation': True,
+        },
         'artifacts': {p.name: {'path': str(p.resolve()), 'bytes': p.stat().st_size,
                                'sha256': sha256_file_hex(p)} for p in
                       (train_path, held_path, row_path, held_row_path, proof_path, map_path)}}
