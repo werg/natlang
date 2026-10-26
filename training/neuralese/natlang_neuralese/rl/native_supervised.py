@@ -153,12 +153,23 @@ def bind_semantic_recipe_lineage(config,checkpoint,participant,declared,*,preser
     return bind_recipe_lineage(config,lineage)
 
 
+def bind_foundation_policy(config, parameters):
+    """Carry the controller's qualification schedule into the real trainer."""
+    policy = config.get('foundation_readiness_policy')
+    if policy is not None:
+        if policy not in ('at-boundary', 'on-shared-request'):
+            raise ValueError('unknown foundation readiness scheduling policy')
+        parameters.setdefault('foundation_readiness_policy', policy)
+    return parameters
+
+
 def continuation_config(config,stage,*,checkpoint,adapter,out):
     from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,effective_stage_parameters,native_recipe_binding
     recipe=resolve_recipe_data(config['production_recipe'])
     sources=resolve_stage_inputs(recipe,stage,{})
     parameters=effective_stage_parameters(stage,[],recipe)
     parameters={key:value for key,value in parameters.items() if value is not None}
+    bind_foundation_policy(config, parameters)
     if adapter is not None:parameters.pop('communication_foundation',None)
     # Keep the recipe's explicit capacity requests for ordinary SFT as well as
     # preference training. Restoring optimizer progress does not restore a
@@ -253,6 +264,7 @@ def prepare_seed_command(config,directory,values,state,state_path,*,parameters=N
     # the actor's argument splice can send unsupported serving flags to SFT.
     from ..train.recipe import stage_parameter_args
     selected=config.get('trainer_parameters',{}) if parameters is None else parameters
+    bind_foundation_policy(config, selected)
     values['trainer_args']=stage_parameter_args(selected)
     values['seed_trainer_args']=list(values['trainer_args'])
     command,reused=_resume_source_arguments(config,directory,values,parameters=parameters)

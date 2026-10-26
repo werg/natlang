@@ -81,9 +81,12 @@ def _inputs(declaration):
 
 def _seed_quantum(config,record):
     """Bind the complete supervised settings to the finite seed operation."""
+    from .native_supervised import bind_foundation_policy
     config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
         **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True,
         'stage_id':config['production_stage']}
+    for key in ('trainer_parameters', 'seed_trainer_parameters'):
+        bind_foundation_policy(config, config.setdefault(key, {}))
     if config.get('foundation_readiness_policy'):
         for key in ('trainer_parameters','seed_trainer_parameters'):
             config.setdefault(key,{})['foundation_readiness_policy']=config['foundation_readiness_policy']
