@@ -23,6 +23,7 @@ import { GENERATION_GUIDANCE, GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT, TOOLS_PROMP
 import { loadNatlang } from '../runtime/node-files.js';
 import type { CollectedTurn, SplitExample } from './collect.js';
 import { sharedSourceHash, trainingScaffoldKey } from './keys.js';
+import { canonicalJson } from '../package/archive.js';
 import { importedTeachers, rootRecordPath, validRootRecord, type RootRecord } from './pipeline.js';
 
 export const CASES_SCHEMA = 'natlang.tune-pool-cases/v1' as const;
@@ -102,11 +103,12 @@ function resultFiles(path: string): string[] {
 }
 
 /** The exact actor and runtime identity of a collector row, as the tuner's `teacher` field. */
-export function collectorTeacherId(provenance: Record<string, unknown>): string {
+export function collectorTeacherId(provenance: Record<string, unknown>, reviewedActor?: Record<string, unknown>): string {
   const keys = ['model', 'provider', 'pi_options', 'transport', 'tool_schema', 'tool_surface_sha256', 'runtime', 'runtime_contract_version',
     'collector_version', 'execution_policy_version', 'system_prompt_sha256', 'prompt_rendering', 'execution_plans', 'temperature',
     'context_tokens', 'action_max_tokens', 'chat_request_controls', 'provider_request_controls', 'neuralese_server', 'collection_role'];
-  const identity = Object.fromEntries(keys.filter(key => key in provenance).map(key => [key, provenance[key]]));
+  const identity = { ...Object.fromEntries(keys.filter(key => key in provenance).map(key => [key, provenance[key]])),
+    ...(reviewedActor ? { reviewed_dispatch_actor: reviewedActor } : {}) };
   return `collector:${String(provenance.provider ?? provenance.transport ?? 'unknown')}:${String(provenance.model)}:${sha(json(identity)).slice(0, 16)}`;
 }
 
@@ -121,30 +123,140 @@ function servingSystem(content: string): string | null {
 }
 
 type Row = { task?: { program_ir?: { semantics?: { root?: string }; tune?: TuneCaseBinding } }; provenance?: Record<string, unknown>;
-  outcome?: { status?: string; accepted?: boolean; oracle?: { accepted?: boolean };
-    invocation_ledger?: { invocation_id: string; completion_status?: string | null }[];
+  outcome?: { status?: string; accepted?: boolean; oracle?: { accepted?: boolean; level?: string };
+    checks?: Record<string, unknown>;
+    invocation_ledger?: { invocation_id: string; parent_invocation_id?: string | null; completion_status?: string | null;
+      completion_source?: string }[];
+    action_ledger?: { call_id?: string; name?: string; outcome?: string; arguments?: unknown; seq?: number }[];
     execution_graph?: { kind?: string; phase?: string; call_id?: string; definition?: { id?: string }; context?: string; inputs?: { port?: string }[] }[] };
   trajectory?: { phase?: string; invocation_id?: string; context?: { role: string; content?: unknown }[]; tools_offered?: unknown[];
-    model_response?: { calls?: unknown; text?: string; protocol_failure?: unknown }; assistant?: { reasoning?: unknown } }[] };
+    model_response?: { calls?: unknown; text?: string; protocol_failure?: unknown };
+    assistant?: { reasoning?: unknown; calls?: { source_tool?: string; tool?: string; arguments?: Record<string, unknown> }[] } }[] };
+
+const blockedChecks = ['seeded_failure_requirement', 'expected_status', 'honest_stop', 'effects', 'files', 'world',
+  'file_return_consistency', 'answer'];
+export function honestTuneBlockedRoot(row: Row, expected: unknown): boolean {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
+      (expected as Record<string, unknown>).status !== 'blocked') return false;
+  const outcome = row.outcome, checks = outcome?.checks, oracle = outcome?.oracle;
+  if (outcome?.status !== 'quiesced' || outcome.accepted !== true || oracle?.accepted !== true || oracle.level !== 'exact' ||
+      !checks || blockedChecks.some(key => checks[key] !== true) || Object.values(checks).some(value => value !== true)) return false;
+  const ledger = outcome.invocation_ledger;
+  if (!ledger) return false;
+  const roots = ledger.filter(item => item.parent_invocation_id === null);
+  if (roots.length !== 1) return false;
+  const root = roots[0]!;
+  if (root.completion_status !== 'quiesced' || root.completion_source !== 'execution_graph' || !root.invocation_id) return false;
+  const children = ledger.filter(item => item !== root);
+  if (children.some(item => item.completion_status !== 'done' || item.completion_source !== 'execution_graph')) return false;
+  const rootCalls = (row.trajectory ?? []).filter(item => item.invocation_id === root.invocation_id)
+    .flatMap(item => item.assistant?.calls ?? []);
+  const terminal = rootCalls.at(-1), args = terminal?.arguments;
+  if ((terminal?.source_tool ?? terminal?.tool) !== 'return_result' || !args || args.status !== 'blocked' ||
+      typeof args.reason !== 'string' || !args.reason.trim() || canonicalJson(args) !== canonicalJson(expected)) return false;
+  const rootEvents = (outcome.action_ledger ?? []).filter(event => event.call_id === root.invocation_id);
+  const terminalEvents = rootEvents.filter(event => event.name === 'return_result');
+  if (terminalEvents.length !== 1 || terminalEvents[0]?.outcome !== 'blocked' ||
+      canonicalJson(terminalEvents[0].arguments) !== canonicalJson(args) || !Number.isSafeInteger(terminalEvents[0].seq) ||
+      rootEvents.some(event => !Number.isSafeInteger(event.seq)) ||
+      terminalEvents[0].seq !== Math.max(...rootEvents.map(event => Number(event.seq)))) return false;
+  const childIds = new Set(children.map(item => item.invocation_id));
+  for (const step of row.trajectory ?? []) if (step.invocation_id && childIds.has(step.invocation_id))
+    for (const call of step.assistant?.calls ?? []) if ((call.source_tool ?? call.tool) === 'return_result' && call.arguments?.status !== 'success') return false;
+  return true;
+}
 
 export type ImportSummary = { rows: number; imported: number; failures: number; rejected: { row: string; reason: string }[];
   unboundTurns: number; teachers: string[] };
+
+export type TunePoolImportCustody = {
+  schema: 'natlang.tune-pool-import-custody/2';
+  input: { kind: 'file'; path: string; bytes: number; sha256: string } |
+    { kind: 'directory'; path: string; files: { path: string; bytes: number; sha256: string }[] };
+  plan: { path: string; bytes: number; sha256: string };
+  source: { path: string; bytes: number; sha256: string };
+  claim_ledger: { observed: { path: string; bytes: number; sha256: string; stat: Record<string, number>;
+    prefix: { bytes: number; sha256: string } }; snapshot: { path: string; bytes: number; sha256: string } };
+  launch_record: { observed: { path: string; bytes: number; sha256: string; stat: Record<string, number>;
+    prefix: { bytes: number; sha256: string } }; snapshot: { path: string; bytes: number; sha256: string } };
+  dispatcher_identity_sha256: string;
+  reviewed_artifacts: { path: string; bytes: number; sha256: string }[];
+  runtime: { root: string; receipt_sha256: string; receipt: { path: string; bytes: number; sha256: string } };
+  source_inventory?: unknown;
+  selected_rows: { case_index: number; input: { path: string; line: number }; result_row_sha256: string; result_line_sha256: string;
+    result_file: { path: string; bytes: number; sha256: string }; result_manifest: { path: string; bytes: number; sha256: string };
+    queue: { path: string; bytes: number; sha256: string }; source_row_sha256: string;
+    provenance_sha256: string; execution_identity: Record<string, unknown>;
+    actor: { provider: string; model: string; dispatch_plan_sha256: string; runtime_receipt_sha256: string;
+      source_inventory_sha256?: string | null } }[];
+};
+
+function verifyImportInputBinding(path: string, custody: TunePoolImportCustody): void {
+  const inputPath = resolve(path), input = custody.input;
+  if (resolve(input.path) !== inputPath) throw new Error('reviewed campaign custody names a different import input');
+  if (input.kind === 'file') {
+    const bytes = readFileSync(inputPath);
+    if (statSync(inputPath).isDirectory() || sha(bytes) !== input.sha256 || bytes.byteLength !== input.bytes)
+      throw new Error('reviewed campaign import file changed after verification');
+    return;
+  }
+  if (!statSync(inputPath).isDirectory()) throw new Error('reviewed campaign import directory is no longer present');
+  const expected = [...input.files].sort((a, b) => a.path.localeCompare(b.path));
+  if (new Set(expected.map(item => item.path)).size !== expected.length)
+    throw new Error('reviewed campaign cohort repeats a result file');
+  for (const binding of expected) verifyCustodyFile(binding, 'selected closed-case result file');
+}
+
+function verifyCustodyFile(binding: { path: string; bytes: number; sha256: string }, label: string): void {
+  const bytes = readFileSync(binding.path);
+  if (bytes.byteLength !== binding.bytes || sha(bytes) !== binding.sha256)
+    throw new Error(`reviewed dispatcher ${label} changed after verification`);
+}
+
+function verifyCampaignSnapshot(binding: TunePoolImportCustody['claim_ledger'], label: string): void {
+  const { observed, snapshot } = binding;
+  if (!observed || !snapshot || !observed.path || observed.bytes !== observed.stat?.bytes ||
+      observed.prefix?.bytes !== observed.bytes || observed.prefix?.sha256 !== observed.sha256 ||
+      observed.sha256 !== snapshot.sha256 || observed.bytes !== snapshot.bytes)
+    throw new Error(`reviewed dispatcher ${label} observation and snapshot bindings differ`);
+  verifyCustodyFile(snapshot, `${label} snapshot`);
+}
 
 /**
  * Import collector result rows produced from an exported case list. A row is rejected unless its tune binding names
  * this program build, this scaffold and this split; a root that the collector could not finish is not recorded (it is
  * collected again later). Turns of invocations without a binding of their own keep `binding: null` and never train.
  */
-export function importCases(context: PoolContext, path: string): ImportSummary {
+export function importCases(context: PoolContext, path: string, custody: TunePoolImportCustody): ImportSummary {
   const { root, program, scaffold, examples } = context;
+  if (custody?.schema !== 'natlang.tune-pool-import-custody/2') throw new Error('tune result import requires immutable reviewed dispatcher custody');
+  verifyImportInputBinding(path, custody);
+  for (const [label, binding] of [['plan', custody.plan], ['source', custody.source],
+    ['runtime receipt', custody.runtime.receipt]] as const)
+    verifyCustodyFile(binding, label);
+  verifyCampaignSnapshot(custody.claim_ledger, 'claim ledger');
+  verifyCampaignSnapshot(custody.launch_record, 'launch record');
+  for (const binding of custody.reviewed_artifacts) verifyCustodyFile(binding, 'reviewed plan artifact');
+  if (custody.runtime.receipt.sha256 !== custody.runtime.receipt_sha256)
+    throw new Error('reviewed dispatcher runtime receipt identity changed');
   const scaffoldKey = trainingScaffoldKey(scaffold), split = sha(json(context.splitReceipt)), shared = sharedSourceHash(program);
+  const sourceRows = readFileSync(custody.source.path, 'utf8').split('\n').map((line, index) => line.trim()
+    ? { index, row: JSON.parse(line) } : null).filter((item): item is { index: number; row: unknown } => item !== null);
   const byId = new Map(examples.map(example => [example.id, example]));
   const binding = new WeightBinding(scaffold);
   const components = new Map(program.components.map(component => [component.key, component]));
   const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
   const summary: ImportSummary = { rows: 0, imported: 0, failures: 0, rejected: [], unboundTurns: 0, teachers: [] };
   const teachers = new Set(importedTeachers(root));
-  for (const file of resultFiles(path)) for (const [index, line] of readFileSync(file, 'utf8').split('\n').entries()) {
+  const importFiles = custody.input.kind === 'file' ? [resolve(path)] : custody.input.files.map(item => resolve(item.path));
+  if (custody.input.kind === 'directory') {
+    const selectedResultFiles = [...new Set(custody.selected_rows.map(item => resolve(item.result_file.path)))].sort();
+    if (selectedResultFiles.length !== importFiles.length || selectedResultFiles.some((file, index) => file !== [...importFiles].sort()[index]))
+      throw new Error('reviewed directory input does not exactly name the closed-case result-file cohort');
+  }
+  for (const file of importFiles) {
+    const fileText = readFileSync(file, 'utf8'), fileBytes = Buffer.from(fileText), lines = fileText.split('\n');
+    for (const [index, line] of lines.entries()) {
     if (!line.trim()) continue;
     let row: Row;
     // A campaign root also holds ledgers, queues and journals; only collector result rows carry a tune binding.
@@ -161,6 +273,28 @@ export function importCases(context: PoolContext, path: string): ImportSummary {
     if (!example || example.partition !== tune.partition) { reject('the root is no longer a collectable example in that partition'); continue; }
     const provenance = row.provenance ?? {}, outcome = row.outcome ?? {};
     if (!outcome.status) { reject('the collector recorded no outcome'); continue; }
+    const sourceMatches = sourceRows.filter(item => canonicalJson(item.row) === canonicalJson(row.task?.program_ir));
+    if (sourceMatches.length !== 1) { reject('complete tune task does not identify exactly one reviewed source case'); continue; }
+    const caseIndex = sourceMatches[0]!.index;
+    const matchingCustody = custody.selected_rows.filter(item => item.case_index === caseIndex &&
+      resolve(item.input.path) === resolve(file) && item.input.line === index + 1);
+    const rowCustody = matchingCustody[0];
+    if (matchingCustody.length !== 1 || !rowCustody || !/^[0-9a-f]{64}$/.test(rowCustody.result_row_sha256) ||
+        !/^[0-9a-f]{64}$/.test(rowCustody.result_line_sha256)) {
+      reject('result row is not bound to this exact reviewed campaign case and result file'); continue;
+    }
+    const exactOutput = fileBytes;
+    if (exactOutput.byteLength !== rowCustody.result_file.bytes || sha(exactOutput) !== rowCustody.result_file.sha256) {
+      reject('result output changed after campaign verification'); continue;
+    }
+    const rawLine = Buffer.from(line + (index < lines.length - 1 ? '\n' : ''));
+    if (sha(rawLine) !== rowCustody.result_line_sha256) { reject('result row bytes differ from the exact reviewed campaign line'); continue; }
+    for (const [label, fileBinding] of [['result manifest', rowCustody.result_manifest], ['case queue', rowCustody.queue]] as const)
+      verifyCustodyFile(fileBinding, label);
+    if (canonicalJson(sourceRows.find(item => item.index === caseIndex)?.row) !== canonicalJson(row.task?.program_ir)) {
+      reject('result provenance or complete source case differs from reviewed dispatcher custody'); continue;
+    }
+    const teacher = collectorTeacherId(provenance, rowCustody.actor);
     // Invocation → definition (the root is named by its source path) → the binding resolved exactly as at serving time.
     const starts = (outcome.execution_graph ?? []).filter(event => event.kind === 'invocation' && event.phase === 'start' && event.call_id);
     const definitionOf = new Map<string, { definition: string | null; context: string | null }>(starts.map(event => {
@@ -170,6 +304,8 @@ export function importCases(context: PoolContext, path: string): ImportSummary {
     }));
     const callOutcomes = new Map((outcome.invocation_ledger ?? []).map(item => [item.invocation_id, item.completion_status ?? null]));
     const ok = outcome.status === 'done', oracle = 'expected' in example ? outcome.oracle?.accepted === true : null;
+    const blockedRoot = honestTuneBlockedRoot(row, example.expected);
+    const rootAccepted = ok && outcome.accepted === true && oracle !== false || blockedRoot;
     const turns: CollectedTurn[] = [], counters = new Map<string, number>();
     let bad: string | undefined;
     for (const step of row.trajectory ?? []) {
@@ -196,22 +332,52 @@ export function importCases(context: PoolContext, path: string): ImportSummary {
           ...(typeof step.assistant?.reasoning === 'string' && step.assistant.reasoning ? { reasoning: step.assistant.reasoning } : {}),
           // A turn the collector flagged as a protocol failure is never a training target.
           ...(response.protocol_failure ? { truncated: true } : {}) },
-        teacher: collectorTeacherId(provenance), source: example.source ?? 'real', texts: instructions !== undefined ? { instructions } : {},
-        evidence: { rootOracle: oracle, enclosingSuccess: ok && outcome.accepted === true && oracle !== false, callOutcome: call ? callOutcomes.get(call) ?? null : null } });
+        teacher, source: example.source ?? 'real', texts: instructions !== undefined ? { instructions } : {},
+        evidence: { rootOracle: oracle, enclosingSuccess: rootAccepted, callOutcome: call ? callOutcomes.get(call) ?? null : null } });
     }
     if (bad) { reject(bad); continue; }
-    const teacher = collectorTeacherId(provenance);
     const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))].map(id => [id, semantic.get(id) ?? '']));
     const record: RootRecord = { schema: 'natlang.tune-root/v1', root: example.id, teacher, sharedSources: shared, bindings,
-      outcome: { ok, oracle }, turns, imported: { from: resolve(file), line: index + 1, program_ir_sha256: provenance.program_ir_sha256 ?? null,
+      outcome: { ok: rootAccepted, oracle }, turns, imported: { from: resolve(file), line: index + 1,
+        result_row_sha256: rowCustody.result_row_sha256, result_line_sha256: rowCustody.result_line_sha256,
+        campaign: { plan: custody.plan, source: custody.source, claim_ledger: custody.claim_ledger, launch_record: custody.launch_record,
+          runtime_receipt: custody.runtime.receipt, dispatcher_identity_sha256: custody.dispatcher_identity_sha256,
+          reviewed_artifacts: custody.reviewed_artifacts, source_inventory: custody.source_inventory ?? null },
+        result_file: rowCustody.result_file, result_manifest: rowCustody.result_manifest, queue: rowCustody.queue,
+        source_row_sha256: rowCustody.source_row_sha256, provenance_sha256: rowCustody.provenance_sha256,
+        execution_identity: rowCustody.execution_identity, actor: rowCustody.actor,
+        program_ir_sha256: provenance.program_ir_sha256 ?? null,
         model: provenance.model ?? null, provider: provenance.provider ?? null, system_prompt_sha256: provenance.system_prompt_sha256 ?? null,
         rerendered: 'collector system prompt with its collection-guidance block removed' } };
     const target = rootRecordPath(root, example, teacher);
     mkdirSync(join(tuneDirectory(root), 'data', 'roots'), { recursive: true });
-    writeFileSync(target, JSON.stringify(record));
+    const encoded = JSON.stringify(record);
+    if (existsSync(target)) {
+      const existing = JSON.parse(readFileSync(target, 'utf8')) as RootRecord;
+      const oldImport = existing.imported as Record<string, unknown> | undefined;
+      const newImport = record.imported as Record<string, unknown> | undefined;
+      const oldActor = oldImport?.actor, newActor = newImport?.actor;
+      const sameClosedResult = existing.root === record.root && existing.teacher === record.teacher &&
+        oldImport?.result_row_sha256 === newImport?.result_row_sha256 &&
+        oldImport?.result_line_sha256 === newImport?.result_line_sha256 &&
+        oldImport?.source_row_sha256 === newImport?.source_row_sha256 &&
+        oldActor !== undefined && newActor !== undefined &&
+        JSON.stringify(oldActor) === JSON.stringify(newActor);
+      if (!sameClosedResult) {
+        reject('this campaign actor/root already has different imported bytes'); continue;
+      }
+      // Campaign supervision files advance as other cases close. Keep the first
+      // immutable terminal-evidence snapshot for this exact row and make retries idempotent.
+      teachers.add(teacher);
+      summary.imported++;
+      if (!rootAccepted) summary.failures++;
+      continue;
+    }
+    writeFileSync(target, encoded);
     teachers.add(teacher);
     summary.imported++;
-    if (!(ok && oracle !== false && outcome.accepted === true)) summary.failures++;
+    if (!rootAccepted) summary.failures++;
+    }
   }
   summary.teachers = [...teachers].sort();
   mkdirSync(join(tuneDirectory(root), 'data'), { recursive: true });

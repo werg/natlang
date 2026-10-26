@@ -8,8 +8,8 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
 import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
@@ -37,6 +37,8 @@ export type TuneOptions = {
   root: string; program: ProgramDescriptor; settings: TuneSettings; student: StudentSettings & { name: string };
   /** The authorized teacher's driver and identity. */
   teacher: ModelDriver; teacherId: string;
+  /** The native serving endpoint must be checked against student.base before collection or any evaluation/rollout. */
+  assertStudentBase?: () => Promise<void>;
   /** Serves a release for validation: returns a driver that applies the release's adapters, and its loaded set. */
   /** `capture` asks the backend for exact sampling receipts on every turn (RL rollouts; native backend only). */
   serve: (release: { manifest: WeightManifest; directory: string; capture?: boolean }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>;
@@ -47,6 +49,12 @@ export type TuneOptions = {
    * Collection journals every call so repairs replay the same world (world.ts). */
   services?: (example: SplitExample) => Services;
 };
+
+async function assertStudentBackendIdentity(options: TuneOptions): Promise<void> {
+  if (options.settings.backend !== 'native') return;
+  if (!options.assertStudentBase) throw new Error('native tune backend requires a live student.base identity preflight');
+  await options.assertStudentBase();
+}
 
 /** Persist an evaluated arm for reports: `.natlang/tune/evaluations/<partition>/<arm>.json`. */
 export function saveArm(root: string, arm: ArmResult): void {
@@ -100,6 +108,30 @@ export type RootRecord = { schema: 'natlang.tune-root/v1'; root: string; teacher
   bindings: Record<string, string>; outcome: { ok: boolean; oracle: boolean | null }; turns: CollectedTurn[];
   /** Where trajectories collected outside `natlang tune` came from (tune/pool.ts). */
   imported?: Record<string, unknown> };
+const verifiedCampaignSnapshotStats = new Set<string>();
+function campaignSnapshotValid(root: string, value: unknown, label: 'claim-ledger' | 'launch'): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const binding = value as { observed?: { path?: unknown; bytes?: unknown; sha256?: unknown; stat?: { bytes?: unknown };
+    prefix?: { bytes?: unknown; sha256?: unknown } }; snapshot?: { path?: unknown; bytes?: unknown; sha256?: unknown } };
+  const observed = binding.observed, snapshot = binding.snapshot;
+  if (!observed || !snapshot || typeof observed.path !== 'string' || typeof observed.bytes !== 'number' ||
+      typeof observed.sha256 !== 'string' || observed.stat?.bytes !== observed.bytes ||
+      observed.prefix?.bytes !== observed.bytes || observed.prefix.sha256 !== observed.sha256 ||
+      snapshot.bytes !== observed.bytes || snapshot.sha256 !== observed.sha256 || typeof snapshot.path !== 'string') return false;
+  const path = resolve(snapshot.path);
+  if (dirname(path) !== resolve(tuneDirectory(root), 'pool-import-custody-snapshots') ||
+      basename(path) !== `${label}-${snapshot.sha256}.snapshot`) return false;
+  try {
+    const stats = lstatSync(path, { bigint: true });
+    if (!stats.isFile() || stats.size !== BigInt(snapshot.bytes)) return false;
+    const statKey = `${path}:${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}:${snapshot.sha256}`;
+    if (verifiedCampaignSnapshotStats.has(statKey)) return true;
+    const digest = createHash('sha256').update(readFileSync(path)).digest('hex');
+    if (digest !== snapshot.sha256) return false;
+    verifiedCampaignSnapshotStats.add(statKey);
+    return true;
+  } catch { return false; }
+}
 export const rootRecordPath = (root: string, example: Pick<SplitExample, 'function' | 'input' | 'expected' | 'group'>, teacherId: string) =>
   join(tuneDirectory(root), 'data', 'roots', sha(['natlang.tune-root/v1', example.function, example.input,
     example.expected ?? null, example.group ?? null, teacherId]).slice(0, 24) + '.json');
@@ -114,6 +146,11 @@ export function validRootRecord(root: string, example: SplitExample, scaffold: W
     const path = rootRecordPath(root, example, teacher);
     if (!existsSync(path)) continue;
     const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
+    if (record.imported && (typeof record.imported.result_row_sha256 !== 'string' ||
+        !(record.imported.campaign as Record<string, unknown> | undefined)?.plan ||
+        !(record.imported.campaign as Record<string, unknown> | undefined)?.runtime_receipt ||
+        !campaignSnapshotValid(root, (record.imported.campaign as Record<string, unknown> | undefined)?.claim_ledger, 'claim-ledger') ||
+        !campaignSnapshotValid(root, (record.imported.campaign as Record<string, unknown> | undefined)?.launch_record, 'launch'))) continue;
     if (rootDataValid(record, scaffold, shared)) return record;
   }
   return undefined;
@@ -122,6 +159,7 @@ export function validRootRecord(root: string, example: SplitExample, scaffold: W
 /** Discover the scope tree, split root examples before expansion, collect or reuse teacher trajectories. */
 export async function prepareData(options: TuneOptions, timings: StageTiming[] = [], log: (line: string) => void = () => {},
   scopes: ScopeOptions = {}): Promise<TuneData> {
+  await assertStudentBackendIdentity(options);
   const { root, program, student } = options;
   const { scaffold, sites } = await timed(timings, 'discover', log, () => {
     // Persistent site IDs keep an edited or moved inline site's binding, data and lambda node (tune/sites.ts).
@@ -306,6 +344,7 @@ export async function runStudentModule(student: TuneOptions['student'], module: 
 /** Load a stored release on the backend and evaluate it (and optionally other arms) over examples, strictly. */
 export async function evaluateRelease(options: TuneOptions, data: TuneData, manifest: WeightManifest | null,
   examples: readonly SplitExample[], arm: string, partition: string): Promise<ArmResult> {
+  await assertStudentBackendIdentity(options);
   // The untuned arm serves the scaffold: no artifacts to load.
   const directory = manifest ? dirname(releaseFile(options.root, manifest.digest)) : tuneDirectory(options.root);
   const served = await options.serve({ manifest: manifest ?? data.scaffold, directory });

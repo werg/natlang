@@ -23,6 +23,7 @@
  *   natlang tune --families <programs...>  cross-program family discovery, fits and member refits (families.ts)
  */
 import { existsSync, readdirSync, readFileSync, watch } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildProject } from '../compiler/node-project.js';
@@ -51,6 +52,7 @@ import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoic
 import { currentSplit } from '../tune/pipeline.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
 import { loadNatlang } from '../runtime/node-files.js';
+import { requireNativeReaderIdentity } from '../model/index.js';
 
 const ROUTE_TEACHER = fileURLToPath(new URL('../../../applications/tuner/routeTeacher.nl', import.meta.url));
 const PROPOSE_FAMILIES = fileURLToPath(new URL('../../../applications/tuner/proposeFamilies.nl', import.meta.url));
@@ -78,7 +80,7 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases', '--held'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
@@ -116,10 +118,20 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const teacherConfig = loadModelConfiguration(teacherProfile);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
     try {
+      const assertStudentBase = async () => {
+        if (settings.backend !== 'native') return;
+        const serving = loadModelConfiguration(undefined);
+        if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
+          throw new Error('natlang tune: native backend requires a default neuraleseServer profile');
+        await requireNativeReaderIdentity(serving.choice.endpoint, student.base, {
+          apiKey: process.env[serving.choice.apiKeyEnv], headers: serving.choice.headers });
+      };
       return await fn({ root: programRoot, program, settings, student, teacher: driverOf(teacherSession),
         teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
+        assertStudentBase,
         serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
+            await assertStudentBase();
             const serving = loadModelConfiguration(undefined);
             if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
               throw new Error('natlang tune: the native backend needs a default profile with neuraleseServer: true');
@@ -230,6 +242,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     return 0;
   }
   const exportDir = value('--export-cases'), importPath = value('--import-cases');
+  if (value('--import-campaign') && importPath === undefined) throw new Error('--import-campaign is only valid with --import-cases');
   if (exportDir !== undefined || importPath !== undefined) {
     const { settings, student } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
     const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
@@ -245,7 +258,17 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         `manifest ${result.manifest}\nnext: root review and dispatch through the reviewed pool (see plans/TUNING_OPERATIONS_HANDOFF_20261026.md)`);
       return 0;
     }
-    const summary = importCases(context, resolve(importPath!));
+    const python = process.env.NATLANG_PYTHON ?? 'python3';
+    const verifier = fileURLToPath(new URL('../../../scripts/neuralese_data/verify_tune_pool_import.py', import.meta.url));
+    const snapshotDir = join(tuneDirectory(root), 'pool-import-custody-snapshots');
+    const verifyArgs = [verifier, '--input', resolve(importPath!), '--snapshot-dir', snapshotDir,
+      ...(value('--import-campaign') ? ['--campaign', resolve(value('--import-campaign')!)] : [])];
+    const verified = spawnSync(python, verifyArgs, { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (verified.error || verified.status !== 0) throw new Error(`reviewed tune campaign custody verification failed: ${verified.error?.message ?? verified.stderr.trim()}`);
+    let custody;
+    try { custody = JSON.parse(verified.stdout); }
+    catch { throw new Error('reviewed tune campaign custody verifier returned invalid JSON'); }
+    const summary = importCases(context, resolve(importPath!), custody);
     io.out(flags.has('--json') ? JSON.stringify(summary, null, 2) : `imported ${summary.imported}/${summary.rows} tune case row(s) ` +
       `(${summary.failures} failed roots kept as failures, ${summary.unboundTurns} turn(s) without a binding); rejected ${summary.rejected.length}` +
       summary.rejected.slice(0, 5).map(item => `\n  ${item.row}: ${item.reason}`).join(''));

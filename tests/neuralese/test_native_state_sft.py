@@ -82,6 +82,41 @@ def test_decoded_parent_metadata_is_released_before_restored_model_checks(tmp_pa
     assert saved['optimizer'] and saved['rng']
 
 
+def test_quality_held_rows_are_skipped_and_full_held_qualification_stays_incomplete(monkeypatch):
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.train.native_held import bind_held_quality_exclusions
+
+    entries=[{'id':'valid-a','binding':'a','communication':False,'forward_tokens':2},
+        {'id':'bad-known','binding':'bad','communication':True,'forward_tokens':3},
+        {'id':'valid-b','binding':'b','communication':True,'forward_tokens':2}]
+    class Source:
+        file_sha256='held-source'
+        def __len__(self):return len(entries)
+        def __iter__(self):return iter(entries)
+        def iter_indices(self,indices):
+            self.used=list(indices)
+            return (entries[i] for i in indices)
+    source=Source()
+    source.entries=entries
+    coverage=bind_held_quality_exclusions(entries,None,{'bad-known'},source_sha256='held-source')
+    coverage['quality_hold_binding']={'path':'/hold.json','sha256':'h'*64,
+        'row_bindings_path':'/hold-rows.jsonl','row_bindings_sha256':'r'*64}
+    monkeypatch.setattr(trainer,'_evaluate',lambda model, graphs, **kwargs:
+        {'examples':sum(1 for _ in graphs),'loss':0.25,'correct':1})
+    args=SimpleNamespace(held_eval_tokens=0,held_eval_graphs=0,held_final_policy='full',
+        foundation_qualification_request=None,checkpoint_layers=False,chunk_tokens=8,ce_supervision_policy=None)
+    result,after=trainer._evaluate_cadence(object(),source,args=args,coverage=coverage,final=True)
+    assert result['examples']==2 and source.used==[0,2]
+    assert result['scope']=='cadence-subset' and result['source_graphs']==3
+    assert result['held_quality_hold']=={'excluded_rows':1,
+        'excluded_ids_sha256':trainer.canonical_json_sha256_hex(['bad-known']),
+        'manifest_path':'/hold.json','manifest_sha256':'h'*64,
+        'row_bindings_path':'/hold-rows.jsonl','row_bindings_sha256':'r'*64,
+        'full_held_qualification':False,
+        'reason':'known truncated held targets remain protected but are not scored'}
+    assert after['completed_sweeps']==0
+
+
 def test_append_schedule_preserves_resumed_epoch_prefix_and_deterministic_next_epoch():
     rows = [SimpleNamespace(id=key) for key in ('old-a', 'old-b', 'new-a', 'new-b')]
     old_ids = {'old-a', 'old-b'}
@@ -461,6 +496,345 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     assert optimizer_step_values and min(optimizer_step_values) > min(previous_optimizer_steps)
 
 
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure(tmp_path, family, monkeypatch):
+    """Run the correction through source parsing, checkpoint restore, SGD and save."""
+    import copy
+    import hashlib
+    import json
+    import torch
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import WhitespaceSplit
+    from transformers import Lfm2Config, Lfm2ForCausalLM, PreTrainedTokenizerFast
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.train.native_state_sft import NativeGraphSource, main
+    from natlang_neuralese.train.native_source_correction import SCHEMA
+    from natlang_neuralese.common.hashing import sha256_file_hex, sha256_hex
+
+    if family == 'mellum':
+        # This CPU fixture exercises the actual Mellum model/source path. Its
+        # hardware-specific FP8 capacity/adjoint qualification is intentionally
+        # outside this source-continuation test and is represented by this
+        # explicit backend boundary stub; no production readiness is inferred.
+        from contextlib import nullcontext
+        from torch.utils.checkpoint import checkpoint as torch_checkpoint
+        from natlang_neuralese.train import fp8_backend
+        class BackendBoundary:
+            def __init__(self): self.checkpoint = torch_checkpoint
+            def reset_row_counts(self): pass
+            def restore_extra_state(self, state): pass
+            def extra_state(self): return {'test_boundary': 'FP8 hardware qualification not exercised'}
+            def inventory(self): return {'test_boundary': 'FP8 hardware qualification not exercised'}
+            def autocast(self): return nullcontext()
+            def native_modules(self): return nullcontext()
+        monkeypatch.setattr(fp8_backend, 'make_backend', lambda *args, **kwargs: BackendBoundary())
+
+    base = tmp_path / 'base'
+    base.mkdir()
+    if family == 'lfm':
+        model_config = Lfm2Config(vocab_size=128, hidden_size=16, intermediate_size=32,
+            num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=2,
+            layer_types=['full_attention'], max_position_embeddings=64)
+        torch.manual_seed(701)
+        Lfm2ForCausalLM(model_config).save_pretrained(base)
+    else:
+        from test_mellum_port import tiny_mellum
+        torch.manual_seed(702)
+        tiny_mellum(base)
+    tokenizer_object = Tokenizer(WordLevel({f't{i}': i for i in range(128)}, unk_token='t0'))
+    tokenizer_object.pre_tokenizer = WhitespaceSplit()
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer_object,
+        unk_token='t0', bos_token='t1', eos_token='t2')
+    tokenizer.add_special_tokens({'additional_special_tokens': list(ROLE_MARKERS)})
+    if family == 'lfm':
+        tokenizer.chat_template = ("{% for message in messages %}"
+            "{{ message.get('reasoning_content', '') if (preserve_thinking or loop.last) else '' }}"
+            "{{ message['content'] }}{% endfor %}assistant:")
+    else:
+        tokenizer.chat_template = ("{% for message in messages %}"
+            "{{ message.get('reasoning_content', '') }}{{ message['content'] }}"
+            "{% endfor %}assistant:")
+    tokenizer.save_pretrained(base)
+    fingerprint = tokenizer_fingerprint(tokenizer)
+    roles = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
+
+    pair = authenticated_pair('corrected-edge', roles=roles, fingerprint=fingerprint)
+    pair['models'][family]['graph']['tokenizer_fingerprint'] = fingerprint
+    corrected = copy.deepcopy(pair)
+    payload_sha = sha256_hex(b'efgh')
+    corrected['payload_sha256'] = payload_sha
+    for model_name, view in corrected['models'].items():
+        view['export']['text'] = 'efgh'
+        view['witness']['payload_sha256'] = payload_sha
+        if model_name == family == 'lfm':
+            view['graph']['nodes'][0]['token_ids'] = [1, roles[0], 8, 9, roles[1]]
+        elif model_name == family == 'mellum':
+            view['graph']['nodes'][0]['token_ids'] = [1, roles[0], 10, 11, 12, roles[1]]
+        view['graph']['source_pairing']['consumed_occurrences'][0]['payload_sha256'] = payload_sha
+
+    ordinary = {**graph('ordinary-row'), 'tokenizer_fingerprint': fingerprint}
+    appended = {**graph('ordinary-appended-after-deferral'), 'tokenizer_fingerprint': fingerprint}
+    old_dir, reduced_dir, new_dir = (tmp_path / 'old-source', tmp_path / 'reduced-source',
+                                    tmp_path / 'new-source')
+    old_dir.mkdir(); reduced_dir.mkdir(); new_dir.mkdir()
+    old_manifest = source_manifest(old_dir, [ordinary], [pair], model=family)
+    reduced_manifest = source_manifest(reduced_dir, [ordinary], [], model=family)
+    # The final corrected source retains the ordinary row appended between the
+    # two correction proofs.  A correction must not silently prune that earned
+    # append merely because it was created after the initial fixture manifest.
+    new_manifest = source_manifest(new_dir, [ordinary, appended], [corrected], model=family)
+    held = {**graph('held-row'), 'split': 'test', 'source_groups': ['protected-held'],
+            'tokenizer_fingerprint': fingerprint}
+    corrected_held = copy.deepcopy(held)
+    corrected_held['nodes'][0]['token_ids'] = [1, 11, 12, 13, 2]
+    corrected_held['nodes'][0]['target_weights'] = [0.0, 1.0, 1.0, 1.0, 1.0]
+    old_held_path = tmp_path / 'held-old.jsonl'
+    new_held_path = tmp_path / 'held-new.jsonl'
+    old_held_path.write_text(json.dumps(held) + '\n')
+    new_held_path.write_text(json.dumps(corrected_held) + '\n')
+    old_source = NativeGraphSource(old_manifest, fingerprint, required_split='train', role_ids=roles)
+    reduced_source = NativeGraphSource(reduced_manifest, fingerprint, required_split='train', role_ids=roles)
+    new_source = NativeGraphSource(new_manifest, fingerprint, required_split='train', role_ids=roles)
+    old_held_source = NativeGraphSource(old_held_path, fingerprint, required_split='test', role_ids=roles)
+    new_held_source = NativeGraphSource(new_held_path, fingerprint, required_split='test', role_ids=roles)
+    corrected_id = family + ':corrected-edge'
+    assert old_source.bindings[corrected_id] != new_source.bindings[corrected_id]
+    held_id = 'held-row'
+    assert old_held_source.bindings[held_id] != new_held_source.bindings[held_id]
+
+    out = tmp_path / 'run'
+    dtype = 'float32' if family == 'lfm' else 'bfloat16'
+    base_argv = ['--base', str(base), '--device', 'cpu', '--dtype', dtype, '--rank', '2',
+        '--held-native-graphs', str(old_held_path), '--epochs', '1', '--eval-every', '100',
+        '--batch-graphs', '1', '--learning-rate', '1e-3', '--seed', '29',
+        '--stage-id', 'native_full_sft']
+    if family == 'mellum':
+        base_argv += ['--fp8-training', 'triton-experts']
+    assert main([*base_argv, '--native-graphs', str(old_manifest), '--out', str(out)]) == 0
+    checkpoint = out / 'checkpoint.pt'
+    first_parent = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    first_training = first_parent['training']
+    # Advance a distinct stage so the checkpoint top-level frame is newer than
+    # native_full_sft. The correction must restore the saved full-SFT cursor
+    # while retaining this latest checkpoint's optimizer, RNG, and global step.
+    later_out = tmp_path / 'later-stage'
+    later_argv = list(base_argv)
+    stage_index = later_argv.index('--stage-id')
+    later_argv[stage_index + 1] = 'native_harness_repair_sft'
+    assert main([*later_argv, '--native-graphs', str(old_manifest), '--out', str(later_out),
+        '--continue-from', str(checkpoint)]) == 0
+    checkpoint = later_out / 'checkpoint.pt'
+    parent = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    parent_training = parent['training']
+    assert parent_training['options']['stage_id'] == 'native_harness_repair_sft'
+    assert parent_training['global_step'] > first_training['global_step']
+    assert parent_training['sft_progress']['native_full_sft']['source_receipts'][0]['sha256'] == \
+        first_training['source_receipts'][0]['sha256']
+    old_receipt = parent_training['sft_progress']['native_full_sft']['source_receipts'][0]
+    old_held_receipt = old_held_source.receipt()
+
+    # Put a real DPO stage with a different train source and the same held
+    # source into the checkpoint before correcting the held target. The
+    # correction must follow held identity independently of train identity.
+    from test_native_offline_preference import example_spec as preference_example_spec
+    from natlang_neuralese.data.native_graph import SCHEMA as GRAPH_SCHEMA
+    dpo_fixture = tmp_path / 'dpo-fixture'; dpo_fixture.mkdir()
+    dpo_example, dpo_objective = preference_example_spec(
+        dpo_fixture, fingerprint=fingerprint)
+    dpo_row = {'schema': GRAPH_SCHEMA, 'id': dpo_example.id, 'split': 'train',
+        'source_groups':list(dpo_example.source_groups), 'tokenizer_fingerprint':fingerprint,
+        'nodes':[{'name':node.name, 'token_ids':list(node.token_ids),
+                  'target_weights':[0.0] * len(node.token_ids)}
+                 for node in dpo_example.plan.invocations]}
+    dpo_train = tmp_path / 'dpo-train.jsonl'; dpo_train.write_text(json.dumps(dpo_row) + '\n')
+    dpo_out = tmp_path / 'dpo-before-correction'
+    dpo_args = ['--base',str(base),'--device','cpu','--dtype',dtype,'--rank','2',
+        '--native-graphs',str(dpo_train),'--held-native-graphs',str(old_held_path),
+        '--objective-spec',str(dpo_objective.path),'--out',str(dpo_out),
+        '--continue-from',str(checkpoint),'--stage-id','native_offline_preference',
+        '--epochs','1','--eval-every','100',
+        '--batch-graphs','1','--learning-rate','1e-3','--seed','29']
+    if family == 'mellum':
+        dpo_args += ['--fp8-training','triton-experts']
+    from natlang_neuralese.train.native_preference import main as preference_main
+    assert preference_main(dpo_args) == 0
+    dpo_checkpoint = dpo_out / 'checkpoint.pt'
+    dpo_parent_training = torch.load(dpo_checkpoint, map_location='cpu', weights_only=False)['training']
+    dpo_frame_before = dpo_parent_training['sft_progress']['native_offline_preference']
+    assert dpo_frame_before['source_receipts'][0]['sha256'] != old_receipt['sha256']
+    assert dpo_frame_before['source_receipts'][1]['sha256'] == old_held_receipt['sha256']
+
+    row_ledger = tmp_path / 'deferred-correction-rows.jsonl'
+    old_leaf = old_source.receipt()['sources'][1]
+    row_ledger.write_text(json.dumps({
+        'id': corrected_id, 'old_binding': old_source.bindings[corrected_id],
+        'new_binding': None,
+        'old_source_sha256': old_leaf['sha256'], 'new_source_sha256': None,
+        'disposition': 'deferred', 'old_communication': True,
+        'reason': 'pending second exact target correction'}, sort_keys=True) + '\n')
+    old_held_receipt = old_held_source.receipt()
+    new_held_receipt = new_held_source.receipt()
+    held_row_ledger = tmp_path / 'protected-held-correction-rows.jsonl'
+    held_row_ledger.write_text(json.dumps({
+        'id': held_id, 'old_binding': old_held_source.bindings[held_id],
+        'new_binding': new_held_source.bindings[held_id],
+        'old_source_sha256': old_held_receipt['sha256'], 'new_source_sha256': new_held_receipt['sha256'],
+        'old_groups': ['protected-held'], 'new_groups': ['protected-held'],
+        'disposition': 'corrected'}, sort_keys=True) + '\n')
+    quality_rows = tmp_path / 'corrected-held-quality-rows.jsonl'
+    quality_rows.write_text('')
+    quality_manifest = tmp_path / 'corrected-held-quality.json'
+    quality_manifest.write_text(json.dumps({
+        'schema':'natlang.native-held-quality-hold/1',
+        'held_source':new_held_receipt,
+        'row_bindings_path':quality_rows.name,
+        'row_bindings_sha256':sha256_file_hex(quality_rows),
+        'excluded_rows':0,'pending_sources':[]},sort_keys=True))
+    quality_ref = {'path':quality_manifest.name,'sha256':sha256_file_hex(quality_manifest)}
+    proof = tmp_path / 'deferred-correction.json'
+    proof.write_text(json.dumps({'schema': SCHEMA,
+        'model_id': parent_training['identity']['config']['architecture'] + ':' +
+            parent_training['identity']['config']['base_inventory_sha256'],
+        'stage_id': 'native_full_sft',
+        'prior_source': {'path': old_receipt['path'], 'sha256': old_receipt['sha256']},
+        'current_source': {'path': str(reduced_manifest.resolve()), 'sha256': reduced_source.file_sha256},
+        'row_bindings_path': str(row_ledger.resolve()),
+        'row_bindings_sha256': sha256_file_hex(row_ledger),
+    }, sort_keys=True))
+
+    deferred_out = tmp_path / 'deferred-run'
+    assert main([*base_argv, '--objective-continuation', '--native-graphs', str(reduced_manifest), '--held-native-graphs', str(old_held_path), '--out', str(deferred_out),
+        '--continue-from', str(dpo_checkpoint), '--continued-native-graphs', str(old_manifest),
+        '--continued-held-native-graphs', str(old_held_path),
+        '--source-correction', str(proof)]) == 0
+    deferred_checkpoint = deferred_out / 'checkpoint.pt'
+    deferred_training = torch.load(deferred_checkpoint, map_location='cpu', weights_only=False)['training']
+    deferred_frame = deferred_training['sft_progress']['native_full_sft']
+    assert corrected_id not in deferred_training['source_row_bindings']
+    assert deferred_frame['pending_source_rows'][corrected_id]['communication'] is True
+    assert corrected_id not in deferred_training['options']['_communication_ids']
+    assert deferred_training['optimizer'] and deferred_training['rng']
+
+    # Apply a normal append while the communication row is pending. Ordinary
+    # append is authenticated by the native source predecessor/row-prefix path
+    # and must not require a synthetic source-correction record.
+    append_dir = tmp_path / 'append-source'; append_dir.mkdir()
+    append_manifest = source_manifest(append_dir, [ordinary, appended], [], model=family)
+    append_source = NativeGraphSource(append_manifest, fingerprint, required_split='train', role_ids=roles)
+    appended_out = tmp_path / 'appended-run'
+    assert main([*base_argv, '--native-graphs', str(append_manifest),
+        '--held-native-graphs', str(old_held_path), '--out', str(appended_out),
+        '--objective-continuation', '--continue-from', str(deferred_checkpoint),
+        '--continued-native-graphs', str(reduced_manifest),
+        '--continued-held-native-graphs', str(old_held_path)]) == 0
+    appended_checkpoint = appended_out / 'checkpoint.pt'
+    appended_training = torch.load(appended_checkpoint, map_location='cpu', weights_only=False)['training']
+    appended_frame = appended_training['sft_progress']['native_full_sft']
+    appended_id = 'ordinary-appended-after-deferral'
+    assert appended_id in appended_training['source_row_bindings']
+    assert appended_frame['pending_source_rows'][corrected_id]['communication'] is True
+    assert corrected_id not in appended_training['options']['_communication_ids']
+    assert len(appended_training['options']['source_correction_history']) == 1
+
+    # Resume from that actual saved appended frame. Its active communication
+    # IDs no longer contain the pending row; the pinned first-correction proof
+    # is the authority that permits exactly this original communication row to return.
+    repaired_rows = tmp_path / 'repaired-correction-rows.jsonl'
+    new_leaf = new_source.receipt()['sources'][1]
+    repaired_rows.write_text(json.dumps({
+        'id': corrected_id, 'old_binding': old_source.bindings[corrected_id],
+        'new_binding': new_source.bindings[corrected_id],
+        'old_source_sha256': old_leaf['sha256'], 'new_source_sha256': new_leaf['sha256'],
+        'disposition': 'corrected', 'old_communication': True}, sort_keys=True) + '\n')
+    repaired_proof = tmp_path / 'repaired-correction.json'
+    repaired_proof.write_text(json.dumps({'schema': SCHEMA,
+        'model_id': parent_training['identity']['config']['architecture'] + ':' +
+            parent_training['identity']['config']['base_inventory_sha256'],
+        'stage_id': 'native_full_sft',
+        'prior_source': {'path': str(append_manifest.resolve()), 'sha256': append_source.file_sha256},
+        'current_source': {'path': str(new_manifest.resolve()), 'sha256': new_source.file_sha256},
+        'row_bindings_path': str(repaired_rows.resolve()),
+        'row_bindings_sha256': sha256_file_hex(repaired_rows),
+        'protected_held_correction': {
+            'schema': 'natlang.native-protected-held-correction/1',
+            'prior_source': {'path': old_held_receipt['path'], 'sha256': old_held_receipt['sha256']},
+            'current_source': {'path': new_held_receipt['path'], 'sha256': new_held_receipt['sha256']},
+            'row_bindings_path': str(held_row_ledger.resolve()),
+            'row_bindings_sha256': sha256_file_hex(held_row_ledger)},
+        'held_quality_hold':quality_ref,
+        'pending_held_correction':{'remaining_original_sources':[]},
+    }, sort_keys=True))
+
+    corrected_out = tmp_path / 'corrected-run'
+    assert main([*base_argv, '--objective-continuation', '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(corrected_out),
+        '--continue-from', str(appended_checkpoint), '--continued-native-graphs', str(append_manifest),
+        '--continued-held-native-graphs', str(old_held_path),
+        '--source-correction', str(repaired_proof)]) == 0
+    child = torch.load(corrected_out / 'checkpoint.pt', map_location='cpu', weights_only=False)
+    child_training = child['training']
+    assert child_training['global_step'] == appended_training['global_step'] + 1
+    assert child_training['source_row_bindings'] == new_source.bindings
+    assert child_training['source_row_order'] == new_source.ordered_ids()
+    assert child_training['exposure_counts']['ordinary-row'] == parent_training['exposure_counts']['ordinary-row']
+    assert child_training['exposure_counts'][corrected_id] == 1
+    assert child_training['held_row_bindings'] == new_held_source.bindings
+    assert child_training['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert child_training['options']['source_correction_history'][-1]['protected_held_rows'] == 1
+    assert child_training['metrics']['held']['source_sha256'] == new_held_receipt['sha256']
+    assert child_training['metrics']['held_coverage']['source_sha256'] == new_held_receipt['sha256']
+    frame = child_training['sft_progress']['native_full_sft']
+    assert frame['required_visits'][corrected_id] == 1
+    carried = child_training['sft_progress']['native_harness_repair_sft']
+    # This independently resumable frame still names the reduced source, not
+    # the intervening append source. Do not rewrite it based on row overlap;
+    # its authenticated deferred-row record remains intact until that frame is
+    # explicitly continued from the new source.
+    assert carried['source_receipts'][0]['sha256'] == reduced_source.file_sha256
+    assert corrected_id not in carried['source_row_bindings']
+    assert carried['pending_source_rows'][corrected_id]['communication'] is True
+    history = child_training['options']['source_correction_history']
+    assert history[-1]['corrected_rows'][0]['prior_exposure'] == 1
+    assert history[-1]['new_corrected_row_exposure_added'] == 0
+    assert not history[-1].get('carried_frame_transitions')
+    carried_dpo = child_training['sft_progress']['native_offline_preference']
+    assert carried_dpo['source_receipts'][0] == dpo_frame_before['source_receipts'][0]
+    assert carried_dpo['source_row_bindings'] == dpo_frame_before['source_row_bindings']
+    assert carried_dpo['source_row_order'] == dpo_frame_before['source_row_order']
+    assert carried_dpo['exposure_counts'] == dpo_frame_before['exposure_counts']
+    assert carried_dpo['required_visits'] == dpo_frame_before['required_visits']
+    assert carried_dpo['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert carried_dpo['held_row_bindings'] == new_held_source.bindings
+    assert 'held' not in carried_dpo.get('metrics', {})
+    assert carried_dpo['options']['held_correction_binding']['sha256'] == sha256_file_hex(repaired_proof)
+
+    # Resume the actual DPO stage from the corrected full-state parent with
+    # its independent train source and newly corrected protected set.
+    dpo_args[dpo_args.index('--out') + 1] = str(tmp_path / 'dpo-after-correction')
+    dpo_args[dpo_args.index('--continue-from') + 1] = str(corrected_out / 'checkpoint.pt')
+    dpo_args[dpo_args.index('--held-native-graphs') + 1] = str(new_held_path)
+    assert preference_main(dpo_args) == 0
+    resumed_dpo = torch.load(tmp_path / 'dpo-after-correction' / 'checkpoint.pt',
+        map_location='cpu', weights_only=False)['training']
+    resumed_dpo_frame = resumed_dpo['sft_progress']['native_offline_preference']
+    assert resumed_dpo_frame['source_receipts'][0] == dpo_frame_before['source_receipts'][0]
+    assert resumed_dpo_frame['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert resumed_dpo_frame['options']['held_correction_binding']['sha256'] == sha256_file_hex(repaired_proof)
+    assert history[-1]['optimizer_rng_weights'] == 'preserved'
+    assert child_training['optimizer'] and child_training['rng']
+    def equal(left, right):
+        if torch.is_tensor(left):
+            return torch.equal(left, right)
+        if isinstance(left, dict):
+            return left.keys() == right.keys() and all(equal(left[key], right[key]) for key in left)
+        if isinstance(left, (tuple, list)):
+            return len(left) == len(right) and all(equal(a, b) for a, b in zip(left, right))
+        return left == right
+    assert not equal(child_training['optimizer'], parent_training['optimizer'])
+    assert not equal(child['interface_state'], parent['interface_state'])
+
+
 def test_token_volume_batches_preserve_every_graph_and_long_graph():
     from natlang_neuralese.train.native_state_sft import batch_boundaries
     entries = [{'forward_tokens': count} for count in (3, 4, 20, 2, 5)]
@@ -510,9 +884,14 @@ def source_manifest(tmp_path, ordinary, pairs, *, model='lfm', name='source.json
     ordinary_path, pairs_path = tmp_path/'ordinary.jsonl', tmp_path/'pairs.jsonl'
     ordinary_path.write_text(''.join(json.dumps(row)+'\n' for row in ordinary))
     pairs_path.write_text(''.join(json.dumps(row)+'\n' for row in pairs))
-    manifest = {'schema': 'natlang.native-graph-sources/1', 'sources': [
-        {'kind': 'native-graphs', 'path': ordinary_path.name, 'sha256': sha256_file_hex(ordinary_path)},
-        {'kind': 'semantic-pairs', 'path': pairs_path.name, 'sha256': sha256_file_hex(pairs_path), 'model': model}]}
+    sources=[]
+    if ordinary:
+        sources.append({'kind': 'native-graphs', 'path': ordinary_path.name,
+                        'sha256': sha256_file_hex(ordinary_path)})
+    if pairs:
+        sources.append({'kind': 'semantic-pairs', 'path': pairs_path.name,
+                        'sha256': sha256_file_hex(pairs_path), 'model': model})
+    manifest = {'schema': 'natlang.native-graph-sources/1', 'sources': sources}
     path = tmp_path/name
     path.write_text(json.dumps(manifest))
     return path

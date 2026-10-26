@@ -2,16 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as host from '../dist/index.js';
 import { collect, scaffoldManifest } from '../dist/tune/collect.js';
-import { currentSplit, tuneProgram } from '../dist/tune/pipeline.js';
+import { currentSplit, tuneProgram, validRootRecord } from '../dist/tune/pipeline.js';
+import { sharedSourceHash } from '../dist/tune/keys.js';
 import { programSites } from '../dist/tune/sites.js';
-import { exportCases, importCases } from '../dist/tune/pool.js';
+import { exportCases, importCases, honestTuneBlockedRoot } from '../dist/tune/pool.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
+import { canonicalJson } from '../dist/package/archive.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const COLLECTOR = fileURLToPath(new URL('../dist/teacher/cli.js', import.meta.url));
@@ -93,13 +96,49 @@ test('pool cases: export, the real collector, import, and a tune that reuses the
     await runCollector([join(work, 'cases', 'source.jsonl'), join(work, 'jobs'), join(work, 'results', 'case.results.jsonl'),
       '--model-id', 'scripted-luna', '--root-seed', '7', '--all', '--workers', '2', '--server', `http://127.0.0.1:${port}`, '--kv-tokens', '0']);
 
-    const summary = importCases(context, join(work, 'results'));
+    const snapshotDir = join(root, '.natlang/tune/pool-import-custody-snapshots');
+    const custody = fixtureCustody(work, join(work, 'results'), join(work, 'cases', 'source.jsonl'), snapshotDir);
+    writeFileSync(join(work, 'results', 'case-late.results.jsonl'), readFileSync(join(work, 'results', 'case.results.jsonl')));
+    assert.throws(() => importCases(context, join(work, 'results')), /reviewed dispatcher custody/);
+    const summary = importCases(context, join(work, 'results'), custody);
     assert.equal(summary.rows, rows.length);
     assert.equal(summary.imported, rows.length, JSON.stringify(summary.rejected));
     assert.equal(summary.unboundTurns, 0, 'every turn maps to its own invocation binding');
     assert.equal(summary.teachers.length, 1);
     assert.match(summary.teachers[0], /^collector:openai-compatible:scripted-luna:/);
     const records = readdirSync(join(root, '.natlang/tune/data/roots')).map(file => JSON.parse(readFileSync(join(root, '.natlang/tune/data/roots', file), 'utf8')));
+    const custodyRecord = records.find(record => record.imported?.result_row_sha256 === custody.selected_rows[0].result_row_sha256);
+    assert.ok(custodyRecord, 'the exact imported result row has a durable tune-root record');
+    assert.equal(custodyRecord.imported.campaign.plan.sha256, custody.plan.sha256);
+    assert.equal(custodyRecord.imported.campaign.runtime_receipt.sha256, custody.runtime.receipt.sha256);
+    assert.ok(existsSync(custodyRecord.imported.campaign.claim_ledger.snapshot.path));
+    const retainedLedgerSnapshot = custodyRecord.imported.campaign.claim_ledger.snapshot.sha256;
+    writeFileSync(custody.claim_ledger.observed.path,
+      readFileSync(custody.claim_ledger.observed.path).toString() + '{"event":"later claim"}\n');
+    writeFileSync(custody.launch_record.observed.path, '{"status":"running","later":true}\n');
+    const laterCustody = fixtureCustody(work, join(work, 'results'), join(work, 'cases', 'source.jsonl'), snapshotDir);
+    assert.equal(importCases(context, join(work, 'results'), laterCustody).imported, rows.length,
+      'the same exact closed results are idempotent as campaign supervision files advance');
+    const afterRetry = readdirSync(join(root, '.natlang/tune/data/roots')).map(file => JSON.parse(readFileSync(join(root, '.natlang/tune/data/roots', file), 'utf8')))
+      .find(record => record.imported?.result_row_sha256 === custody.selected_rows[0].result_row_sha256);
+    assert.equal(afterRetry.imported.campaign.claim_ledger.snapshot.sha256, retainedLedgerSnapshot,
+      're-import preserves the first immutable terminal evidence');
+    const detachedPath = join(work, 'merged-results.jsonl');
+    writeFileSync(detachedPath, readFileSync(join(work, 'results', 'case.results.jsonl')));
+    const detachedCustody = { ...laterCustody,
+      input: { kind: 'file', ...binding(detachedPath) },
+      selected_rows: laterCustody.selected_rows.map((row, index) => ({ ...row,
+        input: { path: resolve(detachedPath), line: index + 1 } })) };
+    assert.equal(importCases(context, detachedPath, detachedCustody).imported, rows.length,
+      'detached merged imports map each exact input line to the original accounted campaign output');
+    const queuePath = custody.selected_rows[0].queue.path, queueBytes = readFileSync(queuePath);
+    writeFileSync(queuePath, Buffer.concat([queueBytes, Buffer.from('tampered\n')]));
+    assert.throws(() => importCases(context, join(work, 'results'), custody), /case queue changed/);
+    writeFileSync(queuePath, queueBytes);
+    const outputPath = join(work, 'results', 'case.results.jsonl'), outputBytes = readFileSync(outputPath);
+    writeFileSync(outputPath, Buffer.concat([outputBytes, Buffer.from(' ')]));
+    assert.throws(() => importCases(context, join(work, 'results'), custody), /selected closed-case result file changed/);
+    writeFileSync(outputPath, outputBytes);
     const iota = context.examples.find(example => example.input.value === 'iota');
     if (iota.partition !== 'confirmation') {
       const failed = records.find(record => record.root === iota.id);
@@ -122,7 +161,7 @@ test('pool cases: export, the real collector, import, and a tune that reuses the
 
     // A changed build rejects the rows.
     const stale = { ...context, program: { ...context.program, buildHash: 'other' } };
-    assert.equal(importCases(stale, join(work, 'results')).rejected.length, rows.length);
+    assert.equal(importCases(stale, join(work, 'results'), custody).rejected.length, rows.length);
 
     // The ordinary tune reuses the imported data; the configured teacher is never called.
     let teacherCalls = 0;
@@ -140,8 +179,73 @@ test('pool cases: export, the real collector, import, and a tune that reuses the
     const job = readdirSync(join(root, '.natlang/tune/jobs'))[0];
     assert.deepEqual(JSON.parse(readFileSync(join(root, '.natlang/tune/jobs', job, 'out/result.json'), 'utf8')).receipt.teachers, summary.teachers,
       'training rows carry the pool actor identity');
+    const retained = validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program), 'teacher:configured');
+    assert.ok(retained?.imported, 'the exact imported row remains reusable while its snapshot is intact');
+    const ledgerSnapshot = retained.imported.campaign.claim_ledger.snapshot.path;
+    writeFileSync(ledgerSnapshot, 'tampered');
+    assert.equal(validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program), 'teacher:configured'), undefined,
+      'a missing or changed immutable terminal snapshot invalidates imported custody');
   } finally {
     server.close();
     rmSync(root, { recursive: true, force: true }); rmSync(work, { recursive: true, force: true });
   }
+});
+
+function hash(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
+function binding(path) { const bytes = readFileSync(path); return { path: resolve(path), bytes: bytes.length, sha256: hash(bytes) }; }
+function campaignSnapshot(livePath, label, snapshotDir) {
+  const bytes = readFileSync(livePath), sha256 = hash(bytes), snapshotPath = join(snapshotDir, `${label}-${sha256}.snapshot`);
+  mkdirSync(snapshotDir, { recursive: true });
+  writeFileSync(snapshotPath, bytes);
+  return { observed: { path: resolve(livePath), bytes: bytes.length, sha256,
+    stat: { bytes: bytes.length }, prefix: { bytes: bytes.length, sha256 } },
+    snapshot: { path: resolve(snapshotPath), bytes: bytes.length, sha256 } };
+}
+function fixtureCustody(work, inputPath, sourcePath, snapshotDir) {
+  const output = join(inputPath, 'case.results.jsonl'), outputBytes = readFileSync(output);
+  const manifestPath = `${output}.manifest.json`, resultRows = outputBytes.toString().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  const sourceText = readFileSync(sourcePath, 'utf8'), sourceRows = sourceText.split('\n').filter(Boolean).map(line => JSON.parse(line));
+  const sourceRawRows = sourceText.split('\n').filter(Boolean).map(line => Buffer.from(line + '\n'));
+  const planPath = join(work, 'fixture-plan.json'), ledgerPath = join(work, 'fixture-ledger.jsonl');
+  const launchPath = join(work, 'fixture-launch.json'), runtimePath = join(work, 'fixture-runtime.json');
+  for (const [path, body] of [[planPath, '{}'], [ledgerPath, '{}\n'], [launchPath, '{}'], [runtimePath, '{}']])
+    if (!existsSync(path)) writeFileSync(path, body);
+  const rows = resultRows.map((row, index) => {
+    const queue = join(work, `fixture-queue-${index}.jsonl`); writeFileSync(queue, JSON.stringify({ index }) + '\n');
+    return { case_index: index, input: { path: resolve(output), line: index + 1 },
+      result_row_sha256: hash(Buffer.from(canonicalJson(row))), result_line_sha256: hash(Buffer.from(outputBytes.toString().split('\n')[index] + '\n')), result_file: binding(output),
+      result_manifest: binding(manifestPath), queue: binding(queue),
+      source_row_sha256: hash(sourceRawRows[index]),
+      provenance_sha256: hash(Buffer.from(canonicalJson(row.provenance))), execution_identity: row.execution_identity,
+      actor: { provider: row.provenance.provider, model: row.provenance.model,
+        dispatch_plan_sha256: 'a'.repeat(64), runtime_receipt_sha256: hash(readFileSync(runtimePath)), source_inventory_sha256: null } };
+  });
+  return { schema: 'natlang.tune-pool-import-custody/2', input: { kind: 'directory', path: resolve(inputPath),
+    files: [binding(output)] }, plan: binding(planPath), source: binding(sourcePath), claim_ledger: campaignSnapshot(ledgerPath, 'claim-ledger', snapshotDir),
+    launch_record: campaignSnapshot(launchPath, 'launch', snapshotDir), dispatcher_identity_sha256: 'b'.repeat(64),
+    reviewed_artifacts: [],
+    runtime: { root: resolve(work), receipt_sha256: hash(readFileSync(runtimePath)), receipt: binding(runtimePath) },
+    source_inventory: null, selected_rows: rows };
+}
+
+test('reviewed tune import accepts only an exact honest blocked root, never a blocked child or failed stop', () => {
+  const expected = { status: 'blocked', reason: 'required evidence is unavailable' };
+  const root = { invocation_id: 'root', parent_invocation_id: null, completion_status: 'quiesced', completion_source: 'execution_graph' };
+  const row = { outcome: { status: 'quiesced', accepted: true, oracle: { accepted: true, level: 'exact' },
+      checks: Object.fromEntries(['seeded_failure_requirement', 'expected_status', 'honest_stop', 'effects', 'files', 'world',
+        'file_return_consistency', 'answer'].map(key => [key, true])), invocation_ledger: [root],
+      action_ledger: [{ call_id: 'root', name: 'return_result', outcome: 'blocked', arguments: expected, seq: 3 }] },
+    trajectory: [{ invocation_id: 'root', assistant: { calls: [{ source_tool: 'return_result', arguments: expected }] } }] };
+  assert.equal(honestTuneBlockedRoot(row, expected), true);
+  const failedRoot = structuredClone(row); failedRoot.outcome.checks.answer = false;
+  assert.equal(honestTuneBlockedRoot(failedRoot, expected), false);
+  const blockedChild = structuredClone(row);
+  blockedChild.outcome.invocation_ledger.push({ invocation_id: 'child', parent_invocation_id: 'root', completion_status: 'done', completion_source: 'execution_graph' });
+  blockedChild.trajectory.push({ invocation_id: 'child', assistant: { calls: [{ source_tool: 'return_result', arguments: { status: 'blocked', reason: 'child is blocked' } }] } });
+  assert.equal(honestTuneBlockedRoot(blockedChild, expected), false);
+  const childFailure = structuredClone(row);
+  childFailure.outcome.invocation_ledger.push({ invocation_id: 'child', parent_invocation_id: 'root', completion_status: 'done', completion_source: 'execution_graph' });
+  childFailure.trajectory.push({ invocation_id: 'child', assistant: { calls: [{ source_tool: 'return_result', arguments: { status: 'failed', reason: 'child failed' } }] } });
+  assert.equal(honestTuneBlockedRoot(childFailure, expected), false, 'a successful root cannot excuse a failed child');
+  assert.equal(honestTuneBlockedRoot(row, { status: 'success', value: 'x' }), false);
 });

@@ -31,6 +31,13 @@ MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 # workspace package links pointed at the checkout under test. A single root
 # node_modules symlink resolves @natlang/* to the wrong source revision.
 python3 "$ROOT/scripts/prepare_check_main_node_modules.py" "$ROOT" "$MAIN"
+# The GGUF exporter uses the installed, reviewed llama.cpp converter snapshot.
+# It is an ignored development dependency, so linked worktrees must share it
+# explicitly just as they share the installed Python and Node dependencies.
+if [ ! -e "$ROOT/vendor/llama.cpp" ] && [ ! -L "$ROOT/vendor/llama.cpp" ] && [ -d "$MAIN/vendor/llama.cpp" ]; then
+  mkdir -p "$ROOT/vendor"
+  ln -s "$MAIN/vendor/llama.cpp" "$ROOT/vendor/llama.cpp"
+fi
 # The ts-host and application installs contain their third-party dependencies;
 # link those trees when the worktree does not already have its own install.
 # (One missing level leaves e.g. undici or @wllama unresolved and reads as TS2307/TS7006 errors.)

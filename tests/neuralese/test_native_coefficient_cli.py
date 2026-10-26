@@ -7,7 +7,6 @@ import signal
 
 import pytest
 import torch
-from natlang_neuralese.common.paths import root as logical_root
 
 from test_native_coefficient_stage import adapters
 from test_native_serving_adapters import engine_fixture
@@ -47,9 +46,7 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
         'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
         'nodes':[{'name':'held','token_ids':[4,5,6],'target_weights':[0,1,1]}]})+'\n')
     packet=tmp_path/'held-task.jsonl'
-    # A tracked held (split=test) natlang.program row: the registered protected
-    # packet under runs/ exists only on the training machines, not in a checkout.
-    original=logical_root('repo')/'data/teacher/read-before-code-probe.ir.jsonl'
+    original=Path(__file__).resolve().parents[1]/'fixtures/native-coefficient-held-case.jsonl'
     packet.write_text(original.open().readline())
     spec={'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),

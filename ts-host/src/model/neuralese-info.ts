@@ -4,6 +4,8 @@
  * by configuration and checked at startup, not discovered by a failing request).
  */
 import { fetchModel, openAIEndpointRoot } from './chat-completion.js';
+import { nativeModelIdentityEqual, type NativeModelIdentity } from '../native/neuralese-store.js';
+import { nativeStateConsumerFromInfo, type NativeStateConsumer } from '../native/neuralese.js';
 
 /** A server's `/v1/neuralese/info`: the dialects it speaks, and the fields hosts read. Other fields are kept as sent. */
 export type NeuraleseServerInfo = { dialects: string[]; width?: number; dtype?: string; max_block_length?: number;
@@ -52,4 +54,16 @@ export async function checkNeuraleseReader(endpoint: string, dialect: string,
       `but the server at ${openAIEndpointRoot(endpoint)} speaks ${info.dialects.map(name => JSON.stringify(name)).join(', ') || 'none'}`),
       { code: 'neuralese-dialect-mismatch' });
   return info;
+}
+
+/** Require that a live native reader is the exact student checkpoint selected for tune training/evaluation. */
+export async function requireNativeReaderIdentity(endpoint: string, expected: NativeModelIdentity,
+    options: Parameters<typeof neuraleseServerInfo>[1] = {}): Promise<NativeStateConsumer> {
+  const info = await neuraleseServerInfo(endpoint, options);
+  const consumer = nativeStateConsumerFromInfo(info);
+  if (!consumer || !nativeModelIdentityEqual(expected, { architecture: consumer.architecture,
+      checkpoint_sha256: consumer.checkpoint_sha256, tokenizer_fingerprint: consumer.tokenizer_fingerprint,
+      embedding_weight_sha256: consumer.embedding_weight_sha256 }))
+    throw new Error(`native reader identity at ${openAIEndpointRoot(endpoint)} does not match the configured student.base`);
+  return consumer;
 }
