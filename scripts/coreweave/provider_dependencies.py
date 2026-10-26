@@ -180,11 +180,33 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             for reference in dependency_bindings(recovery):
                 bound(reference)
 
+    def source_correction_inputs(options):
+        if not isinstance(options, dict):
+            return
+        history = options.get('source_correction_history') or []
+        selected = options.get('source_correction_binding')
+        if selected is not None and (not isinstance(selected, dict)
+                or not isinstance(selected.get('path'), str) or not selected['path']
+                or not isinstance(selected.get('sha256'), str) or not selected['sha256']):
+            raise ValueError('selected native source correction lacks its exact proof binding')
+        if selected is not None and not any(
+                item.get('proof_sha256') == selected.get('sha256')
+                and Path(item.get('proof_path', '')).resolve() == Path(selected.get('path', '')).resolve()
+                for item in history):
+            raise ValueError('selected native source correction is absent from its history')
+        from natlang_neuralese.train.native_source_correction import source_correction_dependencies
+        for item in history:
+            ref = {'path': item.get('proof_path'), 'sha256': item.get('proof_sha256')}
+            for dependency in source_correction_dependencies(ref):
+                bound(dependency)
+
     def training_inputs(training):
         if not isinstance(training, dict):
             return
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
+        source_correction_inputs(training.get('options') or {})
+        source_correction_inputs(training.get('training_options') or {})
         for reference in source_task_baseline_dependencies(training):
             bound(reference)
         policy_sources(training.get('policy_source_history', []))
@@ -205,6 +227,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             # Foundation declarations are checkpoint dependencies even for a
             # completed carried frame; inspect before the source-frame skip.
             foundation_inputs(frame.get('options') or {})
+            source_correction_inputs(frame.get('options') or {})
             supervision = (frame.get('options') or {}).get('ce_supervision_policy_binding')
             if supervision is not None:
                 ce_policy_input(supervision)
