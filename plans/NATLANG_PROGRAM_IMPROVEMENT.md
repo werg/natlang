@@ -801,3 +801,9 @@ cancellation tests verify the same worker lifecycle.
 
 
 The same regression pass found terminal input already at EOF could close readline while buffered lines remained. The terminal transport now tracks closure and drains its existing iterator without prompting a closed interface. The existing piped-input regression verifies both queued actions still execute. This is terminal I/O mechanism; application semantics and event reduction stay unchanged.
+
+## Exact helper visibility at the native boundary (2026-10-26)
+
+The application review found a Natlang child mentioning a TypeScript helper that its callable folder did not expose. The old packaging check examined only other `.nl` names and could pass this program. Extend that exact source check to the loader's real TypeScript module exports: distinguish default callables from named namespace members, reject inaccessible helper references, and check explicit positional arity. A mechanical scripted native execution verifies the bridge independently of source declarations. This does not evaluate Natlang policy or generate a learned-model answer.
+
+The final graph audit also exposed a native function placed an extra directory below its caller. Its directory was visible as a namespace but was incorrectly accepted as callable. The checker now distinguishes the two and follows qualified namespace-child edges; the research scheduler's actual frontier and feasibility children are reachable. The apprenticeship operation consumes its actual utterance classification and completes questions or clarification without entering the simulation transition path. These repairs retain original independent fixtures and need the same live semantic qualification as the rest of the application sources.

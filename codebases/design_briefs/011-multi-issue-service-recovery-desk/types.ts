@@ -1,8 +1,8 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
 export type Rejection = { itemId: string; reason: string };
 export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
@@ -11,12 +11,11 @@ export type ActionProposal = { action: string; target: string; requiresApproval:
 export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
+
 export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type RecoveryCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; customerId: string; orderIds: string[]; requestedOutcome: string; agentId: string; priority: string };
 export type ServiceIssue = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; orderId: string; failure: string; requestedRemedy: string; dependencyIds: string[] };
@@ -34,18 +33,6 @@ export type DraftRecoveryAction = { value: { tenantId?: string; id?: string; ver
 export type StageResultRecoveryAction = { accepted: RecoveryAction[]; unresolved: DraftRecoveryAction[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
 export type DraftRecoveryClosure = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; issueIds?: string[]; fulfilledIds?: string[]; residualIssue?: string; customerAcknowledgment?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
 export type StageResultRecoveryClosure = { accepted: RecoveryClosure[]; unresolved: DraftRecoveryClosure[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type Snapshot = { version: string; caseRecords: RecoveryCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
-export type StageOutputs = { stage1: StageResultServiceIssue; stage2: StageResultEntitlementFinding; stage3: StageResultRemedyBundle; stage4: StageResultRecoveryAction; stage5: StageResultRecoveryClosure };
-export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
-export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultServiceIssue; stage2: StageResultEntitlementFinding; stage3: StageResultRemedyBundle; stage4: StageResultRecoveryAction; stage5: StageResultRecoveryClosure; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
 
 export type RecoveryRequest = { caseId: string; customerId: string; orderIds: string[]; requestedOutcome: string; assignedAgent: string; expectedCaseVersion: string; contactPreference?: string };
 export type ServiceRecoverySnapshot = { version: string; cases: RecoveryCase[]; customerTimeline: EvidencePage[]; orderAndPurchaseRecords: EvidencePage[]; policyEditions: PolicyCandidate[]; documentedExceptions: EvidencePage[]; paymentAndStockLedger: EvidencePage[]; customerChoices: EvidencePage[]; operationReceipts: EvidencePage[]; contactPreferences: EvidencePage[]; searchedPartitions: string[] };
@@ -53,7 +40,7 @@ export type ServiceRecoveryProposal = { caseId: string; version: string; issues:
 export type ServiceRecoveryCheckpoint = { caseId: string; revision: number; snapshotVersion: string; proposalHistory: ServiceRecoveryProposal[]; knownOperationIds: string[]; confirmedIssueClosures: string[]; unresolvedEffects: string[]; customerChoiceVersions: string[] };
 export type ServiceRecoveryRun = { proposal: ServiceRecoveryProposal; checkpoint: ServiceRecoveryCheckpoint; operationsRequiringReadback: string[]; independentlyClosedIssueIds: string[] };
 export type RecoveryIssueEpisode = { orderId: string; issue: string; customerOutcome: string; relevantPromiseIds: string[]; dependencyIssueIds: string[]; timelineEvidenceIds: string[]; independentlyResolvable: boolean };
-export type RemedyConstraintReview = { issueIds: string[]; separatelyEntitledOutcomes: string[]; duplicateLossCredits: string[]; amountWithinAuthority: boolean; incompatibleOptions: string[]; sourceEvidenceIds: string[] };
+
 export type OperationReconciliation = { operationId: string; actionKind: string; status: 'confirmed'|'failed'|'unknown'|'reservation-expired'; receiptIds: string[]; safeToRetry: boolean; reason: string };
 
 export type EntitlementReview = { policyId: string; purchaseDate: string; applicableEdition: string; mandatoryRemedies: string[]; discretionaryGestures: string[]; exceptionScope: string; decisiveMissingFacts: string[]; evidenceIds: string[] };

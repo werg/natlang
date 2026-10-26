@@ -7,7 +7,22 @@
     {
       "name": "foundryRoom",
       "path": "foundryRoom.nl",
-      "purpose": "Develop a solvable, recoverable and safe escape room with session-reset operations."
+      "purpose": "Develop a solvable, recoverable and safe escape room with session-reset operations.",
+      "stateParameter": "room",
+      "stateResultPath": [
+        "room"
+      ],
+      "stateKey": "escape-room-design-state"
+    },
+    {
+      "name": "verifySessionReset",
+      "path": "verifySessionReset.nl",
+      "purpose": "Verify one observed room reset against the exact room revision, prop baseline, cleared puzzle state, emergency exit and next session identity.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "escape-room-reset-checkpoint"
     }
   ],
   "coverage": {
@@ -21,7 +36,8 @@
       {
         "stage": "constructPuzzleGraph",
         "paths": [
-          "foundryRoom/auditClueFairness.nl"
+          "foundryRoom/auditClueFairness.nl",
+          "foundryRoom/verifyPuzzleGraph.nl"
         ]
       },
       {
@@ -39,7 +55,9 @@
       {
         "stage": "packageOperations",
         "paths": [
-          "foundryRoom/packageSessionOperations.nl"
+          "foundryRoom/blockInvalidPuzzleRoom.nl",
+          "foundryRoom/packageSessionOperations.nl",
+          "verifySessionReset.nl"
         ]
       }
     ],
@@ -47,19 +65,24 @@
       {
         "id": 1,
         "paths": [
-          "foundryRoom/auditClueFairness.nl"
+          "foundryRoom/auditClueFairness.nl",
+          "foundryRoom/verifyPuzzleGraph.nl"
         ]
       },
       {
         "id": 2,
         "paths": [
-          "foundryRoom/rehearseFailureStates.nl"
+          "foundryRoom/rehearseFailureStates.nl",
+          "foundryRoom/verifyPuzzleGraph.nl"
         ]
       },
       {
         "id": 3,
         "paths": [
-          "foundryRoom/packageSessionOperations.nl"
+          "foundryRoom/blockInvalidPuzzleRoom.nl",
+          "foundryRoom/packageSessionOperations.nl",
+          "foundryRoom/verifyPuzzleGraph.nl",
+          "verifySessionReset.nl"
         ]
       },
       {
@@ -71,7 +94,8 @@
       {
         "id": 5,
         "paths": [
-          "foundryRoom/auditClueFairness.nl"
+          "foundryRoom/auditClueFairness.nl",
+          "foundryRoom/verifyPuzzleGraph.nl"
         ]
       }
     ]
@@ -79,12 +103,24 @@
   "source_files": [
     "foundryRoom.nl",
     "foundryRoom/auditClueFairness.nl",
+    "foundryRoom/blockInvalidPuzzleRoom.nl",
     "foundryRoom/designAccessibleRoutes.nl",
     "foundryRoom/modelRoomConstraints.nl",
     "foundryRoom/packageSessionOperations.nl",
+    "foundryRoom/reconcileProof.nl",
+    "foundryRoom/reconcileProof/comparePuzzleProofs.ts",
     "foundryRoom/rehearseFailureStates.nl",
-    "foundryRoom/verifyPuzzleGraph.ts",
+    "foundryRoom/rehearseFailureStates/enumerateFailureCases.nl",
+    "foundryRoom/rehearseFailureStates/judgeFailureBranch.nl",
+    "foundryRoom/verifyPuzzleGraph.nl",
+    "foundryRoom/verifyPuzzleGraph/explorePuzzleFrontier.nl",
+    "foundryRoom/verifyPuzzleGraph/tracePrerequisiteCycles.nl",
+    "foundryRoom/verifyPuzzleGraph/tracePrerequisiteCycles/classifyCycleImpact.nl",
+    "foundryRoom/verifyPuzzleGraph/validatePuzzleStructure.ts",
+    "foundryRoom/verifyPuzzleGraph/verifyExitAvailability.nl",
     "runCase/modelExperience/audit/qualify.nl",
-    "types.ts"
+    "types.ts",
+    "verifySessionReset.nl",
+    "verifySessionReset/verifyResetReadback.ts"
   ]
 }

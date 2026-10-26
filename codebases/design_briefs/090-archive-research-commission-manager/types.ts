@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { frameCommission: StageResultResearchCommissionScope; planSearch: StageResultArchiveSearchPlan; followEvidence: StageResultArchiveLead; reconcileFindings: StageResultArchiveFinding; assembleDossier: StageResultResearchDossier };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,87 +65,14 @@ export type DraftResearchCommissionScope = { values: {
     excludedClaims?: string[];
     stoppingRule?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultResearchCommissionScope = { accepted: ResearchCommissionScope[]; unresolved: DraftResearchCommissionScope[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftArchiveSearchPlan = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    questionIds?: string[];
-    collectionIds?: string[];
-    searchTerms?: string[];
-    coverageGaps?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultArchiveSearchPlan = { accepted: ArchiveSearchPlan[]; unresolved: DraftArchiveSearchPlan[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftArchiveLead = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    sourceRef?: string;
-    relevantQuestion?: string;
-    newSearchTask?: string;
-    reliabilityLimit?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultArchiveLead = { accepted: ArchiveLead[]; unresolved: DraftArchiveLead[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftArchiveFinding = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    question?: string;
-    supportingRefs?: string[];
-    contradictoryRefs?: string[];
-    conclusion?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultArchiveFinding = { accepted: ArchiveFinding[]; unresolved: DraftArchiveFinding[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftResearchDossier = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    findingIds?: string[];
-    searchedManifestId?: string;
-    remainingLeads?: string[];
-    rightsNotes?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultResearchDossier = { accepted: ResearchDossier[]; unresolved: DraftResearchDossier[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type CommissionRequest = { id:string; researchQuestion:string; requesterId:string; researcherId:string; collectionIds:string[]; effortBudget:number; deliverable:string; exclusions:string[]; };
 export type ArchiveSource = { id:string; collectionId:string; title:string; description:string; access:'open'|'closed'|'restricted'; revision:string; citation:string; rights:string[]; linkedSourceIds:string[]; };
 export type SearchObservation = { id:string; collectionId:string; query:string; result:'hit'|'no-hit'|'closed'|'not-searched'; sourceIds:string[]; reason:string; };
+export type ArchiveSearchCoverage={collectionId:string;question:string;access:'open'|'closed'|'restricted'|'missing';queryVariants:string[];matchingObservationIds:string[];coverage:'observed-hit'|'observed-no-hit'|'closed'|'restricted'|'not-searched'|'partial';reason:string;};
 export type FollowupLead = { id:string; questionId:string; sourceId:string; rationale:string; missingSource:boolean; estimatedEffort:number; state:'open'|'pursued'|'stopped'|'unavailable'; };
 export type SupportedClaim = { id:string; questionId:string; statement:string; evidenceIds:string[]; counterEvidenceIds:string[]; inferenceLimit:string; certainty:'direct'|'supported'|'contested'|'unknown'; };
 export type ResearchCheckpoint = { requestId:string; questionIds:string[]; manifest:SearchObservation[]; leads:FollowupLead[]; claims:SupportedClaim[]; consumedEffort:number; sourceRevisions:string[]; };
-export type CommissionDossier = { requestId:string; subquestions:string[]; claims:SupportedClaim[]; searchManifest:SearchObservation[]; remainingLeads:FollowupLead[]; coverageLimits:string[]; restrictedSources:string[]; interpretationNotes:string[]; checkpoint:ResearchCheckpoint; status:'bounded'|'extension-needed'|'incomplete'; };
+export type CommissionDossier = { requestId:string; subquestions:string[]; claims:SupportedClaim[]; searchManifest:SearchObservation[]; searchCoverage:ArchiveSearchCoverage[]; remainingLeads:FollowupLead[]; coverageLimits:string[]; restrictedSources:string[]; interpretationNotes:string[]; checkpoint:ResearchCheckpoint; status:'bounded'|'extension-needed'|'incomplete'; };
 
 export type ArchiveCommissionBinding = { request: CommissionRequest; evidenceIds: string[]; blockers: string[] };

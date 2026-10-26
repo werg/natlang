@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { recoverInstructions: StageResultPreparationRequirement; interpretCircumstances: StageResultPreparationContext; composeChecklist: StageResultPreparationChecklist; routeQuestions: StageResultPreparationQuestion; trackAcknowledgment: StageResultPreparationStatus };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,80 +65,6 @@ export type DraftPreparationRequirement = { values: {
     timingRule?: string;
     exception?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPreparationRequirement = { accepted: PreparationRequirement[]; unresolved: DraftPreparationRequirement[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftPreparationContext = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    statedConstraint?: string;
-    communicationNeed?: string;
-    authorizedRepresentativeId?: string;
-    unresolvedQuestion?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPreparationContext = { accepted: PreparationContext[]; unresolved: DraftPreparationContext[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftPreparationChecklist = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    requirementIds?: string[];
-    accessibleText?: string[];
-    exactTimingArtifactId?: string;
-    staffQuestionIds?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPreparationChecklist = { accepted: PreparationChecklist[]; unresolved: DraftPreparationChecklist[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftPreparationQuestion = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    requirementId?: string;
-    patientQuestion?: string;
-    responsibleServiceId?: string;
-    responseRef?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPreparationQuestion = { accepted: PreparationQuestion[]; unresolved: DraftPreparationQuestion[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftPreparationStatus = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    checklistId?: string;
-    acknowledgedItems?: string[];
-    unresolvedItems?: string[];
-    contactOutcome?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPreparationStatus = { accepted: PreparationStatus[]; unresolved: DraftPreparationStatus[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type PreparationCoordinator = { id: string };
 export type AppointmentChange = { instructionUpdates: EvidenceItem[]; appointmentUpdates: EvidenceItem[]; patientReports: EvidenceItem[]; translationReviews: EvidenceItem[]; representativeConsent: EvidenceItem[]; deliveries: EvidenceItem[] };

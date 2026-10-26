@@ -37,7 +37,7 @@
       {
         "stage": "advanceWorld",
         "paths": [
-          "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl",
+          "simulateApprenticeshipTurn/inspectTurnIdentifier.nl",
           "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyProcedureTransition.nl"
         ]
       },
@@ -65,7 +65,7 @@
       {
         "id": 2,
         "paths": [
-          "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl"
+          "simulateApprenticeshipTurn/inspectTurnIdentifier.nl"
         ]
       },
       {
@@ -99,12 +99,11 @@
     "qualification/authorSituation.nl",
     "simulateApprenticeshipTurn.nl",
     "simulateApprenticeshipTurn/advanceTrainingWorldOnce.nl",
-    "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl",
+    "simulateApprenticeshipTurn/inspectTurnIdentifier.nl",
     "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation.nl",
     "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyProcedureTransition.nl",
     "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyTrainingResourceInvariant.nl",
     "simulateApprenticeshipTurn/checkpointTurn.nl",
-    "simulateApprenticeshipTurn/classifyQuestionOrAction.nl",
     "simulateApprenticeshipTurn/compareObservedProcedure.nl",
     "simulateApprenticeshipTurn/interpretTraineeUtterance.nl",
     "simulateApprenticeshipTurn/interpretTraineeUtterance/classifyQuestionOrAction.nl",

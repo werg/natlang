@@ -7,7 +7,25 @@
     {
       "name": "directPersistentWorld",
       "path": "directPersistentWorld.nl",
-      "purpose": "Interpret player actions through character knowledge and reconcile authoritative world-simulator receipts."
+      "purpose": "Interpret player actions through character knowledge and reconcile authoritative world-simulator receipts.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "persistent-world-checkpoint"
+    },
+    {
+      "name": "prepareWorldActionEffects",
+      "path": "directPersistentWorld/prepareWorldActionEffects.nl",
+      "purpose": "Prepare a version-bound simulator action or status-read intention and carry its idempotency checkpoint.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "persistent-world-checkpoint",
+      "effectsPath": [
+        "effects"
+      ]
     }
   ],
   "coverage": {
@@ -27,18 +45,24 @@
       {
         "stage": "chooseWorldActions",
         "paths": [
-          "directPersistentWorld/chooseLegalCharacterActions.nl"
+          "directPersistentWorld/chooseLegalCharacterActions.nl",
+          "directPersistentWorld/chooseLegalCharacterActions/checkActionBoundary.nl",
+          "directPersistentWorld/chooseLegalCharacterActions/checkActionContext.nl",
+          "directPersistentWorld/chooseLegalCharacterActions/checkActionKnowledge.nl"
         ]
       },
       {
         "stage": "advanceConsequences",
         "paths": [
-          "directPersistentWorld/applyWorldReceipts.nl"
+          "directPersistentWorld/applyWorldReceipts.nl",
+          "directPersistentWorld/applyWorldReceipts/reviewCommittedEvents.nl",
+          "directPersistentWorld/prepareWorldActionEffects.nl"
         ]
       },
       {
         "stage": "maintainContinuity",
         "paths": [
+          "directPersistentWorld/reconcileGameCheckpoint.nl",
           "directPersistentWorld/updateBeliefsAndContinuity.nl"
         ]
       }
@@ -47,25 +71,32 @@
       {
         "id": 1,
         "paths": [
-          "directPersistentWorld/applyWorldReceipts.nl"
+          "directPersistentWorld/applyWorldReceipts.nl",
+          "directPersistentWorld/reconcileGameCheckpoint.nl"
         ]
       },
       {
         "id": 2,
         "paths": [
-          "directPersistentWorld/applyWorldReceipts.nl"
+          "directPersistentWorld/applyWorldReceipts.nl",
+          "directPersistentWorld/chooseLegalCharacterActions/checkActionBoundary.nl",
+          "directPersistentWorld/chooseLegalCharacterActions/checkActionKnowledge.nl"
         ]
       },
       {
         "id": 3,
         "paths": [
+          "directPersistentWorld/applyWorldReceipts.nl",
+          "directPersistentWorld/applyWorldReceipts/reviewCommittedEvents.nl",
+          "directPersistentWorld/prepareWorldActionEffects.nl",
           "directPersistentWorld/updateBeliefsAndContinuity.nl"
         ]
       },
       {
         "id": 4,
         "paths": [
-          "directPersistentWorld/chooseLegalCharacterActions.nl"
+          "directPersistentWorld/chooseLegalCharacterActions.nl",
+          "directPersistentWorld/updateBeliefsAndContinuity.nl"
         ]
       },
       {
@@ -79,9 +110,18 @@
   "source_files": [
     "directPersistentWorld.nl",
     "directPersistentWorld/applyWorldReceipts.nl",
+    "directPersistentWorld/applyWorldReceipts/reviewCommittedEvents.nl",
+    "directPersistentWorld/applyWorldReceipts/validateReceiptBindings.ts",
     "directPersistentWorld/chooseLegalCharacterActions.nl",
+    "directPersistentWorld/chooseLegalCharacterActions/checkActionBoundary.nl",
+    "directPersistentWorld/chooseLegalCharacterActions/checkActionContext.nl",
+    "directPersistentWorld/chooseLegalCharacterActions/checkActionKnowledge.nl",
+    "directPersistentWorld/chooseLegalCharacterActions/validateActionEnvelope.ts",
     "directPersistentWorld/interpretPlayerIntent.nl",
+    "directPersistentWorld/prepareWorldActionEffects.nl",
+    "directPersistentWorld/prepareWorldActionEffects/prepareWorldActionEffects.ts",
     "directPersistentWorld/projectCharacterKnowledge.nl",
+    "directPersistentWorld/reconcileGameCheckpoint.nl",
     "directPersistentWorld/updateBeliefsAndContinuity.nl",
     "runCase/interpretIntent/audit/qualify.nl",
     "types.ts"

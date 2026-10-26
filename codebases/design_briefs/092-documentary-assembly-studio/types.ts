@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { indexMaterial: StageResultDocumentarySegment; constructArguments: StageResultDocumentaryStructure; selectEdits: StageResultDocumentaryEdit; reviewProduction: StageResultDocumentaryClearance; freezeAssembly: StageResultDocumentaryRelease };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -71,87 +67,15 @@ export type DraftDocumentarySegment = { values: {
     context?: string;
     rightsStatus?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDocumentarySegment = { accepted: DocumentarySegment[]; unresolved: DraftDocumentarySegment[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftDocumentaryStructure = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    centralQuestion?: string;
-    sectionClaims?: string[];
-    supportingSegmentIds?: string[];
-    counterevidenceIds?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDocumentaryStructure = { accepted: DocumentaryStructure[]; unresolved: DraftDocumentaryStructure[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftDocumentaryEdit = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    segmentIds?: string[];
-    order?: number[];
-    transitionText?: string;
-    impliedMeaning?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDocumentaryEdit = { accepted: DocumentaryEdit[]; unresolved: DraftDocumentaryEdit[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftDocumentaryClearance = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    editIds?: string[];
-    factualIssues?: string[];
-    rightsIssues?: string[];
-    accessibilityTasks?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDocumentaryClearance = { accepted: DocumentaryClearance[]; unresolved: DraftDocumentaryClearance[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftDocumentaryRelease = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    editDecisionListId?: string;
-    approvedArtifactIds?: string[];
-    durationSeconds?: number;
-    approvalRefs?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDocumentaryRelease = { accepted: DocumentaryRelease[]; unresolved: DraftDocumentaryRelease[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type MediaAsset={id:string;revision:string;durationFrames:number;frameRate:number;speaker:string;claim:string;qualifier:string;contextBefore:string;contextAfter:string;rights:string[];sourceDate:string;correctedClaim:string;};
 export type Cut={assetId:string;inFrame:number;outFrame:number;};
 export type CutTransition={fromAssetId:string;toAssetId:string;narration:string;argument:string;};
 export type AssemblyState={id:string;revision:number;assets:MediaAsset[];cuts:Cut[];transitions:CutTransition[];targetFrames:number;approvedClaimIds:string[];captionsRevision:string;descriptionsRevision:string;};
 export type CutFinding={assetId:string;kind:'timecode'|'qualifier'|'rights'|'fact'|'implication'|'duration'|'correction';status:'clear'|'blocked'|'needs-review';evidenceIds:string[];reason:string;repair:string;};
-export type DocumentaryCheckpoint={assemblyId:string;revision:number;digest:string;checkedAssets:string[];invalidatedOutputs:string[];clearanceRefs:string[];receiptStatus:'none'|'sent'|'unknown'|'confirmed';};
+export type DocumentaryCheckpoint={assemblyId:string;revision:number;digest:string;checkedAssets:string[];invalidatedOutputs:string[];clearanceRefs:string[];receiptStatus:'none'|'sent'|'unknown'|'confirmed';deliveryReceiptId?:string;deliveryObservedAt?:string;};
 export type DocumentaryDeliverable={kind:'edit-list'|'script'|'captions'|'description'|'asset-manifest';revision:string;assemblyDigest:string;};
-export type AssemblyRelease={assembly:AssemblyState;findings:CutFinding[];deliverables:DocumentaryDeliverable[];clearanceTasks:string[];factCheckTasks:string[];checkpoint:DocumentaryCheckpoint;status:'blocked'|'review'|'frozen';};
-
+export type DocumentaryDeliveryEffect={kind:'deliver-documentary-package'|'read-documentary-delivery-status';assemblyId:string;revision:number;digest:string;deliverables:DocumentaryDeliverable[];clearanceRefs:string[];idempotencyKey:string;};
+export type DocumentaryDeliveryReadback={assemblyId:string;revision:number;digest:string;receiptId:string;status:'confirmed'|'absent'|'conflict';observedAt:string;};
+export type AssemblyRelease={assembly:AssemblyState;findings:CutFinding[];deliverables:DocumentaryDeliverable[];clearanceTasks:string[];factCheckTasks:string[];checkpoint:DocumentaryCheckpoint;status:'blocked'|'review'|'frozen';effects?:DocumentaryDeliveryEffect[];};
+export type DocumentaryDeliveryPreparation={effects:DocumentaryDeliveryEffect[];checkpoint:DocumentaryCheckpoint;};

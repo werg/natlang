@@ -1,22 +1,19 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
-export type Rejection = { itemId: string; reason: string };
-export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
-export type Question = { question: string; respondent: string; evidenceNeeded: string };
+
 export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
-export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
+
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
+
 export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type SubscriptionCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; customerId: string; subscriptionIds: string[]; requestedOutcome: string; requestedEffectiveDate: string; consentRef: Ref };
 export type ChangeIntent = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; affectedIds: string[]; requestedAction: string; preservedServices: string[]; ambiguity: string };
@@ -25,25 +22,10 @@ export type ChangeOption = { tenantId: ID; id: ID; version: number; schemaVersio
 export type SubscriptionOperation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; selectedOptionId: string; operationId: string; approvalRef: Ref; externalStatus: string };
 export type ExitReceipt = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; operationIds: string[]; remainingCharges: string; remainingAccess: string; confirmationRef: Ref };
 export type DraftChangeIntent = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; affectedIds?: string[]; requestedAction?: string; preservedServices?: string[]; ambiguity?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftChangeConsequence = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; subscriptionId?: string; accessEnd?: string; billingDelta?: { minorUnits: string; currency: string; scale: number }; dataConsequence?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftChangeOption = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; actionIds?: string[]; effectiveAt?: string; explanation?: string; requiresConsent?: boolean }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftSubscriptionOperation = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; selectedOptionId?: string; operationId?: string; approvalRef?: Ref; externalStatus?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftExitReceipt = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; operationIds?: string[]; remainingCharges?: string; remainingAccess?: string; confirmationRef?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type Snapshot = { version: string; caseRecords: SubscriptionCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
 
 export type SubscriptionExitRequest = { caseId: string; customerId: string; subscriptionIds: string[]; requestedOutcome: string; requestedEffectiveDate: string; requestedBy: string; expectedVersion: string };
 export type ExitServiceSnapshot = { subscriptions: SubscriptionCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; entitlementReceipts: EvidencePage[]; billingReceipts: EvidencePage[]; mutationReceipts: EvidencePage[] };
 export type ExitGuardrail = { decisions: string[]; blockers: string[]; evidenceRefs: string[]; proposedActions: ActionProposal[] };
-
-
 
 export type ExitProgramResult={caseId:string;scope:GoalContract;policy:PolicySelection;intent:ChangeIntent|null;consequences:ChangeConsequence[];choices:ChangeOption[];operation:SubscriptionOperation|null;receipt:ExitReceipt|null;guardrails:ExitGuardrail[];unresolved:string[];checkpoint:ExitCheckpoint;commitAllowed:boolean};
 export type ExitCheckpoint={caseId:string;revision:number;requestedSubscriptionIds:string[];consentReceiptRefs:string[];operationReceiptRefs:string[];billingReceiptRefs:string[];completedChanges:string[];unknownOperationIds:string[];pendingRefundRefs:string[];historicalChoices:ChangeOption[]};

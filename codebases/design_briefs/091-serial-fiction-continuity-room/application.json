@@ -7,7 +7,12 @@
     {
       "name": "continuityRoom",
       "path": "continuityRoom.nl",
-      "purpose": "Review a scene proposal against edition-bound canon, character knowledge and narrative obligations."
+      "purpose": "Review a scene proposal against edition-bound canon, character knowledge and narrative obligations.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "serial-continuity-checkpoint"
     }
   ],
   "coverage": {
@@ -22,7 +27,8 @@
       {
         "stage": "trackArcs",
         "paths": [
-          "continuityRoom/assessSerialChange.nl"
+          "continuityRoom/assessSerialChange.nl",
+          "continuityRoom/assessSerialChange/traceContinuityDependencies.nl"
         ]
       },
       {
@@ -40,7 +46,8 @@
       {
         "stage": "verifyEdition",
         "paths": [
-          "continuityRoom/verifySerialEdition.nl"
+          "continuityRoom/verifySerialEdition.nl",
+          "continuityRoom/assembleContinuityDossier.nl"
         ]
       }
     ],
@@ -48,7 +55,8 @@
       {
         "id": 1,
         "paths": [
-          "continuityRoom/advanceKnowledgeLedger.nl"
+          "continuityRoom/advanceKnowledgeLedger.nl",
+          "continuityRoom/advanceKnowledgeLedger/deriveSceneExposureEvents.nl"
         ]
       },
       {
@@ -74,7 +82,9 @@
         "id": 5,
         "paths": [
           "continuityRoom/assessSerialChange.nl",
-          "continuityRoom/verifySerialEdition.nl"
+          "continuityRoom/assessSerialChange/traceContinuityDependencies.nl",
+          "continuityRoom/verifySerialEdition.nl",
+          "continuityRoom/assembleContinuityDossier.nl"
         ]
       }
     ]
@@ -83,6 +93,9 @@
     "continuityRoom.nl",
     "continuityRoom/advanceKnowledgeLedger.nl",
     "continuityRoom/assessSerialChange.nl",
+    "continuityRoom/assembleContinuityDossier.nl",
+    "continuityRoom/advanceKnowledgeLedger/deriveSceneExposureEvents.nl",
+    "continuityRoom/assessSerialChange/traceContinuityDependencies.nl",
     "continuityRoom/bindStorySeriesContext.nl",
     "continuityRoom/mapContinuityRepairs.nl",
     "continuityRoom/recoverStoryCanon.nl",

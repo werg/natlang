@@ -7,7 +7,12 @@
     {
       "name": "commissionArchive",
       "path": "commissionArchive.nl",
-      "purpose": "Bound an archival inquiry, route contextual searches, reconcile supported claims and resume from provenance state."
+      "purpose": "Bound an archival inquiry, route contextual searches, reconcile supported claims and resume from provenance state.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "archive-research-checkpoint"
     }
   ],
   "coverage": {
@@ -22,13 +27,15 @@
       {
         "stage": "planSearch",
         "paths": [
-          "commissionArchive/routeArchiveSearch.nl"
+          "commissionArchive/routeArchiveSearch.nl",
+          "commissionArchive/routeArchiveSearch/classifyCollectionCoverage.nl"
         ]
       },
       {
         "stage": "followEvidence",
         "paths": [
-          "commissionArchive/traceSourceLeads.nl"
+          "commissionArchive/traceSourceLeads.nl",
+          "commissionArchive/traceSourceLeads/compareCitationAncestry.nl"
         ]
       },
       {
@@ -48,7 +55,8 @@
       {
         "id": 1,
         "paths": [
-          "commissionArchive/traceSourceLeads.nl"
+          "commissionArchive/traceSourceLeads.nl",
+          "commissionArchive/traceSourceLeads/compareCitationAncestry.nl"
         ]
       },
       {
@@ -60,7 +68,8 @@
       {
         "id": 3,
         "paths": [
-          "commissionArchive/routeArchiveSearch.nl"
+          "commissionArchive/routeArchiveSearch.nl",
+          "commissionArchive/routeArchiveSearch/classifyCollectionCoverage.nl"
         ]
       },
       {
@@ -83,7 +92,9 @@
     "commissionArchive/boundQuestions.nl",
     "commissionArchive/composeResearchDossier.nl",
     "commissionArchive/routeArchiveSearch.nl",
+    "commissionArchive/routeArchiveSearch/classifyCollectionCoverage.nl",
     "commissionArchive/traceSourceLeads.nl",
+    "commissionArchive/traceSourceLeads/compareCitationAncestry.nl",
     "commissionArchive/weighArchiveClaims.nl",
     "runCase/frameCommission/audit/qualify.nl",
     "types.ts"

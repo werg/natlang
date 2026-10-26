@@ -1,8 +1,8 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
 export type Rejection = { itemId: string; reason: string };
 export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
@@ -11,12 +11,12 @@ export type ActionProposal = { action: string; target: string; requiresApproval:
 export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
+
 export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
 export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type SubstitutionRequest = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; originalItemId: string; intendedUse: string; requiredBy: string; requesterId: string; approvalOwnerId: string };
 export type FunctionalRequirement = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; function: string; environment: string; essentialProperties: string[]; incidentalProperties: string[] };
@@ -34,18 +34,6 @@ export type DraftQualificationTask = { value: { tenantId?: string; id?: string; 
 export type StageResultQualificationTask = { accepted: QualificationTask[]; unresolved: DraftQualificationTask[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
 export type DraftSubstitutionPacket = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; candidateId?: string; adaptationTasks?: string[]; residualRisks?: string[]; approvalRef?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
 export type StageResultSubstitutionPacket = { accepted: SubstitutionPacket[]; unresolved: DraftSubstitutionPacket[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type Snapshot = { version: string; caseRecords: SubstitutionRequest[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
-export type StageOutputs = { stage1: StageResultFunctionalRequirement; stage2: StageResultSubstituteCandidate; stage3: StageResultCompatibilityFinding; stage4: StageResultQualificationTask; stage5: StageResultSubstitutionPacket };
-export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
-export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultFunctionalRequirement; stage2: StageResultSubstituteCandidate; stage3: StageResultCompatibilityFinding; stage4: StageResultQualificationTask; stage5: StageResultSubstitutionPacket; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
 
 export type SubstituteEvaluationRequest = { caseId: string; originalItemId: string; intendedUse: string; requiredBy: string; requestedBy: string; approvalOwnerId: string };
 export type SupplierCatalogSnapshot = { requests: SubstitutionRequest[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; revisionChanges: EvidencePage[]; conversionReceipts: EvidencePage[]; lotAcceptanceRules: EvidencePage[]; adapterQuotes: EvidencePage[]; useApprovals: EvidencePage[] };
@@ -55,5 +43,3 @@ export type SubstitutionCheckpoint = { caseId:string; revision:number; catalogVe
 
 export type CandidatePropertyEvidence = { candidateId: string; revision: string; property: string; value: string; unit: string; evidenceRef: Ref; status: string };
 export type CandidatePropertyReview = { candidateId: string; revision: string; propertyFindings: CompatibilityFinding[]; criticalFailures: string[]; unknownCritical: string[]; interactionFindings: string[]; qualified: boolean };
-export type CandidateQualificationRequest = { candidateId: string; revision: string; unresolvedProperty: string; method: string; passCriteria: string; acceptingRole: string; lotScope: string };
-export type ScopedSubstitutionPlan = { candidateId: string; revision: string; machineIds: string[]; intendedUse: string; environment: string; adapters: string[]; priceBasis: string[]; leadTime: string; interfaceRisks: string[]; approvalRefs: Ref[]; exclusions: string[] };

@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; workflowStatus: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { authorNegotiation: StageResultNegotiationScenario; prepareRoles: StageResultNegotiationRole; interpretOffers: StageResultTrainingOffer; runCounterparts: StageResultCounterpartAction; debriefNegotiation: StageResultNegotiationDebrief };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,79 +65,6 @@ export type DraftNegotiationScenario = { values: {
     hiddenPreferences?: string[];
     feasibleAgreementRules?: string[];
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultNegotiationScenario = { accepted: NegotiationScenario[]; unresolved: DraftNegotiationScenario[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftNegotiationRole = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    participantId?: string;
-    privateFacts?: string[];
-    authorityLimits?: string[];
-    permittedTactics?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultNegotiationRole = { accepted: NegotiationRole[]; unresolved: DraftNegotiationRole[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftTrainingOffer = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    proposerId?: string;
-    terms?: string[];
-    conditions?: string[];
-    status?: 'proposal'|'counteroffer'|'accepted'|'withdrawn';
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultTrainingOffer = { accepted: TrainingOffer[]; unresolved: DraftTrainingOffer[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftCounterpartAction = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    roleId?: string;
-    legalActionId?: string;
-    response?: string;
-    privateObjectiveBasis?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCounterpartAction = { accepted: CounterpartAction[]; unresolved: DraftCounterpartAction[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftNegotiationDebrief = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    agreementIds?: string[];
-    observedSkills?: string[];
-    missedOpportunities?: string[];
-    nextExercise?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultNegotiationDebrief = { accepted: NegotiationDebrief[]; unresolved: DraftNegotiationDebrief[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type ArenaIssue={id:string;name:string;unit:string;minimum:string;maximum:string;};
 export type ArenaRole={id:string;authority:string[];privatePriorities:string[];reservationConditions:string[];conductLimits:string[];disclosableFacts:string[];};
@@ -152,4 +75,3 @@ export type CounterpartChoice={roleId:string;actionId:string;terms:Record<string
 export type ArenaTurn={turnId:string;speaker:string;utterance:string;offer:ParsedArenaOffer|null;counterpart:CounterpartChoice|null;state:'open'|'clarification-needed'|'accepted'|'withdrawn'|'rejected';};
 export type ArenaCheckpoint={scenarioId:string;revision:number;turns:ArenaTurn[];openOfferIds:string[];acceptedTerms:string[];difficultyRevision:string;debriefReleaseScope:string;};
 export type ArenaRunResult={scenario:ArenaScenario;turns:ArenaTurn[];clarificationQuestions:string[];feasibility:FeasibilityArtifact[];privateFeedback:string[];debrief:string[];checkpoint:ArenaCheckpoint;status:'in-progress'|'clarification-needed'|'agreement'|'withdrawn'|'debrief-ready';};
-

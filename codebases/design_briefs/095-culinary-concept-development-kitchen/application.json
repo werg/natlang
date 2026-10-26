@@ -7,7 +7,12 @@
     {
       "name": "developMenu",
       "path": "developMenu.nl",
-      "purpose": "Develop and stage a service menu against dietary, ingredient, equipment, cost, and tasting constraints."
+      "purpose": "Develop and stage a service menu against dietary, ingredient, equipment, cost, and tasting constraints.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "kitchen-service-checkpoint"
     }
   ],
   "coverage": {
@@ -34,7 +39,10 @@
         "stage": "planAndCost",
         "paths": [
           "developMenu/scheduleKitchenLine.nl",
-          "developMenu/verifyIngredientAndServiceControls.nl"
+          "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl",
+          "developMenu/verifyIngredientAndServiceControls.nl",
+          "developMenu/verifyIngredientAndServiceControls/checkDishSafetyByLot.nl",
+          "developMenu/reconcileKitchenBatches.nl"
         ]
       },
       {
@@ -56,13 +64,15 @@
       {
         "id": 2,
         "paths": [
-          "developMenu/verifyIngredientAndServiceControls.nl"
+          "developMenu/verifyIngredientAndServiceControls.nl",
+          "developMenu/reconcileKitchenBatches.nl"
         ]
       },
       {
         "id": 3,
         "paths": [
-          "developMenu/scheduleKitchenLine.nl"
+          "developMenu/scheduleKitchenLine.nl",
+          "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl"
         ]
       },
       {
@@ -84,11 +94,14 @@
     "developMenu/composeServiceMenu.nl",
     "developMenu/assembleKitchenProposal.nl",
     "developMenu/designDishConcepts.nl",
-    "developMenu/exactKitchen.ts",
     "developMenu/interpretKitchenBrief.nl",
     "developMenu/propagateTastingRevisions.nl",
+    "developMenu/reconcileKitchenBatches.nl",
+    "developMenu/reconcileKitchenBatches/reconcileScaledBatches.ts",
     "developMenu/scheduleKitchenLine.nl",
+    "developMenu/scheduleKitchenLine/assessDishStationCompatibility.nl",
     "developMenu/verifyIngredientAndServiceControls.nl",
+    "developMenu/verifyIngredientAndServiceControls/checkDishSafetyByLot.nl",
     "runCase/interpretBrief/audit/qualify.nl",
     "types.ts"
   ]

@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { normalizeRecords: StageResultHistoricalObservation; generateLinks: StageResultHistoricalCandidate; judgeIdentity: StageResultHistoricalIdentityFinding; reconcileNetworks: StageResultHistoricalNetwork; prepareResearchView: StageResultHistoricalLinkageEdition };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -70,79 +66,6 @@ export type DraftHistoricalObservation = { values: {
     placeExpression?: string;
     attributes?: string[];
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultHistoricalObservation = { accepted: HistoricalObservation[]; unresolved: DraftHistoricalObservation[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftHistoricalCandidate = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    leftId?: string;
-    rightId?: string;
-    sharedEvidence?: string[];
-    incompatibleEvidence?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultHistoricalCandidate = { accepted: HistoricalCandidate[]; unresolved: DraftHistoricalCandidate[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftHistoricalIdentityFinding = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    candidateId?: string;
-    relation?: 'same'|'different'|'related'|'uncertain';
-    rationale?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultHistoricalIdentityFinding = { accepted: HistoricalIdentityFinding[]; unresolved: DraftHistoricalIdentityFinding[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftHistoricalNetwork = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    entityIds?: string[];
-    relationshipIds?: string[];
-    contradictionIds?: string[];
-    unresolvedAlternatives?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultHistoricalNetwork = { accepted: HistoricalNetwork[]; unresolved: DraftHistoricalNetwork[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftHistoricalLinkageEdition = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    networkId?: string;
-    acceptedLinkIds?: string[];
-    provisionalLinkIds?: string[];
-    reviewRefs?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultHistoricalLinkageEdition = { accepted: HistoricalLinkageEdition[]; unresolved: DraftHistoricalLinkageEdition[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type LinkageArchivist = { id: string };
 export type LinkageChange = { newRecords: EvidenceItem[]; transcriptionCorrections: EvidenceItem[]; geographyEvidence: EvidenceItem[]; relationshipEvidence: EvidenceItem[]; splitRequests: EvidenceItem[] };

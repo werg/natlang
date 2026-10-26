@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { recoverCanon: StageResultCanonFact; trackArcs: StageResultStoryObligation; assessProposals: StageResultStoryProposalFinding; generateRepairs: StageResultStoryRevision; verifyEdition: StageResultStoryEdition };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,90 +65,16 @@ export type DraftCanonFact = { values: {
     validStoryTime?: string;
     narratorReliability?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCanonFact = { accepted: CanonFact[]; unresolved: DraftCanonFact[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftStoryObligation = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    characterId?: string;
-    unresolvedSetup?: string;
-    motivation?: string;
-    promisedPayoff?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultStoryObligation = { accepted: StoryObligation[]; unresolved: DraftStoryObligation[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftStoryProposalFinding = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    proposal?: string;
-    affectedCanonIds?: string[];
-    continuityConflict?: string;
-    creativeOpportunity?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultStoryProposalFinding = { accepted: StoryProposalFinding[]; unresolved: DraftStoryProposalFinding[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftStoryRevision = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    affectedSceneIds?: string[];
-    revisedMaterial?: string;
-    preservedArcs?: string[];
-    tradeoff?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultStoryRevision = { accepted: StoryRevision[]; unresolved: DraftStoryRevision[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftStoryEdition = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    revisionIds?: string[];
-    canonDeltaIds?: string[];
-    remainingObligations?: string[];
-    editorApprovalRef?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultStoryEdition = { accepted: StoryEdition[]; unresolved: DraftStoryEdition[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type SerialEdition = { id:string; revision:string; approved:boolean; scenes:SerialScene[]; canon:CanonAssertion[]; knowledge:KnowledgeEvent[]; obligations:ArcObligation[]; };
 export type SerialScene = { id:string; episode:number; order:number; characterIds:string[]; assertedFacts:string[]; revealedSecrets:string[]; narration:'reliable'|'unreliable'|'unknown'; text:string; };
 export type CanonAssertion = { id:string; proposition:string; kind:'world-fact'|'author-plan'|'character-belief'|'narration'; subjectId:string; sourceSceneId:string; editionId:string; confidence:'approved'|'draft'|'contested'; };
 export type KnowledgeEvent = { characterId:string; secretId:string; sceneId:string; editionId:string; learnedAt:number; evidence:string; };
+export type KnowledgeLedgerAnalysis = { events:KnowledgeEvent[]; invalidatedEventIds:string[]; unresolvedExposureIds:string[]; };
 export type ArcObligation = { id:string; characterId:string; setupSceneId:string; promise:string; state:'open'|'paid'|'deliberate-mystery'|'waived'; rationale:string; };
 export type StoryChange = { proposal:SerialScene; authorIntent:string; requestedCanonChanges:string[]; };
 export type ContinuityCheckpoint = { editionId:string; revision:string; checkedSceneIds:string[]; knowledge:KnowledgeEvent[]; openObligationIds:string[]; invalidatedSceneIds:string[]; };
 export type ContinuityFinding = { sceneId:string; kind:'chronology'|'knowledge'|'world-rule'|'motivation'|'arc'|'narrative'; status:'consistent'|'conflict'|'needs-editor'; evidenceIds:string[]; explanation:string; repairOptions:string[]; };
 export type ContinuityDossier = { editionId:string; proposalId:string; findings:ContinuityFinding[]; repairs:StoryRevision[]; canonAmendmentRequired:boolean; affectedSceneIds:string[]; revisedEdition:SerialEdition; checkpoint:ContinuityCheckpoint; status:'review'|'blocked'|'ready'; };
-
 
 export type BoundStoryContext = { edition: SerialEdition; change: StoryChange; evidence: EvidenceItem[]; seriesId: string; manuscriptIds: string[]; editorId: string; creativeBrief: string; evidenceGaps: string[] };

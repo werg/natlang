@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { recoverEventPromises: StageResultEventCommitment; interpretFailure: StageResultEventDisruption; generateFormats: StageResultEventRecoveryOption; rebuildRunOfShow: StageResultEventRunPlan; coordinateLiveChange: StageResultEventChange };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,80 +65,6 @@ export type DraftEventCommitment = { values: {
     timeWindow?: string;
     essentialCondition?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEventCommitment = { accepted: EventCommitment[]; unresolved: DraftEventCommitment[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftEventDisruption = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    affectedResourceIds?: string[];
-    unavailableFunction?: string;
-    expectedDuration?: string;
-    uncertainty?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEventDisruption = { accepted: EventDisruption[]; unresolved: DraftEventDisruption[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftEventRecoveryOption = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    affectedAgendaIds?: string[];
-    alternativeFormat?: string;
-    preservedPromises?: string[];
-    changedPromises?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEventRecoveryOption = { accepted: EventRecoveryOption[]; unresolved: DraftEventRecoveryOption[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftEventRunPlan = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    optionId?: string;
-    taskIds?: string[];
-    resourceReservations?: string[];
-    revisedTiming?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEventRunPlan = { accepted: EventRunPlan[]; unresolved: DraftEventRunPlan[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftEventChange = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    runPlanId?: string;
-    staffBriefingIds?: string[];
-    audienceMessageIds?: string[];
-    acknowledgmentRefs?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEventChange = { accepted: EventChange[]; unresolved: DraftEventChange[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type PromiseLedgerItem={id:string;sourceId:string;kind:'public-promise'|'contract'|'accessibility'|'internal';priority:number;outcome:string;dependencies:string[];owner:string;};
 export type EventResource={id:string;kind:string;available:boolean;windowStart:number;windowEnd:number;setupMinutes:number;teardownMinutes:number;};
@@ -151,6 +73,7 @@ export type EventProductionState={id:string;revision:number;closingMinute:number
 export type Disruption={id:string;capabilityId:string;reportedAt:number;state:'confirmed-lost'|'estimated-lost'|'restored';confidence:string;affectedSegmentIds:string[];sourceId:string;};
 export type StaffAcknowledgement={role:string;revision:string;status:'received'|'pending'|'conflict';receivedAt:number;};
 export type RunSheetProof={eventRevision:number;doubleBookedResources:string[];brokenDependencies:string[];closingOverrun:boolean;setupConflicts:string[];switchDeadlines:Record<string,number>;};
-export type LiveCheckpoint={eventId:string;revision:number;runSheetRevision:string;reservedResourceIds:string[];acknowledgements:StaffAcknowledgement[];executionEvents:string[];emergencyActive:boolean;};
-export type ChangePacket={event:EventProductionState;options:string[];proof:RunSheetProof;messages:string[];decisionDeadlines:string[];checkpoint:LiveCheckpoint;status:'suspended-emergency'|'blocked'|'awaiting-approval'|'ready-to-announce'|'executing';};
-
+export type LiveCheckpoint={eventId:string;revision:number;runSheetRevision:string;reservedResourceIds:string[];acknowledgements:StaffAcknowledgement[];executionEvents:string[];emergencyActive:boolean;producerApprovalRevision?:string;};
+export type LiveEventEffect={kind:'reserve-event-resources'|'request-role-acknowledgements'|'publish-event-revision';eventId:string;eventRevision:number;runSheetRevision:string;venueId:string;producerId:string;resourceIds:string[];roleUpdates:StaffAcknowledgement[];idempotencyKey:string;};
+export type LiveEventEffectPreparation={effects:LiveEventEffect[];checkpoint:LiveCheckpoint;};
+export type ChangePacket={event:EventProductionState;options:string[];proof:RunSheetProof|null;messages:string[];decisionDeadlines:string[];checkpoint:LiveCheckpoint;status:'suspended-emergency'|'blocked'|'awaiting-approval'|'ready-to-announce'|'executing';effects?:LiveEventEffect[];blockers?:string[];};

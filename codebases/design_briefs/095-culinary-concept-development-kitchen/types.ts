@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { interpretBrief: StageResultMenuRequirement; generateDishes: StageResultDishConcept; constructMenu: StageResultMenuComposition; planAndCost: StageResultKitchenProductionPlan; reviewTastings: StageResultCulinaryRevision };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,80 +65,6 @@ export type DraftMenuRequirement = { values: {
     equipmentLimits?: string[];
     costTarget?: Money;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultMenuRequirement = { accepted: MenuRequirement[]; unresolved: DraftMenuRequirement[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftDishConcept = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    requirementIds?: string[];
-    concept?: string;
-    ingredientIds?: string[];
-    preparationApproach?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultDishConcept = { accepted: DishConcept[]; unresolved: DraftDishConcept[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftMenuComposition = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    dishIds?: string[];
-    courseRoles?: string[];
-    sharedPreparationIds?: string[];
-    serviceTradeoff?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultMenuComposition = { accepted: MenuComposition[]; unresolved: DraftMenuComposition[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftKitchenProductionPlan = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    menuId?: string;
-    batchQuantities?: Quantity[];
-    preparationTaskIds?: string[];
-    totalCost?: Money;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultKitchenProductionPlan = { accepted: KitchenProductionPlan[]; unresolved: DraftKitchenProductionPlan[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftCulinaryRevision = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    dishId?: string;
-    tastingObservations?: string[];
-    proposedChange?: string;
-    affectedPlanIds?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCulinaryRevision = { accepted: CulinaryRevision[]; unresolved: DraftCulinaryRevision[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type IngredientFact={ingredientId:string;lotId:string;revision:string;allergens:string[];dietaryProperties:string[];supplier:string;verified:boolean;substituteFor:string[];};
 export type RecipeLine={ingredientId:string;quantityMinor:string;unit:string;yieldServings:string;wasteBasis:string;};
@@ -153,6 +75,6 @@ export type KitchenSlot={equipment:string;taskId:string;startMinute:number;endMi
 export type MenuFinding={kind:'ingredient'|'allergen'|'coverage'|'yield'|'cost'|'equipment'|'tasting'|'disclosure';subjectId:string;state:'clear'|'blocked'|'review';evidenceIds:string[];detail:string;};
 export type KitchenCheckpoint={ledgerRevision:number;recipeRevisions:string[];ingredientRevisions:string[];invalidatedDishIds:string[];costMinor:string;};
 export type KitchenProposal={menu:Dish[];findings:MenuFinding[];scaledBatches:ScaledBatch[];sharedPrep:SharedPrep[];disclosures:string[];checkpoint:KitchenCheckpoint;status:'blocked'|'review'|'ready-for-chef';};
+export type BatchReconciliation={expected:ScaledBatch[];supplied:ScaledBatch[];discrepancies:string[];blockers:string[];};
 export type ScaledBatch={dishId:string;ingredientId:string;quantityMinor:string;unit:string;};
 export type SharedPrep={componentId:string;totalQuantityMinor:string;unit:string;usedByDishIds:string[];equipment:string[];};
-

@@ -1,22 +1,19 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
-export type Rejection = { itemId: string; reason: string };
-export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
-export type Question = { question: string; respondent: string; evidenceNeeded: string };
+
 export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
-export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
+
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
+
 export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type AmendmentCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; baseAgreementId: string; amendmentIds: string[]; effectiveDate: string; reviewOwnerId: string; baselineHash: string };
 export type AmendmentTarget = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; amendmentId: string; targetClauseIds: string[]; operation: 'replace'|'add'|'delete'|'narrow'|'extend'; ambiguity: string };
@@ -24,15 +21,6 @@ export type AmendmentScope = { tenantId: ID; id: ID; version: number; schemaVers
 export type AmendedObligation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; priorId: string; newText: string; preservedConditions: string[]; removedConditions: string[] };
 export type AmendmentImpact = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; obligationId: string; affectedTaskIds: string[]; affectedArtifactIds: string[]; unaffectedReason: string };
 export type AmendmentRelease = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; impactIds: string[]; reviewerIds: string[]; approvedHash: string; migrationPlan: string };
-export type Snapshot = { version: string; caseRecords: AmendmentCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
 
 export type AmendmentReviewRequest = { caseId: string; baseAgreementId: string; amendmentIds: string[]; effectiveDate: string; reviewOwnerId: string; baselineHash: string; expectedVersion: string };
 export type ExecutedAgreementBundle = { checkpoint?: AmendmentCheckpoint; agreements: AmendmentCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; executedEditions: EvidencePage[]; billingHistory: EvidencePage[]; overlapEvidence: EvidencePage[]; cutoverReceipts: EvidencePage[]; exceptionRegressions: EvidencePage[] };
@@ -44,10 +32,6 @@ export type AmendmentImpactMap = { impacts: AmendmentImpact[]; unaffectedIds: st
 export type AmendmentReleasePlan = { release: AmendmentRelease | null; approvedDiffHash: string; migrationDecisionsRequired: string[]; blockers: string[] };
 export type AmendmentProgramResult = { caseId: string; baseline: GoalContract; targets: AmendmentTargetMap; scope: AmendmentScopeMap | null; composition: ObligationComposition | null; impacts: AmendmentImpactMap | null; release: AmendmentReleasePlan | null; guardrails: AmendmentGuardrail[]; checkpoint: AmendmentCheckpoint; commitAllowed: boolean };
 
-export type DraftAmendedObligation = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; priorId?: string; newText?: string; preservedConditions?: string[]; removedConditions?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftAmendmentImpact = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; obligationId?: string; affectedTaskIds?: string[]; affectedArtifactIds?: string[]; unaffectedReason?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftAmendmentRelease = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; impactIds?: string[]; reviewerIds?: string[]; approvedHash?: string; migrationPlan?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type DraftAmendmentScope = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; targetId?: string; validFrom?: string; validTo?: string; coveredEntities?: string[]; excludedCases?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
 export type DraftAmendmentTarget = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; amendmentId?: string; targetClauseIds?: string[]; operation?: 'replace'|'add'|'delete'|'narrow'|'extend'; ambiguity?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
 
 export type AmendmentCheckpoint={caseId:string;revision:number;executedEditionRefs:string[];amendmentEditions:AmendmentCase[];effectiveScopeRefs:string[];changedDependencyIds:string[];preservedExceptionIds:string[];billingCorrectionRefs:string[];cutoverReceiptRefs:string[];pendingReleaseBlockers:string[]};

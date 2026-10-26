@@ -3,4 +3,4 @@ description: Apply offer acceptance and withdrawal rules to the immutable turn l
 args:{scenario:ArenaScenario;offer:ParsedArenaOffer;response:CounterpartChoice;turns:ArenaTurn[]}
 returns:ArenaTurn[]
 ---
-Append a new turn; never rewrite prior utterances. Apply the scenario acceptance rule to exact offer expiry and response order. A conditional acceptance leaves conditions open until explicitly satisfied. A withdrawal after a valid acceptance does not retroactively erase agreement; before acceptance it closes the open offer. Create no commitment from an exploratory turn.
+Return `resolveIssueLevelTiming(scenario, offer, response, turns)` as the complete append-only ledger. Use the scenario acceptance rule against exact offer expiry and response order. A conditional acceptance leaves conditions open until supplied evidence satisfies them. A withdrawal after valid acceptance does not erase agreement; before acceptance it closes that open offer. An exploratory turn creates no commitment.

@@ -151,8 +151,6 @@
     "learningRepairSession/buildUnbiasedProbe/independentlyVerifyAnswerClasses.nl",
     "learningRepairSession/buildUnbiasedProbe/rejectUnlearnedPrerequisiteLeak.nl",
     "learningRepairSession/buildUnbiasedProbe/varyOneConceptualFeature.nl",
-    "learningRepairSession/diagnostic/audit/qualify.nl",
-    "learningRepairSession/hypotheses/audit/qualify.nl",
     "learningRepairSession/interpretLearnerEvidence.nl",
     "learningRepairSession/interpretLearnerEvidence/classifyResponseError.nl",
     "learningRepairSession/interpretLearnerEvidence/compareResponseToAcceptedStrategies.nl",
@@ -165,14 +163,12 @@
     "learningRepairSession/preserveCompetencyAcrossAccommodation.nl",
     "learningRepairSession/preserveCompetencyAcrossAccommodation/auditCompetencyInvariant.nl",
     "learningRepairSession/preserveCompetencyAcrossAccommodation/transformPresentationForAccess.nl",
-    "learningRepairSession/repair/audit/qualify.nl",
     "learningRepairSession/response/audit/qualify.nl",
     "learningRepairSession/resumeLearningCheckpoint.nl",
     "learningRepairSession/saveLearningProgress.nl",
     "learningRepairSession/testCompetingExplanations.nl",
     "learningRepairSession/testCompetingExplanations/chooseDiscriminatingQuestion.nl",
     "learningRepairSession/testCompetingExplanations/enumerateRivalHypotheses.nl",
-    "learningRepairSession/transfer/audit/qualify.nl",
     "types.ts"
   ]
 }

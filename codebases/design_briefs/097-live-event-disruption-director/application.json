@@ -7,7 +7,21 @@
     {
       "name": "directLiveEvent",
       "path": "directLiveEvent.nl",
-      "purpose": "Replan disrupted live program segments and coordinate revision-bound staff acknowledgements."
+      "purpose": "Replan disrupted live program segments and coordinate revision-bound staff acknowledgements.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "live-event-checkpoint"
+    },
+    {
+      "name": "prepareLiveEventEffects",
+      "path": "directLiveEvent/prepareLiveEventEffects.nl",
+      "purpose": "Prepare revision-bound resource, staff and public-event intentions from a proved run sheet.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "live-event-checkpoint",
+      "effectsPath": ["effects"]
     }
   ],
   "coverage": {
@@ -33,13 +47,15 @@
       {
         "stage": "rebuildRunOfShow",
         "paths": [
-          "directLiveEvent/rebuildEventRunSheet.nl"
+          "directLiveEvent/rebuildEventRunSheet.nl",
+          "directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl"
         ]
       },
       {
         "stage": "coordinateLiveChange",
         "paths": [
-          "directLiveEvent/coordinateRoleUpdates.nl"
+          "directLiveEvent/coordinateRoleUpdates.nl",
+          "directLiveEvent/prepareLiveEventEffects.nl"
         ]
       }
     ],
@@ -49,6 +65,7 @@
         "paths": [
           "directLiveEvent/interpretCapabilityLoss.nl",
           "directLiveEvent/rebuildEventRunSheet.nl"
+          ,"directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl"
         ]
       },
       {
@@ -60,7 +77,8 @@
       {
         "id": 3,
         "paths": [
-          "directLiveEvent/coordinateRoleUpdates.nl"
+          "directLiveEvent/coordinateRoleUpdates.nl",
+          "directLiveEvent/prepareLiveEventEffects.nl"
         ]
       },
       {
@@ -82,7 +100,9 @@
     "directLiveEvent/constructRecoveryFormats.nl",
     "directLiveEvent/coordinateRoleUpdates.nl",
     "directLiveEvent/interpretCapabilityLoss.nl",
+    "directLiveEvent/prepareLiveEventEffects.nl",
     "directLiveEvent/rebuildEventRunSheet.nl",
+    "directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl",
     "directLiveEvent/recoverEventPromises.nl",
     "runCase/recoverEventPromises/audit/qualify.nl",
     "types.ts"

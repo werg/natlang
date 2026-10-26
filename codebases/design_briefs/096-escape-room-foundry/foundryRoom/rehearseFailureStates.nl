@@ -1,6 +1,8 @@
 ---
-description: Exercise lost props, repeated actions and soft-lock recovery with staff procedures.
-args:{room:EscapeRoomState;proof:PuzzleProof;variants:AccessibilityRoute[]}
-returns:PlaytestFinding[]
+description: Rehearse each witnessed graph state against prop loss, out-of-order clues, repeated actions and access variants.
+args: { room: EscapeRoomState; proof: PuzzleVerification; variants: AccessibilityRoute[]; sourceEvidence: EvidenceItem[] }
+returns: PlaytestFinding[]
 ---
-For every reachable state, test missing and broken props, repeated solve input, early goal discovery and opt-out route. A broken prop must have a documented recovery that restores the intended state without revealing designer-only facts. If no safe exit or staff path exists, block the design rather than treating a hint as recovery.
+1. Bind cases = `enumerateFailureCases(room, proof, variants)` from the exact explored proof states. Keep each state, affected prop and route variant attached to its case; do not invent a state absent from the proof.
+2. For each case call `judgeFailureBranch(room, proof, variants, sourceEvidence, case)`. Preserve its distinct recovery finding. A viable story explanation is not a staff procedure, and a suggested hint is not a receipt that the world state was restored.
+3. Return every finding, including the branch that blocks a required goal, has no safe staffed recovery, or loses equivalent access. Do not collapse different graph states because they mention the same prop.

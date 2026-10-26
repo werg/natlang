@@ -7,7 +7,12 @@
     {
       "name": "shapeBrandSystem",
       "path": "shapeBrandSystem.nl",
-      "purpose": "Maintain a sourced brand system and channel-specific assets under scoped approval."
+      "purpose": "Maintain a sourced brand system and channel-specific assets under scoped approval.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "brand-system-checkpoint"
     }
   ],
   "coverage": {
@@ -28,6 +33,7 @@
         "stage": "constructSystem",
         "paths": [
           "shapeBrandSystem/testBrandRules.nl"
+          ,"shapeBrandSystem/testBrandRules/resolveRuleConflicts.nl"
         ]
       },
       {
@@ -39,7 +45,8 @@
       {
         "stage": "reviewCoherence",
         "paths": [
-          "shapeBrandSystem/auditBrandCoherence.nl"
+          "shapeBrandSystem/auditBrandCoherence.nl",
+          "shapeBrandSystem/assembleBrandReviewPacket.nl"
         ]
       }
     ],
@@ -61,13 +68,15 @@
         "id": 3,
         "paths": [
           "shapeBrandSystem/testBrandRules.nl",
+          "shapeBrandSystem/testBrandRules/resolveRuleConflicts.nl",
           "shapeBrandSystem/adaptBrandAssets.nl"
         ]
       },
       {
         "id": 4,
         "paths": [
-          "shapeBrandSystem/auditBrandCoherence.nl"
+          "shapeBrandSystem/auditBrandCoherence.nl",
+          "shapeBrandSystem/assembleBrandReviewPacket.nl"
         ]
       },
       {
@@ -82,10 +91,12 @@
     "runCase/recoverBrandConstraints/audit/qualify.nl",
     "shapeBrandSystem.nl",
     "shapeBrandSystem/adaptBrandAssets.nl",
+    "shapeBrandSystem/assembleBrandReviewPacket.nl",
     "shapeBrandSystem/auditBrandCoherence.nl",
     "shapeBrandSystem/differentiateCreativeDirections.nl",
     "shapeBrandSystem/recoverProductConstraints.nl",
     "shapeBrandSystem/testBrandRules.nl",
+    "shapeBrandSystem/testBrandRules/resolveRuleConflicts.nl",
     "types.ts"
   ]
 }

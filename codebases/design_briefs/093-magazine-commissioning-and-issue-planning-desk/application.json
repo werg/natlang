@@ -7,7 +7,12 @@
     {
       "name": "planMagazineIssue",
       "path": "planMagazineIssue.nl",
-      "purpose": "Shape a magazine issue portfolio and advance only accepted, evidence-ready commissions to freeze."
+      "purpose": "Shape a magazine issue portfolio and advance only accepted, evidence-ready commissions to freeze.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "magazine-issue-checkpoint"
     }
   ],
   "coverage": {
@@ -16,6 +21,7 @@
         "stage": "interpretPitches",
         "paths": [
           "planMagazineIssue/scorePitchPortfolio.nl",
+          "planMagazineIssue/scorePitchPortfolio/analyzePitchPlacements.nl",
           "planMagazineIssue/bindMagazineSource.nl"
         ]
       },
@@ -56,6 +62,7 @@
         "id": 2,
         "paths": [
           "planMagazineIssue/scorePitchPortfolio.nl",
+          "planMagazineIssue/scorePitchPortfolio/analyzePitchPlacements.nl",
           "planMagazineIssue/mapIssueCoverage.nl"
         ]
       },
@@ -88,6 +95,7 @@
     "planMagazineIssue/qualifyIssueFreeze.nl",
     "planMagazineIssue/reconcileEditorialProduction.nl",
     "planMagazineIssue/scorePitchPortfolio.nl",
+    "planMagazineIssue/scorePitchPortfolio/analyzePitchPlacements.nl",
     "planMagazineIssue/secureExactCommissions.nl",
     "runCase/interpretPitches/audit/qualify.nl",
     "types.ts"

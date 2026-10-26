@@ -7,7 +7,12 @@
     {
       "name": "runNegotiationArena",
       "path": "runNegotiationArena.nl",
-      "purpose": "Run a private-role negotiation exercise with exact offer state and behavior-grounded debrief."
+      "purpose": "Run a private-role negotiation exercise with exact offer state and behavior-grounded debrief.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "negotiation-arena-checkpoint"
     }
   ],
   "coverage": {
@@ -15,26 +20,30 @@
       {
         "stage": "authorNegotiation",
         "paths": [
-          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl"
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl",
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility/checkIssueLevelMandates.nl"
         ]
       },
       {
         "stage": "prepareRoles",
         "paths": [
-          "runNegotiationArena/chooseBoundedCounterpartAction.nl"
+          "runNegotiationArena/chooseBoundedCounterpartAction.nl",
+          "runNegotiationArena/chooseBoundedCounterpartAction/filterRoleVisibleFacts.nl"
         ]
       },
       {
         "stage": "interpretOffers",
         "paths": [
-          "runNegotiationArena/parseIssueLevelOffer.nl"
+          "runNegotiationArena/parseIssueLevelOffer.nl",
+          "runNegotiationArena/holdAmbiguousOffer.nl"
         ]
       },
       {
         "stage": "runCounterparts",
         "paths": [
           "runNegotiationArena/chooseBoundedCounterpartAction.nl",
-          "runNegotiationArena/applyNegotiationTimingRules.nl"
+          "runNegotiationArena/applyNegotiationTimingRules.nl",
+          "runNegotiationArena/applyNegotiationTimingRules/resolveIssueLevelTiming.nl"
         ]
       },
       {
@@ -48,19 +57,22 @@
       {
         "id": 1,
         "paths": [
-          "runNegotiationArena/parseIssueLevelOffer.nl"
+          "runNegotiationArena/parseIssueLevelOffer.nl",
+          "runNegotiationArena/holdAmbiguousOffer.nl"
         ]
       },
       {
         "id": 2,
         "paths": [
-          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl"
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl",
+          "runNegotiationArena/checkOfferAuthorityAndFeasibility/checkIssueLevelMandates.nl"
         ]
       },
       {
         "id": 3,
         "paths": [
-          "runNegotiationArena/applyNegotiationTimingRules.nl"
+          "runNegotiationArena/applyNegotiationTimingRules.nl",
+          "runNegotiationArena/applyNegotiationTimingRules/resolveIssueLevelTiming.nl"
         ]
       },
       {
@@ -81,14 +93,18 @@
     "runCase/authorNegotiation/audit/qualify.nl",
     "runNegotiationArena.nl",
     "runNegotiationArena/applyNegotiationTimingRules.nl",
+    "runNegotiationArena/applyNegotiationTimingRules/resolveIssueLevelTiming.nl",
     "runNegotiationArena/checkOfferAuthorityAndFeasibility.nl",
+    "runNegotiationArena/checkOfferAuthorityAndFeasibility/checkIssueLevelMandates.nl",
     "runNegotiationArena/chooseBoundedCounterpartAction.nl",
+    "runNegotiationArena/chooseBoundedCounterpartAction/filterRoleVisibleFacts.nl",
     "runNegotiationArena/debriefObservedNegotiation.nl",
     "runNegotiationArena/parseIssueLevelOffer.nl",
     "runNegotiationArena/reconcileArenaCheckpoint.nl",
     "runNegotiationArena/assembleArenaRunResult.nl",
     "runNegotiationArena/validateArenaResume.nl",
     "runNegotiationArena/holdArenaResume.nl",
+    "runNegotiationArena/holdAmbiguousOffer.nl",
     "types.ts"
   ]
 }

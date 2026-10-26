@@ -9,8 +9,12 @@
       "path": "directProjectCycle.nl",
       "purpose": "Map required goals to learner-owned demonstrations, sequence a feasible project, adapt support without substitution, and rehearse late changes.",
       "stateParameter": "project",
-      "stateInputPath": ["prior"],
-      "stateResultPath": ["checkpoint"],
+      "stateInputPath": [
+        "prior"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
       "stateKey": "project-learning-checkpoint"
     }
   ],
@@ -109,10 +113,6 @@
     "directProjectCycle/translateGoalsToEvidence.nl",
     "directProjectCycle/translateGoalsToEvidence/decomposeGoalIntoObservableFacets.nl",
     "directProjectCycle/translateGoalsToEvidence/locateLearnerDemonstration.nl",
-    "qualification/adaptScaffolding.nl",
-    "qualification/designProject.nl",
-    "qualification/introduceComplications.nl",
-    "qualification/sequenceMilestones.nl",
     "qualification/translateGoals.nl",
     "types.ts"
   ]

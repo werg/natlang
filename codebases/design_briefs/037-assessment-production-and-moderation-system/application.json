@@ -132,10 +132,6 @@
     "freezeAssessmentEdition/traceBlueprintEvidence/inspectCompetencyWeights.nl",
     "freezeAssessmentEdition/traceBlueprintEvidence/separateIncidentalDemands.nl",
     "qualification/blueprintCoverage.nl",
-    "qualification/challengeAssessment.nl",
-    "qualification/constructRubrics.nl",
-    "qualification/generateItems.nl",
-    "qualification/moderateAndAppeal.nl",
     "reconcileAssessmentRelease.nl",
     "reconcileAssessmentRelease/verifyEditionFreezeReadiness.nl",
     "types.ts"

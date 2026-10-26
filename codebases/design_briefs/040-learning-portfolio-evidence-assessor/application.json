@@ -9,8 +9,12 @@
       "path": "reviewLearnerPortfolio.nl",
       "purpose": "Assess an evidence portfolio against a versioned competency standard and prepare an assessor-bound recommendation.",
       "stateParameter": "portfolio",
-      "stateInputPath": ["assessmentState"],
-      "stateResultPath": ["assessmentState"],
+      "stateInputPath": [
+        "assessmentState"
+      ],
+      "stateResultPath": [
+        "assessmentState"
+      ],
       "stateKey": "learner-portfolio-assessment-ledger"
     },
     {
@@ -94,11 +98,7 @@
     "appeal": "versioned reassessment limited to affected competency mappings"
   },
   "source_files": [
-    "qualification/assessSufficiency.nl",
-    "qualification/formNextTasks.nl",
     "qualification/indexEvidence.nl",
-    "qualification/mapCompetencies.nl",
-    "qualification/prepareAssessment.nl",
     "reviewLearnerPortfolio.nl",
     "reviewLearnerPortfolio/assembleAssessorDecision.nl",
     "reviewLearnerPortfolio/assembleAssessorDecision/identifyClaimedOutcomesWithoutEvidence.nl",

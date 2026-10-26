@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { segmentAccounts: StageResultOralHistoryAccount; resolveReferences: StageResultOralHistoryReference; reconcileEvents: StageResultRecollectionComparison; formFollowups: StageResultOralHistoryQuestion; publishArchive: StageResultOralHistoryEdition };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,86 +65,12 @@ export type DraftOralHistoryAccount = { values: {
     rememberedTime?: string;
     certaintyLanguage?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultOralHistoryAccount = { accepted: OralHistoryAccount[]; unresolved: DraftOralHistoryAccount[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftOralHistoryReference = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    accountId?: string;
-    mentionedName?: string;
-    candidateEntityIds?: string[];
-    unresolvedIdentity?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultOralHistoryReference = { accepted: OralHistoryReference[]; unresolved: DraftOralHistoryReference[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftRecollectionComparison = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    accountIds?: string[];
-    sharedEvent?: string;
-    agreement?: string;
-    disagreement?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultRecollectionComparison = { accepted: RecollectionComparison[]; unresolved: DraftRecollectionComparison[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftOralHistoryQuestion = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    accountIds?: string[];
-    unresolvedIssue?: string;
-    neutralQuestion?: string;
-    consentConstraint?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultOralHistoryQuestion = { accepted: OralHistoryQuestion[]; unresolved: DraftOralHistoryQuestion[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftOralHistoryEdition = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    accountIds?: string[];
-    narrative?: string;
-    restrictionIds?: string[];
-    provenanceManifestId?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultOralHistoryEdition = { accepted: OralHistoryEdition[]; unresolved: DraftOralHistoryEdition[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type Archivist = { id: string };
 export type ArchiveChange = { transcriptUpdates: EvidenceItem[]; speakerResponses: EvidenceItem[]; consentChanges: EvidenceItem[]; correctionEvidence: EvidenceItem[]; disclosureReviews: EvidenceItem[] };
 export type OralHistoryDossier = { project: OralHistoryProject; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; questions: OralHistoryQuestion[]; editions: OralHistoryEdition[]; evidence: EvidenceItem[]; checkpoint: OralArchiveCheckpoint };
 export type ConsentSpan = { speakerId: string; interviewId: string; sourceSpan: string; permittedUses: string[]; publicationAudience: string; state: 'current'|'withdrawn'|'uncertain'; evidenceIds: string[]; };
-export type AccountRelation = { accountIds: string[]; relation: 'same-event'|'related'|'disputed'|'unresolved'; competingDates: string[]; contexts: string[]; basis: string; sourceIds: string[]; };
+
 export type DerivativeLineage = { derivativeId: string; sourceSpanIds: string[]; consentIds: string[]; derivativeKind: string; status: 'permitted'|'retract'|'review'|'withheld'; };
 export type OralArchiveCheckpoint = { revision: string; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; consent: ConsentSpan[]; questions: OralHistoryQuestion[]; editions: OralHistoryEdition[]; lineage: DerivativeLineage[]; withdrawnSpans: string[]; obligations: string[]; };
 export type OralArchiveProposal = { application: 'Oral History Reconciliation Archive'; status: 'ready-for-review'|'blocked'; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; questions: OralHistoryQuestion[]; edition: OralHistoryEdition; consent: ConsentSpan[]; retractLineage: DerivativeLineage[]; disclosureFindings: string[]; blockers: string[]; actionBoundary: string; resumeState: OralArchiveCheckpoint; };

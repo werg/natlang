@@ -1,22 +1,16 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
-export type Rejection = { itemId: string; reason: string };
-export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
-export type Question = { question: string; respondent: string; evidenceNeeded: string };
-export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
-export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
+
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
-export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
+
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type ProblemStudy = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; question: string; populationDefinition: string; windowStart: string; windowEnd: string; ownerId: string };
 export type ProblemEpisode = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; customerId: string; situation: string; desiredOutcome: string; observedObstacle: string; occurredAt: string };
@@ -25,40 +19,11 @@ export type ProblemConcept = { tenantId: ID; id: ID; version: number; schemaVers
 export type TrendSlice = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; conceptId: string; cohortQueryId: string; numerator: number; denominator: number; qualification: string };
 export type InvestigationBrief = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; conceptIds: string[]; question: string; discriminatingEvidence: string; ownerId: string };
 export type DraftProblemEpisode = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; customerId?: string; situation?: string; desiredOutcome?: string; observedObstacle?: string; occurredAt?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultProblemEpisode = { accepted: ProblemEpisode[]; unresolved: DraftProblemEpisode[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftIncidentGroup = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; episodeIds?: string[]; customerId?: string; incidentKey?: string; independenceBasis?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultIncidentGroup = { accepted: IncidentGroup[]; unresolved: DraftIncidentGroup[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftProblemConcept = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; name?: string; definition?: string; episodeIds?: string[]; boundaryExamples?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultProblemConcept = { accepted: ProblemConcept[]; unresolved: DraftProblemConcept[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftTrendSlice = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; conceptId?: string; cohortQueryId?: string; numerator?: number; denominator?: number; qualification?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultTrendSlice = { accepted: TrendSlice[]; unresolved: DraftTrendSlice[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftInvestigationBrief = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; conceptIds?: string[]; question?: string; discriminatingEvidence?: string; ownerId?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultInvestigationBrief = { accepted: InvestigationBrief[]; unresolved: DraftInvestigationBrief[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type Snapshot = { version: string; caseRecords: ProblemStudy[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
-export type StageOutputs = { stage1: StageResultProblemEpisode; stage2: StageResultIncidentGroup; stage3: StageResultProblemConcept; stage4: StageResultTrendSlice; stage5: StageResultInvestigationBrief };
-export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
-export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultProblemEpisode; stage2: StageResultIncidentGroup; stage3: StageResultProblemConcept; stage4: StageResultTrendSlice; stage5: StageResultInvestigationBrief; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
 
 export type ObservatoryQuestion = { caseId: string; studyQuestion: string; targetPopulation: string; intervalStart: string; intervalEnd: string; requestedBy: string; expectedSnapshotVersion: string; stableConceptIds: string[] };
 export type SignalObservationSet = { snapshotVersion: string; studies: ProblemStudy[]; conversationAndSurveyPages: EvidencePage[]; exposureFrames: EvidencePage[]; identityMappingEvents: EvidencePage[]; consentEvents: EvidencePage[]; channelCoverage: EvidencePage[]; policies: PolicyCandidate[]; searchedPartitions: string[] };
-export type ObservatoryProposal = { caseId: string; snapshotVersion: string; episodes: StageResultProblemEpisode; incidents: StageResultIncidentGroup; concepts: StageResultProblemConcept; trends?: StageResultTrendSlice; investigations?: StageResultInvestigationBrief; privacyInvalidations: string[]; identityVersionQuestions: string[]; comparabilityBreaks: string[]; stableConceptIds: string[]; questions: Question[]; commitAllowed: boolean };
-export type CustomerEpisodeContext = { customerId: string; attemptedJob: string; desiredOutcome: string; obstacle: string; consequence: string; featureRequest: string; occurredAt: string; sourceIds: string[]; attributionAllowed: boolean; uncertainty: string[] };
-export type IncidentLink = { episodeIds: string[]; customerId: string; eventId: string; timeWindow: string; sameIncidentEvidence: string[]; repeatOccurrenceEvidence: string[]; identityUncertainty: string[] };
-export type ExposurePartition = { cohortId: string; channelId: string; periodStart: string; periodEnd: string; eligibleCustomers: number; independentIncidents: number; coverageComplete: boolean; comparability: 'comparable'|'broken'|'unknown'; exclusions: string[]; evidenceIds: string[] };
-export type InvestigationQuestion = { uncertainty: string; decisionItCouldChange: string; supportingCases: string[]; counterexamples: string[]; discriminatingEvidence: string; targetCohort: string };
 
-export type PrivacyReview = { withdrawnQuoteIds: string[]; invalidDerivativeIds: string[]; retainedAggregateIds: string[]; restrictedSources: string[]; questions: Question[] };
-export type ProblemMechanism = { failedOutcome: string; mechanism: string; alternatives: string[]; episodeIds: string[]; evidenceIds: string[]; unresolved: string[] };
-export type ConceptBoundaryReview = { conceptId: string; supportingEpisodeIds: string[]; counterexampleEpisodeIds: string[]; proposedDisposition: 'retain'|'move'|'split'|'new-concept'|'unresolved'; reason: string };
-export type IdentityReview = { previousId: string; currentId: string; mappingVersion: string; effectiveFrom: string; effectiveTo: string; linked: boolean; evidenceIds: string[]; unresolved: string[] };
+export type CustomerEpisodeContext = { customerId: string; attemptedJob: string; desiredOutcome: string; obstacle: string; consequence: string; featureRequest: string; occurredAt: string; sourceIds: string[]; attributionAllowed: boolean; uncertainty: string[] };
 
 export type CustomerObservatoryRequest = { caseId: string; question: string; populationDefinition: string; windowStart: string; windowEnd: string; ownerId: string; expectedVersion: string };
 export type CustomerSignalDossier = { snapshotVersion: string; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; studies: ProblemStudy[]; evidencePages: EvidencePage[]; rawEpisodes: CustomerEpisodeContext[]; outageReceipts: EvidencePage[]; samplingFrames: EvidencePage[]; trendReceipts: TrendAggregateReceipt[]; consentChanges: EvidencePage[]; identityMapVersions: EvidencePage[]; conceptRenameEvents: EvidencePage[] };
@@ -70,7 +35,7 @@ export type ComparableTrendSet = { slices: TrendSlice[]; excludedWindows: string
 export type InvestigationQueue = { briefs: InvestigationBrief[]; unresolvedMechanisms: string[]; supportingAndOpposingRefs: string[]; excludedFeatureRequests: string[] };
 export type ConsentDerivativePlan = { withdrawnCustomerIds: string[]; attributableQuoteIdsToRemove: string[]; derivedArtifactsToRecompute: string[]; evidenceRefs: string[] };
 export type IdentityVersionLedger = { acceptedMappingVersions: string[]; ambiguousCustomerIds: string[]; countsBlockedUntilVersioned: string[]; evidenceRefs: string[] };
-export type ObservatoryResult = { caseId: string; frame: ObservatoryFrame; episodes: EpisodeRegister; incidents: IncidentDedupLedger; problemMap: StableProblemMap; trends: ComparableTrendSet | null; investigations: InvestigationQueue; consentPlan: ConsentDerivativePlan; identityLedger: IdentityVersionLedger; commitAllowed: boolean };
+
 export type ObservatoryFrame = { question: string; population: string; windowStart: string; windowEnd: string; ownerId: string; studyVersion: string; blockers: string[] };
 export type ObservatoryCheckpoint = { caseId: string; revision: number; snapshotVersion: string; sourceVersions: string[]; episodes: EpisodeRegister[]; identityHistory: IdentityVersionLedger[]; incidentEditions: IncidentDedupLedger[]; conceptEditions: StableProblemMap[]; trendEditions: ComparableTrendSet[]; investigationHistory: InvestigationQueue[]; consentActions: string[]; unresolvedEffects: string[] };
 export type ObservatoryInvalidation = { revokedDerivativeIds: string[]; staleTrendKeys: string[]; preservedTrendKeys: string[]; reopenedInvestigationKeys: string[]; unresolvedDeletionReceiptIds: string[]; reasons: string[] };

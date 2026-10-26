@@ -31,6 +31,12 @@ External effects need an application-specific adapter or scoped service with an 
 
 For independently authored training applications, keep optional host mechanisms outside model-visible source snapshots. Package every application's own native interfaces and callable paths, including a package boundary used by `uses:` imports. Report structural coverage and measured execution separately; source counts, uniform scaffolding, and fixture replay are not evidence of semantic diversity or production behavior.
 
+Check crisp module visibility against the native loader's actual callable scope. A named TypeScript export requires its qualified module binding, while a default export may supply the bare callable; neither is made available merely by appearing in `source_files`. On a missing export or argument-count diagnostic, repair the packaged module/import relationship and pass the declared parameters rather than adding a second host implementation. A regression should load the real Natlang source and exercise the actual exact helper. Keep such scripted engineering evidence separate from learned execution and external delivery qualification.
+
+Potential-call reports must follow qualified namespace children by their loader identities and reject a bare call to a namespace. Review unreachable packaged helpers against actual public operations and independent fixture roots. A type-valid source inventory can still contain a disconnected reasoning tree; source ownership alone does not prove that a parent can consume its result.
+
+Relative module imports, including erased type imports, must resolve inside the frozen package after a helper moves. Domain-level replay needs the complete bound result and must preserve later checkpoint history; returning a prior transition while rerunning downstream selection is not result-idempotent. Conflicting input under the same domain ID and legacy IDs without complete result evidence remain distinct unresolved recovery cases.
+
 ## Operational commitments
 
 For a selected semantic executor, install `installSelectedSemanticEnvironment`

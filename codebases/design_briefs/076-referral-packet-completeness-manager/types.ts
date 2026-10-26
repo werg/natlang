@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; workflowStatus: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { interpretRequirements: StageResultReferralRequirement; matchPatientRecords: StageResultReferralRecordMatch; assessCompleteness: StageResultReferralGap; requestMaterial: StageResultReferralRequest; releaseAndTrack: StageResultReferralPacket };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -69,79 +65,6 @@ export type DraftReferralRequirement = { values: {
     validityRule?: string;
     acceptingRole?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultReferralRequirement = { accepted: ReferralRequirement[]; unresolved: DraftReferralRequirement[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftReferralRecordMatch = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    patientId?: string;
-    documentId?: string;
-    identityEvidence?: string;
-    mismatch?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultReferralRecordMatch = { accepted: ReferralRecordMatch[]; unresolved: DraftReferralRecordMatch[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftReferralGap = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    requirementId?: string;
-    documentIds?: string[];
-    status?: 'met'|'missing'|'expired'|'uncertain';
-    missingDetail?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultReferralGap = { accepted: ReferralGap[]; unresolved: DraftReferralGap[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftReferralRequest = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    gapIds?: string[];
-    recipientId?: string;
-    requestedMaterial?: string;
-    purpose?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultReferralRequest = { accepted: ReferralRequest[]; unresolved: DraftReferralRequest[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftReferralPacket = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    workflowStatus?: string;
-    documentIds?: string[];
-    approvalRef?: string;
-    deliveryReceipt?: string;
-    receivingStatus?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultReferralPacket = { accepted: ReferralPacket[]; unresolved: DraftReferralPacket[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type ReferralCoordinator = { id: string };
 export type PacketChange = { checklistUpdates: EvidenceItem[]; identityEvidence: EvidenceItem[]; documents: EvidenceItem[]; clinicianUpdates: EvidenceItem[]; recipientReceipts: EvidenceItem[] };
@@ -149,6 +72,7 @@ export type ReferralDossier = { referral: ReferralCase; requirements: ReferralRe
 export type IdentityBinding = { patientId: string; documentIds: string[]; verifiedRefs: string[]; mismatches: string[]; status: 'verified'|'uncertain'|'mismatch' };
 export type ChecklistDelta = { version: string; addedRequirementIds: string[]; changedRequirementIds: string[]; unchangedRequirementIds: string[]; missingAuthority: string[] };
 export type DocumentFinding = { documentId: string; requirementId: string; state: 'present-valid'|'unsigned'|'expired'|'wrong-episode'|'identity-uncertain'|'missing'; evidenceIds: string[]; }
-export type TransferLedger = { packetId: string; state: 'prepared'|'authorized'|'dispatched'|'acknowledged'|'unknown'; receiptRefs: string[]; recipientReadback: string[]; resendAllowed: boolean; blockers: string[]; };
+export type ReferralTransferEffect = { kind: 'send-referral-packet'|'read-recipient-status'; effectId: string; packetId: string; packetRevision: string; patientId: string; episodeScope: string; recipientServiceId: string; documentIds: string[]; authorizationRef: string; };
+export type TransferLedger = { packetId: string; state: 'prepared'|'authorized'|'dispatched'|'acknowledged'|'unknown'; receiptRefs: string[]; recipientReadback: string[]; resendAllowed: boolean; blockers: string[]; effects?: ReferralTransferEffect[]; };
 export type ReferralCheckpoint = { revision: string; referral: ReferralCase; identity: IdentityBinding; checklist: ChecklistDelta; documents: DocumentFinding[]; priorityRef: string; episodeScope: string; requests: ReferralRequest[]; transfer: TransferLedger; disclosureRefs: string[]; };
-export type ReferralProposal = { application: 'Referral Packet Completeness Manager'; status: 'ready-for-review'|'blocked'; identity: IdentityBinding; checklist: ChecklistDelta; documents: DocumentFinding[]; gaps: ReferralGap[]; requests: ReferralRequest[]; clinicianPriorityRef: string; transfer: TransferLedger; blockers: string[]; actionBoundary: string; resumeState: ReferralCheckpoint; };
+export type ReferralProposal = { application: 'Referral Packet Completeness Manager'; status: 'ready-for-review'|'blocked'; identity: IdentityBinding; checklist: ChecklistDelta; documents: DocumentFinding[]; gaps: ReferralGap[]; requests: ReferralRequest[]; clinicianPriorityRef: string; transfer: TransferLedger; effects: ReferralTransferEffect[]; blockers: string[]; actionBoundary: string; resumeState: ReferralCheckpoint; };

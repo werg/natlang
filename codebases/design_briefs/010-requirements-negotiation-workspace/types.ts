@@ -1,8 +1,8 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
 export type Rejection = { itemId: string; reason: string };
 export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
@@ -11,12 +11,11 @@ export type ActionProposal = { action: string; target: string; requiresApproval:
 export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
+
 export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type RequirementsProject = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; productScope: string; sponsorId: string; stakeholderIds: string[]; releaseTarget: string; baselineId: string };
 export type StakeholderPosition = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; stakeholderId: string; requestedOutcome: string; rationale: string; strength: 'mandatory'|'preference'|'unknown'; condition: string };
@@ -34,18 +33,6 @@ export type DraftRequirement = { value: { tenantId?: string; id?: string; versio
 export type StageResultRequirement = { accepted: Requirement[]; unresolved: DraftRequirement[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
 export type DraftAcceptanceScenario = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; requirementIds?: string[]; initialState?: string; action?: string; expectedOutcome?: string; coverageKind?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
 export type StageResultAcceptanceScenario = { accepted: AcceptanceScenario[]; unresolved: DraftAcceptanceScenario[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type Snapshot = { version: string; caseRecords: RequirementsProject[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
-export type StageOutputs = { stage1: StageResultStakeholderPosition; stage2: StageResultRequirementConflict; stage3: StageResultCompromiseOption; stage4: StageResultRequirement; stage5: StageResultAcceptanceScenario };
-export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
-export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultStakeholderPosition; stage2: StageResultRequirementConflict; stage3: StageResultCompromiseOption; stage4: StageResultRequirement; stage5: StageResultAcceptanceScenario; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
 
 export type NegotiationRequest = { caseId: string; productScope: string; releaseTarget: string; sponsorId: string; expectedBaselineVersion: string; question: string };
 export type NegotiationDossier = { version: string; project: RequirementsProject[]; stakeholderRecords: EvidencePage[]; constraintEvidence: EvidencePage[]; agreementRecords: EvidencePage[]; roleChanges: EvidencePage[]; interfaceOwners: EvidencePage[]; simulatorSchemas: EvidencePage[]; simulatorResults: SimulatorReplay[]; policies: PolicyCandidate[]; searchedPartitions: string[] };

@@ -53,7 +53,7 @@
   "mechanisms": [
     {
       "name": "intervalsOverlap",
-      "path": "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
+      "path": "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
       "purpose": "Exact half-open interval arithmetic only; NatLang owns candidate search, branching, and ranking."
     }
   ],
@@ -74,7 +74,7 @@
       {
         "stage": "constructSchedule",
         "paths": [
-          "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/chooseNextExperiment.nl",
+          "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/chooseNextExperiment.nl",
           "coordinateResearchWindow/solveWindowAssignments/chooseBestProtocolSchedule.nl"
         ]
       },
@@ -156,7 +156,6 @@
     "coordinateResearchWindow/proposeResearchRescue/testPostponementAuthority.nl",
     "coordinateResearchWindow/proposeResearchRescue/testResequencing.nl",
     "coordinateResearchWindow/proposeResearchRescue/testSubstituteBehavior.nl",
-    "coordinateResearchWindow/readiness/audit/qualify.nl",
     "coordinateResearchWindow/recheckDayOfReadiness.nl",
     "coordinateResearchWindow/recheckDayOfReadiness/verifyDeviationApproval.nl",
     "coordinateResearchWindow/recheckDayOfReadiness/verifyInstrumentStatus.nl",
@@ -170,23 +169,19 @@
     "coordinateResearchWindow/reconcileResourceCalendar/examineSharedReservations.nl",
     "coordinateResearchWindow/reconcileResourceCalendar/verifyOperatorQualifications.nl",
     "coordinateResearchWindow/requirements/audit/qualify.nl",
-    "coordinateResearchWindow/rescue/audit/qualify.nl",
-    "coordinateResearchWindow/resource/audit/qualify.nl",
-    "coordinateResearchWindow/schedule/audit/qualify.nl",
     "coordinateResearchWindow/solveWindowAssignments.nl",
     "coordinateResearchWindow/solveWindowAssignments/chooseBestProtocolSchedule.nl",
     "coordinateResearchWindow/solveWindowAssignments/seedAssignmentSearch.nl",
     "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier.nl",
     "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/chooseNextExperiment.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/deriveLegalIntervalOptions.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts.nl",
-    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/chooseNextExperiment.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/deriveLegalIntervalOptions.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
     "reconcileResearchReservation.nl",
     "reconcileResearchReservation/verifyReceiptAgainstAssignment.nl",
-    "types.ts",
-    "walkScheduleFrontier/chooseBestProtocolSchedule.nl"
+    "types.ts"
   ]
 }

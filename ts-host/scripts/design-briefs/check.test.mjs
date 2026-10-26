@@ -81,6 +81,33 @@ test('explicit native calls obey positional signatures rather than a single name
   assert.throws(() => checkNativeCalls(duplicate, 'plan.nl'), /duplicate native parameter/);
 });
 
+test('exact TypeScript helpers need actual callable scope and the right export binding', () => {
+  const root = body => `---\nargs: { value: number }\nreturns: number\n---\n${body}\n`;
+  const named = 'export function sum(value: number): number { return value + 1; }';
+  const direct = 'export default function sum(value: number): number { return value + 1; }';
+  assert.throws(() => checkNativeCalls({ 'plan.nl': root('Return sum(value).'), 'sum.ts': direct }, 'plan.nl'), /not a visible callable/);
+  assert.throws(() => checkNativeCalls({ 'plan.nl': root('Return sum(value).'), 'plan/math.ts': named }, 'plan.nl'), /module.export/);
+  assert.throws(() => checkNativeCalls({ 'plan.nl': root('Return math.sum(value).'), 'math.ts': named }, 'plan.nl'), /not a visible callable/);
+  assert.doesNotThrow(() => checkNativeCalls({ 'plan.nl': root('Return math.sum(value).'), 'plan/math.ts': named }, 'plan.nl'));
+  assert.doesNotThrow(() => checkNativeCalls({ 'plan.nl': root('Return sum(value).'), 'plan/sum.ts': direct }, 'plan.nl'));
+  assert.throws(() => checkNativeCalls({ 'plan.nl': root('Return math.sum(value, value).'), 'plan/math.ts': named }, 'plan.nl'), /1 positional arguments.*supplies 2/);
+  const typed = `import type { Count } from '../types.js';\n${direct}`;
+  assert.throws(() => checkNativeCalls({ 'plan.nl': root('Return sum(value).'), 'plan/sum.ts': typed }, 'plan.nl'), /relative import.*absent from the packaged source/);
+  assert.doesNotThrow(() => checkNativeCalls({ 'types.ts': 'export type Count = number;', 'plan.nl': root('Return sum(value).'), 'plan/sum.ts': typed }, 'plan.nl'));
+});
+
+test('a namespace is not a callable and qualified children retain their actual call edges', () => {
+  const root = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
+  const project = body => ({ 'plan.nl': root(body), 'plan/expand/expand.nl': root('Return value.') });
+  assert.throws(() => checkNativeCalls(project('Call expand(value).'), 'plan.nl'), /namespace, not a native callable/);
+  const valid = project('Bind result = expand.expand(value). Return result.');
+  assert.doesNotThrow(() => checkNativeCalls(valid, 'plan.nl'));
+  assert.deepEqual(inspectPotentialCalls(valid, ['plan.nl']).edges,
+    [{ caller: 'plan.nl', callee: 'plan/expand/expand.nl' }]);
+  assert.deepEqual(inspectPotentialCalls(valid, ['plan.nl']).unreferenced, []);
+  assert.throws(() => checkNativeCalls(project('Call expand.expand(value, value).'), 'plan.nl'), /1 positional arguments.*supplies 2/);
+});
+
 test('existing exact scorer rewards only the finite answer; judged workflow never auto-passes', async () => {
   for (const answer of ['pass', 'fail', 'needs-review']) {
     const correct = await checkOracle(answer, answer, 'exact');

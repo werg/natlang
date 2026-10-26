@@ -7,7 +7,18 @@
     {
       "name": "manageReferralPacket",
       "path": "manageReferralPacket.nl",
-      "purpose": "Reconcile an identity-bound referral against the recipient's current checklist and safe transfer state."
+      "purpose": "Reconcile an identity-bound referral against the recipient's current checklist and safe transfer state.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "referral-packet-checkpoint",
+      "effectsPath": [
+        "effects"
+      ]
     }
   ],
   "coverage": {

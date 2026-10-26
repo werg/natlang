@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { interpretPitches: StageResultEditorialPitch; mapCoverage: StageResultIssueCoverage; commissionPieces: StageResultCommissionBrief; manageEditorialWork: StageResultEditorialTask; qualifyIssue: StageResultIssueReadiness };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -70,81 +66,6 @@ export type DraftEditorialPitch = { values: {
     evidencePlan?: string;
     audienceValue?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEditorialPitch = { accepted: EditorialPitch[]; unresolved: DraftEditorialPitch[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftIssueCoverage = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    sectionId?: string;
-    coveredAngles?: string[];
-    missingPerspectives?: string[];
-    duplicatePitchIds?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultIssueCoverage = { accepted: IssueCoverage[]; unresolved: DraftIssueCoverage[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftCommissionBrief = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    pitchId?: string;
-    scope?: string;
-    deliverables?: string[];
-    evidenceRequirements?: string[];
-    dueAt?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCommissionBrief = { accepted: CommissionBrief[]; unresolved: DraftCommissionBrief[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftEditorialTask = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    pieceId?: string;
-    revisionNeed?: string;
-    factCheckIds?: string[];
-    productionDependencies?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultEditorialTask = { accepted: EditorialTask[]; unresolved: DraftEditorialTask[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftIssueReadiness = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    pieceIds?: string[];
-    layoutArtifactIds?: string[];
-    unresolvedTasks?: string[];
-    approvalRefs?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultIssueReadiness = { accepted: IssueReadiness[]; unresolved: DraftIssueReadiness[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type IssueBrief={id:string;theme:string;audience:string;mustCover:string[];exclusions:string[];publicationDate:string;formats:string[];};
 export type StoryPitch={id:string;contributor:string;angle:string;reportingPlan:string[];sourceAccess:string[];format:string;estimatedWords:number;rightsTerms:string[];deadline:string;};
@@ -156,6 +77,5 @@ export type IssueState={id:string;revision:number;brief:IssueBrief;pitches:Story
 export type IssueFinding={kind:'gap'|'overlap'|'terms'|'access'|'reporting'|'fact'|'rights'|'headline'|'withdrawal'|'credit';pieceIds:string[];status:'clear'|'blocked'|'needs-review';reason:string;dependencies:string[];};
 export type EditorialCheckpoint={issueId:string;revision:number;acceptedTerms:string[];checkedPieceRevisions:string[];invalidatedAssets:string[];freezeDigest:string;};
 export type IssueReadinessPacket={issue:IssueState;findings:IssueFinding[];coverageGaps:string[];withdrawalPlan:string[];invalidatedAssets:string[];checkpoint:EditorialCheckpoint;status:'blocked'|'review'|'ready-to-freeze';};
-
 
 export type MagazineSourceBinding = { brief: IssueBrief; issue: IssueState; editorId: string; sectionIds: string[]; sourceEvidenceIds: string[]; blockers: string[] };

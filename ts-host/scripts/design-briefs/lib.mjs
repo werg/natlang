@@ -1,9 +1,11 @@
 /** Exact source packaging for the authored design-brief programs. No model calls. */
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve, posix } from 'node:path';
+import ts from 'typescript';
 import { programDefinition, programNode } from '../../dist/teacher/program.js';
 import { definitionNode } from '../../dist/runtime/kernel.js';
+import { parseModule, PATH_ONLY } from '../../dist/runtime/loader.js';
 import { TypeEnv, fitsType, formatType, parseType } from '../../dist/native/types.js';
 import { coerce, problems } from '../../dist/native/values.js';
 import { generationHoldReason, quarantineReason } from '../../dist/teacher/curriculum-policy.js';
@@ -117,9 +119,12 @@ export function checkDomainContracts(files, contracts, root = 'runCase.nl') {
 
 /** A prose reference cannot make an out-of-scope sibling into an actual callable. */
 export function checkNativeCalls(files, root = 'runCase.nl') {
+  checkRelativeModuleImports(files);
   const paths = Object.keys(files).filter(path => path.endsWith('.nl'));
   const names = new Set(paths.map(path => basename(path, '.nl')));
   const sharedTypes = files[root] ? programNode({ semantics: { root, files } }).types : {};
+  const modules = Object.entries(files).filter(([path]) => path.endsWith('.ts') && !path.endsWith('types.ts'))
+    .map(([path, text]) => parseModule(path, text, sharedTypes, PATH_ONLY));
   let references = 0;
   for (const path of paths) {
     const definition = programDefinition({ semantics: { root: path, files } });
@@ -131,18 +136,21 @@ export function checkNativeCalls(files, root = 'runCase.nl') {
       if (/^(Draft|StageResult)/.test(name) && localTypes[name] && JSON.stringify(type) !== JSON.stringify(localTypes[name]))
         throw new Error(`${path}: ${name} shadows the shared draft/stage contract`);
     }
-    const visible = new Set(Object.keys(definition.codebase ?? {}));
-    for (const name of names) {
+    const visible = new Map(nativeBindings(definition.codebase));
+    checkModuleReferences(definition, modules, path);
+    for (const name of new Set([...names, ...visible.keys()].filter(name => !name.includes('.') || visible.get(name)?.kind === 'natlang'))) {
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const call = new RegExp(`\\b${escaped}\\s*\\(|\\b(?:call|calling|invoke|invoking)\\s+${escaped}\\b`, 'i');
+      const call = new RegExp(`(?<![\\w$.])${escaped}\\s*\\(|\\b(?:call|calling|invoke|invoking)\\s+${escaped}(?![\\w$.])`, 'i');
       if (call.test(definition.body)) {
         if (!visible.has(name)) throw new Error(`${path}: referenced helper ${name} is outside its native callable scope`);
         if (new RegExp(`[A-Za-z0-9_-]+/${escaped}\\s*\\(`).test(definition.body))
           throw new Error(`${path}: invoke native helper ${name} by its callable name, not a source-file path`);
-        const child = definition.codebase[name];
+        const child = visible.get(name);
+        if (child.kind === 'namespace')
+          throw new Error(`${path}: ${name} is a namespace, not a native callable; qualify its child or move the function into the intended companion folder`);
         if (child.kind === 'natlang') {
           const parameters = Object.keys(child.args ?? {}), minimum = parameters.filter(name => !name.endsWith('?')).length;
-          for (const match of definition.body.matchAll(new RegExp(`\\b${escaped}\\s*\\(`, 'g'))) {
+          for (const match of definition.body.matchAll(new RegExp(`(?<![\\w$.])${escaped}\\s*\\(`, 'g'))) {
             const args = literalCallArguments(definition.body, match.index + match[0].length);
             if (args && !args.some(arg => arg.includes('...')) && (args.length < minimum || args.length > parameters.length))
               throw new Error(`${path}: ${name} declares ${minimum === parameters.length ? minimum : `${minimum}–${parameters.length}`} positional arguments, but this explicit call supplies ${args.length}`);
@@ -153,6 +161,63 @@ export function checkNativeCalls(files, root = 'runCase.nl') {
     }
   }
   return { functions: paths.length, visible_references: references };
+}
+
+// A callable folder may contain a namespace as well as a directly callable child.
+// Preserve qualified names instead of treating a directory as a function.
+function nativeBindings(codebase = {}, prefix = '') {
+  return Object.entries(codebase).flatMap(([name, child]) => {
+    const spelling = prefix + name;
+    return [[spelling, child], ...(child.kind === 'namespace'
+      ? nativeBindings(child.codebase, spelling + '.') : [])];
+  });
+}
+
+// Type-only imports disappear at runtime, but their source paths must still resolve
+// in the exact package an author compiles. A moved helper cannot retain a stale path.
+function checkRelativeModuleImports(files) {
+  for (const [path, text] of Object.entries(files).filter(([path]) => path.endsWith('.ts'))) {
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+      const specifier = statement.moduleSpecifier;
+      if (!specifier || !ts.isStringLiteral(specifier) || !specifier.text.startsWith('.')) continue;
+      const target = posix.normalize(posix.join(posix.dirname(path), specifier.text));
+      const candidates = [target, target.replace(/\.js$/, '.ts'), `${target}.ts`, `${target}.nl`, `${target}/index.ts`];
+      if (!candidates.some(candidate => Object.hasOwn(files, candidate)))
+        throw new Error(`${path}: relative import ${specifier.text} is absent from the packaged source; repair the moved helper's import or source inventory`);
+    }
+  }
+}
+
+// The loader exposes a default function as its module name and named exports as
+// module.member. A function mentioned in prose is not automatically imported.
+function checkModuleReferences(definition, modules, path) {
+  const escape = name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const checked = new Set();
+  function inspect(spelling, spec) {
+    if (checked.has(spelling)) return;
+    checked.add(spelling);
+    const pattern = new RegExp(`(?<![\\w$.])${escape(spelling)}\\s*\\(`, 'g');
+    for (const match of definition.body.matchAll(pattern)) {
+      if (!spec || spec.kind !== 'function')
+        throw new Error(`${path}: TypeScript helper ${spelling} is not a visible callable; use its companion-folder default function or visible module.export name`);
+      const parameters = Object.keys(spec.args ?? {}), minimum = parameters.filter(name => !name.endsWith('?')).length;
+      const args = literalCallArguments(definition.body, match.index + match[0].length);
+      if (args && !args.some(arg => arg.includes('...')) && (args.length < minimum || args.length > parameters.length))
+        throw new Error(`${path}: ${spelling} declares ${minimum === parameters.length ? minimum : `${minimum}–${parameters.length}`} positional arguments, but this explicit call supplies ${args.length}`);
+    }
+  }
+  for (const module of modules) {
+    const visible = definition.codebase?.[module.name];
+    if (visible?.kind !== 'natlang') inspect(module.name, visible?.kind === 'module' ? visible.exports.default : null);
+    for (const [name, spec] of Object.entries(module.exports)) {
+      if (name === 'default' || spec.kind !== 'function') continue;
+      inspect(`${module.name}.${name}`, visible?.kind === 'module' ? visible.exports[name] : null);
+      const direct = definition.codebase?.[name];
+      if (direct?.kind !== 'natlang') inspect(name, direct?.kind === 'module' ? direct.exports.default : null);
+    }
+  }
 }
 
 // Native metadata can normalize an inline argument map before exposing params.
@@ -271,7 +336,7 @@ export function inspectPotentialCalls(files, entrypoints) {
   const edges = [];
   for (const path of paths) {
     const definition = programDefinition({ semantics: { root: path, files } });
-    for (const [name, child] of Object.entries(definition.codebase ?? {})) {
+    for (const [name, child] of nativeBindings(definition.codebase)) {
       // Native loader identity covers both companion-folder children and explicit package `uses:` edges.
       const target = child.source;
       if (typeof target !== 'string' || !paths.includes(target)) continue;

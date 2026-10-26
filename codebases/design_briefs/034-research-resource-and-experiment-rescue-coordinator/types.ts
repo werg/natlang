@@ -1,22 +1,19 @@
-export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
+
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
 export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
-export type EvidenceBinding = { sourceId: string; version: string; span: string; field: string };
+
 export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
-export type Rejection = { itemId: string; reason: string };
-export type CoverageManifest = { candidateIds: string[]; processedIds: string[]; deferredIds: string[]; excludedIds: string[] };
+
 export type Question = { question: string; respondent: string; evidenceNeeded: string };
 export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
-export type CheckResult = { check: string; passed: boolean; evidenceRefs: string[] };
+
 export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
 export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
-export type RequestEnvelope = { caseId: string; objective: string; scope: string; requestedBy: string; expectedVersion: string };
-export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
+
 export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
 export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
-export type Candidate = { id: string; subject: string; existingRecord: string; evidenceRefs: string[] };
-export type DecisionAtom = { field: string; value: string; evidenceRefs: string[]; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; alternative: string };
+
 export type GateVerdict = 'pass' | 'fail' | 'needs-review';
 export type ResearchSchedule = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; projectIds: string[]; resourceIds: string[]; planningWindow: string; coordinatorId: string; protocolIds: string[] };
 export type ExperimentRequirement = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; experimentId: string; scientificObjective: string; resourceNeed: string; timingConstraint: string };
@@ -25,27 +22,6 @@ export type ExperimentSlot = { tenantId: ID; id: ID; version: number; schemaVers
 export type RescueOption = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; disruptedSlotId: string; replacementResourceIds: string[]; scientificDeviation: string; approvalNeeded: string };
 export type ReadinessCheck = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; slotId: string; confirmationRefs: Ref[]; remainingBlockers: string[]; goDecisionRef: Ref };
 export type DraftExperimentRequirement = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; experimentId?: string; scientificObjective?: string; resourceNeed?: string; timingConstraint?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultExperimentRequirement = { accepted: ExperimentRequirement[]; unresolved: DraftExperimentRequirement[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftResourceCapability = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; resourceId?: string; capability?: string; availabilityWindows?: string[]; qualificationRef?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultResourceCapability = { accepted: ResourceCapability[]; unresolved: DraftResourceCapability[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftExperimentSlot = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; experimentId?: string; resourceIds?: string[]; startsAt?: string; prerequisiteIds?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultExperimentSlot = { accepted: ExperimentSlot[]; unresolved: DraftExperimentSlot[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftRescueOption = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; disruptedSlotId?: string; replacementResourceIds?: string[]; scientificDeviation?: string; approvalNeeded?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultRescueOption = { accepted: RescueOption[]; unresolved: DraftRescueOption[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type DraftReadinessCheck = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; slotId?: string; confirmationRefs?: Ref[]; remainingBlockers?: string[]; goDecisionRef?: Ref }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
-export type StageResultReadinessCheck = { accepted: ReadinessCheck[]; unresolved: DraftReadinessCheck[]; rejected: Rejection[]; consumedRefs: Ref[]; coverage: CoverageManifest; nextQuestions: Question[]; proposedActions: ActionProposal[]; checks: CheckResult[] };
-export type Snapshot = { version: string; caseRecords: ResearchSchedule[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; protocols?: ApprovedProtocol[]; instrumentWindows?: InstrumentWindow[]; maintenance?: MaintenanceStatus[]; qualifications?: OperatorQualification[]; bookings?: ExistingBooking[]; cancellations?: CancellationEvent[]; preparedMaterials?: PreparedMaterial[]; readinessEvidence?: CurrentReadinessEvidence[] };
-export type WorkGraphProposal = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[] };
-export type EvidencePlan = { requiredEvidence: string[]; searchedPartitions: string[]; missingCoverage: string[] };
-export type CollectionFinding = { consistent: boolean; conflicts: string[]; incompleteIds: string[]; minimalRepair: string[] };
-export type QuestionBatch = { questions: Question[]; respondents: string[]; acceptableEvidence: string[] };
-export type InvalidationProposal = { invalidatedIds: string[]; preservedIds: string[]; uncertainIds: string[]; reason: string };
-export type ReviewPacket = { supportedDecisions: string[]; unresolvedAlternatives: string[]; actionScope: string[]; approvalBindings: string[] };
-export type ViewModel = { title: string; status: string; sections: string[]; uncertainty: string[] };
-export type RevisionProposal = { target: string; change: string; regressionRisks: string[]; tests: string[] };
-export type StageOutputs = { stage1: StageResultExperimentRequirement; stage2: StageResultResourceCapability; stage3: StageResultExperimentSlot; stage4: StageResultRescueOption; stage5: StageResultReadinessCheck };
-export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
-export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultExperimentRequirement; stage2: StageResultResourceCapability; stage3: StageResultExperimentSlot; stage4: StageResultRescueOption; stage5: StageResultReadinessCheck; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
 
 export type ProtocolMandate = { experimentId: string; protocolId: string; sampleWindowStart: string; sampleWindowEnd: string; durationHours: number; requiredCapability: string; requiredOperatorId: string; hardConditions: string[]; preferences: string[]; sourceRefs: Ref[] };
 export type InstrumentWindow = { instrumentId: string; operatorId: string; startsAt: string; endsAt: string; calibrationValidUntil: string; qualificationRefs: Ref[]; capabilities: string[]; measurementBehavior: string; bookingId: string };
@@ -63,7 +39,7 @@ export type WindowAssignment = { experimentId: string; instrumentId: string; ope
 export type AssignmentSearch = { assignments: WindowAssignment[]; unscheduledExperimentIds: string[]; conflictSets: string[][]; searchComplete: boolean; exploredBranches: number };
 export type TimeInterval = { startsAt: DateTime; endsAt: DateTime };
 export type AssignmentBranch = { experimentId: string; instrument: InstrumentWindow; startsAt: DateTime; endsAt: DateTime; sourceRefs: Ref[] };
-export type AssignmentFrontier = { pendingExperimentIds: string[]; selected: WindowAssignment[]; rejected: { experimentId: string; reason: string; refs: Ref[] }[]; completeSchedules: WindowAssignment[][]; conflicts: string[][]; exploredBranches: number; searchComplete: boolean };
+export type AssignmentFrontier = { pendingExperimentIds: string[]; deferredExperimentIds: string[]; selected: WindowAssignment[]; rejected: { experimentId: string; reason: string; refs: Ref[] }[]; completeSchedules: WindowAssignment[][]; conflicts: string[][]; exploredBranches: number; searchComplete: boolean };
 export type StartWindowOptions = { branches: AssignmentBranch[]; blockedReasons: string[] };
 export type FeasibilitySet = { feasible: AssignmentBranch[]; rejected: { experimentId: string; reason: string; refs: Ref[] }[]; complete: boolean };
 export type ReadinessDecision = { experimentId: string; bookingRetained: boolean; status: 'ready' | 'blocked' | 'review'; blockers: string[]; currentEvidenceRefs: Ref[]; cancellationId: string };
@@ -74,7 +50,7 @@ export type ProtocolReview = { mandates: ProtocolMandate[]; missingProtocolIds: 
 export type InstrumentReview = { eligible: ResourceAssessment[]; substitutionCandidates: InstrumentWindow[]; bookedButUnavailable: string[] };
 export type OperatorReview = { eligibleOperatorIds: string[]; unqualifiedOperatorIds: string[]; currentQualifications: Ref[] };
 export type ReservationReview = { unavailableWindows: string[]; sameOperatorCollisions: string[]; activeBookingRefs: Ref[] };
-export type BehaviorDelta = { instrumentId: string; protocolBehavior: string; measuredBehavior: string; equivalent: boolean; evidenceRefs: Ref[] };
+
 export type ReadinessEvidenceReview = { status: 'pass' | 'block' | 'uncertain'; blockers: string[]; currentRefs: Ref[] };
 export type MaterialTrace = { cancellations: CancellationEvent[]; materials: PreparedMaterial[] };
 export type DependencyImpact = { experimentIds: string[]; dependencyRefs: Ref[] };

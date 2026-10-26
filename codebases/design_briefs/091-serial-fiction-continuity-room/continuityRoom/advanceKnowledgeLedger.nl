@@ -1,6 +1,6 @@
 ---
 description: Reconstruct what each character knows at the proposed scene boundary.
 args: { edition:SerialEdition; proposal:SerialScene }
-returns: KnowledgeEvent[]
+returns: KnowledgeLedgerAnalysis
 ---
-Order approved scenes by episode and scene order. For each secret, add a character-specific knowledge event only where the scene explicitly exposes that secret to that character. Do not infer awareness from reader knowledge, implication, or another character's private scene. Bind every event to scene and edition revision. Invalidate later knowledge states when an earlier exposure changes.
+Bind trace = `deriveSceneExposureEvents(edition, proposal)`. Return the complete KnowledgeLedgerAnalysis with trace.events at the proposal boundary, retaining unaffected prior entries with exact edition and scene provenance. Remove only trace.invalidatedEventIds from the old downstream ledger so later scenes are re-evaluated after a changed exposure. Preserve unresolvedExposureIds as explicit unknown-character-knowledge findings.

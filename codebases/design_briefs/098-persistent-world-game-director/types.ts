@@ -1,12 +1,8 @@
 export type EvidenceItem = { id: string; source: string; version: string; text: string; status: 'current' | 'superseded' | 'unknown'; authority: string; };
 export type EvidenceSlice = { subject: string; candidateIds: string[]; supporting: EvidenceItem[]; conflicting: EvidenceItem[]; missing: string[]; searchedScope: string; };
-export type DecisionAtom = { field: string; value: string; status: 'established' | 'disputed' | 'unknown' | 'inapplicable'; evidenceIds: string[]; rationale: string; alternative: string; };
-export type StageDraft = { stage: string; subject: string; fields: Record<string, string>; decisions: DecisionAtom[]; evidenceIds: string[]; unresolved: string[]; conflicts: string[]; };
-export type StageAudit = { verdict: 'pass' | 'fail' | 'needs-review'; gate: string; findings: string[]; repairTargets: string[]; };
+
 export type WorkRecord = { id: string; kind: string; subject: string; status: string; evidenceIds: string[]; fields: Record<string, string>; };
-export type StageOutputs = { interpretIntent: StageResultPlayerIntent; modelCharacterViews: StageResultCharacterView; chooseWorldActions: StageResultCharacterAction; advanceConsequences: StageResultWorldConsequence; maintainContinuity: StageResultWorldContinuity };
-export type RunProposal = { application: string; goal: string; status: 'ready-for-review' | 'blocked'; stageOutputs: StageOutputs; view: ViewModel; questions: string[]; coverage: string[]; checks: string[]; actionBoundary: string; };
-export type QualifyInput = { evidence: EvidenceSlice; draft: StageDraft; };
+
 export type RecordMeta = { id: string; caseId: string; sourceRefs: string[]; state: 'draft' | 'qualified' | 'blocked'; };
 export type Decimal = string;
 export type Ratio = { numerator: Decimal; denominator: Decimal; };
@@ -70,81 +66,6 @@ export type DraftPlayerIntent = { values: {
     targetIds?: string[];
     ambiguity?: string;
   }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultPlayerIntent = { accepted: PlayerIntent[]; unresolved: DraftPlayerIntent[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftCharacterView = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    characterId?: string;
-    knownFactIds?: string[];
-    beliefs?: string[];
-    goals?: string[];
-    obligations?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCharacterView = { accepted: CharacterView[]; unresolved: DraftCharacterView[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftCharacterAction = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    characterId?: string;
-    legalActionId?: string;
-    intent?: string;
-    dialogue?: string;
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultCharacterAction = { accepted: CharacterAction[]; unresolved: DraftCharacterAction[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftWorldConsequence = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    actionIds?: string[];
-    stateEventIds?: string[];
-    relationshipChanges?: string[];
-    unresolvedHooks?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultWorldConsequence = { accepted: WorldConsequence[]; unresolved: DraftWorldConsequence[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type DraftWorldContinuity = { values: {
-    id?: string;
-    caseId?: string;
-    sourceRefs?: string[];
-    state?: 'draft' | 'qualified' | 'blocked';
-    kind?: string;
-    subject?: string;
-    evidenceIds?: string[];
-    fields?: Record<string, string>;
-    status?: string;
-    checkpointId?: string;
-    unresolvedConflictIds?: string[];
-    proposedEvent?: string;
-    affectedEntityIds?: string[];
-  }; missingFields: string[]; conflicts: string[]; evidenceIds: string[]; };
-export type StageResultWorldContinuity = { accepted: WorldContinuity[]; unresolved: DraftWorldContinuity[]; rejected: string[]; consumedEvidence: string[]; nextQuestions: string[]; gate: StageAudit[]; };
-export type CollectionFinding = { conflicts: string[]; uncovered: string[]; duplicateIds: string[]; disposition: string; };
-export type GoalContract = { outcome: string; scope: string[]; exclusions: string[]; acceptanceEvidence: string[]; ambiguities: string[]; };
-export type PolicySelection = { clauses: string[]; precedence: string; unresolvedAuthority: string[]; };
-export type WorkGraph = { nodes: string[]; prerequisites: string[]; blockedQuestions: string[]; };
-export type EvidencePlan = { required: string[]; searched: string[]; omittedPartitions: string[]; };
-export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; approvalRequired: string[]; };
-export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
-export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
-export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
 
 export type PlayerUtterance={playerId:string;characterId:string;text:string;visibleLocation:string;clientActionId:string;};
 export type PersistentWorldState={id:string;revision:number;ruleVersion:string;locations:string[];resources:WorldResource[];characters:GameCharacter[];events:WorldEvent[];boundaries:ContentBoundary[];};
@@ -155,7 +76,16 @@ export type WorldEvent={id:string;revision:number;kind:string;actorId:string;loc
 export type ContentBoundary={participantId:string;blockedTopics:string[];allowedIntensity:string;revision:string;};
 export type LegalAction={id:string;actorId:string;kind:string;targetId:string;location:string;resourceDelta:string;requires:string[];clientActionId:string;};
 export type WorldTransitionReceipt={clientActionId:string;worldId:string;priorRevision:number;newRevision:number;outcome:'committed'|'rejected';eventIds:string[];resourceLedgerHash:string;rejectionReason:string;};
-export type GameCheckpoint={worldId:string;revision:number;ruleVersion:string;pendingActionIds:string[];unknownReceiptIds:string[];boundaryRevisions:string[];replayCursor:string;};
-export type GameSessionResult={intent:LegalAction[];questions:string[];views:CharacterPerspective[];actions:LegalAction[];receipts:WorldTransitionReceipt[];beliefUpdates:CharacterBelief[];continuityNotes:string[];checkpoint:GameCheckpoint;status:'needs-clarification'|'awaiting-simulator'|'reconciled'|'blocked';};
+export type ActionCheck={actionId:string;eligible:boolean;blockers:string[];evidenceIds:string[];};
+export type ActionSelection={actions:LegalAction[];checks:ActionCheck[];questions:string[];blockers:string[];};
+export type WorldSimulatorReadback={worldId:string;revision:number;ruleVersion:string;resourceLedgerHash:string;eventIds:string[];receiptedActionIds:string[];world:PersistentWorldState;};
+export type ReceiptBindingFacts={receipts:WorldTransitionReceipt[];blockers:string[];actions:{clientActionId:string;receipt:WorldTransitionReceipt|null;conflictingDuplicate:boolean;worldMatches:boolean|null;priorRevisionMatches:boolean|null;actionBound:boolean|null;rejectionReasonPresent:boolean|null;revisionAdvances:boolean|null;readbackWorldMatches:boolean|null;readbackRevisionMatches:boolean|null;readbackRuleVersionMatches:boolean|null;resourceHashMatches:boolean|null;actionReported:boolean|null;missingReceiptEventIds:string[];invalidEventBindings:string[]}[];};
+export type ReceiptEventReview={acceptedEvents:WorldEvent[];unresolvedEventIds:string[];blockers:string[];};
+export type WorldActionEffectPreparation={effects:WorldActionEffect[];checkpoint:GameCheckpoint;blockers:string[];};
+export type WorldActionEffect={kind:'apply-player-actions'|'read-action-status';worldId:string;priorRevision:number;ruleVersion:string;clientActionId:string;actions:LegalAction[];idempotencyKey:string;};
+export type PendingWorldAction={clientActionId:string;worldId:string;priorRevision:number;ruleVersion:string;actions:LegalAction[];};
+export type WorldReconciliation={receipts:WorldTransitionReceipt[];pendingActionIds:string[];unknownReceiptIds:string[];committedEvents:WorldEvent[];updatedWorld:PersistentWorldState|null;status:'awaiting-simulator'|'reconciled'|'blocked';blockers:string[];};
+export type GameCheckpoint={worldId:string;revision:number;ruleVersion:string;pendingActionIds:string[];unknownReceiptIds:string[];pendingActions?:PendingWorldAction[];boundaryRevisions:string[];replayCursor:string;worldSnapshot?:PersistentWorldState;receiptLedger?:WorldTransitionReceipt[];};
+export type GameSessionResult={intent:LegalAction[];questions:string[];views:CharacterPerspective[];actions:LegalAction[];receipts:WorldTransitionReceipt[];beliefUpdates:CharacterBelief[];continuityNotes:string[];checkpoint:GameCheckpoint;status:'needs-clarification'|'awaiting-simulator'|'reconciled'|'blocked';effects?:WorldActionEffect[];worldState?:PersistentWorldState;};
 export type CharacterPerspective={characterId:string;visibleFacts:string[];permittedMemories:string[];privateFactsExcluded:string[];availableActions:string[];};
-
+export type CheckpointReconciliation={checkpoint:GameCheckpoint;ready:boolean;blockers:string[];};

@@ -1468,3 +1468,27 @@ search is removed; the existing Natlang frontier remains the scheduler. Nested
 authority, evidence and physical-readback judgments carry their actual findings
 into parent state updates. These additions have the same live-measurement debt;
 no new independent expected answer or sampled model trajectory is authored here.
+
+The final source pass removes unused inherited run/stage declarations while
+preserving all original domain contracts. Creative and simulation applications
+now carry their own citation ancestry, character knowledge, rights and delivery
+states, physical puzzle proof/reset evidence, and pending world actions. Their
+typed nested judgments and complete blocked branches consume the actual child
+findings. The exact kitchen arithmetic and world-action identity helpers have
+native-loader regression coverage. Packaging now checks TypeScript module
+visibility, qualified named exports and explicit call arity as well as Natlang
+children; this does not type-check the semantic content of natural-language
+instructions. Final source-bound evidence lives in
+`training/semantic_applications/design_briefs/release-v2/`. These source changes
+retain the same outstanding live qualification and training admission debt.
+
+The final graph review repairs a disconnected research-scheduling frontier and
+removes inactive qualification wrappers whose original invariants are owned by
+active Natlang operations. The apprenticeship simulator now distinguishes
+information requests and procedure clarification from transitions, preserves
+complete per-turn results for replay without rescheduling or rewinding newer
+history, and gives its debrief separate planned, simulated and observed evidence.
+The original exact fixture roots and independent expected results remain intact.
+Scripted native regressions test wiring and result contracts, not the quality of
+the semantic classifier, scheduler or replay judgment. Qualification debt above
+still applies to these final source changes.
