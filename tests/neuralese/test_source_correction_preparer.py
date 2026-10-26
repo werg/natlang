@@ -163,3 +163,25 @@ def test_mellum_missing_cloud_leaf_relocates_only_through_exact_registry_role(tm
     with pytest.raises(ValueError, match='registry member differs'):
         PREPARER._relocate_declared_mellum_package_leaves(
             bad_train, held, {}, cfg=cfg, registry_root=registry)
+
+
+def test_row_writer_emits_removed_replacements_once_and_retains_other_changes(tmp_path):
+    import json
+    from types import SimpleNamespace
+    old = SimpleNamespace(bindings={'replaced': 'old-r', 'pending': 'old-p', 'changed': 'old-c', 'same': 'same'},
+                          ordered_ids=lambda: ['replaced', 'pending', 'changed', 'same'])
+    new = SimpleNamespace(bindings={'replaced': 'new-r', 'changed': 'new-c', 'same': 'same', 'added': 'new-a'},
+                          ordered_ids=lambda: ['replaced', 'changed', 'same', 'added'])
+    bad = next(iter(PREPARER.BAD_TRAIN))
+    path = tmp_path / 'rows.jsonl'
+    PREPARER.write_train_correction_rows(path, model='lfm', old_train=old, current_train=new,
+        old_origins={'replaced': 'repair-source', 'pending': bad, 'changed': 'ordinary-source', 'same': 'same-source'},
+        new_origins={'replaced': 'repaired-source', 'changed': 'changed-source', 'same': 'same-source', 'added': 'new-source'},
+        removed_ids={'replaced', 'pending'}, source_reasons={'repair-source': 'full producer repair', bad: 'not available'},
+        old_communication_ids={'replaced', 'pending'})
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(rows) == len({row['id'] for row in rows}) == 4
+    assert {row['id']: row['disposition'] for row in rows} == {
+        'replaced': 'corrected', 'pending': 'deferred', 'changed': 'corrected', 'added': 'added'}
+    assert rows[0]['reason'] == 'full producer repair'
+    assert rows[0]['old_communication'] is True

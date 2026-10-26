@@ -457,6 +457,42 @@ def _origins(receipt, order):
     return result
 
 
+def write_train_correction_rows(row_path, *, model, old_train, current_train, old_origins, new_origins, removed_ids, source_reasons, old_communication_ids):
+    old_ids = set(old_train.bindings)
+    current_ids = set(current_train.bindings)
+    with row_path.open('w') as f:
+        for row_id in old_train.ordered_ids():
+            if row_id in removed_ids:
+                digest = old_origins[row_id]
+                if row_id in current_ids:
+                    if old_train.bindings[row_id] == current_train.bindings[row_id]:
+                        raise ValueError(f'{model}: corrected replacement left a faulty row binding unchanged: {row_id}')
+                    f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
+                        'old_source_sha256': digest, 'new_binding': current_train.bindings[row_id],
+                        'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
+                        'old_communication': row_id in old_communication_ids,
+                        'reason': source_reasons[digest]}, sort_keys=True) + '\n')
+                else:
+                    if digest not in BAD_TRAIN:
+                        raise ValueError(f'{model}: corrected replacement changed graph identity: {row_id}')
+                    f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
+                        'old_source_sha256': digest, 'new_binding': None,
+                        'disposition': 'deferred', 'old_communication': row_id in old_communication_ids,
+                        'reason': source_reasons[digest]}, sort_keys=True) + '\n')
+        for row_id in current_train.ordered_ids():
+            if row_id not in old_ids:
+                f.write(json.dumps({'id': row_id, 'old_binding': None, 'old_source_sha256': None,
+                    'new_binding': current_train.bindings[row_id], 'new_source_sha256': new_origins[row_id],
+                    'disposition': 'added'}, sort_keys=True) + '\n')
+            elif row_id not in removed_ids and current_train.bindings[row_id] != old_train.bindings[row_id]:
+                if row_id not in old_train.bindings:
+                    raise ValueError('replacement row identity is not in old source inventory')
+                f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
+                    'old_source_sha256': old_origins[row_id], 'new_binding': current_train.bindings[row_id],
+                    'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
+                    'old_communication': row_id in old_communication_ids}, sort_keys=True) + '\n')
+
+
 def build(model, out_root):
     from natlang_neuralese.data.native_sources import NativeGraphSource
     from natlang_neuralese.train.native_source_correction import SCHEMA
@@ -512,37 +548,9 @@ def build(model, out_root):
     source_reasons.update({s['sha256']: 'replaced by exact policy-v4 full producer target rebuild; corrected rows start fresh exposure'
                            for s in removed if s['sha256'] in CORRECTED_OLD})
     row_path = out / 'train-row-bindings.jsonl'
-    with row_path.open('w') as f:
-        for row_id in old_train.ordered_ids():
-            if row_id in removed_ids:
-                digest = old_origins[row_id]
-                if row_id in current_ids:
-                    if old_train.bindings[row_id] == current_train.bindings[row_id]:
-                        raise ValueError(f'{model}: corrected replacement left a faulty row binding unchanged: {row_id}')
-                    f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
-                        'old_source_sha256': digest, 'new_binding': current_train.bindings[row_id],
-                        'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
-                        'old_communication': row_id in old_communication_ids,
-                        'reason': source_reasons[digest]}, sort_keys=True) + '\n')
-                else:
-                    if digest not in BAD_TRAIN:
-                        raise ValueError(f'{model}: corrected replacement changed graph identity: {row_id}')
-                    f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
-                        'old_source_sha256': digest, 'new_binding': None,
-                        'disposition': 'deferred', 'old_communication': row_id in old_communication_ids,
-                        'reason': source_reasons[digest]}, sort_keys=True) + '\n')
-        for row_id in current_train.ordered_ids():
-            if row_id not in old_ids:
-                f.write(json.dumps({'id': row_id, 'old_binding': None, 'old_source_sha256': None,
-                    'new_binding': current_train.bindings[row_id], 'new_source_sha256': new_origins[row_id],
-                    'disposition': 'added'}, sort_keys=True) + '\n')
-            elif current_train.bindings[row_id] != old_train.bindings[row_id]:
-                if row_id not in old_train.bindings:
-                    raise ValueError('replacement row identity is not in old source inventory')
-                f.write(json.dumps({'id': row_id, 'old_binding': old_train.bindings[row_id],
-                    'old_source_sha256': old_origins[row_id], 'new_binding': current_train.bindings[row_id],
-                    'new_source_sha256': new_origins[row_id], 'disposition': 'corrected',
-                    'old_communication': row_id in old_communication_ids}, sort_keys=True) + '\n')
+    write_train_correction_rows(row_path, model=model, old_train=old_train, current_train=current_train,
+        old_origins=old_origins, new_origins=new_origins, removed_ids=removed_ids,
+        source_reasons=source_reasons, old_communication_ids=old_communication_ids)
     # This subset is intentionally correction-only; it does not authorize
     # promotion of unresolved held targets or full readiness.
     old_held_origins = _origins(old_held_receipt, old_held.ordered_ids())
