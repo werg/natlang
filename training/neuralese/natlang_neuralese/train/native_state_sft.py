@@ -1370,6 +1370,32 @@ def _main(argv=None, *, requested_refresh):
     foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint,
                                            required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
+    # Persist the exact inputs that are actively consumed by this stage. These
+    # bindings are part of checkpoint metadata even when the run makes no
+    # optimizer update, so provider recovery can reconstruct its full closure.
+    if args.foundation_native_graphs:
+        foundation_binding = {
+            'path': str(foundation_source.path.resolve()),
+            'sha256': foundation_source.file_sha256,
+            'bytes': foundation_source.path.stat().st_size,
+        }
+        from .native_foundation_recovery import native_graph_bindings
+        foundation_binding['dependencies'] = [item for item in native_graph_bindings(foundation_binding)
+            if item['path'] != foundation_binding['path']]
+        checkpoint_options['foundation_native_graphs_binding'] = foundation_binding
+    else:
+        checkpoint_options.pop('foundation_native_graphs_binding', None)
+    if args.foundation_declaration_recovery:
+        recovery_path = args.foundation_declaration_recovery.resolve(strict=True)
+        checkpoint_options['foundation_declaration_recovery_binding'] = {
+            'path': str(recovery_path), 'sha256': sha256_file_hex_cached(recovery_path),
+            'bytes': recovery_path.stat().st_size,
+        }
+    else:
+        checkpoint_options.pop('foundation_declaration_recovery_binding', None)
+    foundation_dependencies_changed = any(
+        checkpoint_options.get(key) != saved_options.get(key)
+        for key in ('foundation_native_graphs_binding', 'foundation_declaration_recovery_binding'))
     if args.foundation_communication_batches is not None and args.foundation_native_graphs is None:
         raise ValueError('foundation scheduling requires the exact declared foundation source')
     if args.communication_foundation and args.foundation_native_graphs is None:
@@ -1854,6 +1880,7 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
         or foundation_declaration_changed
+        or foundation_dependencies_changed
         or args.native_shared_execution is not None and args.native_shared_execution!=previous_shared_declaration
         or config.get('native_shared_execution','source-v1')!=previous_shared_execution
         or args.native_norm_execution is not None and args.native_norm_execution != previous_norm_declaration

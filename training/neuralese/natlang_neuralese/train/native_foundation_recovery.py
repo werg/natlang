@@ -9,6 +9,92 @@ from ..common.hashing import sha256_file_hex_cached
 SCHEMA = 'natlang.native-foundation-declaration-recovery/1'
 
 
+def native_graph_bindings(reference):
+    """Enumerate a graph header, its payload closure, and maps used to resolve it."""
+    header = _bound(reference)
+    # Match the production resolver exactly, while retaining the custody map
+    # bytes that determined where each declared graph member was loaded from.
+    from .recipe import native_source_dependencies
+    from ..data.native_source_tree import _staged_path, _source_identity
+    manifests = [header]
+    seen = set()
+    maps = []
+    consumed = []
+    _source_identity(header, custody=maps)
+    while manifests:
+        manifest_path = manifests.pop().resolve()
+        if manifest_path in seen or manifest_path.suffix != '.json':
+            continue
+        seen.add(manifest_path)
+        value = json.loads(manifest_path.read_text())
+        if value.get('schema') != 'natlang.native-graph-sources/1':
+            continue
+        for source in value.get('sources') or []:
+            target = _staged_path(manifest_path, source['path'], custody=maps)
+            if not target.is_absolute():
+                target = manifest_path.parent / target
+            target = target.resolve(strict=True)
+            _source_identity(target, custody=maps)
+            consumed.append(target)
+            if source.get('kind') == 'native-graphs':
+                manifests.append(target)
+
+    # native_source_dependencies performs the canonical recursive schema,
+    # identity and payload hash checks. Include its results unchanged.
+    direct = [header, *consumed]
+    for item in native_source_dependencies(header):
+        direct.append(_bound({'path': item['path'], 'sha256': item['sha256']}))
+    direct.extend(_bound(reference) for reference in maps)
+    unique = {}
+    for path in direct:
+        path = path.resolve(strict=True)
+        unique[str(path)] = {'path': str(path), 'sha256': sha256_file_hex_cached(path),
+                             'bytes': path.stat().st_size}
+    if unique[str(header)]['sha256'] != reference['sha256'] or (
+            'bytes' in reference and unique[str(header)]['bytes'] != reference['bytes']):
+        raise ValueError('foundation graph dependency changed during enumeration')
+    return list(unique.values())
+
+
+def dependency_bindings(reference):
+    """Return files needed to revalidate a selected recovery.
+
+    Historical recipe/metadata/verification files are authenticated as
+    documentary evidence only. Paths mentioned inside those documents, such
+    as an unavailable old checkpoint, are never followed.
+    """
+    proof_path = _bound(reference)
+    proof = json.loads(proof_path.read_text())
+    required = {'schema', 'stage_id', 'historical_recipe', 'historical_training_metadata',
+                'historical_checkpoint_verification', 'foundation_sources', 'reason'}
+    if (not isinstance(proof, dict) or set(proof) != required or proof.get('schema') != SCHEMA
+            or not isinstance(proof.get('stage_id'), str) or not proof['stage_id']
+            or not isinstance(proof.get('reason'), str) or not proof['reason'].strip()):
+        raise ValueError('foundation recovery dependency proof has an invalid schema')
+    refs = [reference, proof['historical_recipe'], proof['historical_training_metadata'],
+            proof['historical_checkpoint_verification']]
+    for ref in refs:
+        _bound(ref)
+    direct = [proof_path, *(_bound(proof[key]) for key in ('historical_recipe',
+        'historical_training_metadata', 'historical_checkpoint_verification'))]
+    graph_items = native_graph_bindings(proof['foundation_sources'])
+    direct.extend(Path(item['path']) for item in graph_items)
+    unique = {}
+    for path in direct:
+        path = path.resolve(strict=True)
+        unique[str(path)] = {'path': str(path), 'sha256': sha256_file_hex_cached(path),
+                             'bytes': path.stat().st_size}
+    # Recheck references against bytes captured after traversal, catching any
+    # mutation between proof validation and the final inventory.
+    for ref in (reference, proof['historical_recipe'], proof['historical_training_metadata'],
+                proof['historical_checkpoint_verification'], proof['foundation_sources']):
+        path = Path(ref['path']).resolve(strict=True)
+        if unique[str(path)]['sha256'] != ref['sha256'] or (
+                'bytes' in ref and unique[str(path)]['bytes'] != ref['bytes']):
+            raise ValueError('foundation recovery dependency changed during enumeration')
+    return list(unique.values())
+
+
 def _bound(reference):
     if (not isinstance(reference, dict) or not isinstance(reference.get('path'), str)
             or not isinstance(reference.get('sha256'), str) or len(reference['sha256']) != 64):

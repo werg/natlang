@@ -4,7 +4,21 @@ from pathlib import Path
 from ..common.hashing import sha256_file_hex_cached
 
 
-def _staged_path(manifest_path, reference):
+def _read_source_map(index, custody=None):
+    """Use the ordinary map reader, optionally retaining its exact consumed bytes."""
+    before = index.stat() if custody is not None else None
+    value = json.loads(index.read_text())
+    if custody is not None:
+        digest = sha256_file_hex_cached(index)
+        after = index.stat()
+        fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+        if any(getattr(before, key) != getattr(after, key) for key in fields):
+            raise ValueError('staged native source map changed while reading: ' + str(index))
+        custody.append({'path': str(index.resolve()), 'sha256': digest, 'bytes': after.st_size})
+    return value
+
+
+def _staged_path(manifest_path, reference, *, custody=None):
     """Route absolute source references to exact staged copies without changing manifest bytes."""
     path = Path(reference)
     if not path.is_absolute():
@@ -14,7 +28,7 @@ def _staged_path(manifest_path, reference):
         index = parent / '.natlang-source-map.json'
         if not index.is_file():
             continue
-        value = json.loads(index.read_text())
+        value = _read_source_map(index, custody)
         if value.get('schema') != 'natlang.staged-source-map/1' or not isinstance(value.get('paths'), dict):
             raise ValueError(f'invalid staged native source map: {index}')
         staged = value['paths'].get(original)
@@ -26,14 +40,14 @@ def _staged_path(manifest_path, reference):
     return path
 
 
-def _source_identity(path):
+def _source_identity(path, *, custody=None):
     """Recover the original absolute identity for a staged file without changing its bytes."""
     target = str(Path(path).resolve())
     for parent in Path(path).resolve().parents:
         index = parent / '.natlang-source-map.json'
         if not index.is_file():
             continue
-        value = json.loads(index.read_text())
+        value = _read_source_map(index, custody)
         if value.get('schema') == 'natlang.staged-source-map/1' and isinstance(value.get('paths'), dict):
             for original, staged in value['paths'].items():
                 if str(Path(staged).resolve()) == target:

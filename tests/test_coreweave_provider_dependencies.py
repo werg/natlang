@@ -696,3 +696,94 @@ def test_verified_future_keeps_inherited_adaptation_as_bound_provenance(tmp_path
         assert {r['path']for r in closure['files']}=={r['path']for r in
             [config,active,historical,future,source_manifest,source,held_manifest,held]}
     assert calls==[active]
+
+
+@pytest.mark.parametrize('complete',[False,True])
+def test_foundation_recovery_and_header_are_in_checkpoint_dependency_closure(tmp_path,complete):
+    import torch
+    payload=tmp_path/'staged'/'graphs.jsonl'
+    payload.parent.mkdir();payload.write_text('{"id":"actual-graph"}\n')
+    original='/retired/source/graphs.jsonl'
+    source_map=write(tmp_path/'.natlang-source-map.json',{'schema':'natlang.staged-source-map/1',
+        'paths':{original:str(payload)}})
+    header=write(tmp_path/'foundation.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs','path':original,'sha256':deps.sha256_file_hex_cached(payload)}]})
+    from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings
+    header['dependencies']=[item for item in native_graph_bindings(header)
+        if item['path']!=str(Path(header['path']).resolve())]
+    historical_recipe=write(tmp_path/'historical-recipe.json',{
+        'checkpoint_path':'/pruned/old/checkpoint.pt','declared':'documentary only'})
+    metadata=write(tmp_path/'historical-metadata.json',{
+        'checkpoint_path':'/also-pruned/checkpoint.pt','historical':'documentary only'})
+    verification=write(tmp_path/'verification.json',{'checkpoint_path':'/pruned/verify-target.pt'})
+    proof=write(tmp_path/'recovery.json',{'schema':'natlang.native-foundation-declaration-recovery/1',
+        'stage_id':'full','historical_recipe':historical_recipe,'historical_training_metadata':metadata,
+        'historical_checkpoint_verification':verification,'foundation_sources':header,
+        'reason':'exact declaration recovery'})
+    options={'communication_foundation':True,'foundation_native_graphs':header['path'],'foundation_native_graphs_binding':header,
+        'foundation_declaration_recovery':proof['path'],
+        'foundation_declaration_recovery_binding':proof}
+    historical={'options':options,'required_visits':{} if complete else {'actual-graph':1},
+        'source_row_order':['actual-graph'],'exposure_counts':{'actual-graph':0},
+        'source_row_bindings':{'actual-graph':'a'*64}}
+    training={'schema':'natlang.neuralese-native-sft-training/1','identity':{'objective':None},
+        'options':{'stage_id':'next-stage'},'sft_progress':{'full':historical},
+        'global_step':0,'source_row_order':[],'exposure_counts':{},'source_row_bindings':{},
+        'required_visits':{},'completed_foundations':[]}
+    checkpoint=tmp_path/'state.pt';torch.save({'training':training},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    paths={item['path'] for item in closure['files']}
+    assert paths >= {checkpoint.resolve().as_posix(),Path(proof['path']).as_posix(),
+        Path(historical_recipe['path']).as_posix(),Path(metadata['path']).as_posix(),
+        Path(verification['path']).as_posix(),Path(header['path']).as_posix(),
+        payload.resolve().as_posix(),Path(source_map['path']).as_posix()}
+    assert not any('/pruned/' in item or '/also-pruned/' in item for item in paths)
+
+
+def test_foundation_recovery_dependency_binding_omission_and_tampering_fail_closed(tmp_path):
+    import torch
+    header=write(tmp_path/'header.json',{'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'semantic-pairs','path':'pairs.jsonl','sha256':deps.sha256_file_hex_cached(
+            write(tmp_path/'pairs.jsonl','exact').get('path')),'model':'port'}]})
+    from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings
+    header['dependencies']=[item for item in native_graph_bindings(header)
+        if item['path']!=str(Path(header['path']).resolve())]
+    docs=[write(tmp_path/name,{'historical':'opaque'}) for name in
+        ('recipe.json','metadata.json','verification.json')]
+    proof=write(tmp_path/'proof.json',{'schema':'natlang.native-foundation-declaration-recovery/1',
+        'stage_id':'full','historical_recipe':docs[0],'historical_training_metadata':docs[1],
+        'historical_checkpoint_verification':docs[2],'foundation_sources':header,'reason':'recover'})
+    training={'options':{'foundation_declaration_recovery':proof['path'],'foundation_native_graphs':header['path'],
+        'foundation_native_graphs_binding':header},'sft_progress':{}}
+    checkpoint=tmp_path/'state.pt';torch.save({'training':training},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    training['options']['communication_foundation']=True
+    del training['options']['foundation_native_graphs_binding']
+    torch.save({'training':training},checkpoint)
+    binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    with pytest.raises(ValueError,match='active communication foundation lacks'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    training['options']['foundation_native_graphs_binding']=header
+    torch.save({'training':training},checkpoint)
+    binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    with pytest.raises(ValueError,match='selected foundation recovery lacks'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    training['options']['foundation_declaration_recovery_binding']=proof
+    torch.save({'training':training},checkpoint)
+    Path(docs[1]['path']).write_text('tampered')
+    binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    with pytest.raises(ValueError,match='foundation recovery artifact changed'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+
+def test_unselected_stale_foundation_bindings_are_not_runtime_dependencies(tmp_path):
+    import torch
+    absent={'path':str(tmp_path/'obsolete-proof.json'),'sha256':'a'*64,'bytes':1}
+    checkpoint=tmp_path/'state.pt'
+    torch.save({'training':{'options':{'communication_foundation':False,
+        'foundation_native_graphs':None,'foundation_declaration_recovery':None,
+        'foundation_native_graphs_binding':absent,'foundation_declaration_recovery_binding':absent}}},checkpoint)
+    closure=deps.dependency_closure({'parent_checkpoint':{'path':str(checkpoint),
+        'sha256':deps.sha256_file_hex_cached(checkpoint)}},namespace=str(tmp_path))
+    assert {item['path']for item in closure['files']}=={str(checkpoint)}

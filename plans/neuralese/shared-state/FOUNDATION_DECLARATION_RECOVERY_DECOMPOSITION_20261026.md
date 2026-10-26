@@ -23,3 +23,11 @@ This is exact recovery plumbing, not a new curriculum or model-facing policy.
 Both students use the same verifier and recipe role. No historical reader is
 silently replaced: the old recipe is authenticated as a declaration document,
 not executed through today's recipe loader.
+
+Recovery publication retains the selected foundation header, its actual payloads
+and every consulted staged-source identity map. The provider checks this exact
+inventory for active and carried stage frames, including completed frames;
+unselected stale declarations are not current recovery dependencies. The recovery
+proof retains its directly authenticated historical documents without traversing
+obsolete checkpoint paths mentioned inside those documents. These are shared
+exact custody and durability helpers, not additional training policy.

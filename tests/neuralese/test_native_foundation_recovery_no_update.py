@@ -1,5 +1,6 @@
 import copy
 import json
+from pathlib import Path
 
 import torch
 
@@ -63,6 +64,15 @@ def test_completed_in_place_recovery_persists_declaration_with_zero_optimizer_up
     history=saved['training']['options'].get('foundation_declaration_recovery_history')
     assert history and len(history)==1 and history[0]['new_exposure']==0
     assert saved['training']['options']['communication_foundation'] is True
+    expected_header={'path':str(source.resolve()),'sha256':sha256_file_hex(source),
+        'bytes':source.stat().st_size}
+    from natlang_neuralese.train.native_foundation_recovery import native_graph_bindings
+    expected_header['dependencies']=[item for item in native_graph_bindings(expected_header)
+        if item['path']!=expected_header['path']]
+    assert saved['training']['options']['foundation_native_graphs_binding'] == expected_header
+    assert saved['training']['options']['foundation_declaration_recovery_binding'] == {
+        'path':str(Path(proof['path']).resolve()),'sha256':sha256_file_hex(proof['path']),
+        'bytes':Path(proof['path']).stat().st_size}
     def equal(left,right):
         if isinstance(left,torch.Tensor):assert torch.equal(left,right)
         elif isinstance(left,dict):
