@@ -89,7 +89,8 @@ def test_one_snapshot_lambda_balanced_gradient_matches_reference(tmp_path):
     engine = engine_fixture(tmp_path, 'lfm')
     rows = rows_for(engine, 'bx', 2) + rows_for(engine, 'by', 1, offset=3)
     recipe = Recipe(batch_rows=3, optimizer={'name': 'sgd', 'learning_rate': 1.},
-                    depth_penalty={'tree': 0., 'folder': 0., 'lambda': 0.})
+                    depth_penalty={'tree': 0., 'folder': 0., 'lambda': 0.},
+                    level_lr_scale={'tree': 1., 'folder': 1., 'lambda': 1.}, schedule={'kind': 'constant'})
     trainer = JointTrainer(engine, manifest_for(engine), rows, recipe)
     ids = dict(trainer.state['node_artifacts'])
     start = {node: tensors(engine, artifact) for node, artifact in ids.items()}

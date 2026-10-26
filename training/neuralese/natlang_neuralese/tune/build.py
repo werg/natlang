@@ -101,9 +101,10 @@ def load_plan(path):
     manifest = plan['manifest']
     if isinstance(manifest, str):
         manifest = json.loads((Path(path).parent / manifest).read_text())
-    rows_path = Path(path).parent / plan['rows']
-    rows = [json.loads(line) for line in rows_path.read_text().splitlines() if line.strip()]
-    return plan, manifest, rows
+    read = lambda name: [json.loads(line) for line in (Path(path).parent / name).read_text().splitlines() if line.strip()]
+    rows = read(plan['rows']) if plan.get('rows') else []
+    # §5.1a: scored student rollouts (natlang.tune-rollout/v1) are the RL rows of the same fit.
+    return plan, manifest, rows, read(plan['rollouts']) if plan.get('rollouts') else []
 
 
 def main(argv=None):
@@ -111,18 +112,22 @@ def main(argv=None):
     parser.add_argument('--plan', required=True)
     parser.add_argument('--out', required=True)
     args = parser.parse_args(argv)
-    plan, manifest, rows = load_plan(args.plan)
+    plan, manifest, rows, rollouts = load_plan(args.plan)
+    # A continued round names the previous round's build directory: its state, versions and soft initialization.
+    parent_dir = Path(args.plan).parent / plan['parent'] if plan.get('parent') else None
     from ..serve import load_native_engine
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
                                 dtype=getattr(torch, config.get('dtype', 'float32')))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    for directory in [*(Path(args.plan).parent / item for item in plan.get('artifacts', [])), out / 'artifacts']:
+    for directory in [*(Path(args.plan).parent / item for item in plan.get('artifacts', [])),
+                      *([parent_dir / 'artifacts'] if parent_dir else []), out / 'artifacts']:
         if directory.is_dir():
             import_artifacts(engine, directory)
-    if (out / 'states').is_dir():
-        import_states(engine, out / 'states')
+    for directory in [*([parent_dir / 'states'] if parent_dir else []), out / 'states']:
+        if directory.is_dir():
+            import_states(engine, directory)
     state_path = out / 'state.json'
     save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(), *trainer.state['optimizer_states'].values(),
                                                *trainer.state.get('soft_states', {}).values(),
@@ -135,19 +140,24 @@ def main(argv=None):
         # reuses the recorded initial states rather than writing them again.
         from .soft import initialize_soft_states
         init_path = out / 'soft-init.json'
+        if not init_path.exists() and parent_dir is not None and (parent_dir / 'soft-init.json').exists():
+            _write(init_path, json.loads((parent_dir / 'soft-init.json').read_text()))
         soft = json.loads(init_path.read_text()) if init_path.exists() else initialize_soft_states(engine, rows)
         if not init_path.exists():
             persist_artifacts(engine, [record['state'] for record in soft.values()], out / 'artifacts', out / 'states')
             _write(init_path, soft)
     from .rows import lower_rows
     rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1),
-                      soft={key: record['state'] for key, record in soft.items()})
-    trainer = JointTrainer(engine, manifest, rows, Recipe.from_json(plan.get('recipe', {})), state=state)
+                      soft={key: record['state'] for key, record in soft.items()}) if rows else []
+    parent = json.loads((parent_dir / 'state.json').read_text()) if parent_dir is not None and state is None else None
+    trainer = JointTrainer(engine, manifest, rows + rollouts, Recipe.from_json(plan.get('recipe', {})), state=state,
+                           workdir=out / 'rl', parent=parent)
     save()
-    while trainer.state['step'] < trainer.recipe.steps:
+    while trainer.state['step'] < trainer.total_steps:
         record = trainer.step()
         save()
-        print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / len(record['row_losses'])}), flush=True)
+        print(json.dumps({'step': record['step'], 'objective': record['objective'], 'lr_factor': record['lr_factor'],
+                          'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}), flush=True)
     fragment = trainer.manifest_fragment()
     if 'gguf' in plan.get('exports', []):
         export_nodes(trainer, engine, plan, out, fragment['artifacts'])

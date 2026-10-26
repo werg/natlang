@@ -137,6 +137,9 @@ explicit `withNativeAdapters` scopes. Programs without a release are unaffected.
 Implemented: scope compilation, per-call resolution with requested/effective identities and coherent fallback,
 release store with compare-before-activate and rollback, `natlang tune` (collect, split, train, export, validate,
 activate, report, watch), managed llama.cpp serving with per-request stacks, the joint trainer with nested shared
-bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. Not yet
-implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, wllama serving, on-policy repair
-rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.
+bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
+oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
+resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
+them yet. Not yet
+implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, wllama serving, a CLI
+command for the RL rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.
