@@ -193,3 +193,49 @@ test('soft instruction states replace exactly their trained text, need native-st
   assert.equal(innerTrace.adaptation.weights.status, 'degraded');
   assert.deepEqual(innerTrace.adaptation.weights.effective, []);
 });
+
+test('vLLM serving loads whole-stack exports and routes each call to its own stack by name', async () => {
+  const { createServer } = await import('node:http');
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { loadVllmStacks } = await import('../dist/cli/weights.js');
+  const { createResolvedModelSession } = await import('../dist/model/index.js');
+  const app = compile(files), program = app.manifest.adaptation, manifest = release(program, { memberships: false });
+  const binding0 = new host.WeightBinding(manifest, { executor: base });
+  const names = Object.fromEntries(manifest.bindings.map(entry => [entry.component.endsWith('inner.nl::instructions') ? 'inner' : 'outer',
+    host.stackServingName(binding0.resolve(entry.definitionId ?? '', entry.component, null).effective)]));
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-vllm-'));
+  mkdirSync(join(directory, 'vllm'));
+  writeFileSync(join(directory, 'vllm', 'stack-exports.json'), JSON.stringify(Object.entries(names).map(([who, identity]) => ({ identity, directory: identity,
+    artifacts: binding0.resolve('', manifest.bindings.find(b => b.component.endsWith(who === 'inner' ? 'inner.nl::instructions' : 'outer.nl::instructions')).component, null).effective.map(e => e.id) }))));
+  const loads = [], models = [];
+  const server = createServer((request, response) => {
+    let text = ''; request.on('data', chunk => { text += chunk; });
+    request.on('end', () => {
+      response.setHeader('content-type', 'application/json');
+      const body = text ? JSON.parse(text) : {};
+      if (request.url.endsWith('/load_lora_adapter')) { loads.push(body); return response.end('{}'); }
+      if (request.url.endsWith('/models')) return response.end(JSON.stringify({ data: [{ id: 'base', max_model_len: 8192 }] }));
+      models.push(body.model);
+      const tool = body.messages.at(-1).role === 'tool';
+      const opening = String(body.messages[1].content);
+      const code = opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
+      response.end(JSON.stringify({ choices: [{ index: 0, finish_reason: tool ? 'stop' : 'tool_calls', message: tool ? { role: 'assistant', content: 'done' }
+        : { role: 'assistant', content: '', tool_calls: [{ id: 'c', type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] } }] }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+    const loaded = await loadVllmStacks(endpoint, directory);
+    assert.deepEqual(loads.map(item => item.lora_name).sort(), Object.values(names).sort());
+    const session = createResolvedModelSession({ kind: 'external', endpoint, model: 'base', apiKeyEnv: 'NONE', vllm: true });
+    session.vllmStacks(loaded.names);
+    const driver = Object.assign((request, signal, options) => session.turn(request, signal, options), { decide: (r, s) => session.decide(r, s), contextWindow: () => session.contextWindow() });
+    const runtime = host.createNatlangRuntime({ program, model: driver, weights: [new host.WeightBinding(manifest, { executor: base, available: loaded.available })] });
+    assert.equal(await runtime.run(() => app.require('main.ts').default('hi')), 'HI');
+    assert.ok(models.includes(names.outer) && models.includes(names.inner), 'each call used its own whole-stack LoRA');
+    await session.close();
+  } finally { server.close(); }
+});

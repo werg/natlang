@@ -81,7 +81,7 @@ def export_stacks(release, stacks, out, *, family, hf_config, base_identity):
                         base_model_name_or_path=str(hf_config), stack_identity=identity)
         receipt = json.loads((target / 'natlang-export-receipt.json').read_text())
         exported.append({'identity': identity, 'directory': identity, 'receipt_sha256': receipt['receipt_sha256'],
-                         'ranks': receipt['ranks']})
+                         'ranks': receipt['ranks'], 'artifacts': [entry['id'] for entry in stack['entries']]})
     (out / 'stack-exports.json').write_text(json.dumps(exported, indent=1, sort_keys=True))
     return exported
 

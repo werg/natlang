@@ -1,4 +1,5 @@
 import { activeNativeAdapters } from '../native/model-recording.js';
+import { stackServingName } from '../adaptation/weights/binding.js';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -29,6 +30,7 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
   /** Requests carry native content parts (native-state imports); wrappers must keep this marker. */
   readonly neuralese?: boolean;
+  vllmStacks?(names: Iterable<string>): void;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
   turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
   /** Score finite replies (decision readout); fails with `decision-unsupported` where the backend cannot. */
@@ -214,9 +216,18 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
   const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
     headers: external!.headers, apiKey: environment[external!.apiKeyEnv], request: external!.request, owner: randomUUID() });
+  // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
+  const vllmLoaded = new Set<string>();
+  const vllmTunedRequest = () => {
+    const active = activeNativeAdapters();
+    if (!active.length) return undefined;
+    const name = stackServingName(active);
+    if (!vllmLoaded.has(name)) throw new Error(`weights-unavailable: stack ${name} is not loaded by the vLLM server; rerun natlang tune or restart`);
+    return { x_natlang_model_override: name };
+  };
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
-    ...(choice.kind === 'managed-local' ? { tunedRequest } : {}) });
+    ...(choice.kind === 'managed-local' ? { tunedRequest } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
   const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
     { contextWindow: () => serverContextWindow(options) }) : openai(options);
   let unscored: string | null = null;
@@ -320,6 +331,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
     neuralese: !!external?.neuraleseServer,
+    /** Record stacks the vLLM server has loaded (by serving name). */
+    vllmStacks(names: Iterable<string>) { for (const name of names) vllmLoaded.add(name); },
     slotPlan() { return plan; },
     async close() {
       closed = true;

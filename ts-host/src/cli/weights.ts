@@ -19,6 +19,8 @@ export type TunedServing = {
   weights?: readonly WeightBinding[];
   /** For the managed llama.cpp session: the GGUF adapters to load. */
   loraAdapters?: () => readonly { id: string; path: string }[];
+  /** Whole-stack LoRA names a vLLM server loaded, for its session's request routing. */
+  vllmStacks?: readonly string[];
   /** One author-facing line when the program is tuned but not served as tuned, else undefined. */
   notice?: string;
 };
@@ -43,6 +45,13 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
     const uploaded = await uploadRelease(store, directory);
     const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: uploaded, nativeState: true });
     return { weights: [binding], ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
+  }
+  if (choice.kind === 'external' && choice.vllm) {
+    const loaded = await loadVllmStacks(choice.endpoint, directory, { ...choice.headers,
+      ...(environment[choice.apiKeyEnv] ? { authorization: 'Bearer ' + environment[choice.apiKeyEnv] } : {}) });
+    const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: loaded.available, nativeState: false });
+    return { weights: [binding], vllmStacks: loaded.names,
+      ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
   }
   if (choice.kind !== 'managed-local') incompatible = `the ${choice.kind} backend does not serve tuned weights; use the managed local model or the native server`;
   else {
@@ -96,4 +105,28 @@ export async function uploadRelease(store: HttpNeuraleseStore, directory: string
     }
   }
   return served;
+}
+
+/**
+ * Load a release's whole-stack exports (`vllm/stack-exports.json`, written by tune/stack_export.py) into a vLLM server
+ * through its runtime LoRA API. The export paths must be visible to the server at the same absolute path. A stack that
+ * fails to load withdraws all its artifacts from `available`, so its bindings fall back coherently instead of failing.
+ */
+export async function loadVllmStacks(endpoint: string, directory: string, headers: Record<string, string> = {}):
+  Promise<{ names: string[]; available: Set<string> }> {
+  const index = join(directory, 'vllm', 'stack-exports.json');
+  if (!existsSync(index)) return { names: [], available: new Set() };
+  const stacks = JSON.parse(readFileSync(index, 'utf8')) as { identity: string; directory: string; artifacts?: string[] }[];
+  const root = endpoint.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  const names: string[] = [], available = new Set<string>(), withdrawn = new Set<string>();
+  for (const stack of stacks) {
+    const response = await fetch(root + '/v1/load_lora_adapter', { method: 'POST', headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ lora_name: stack.identity, lora_path: join(directory, 'vllm', stack.directory) }) }).catch(() => undefined);
+    // An adapter that is already loaded under the same name is the same content (names hash the stack entries).
+    const ok = !!response && (response.ok || /already/.test(await response.text().catch(() => '')));
+    if (ok) { names.push(stack.identity); for (const id of stack.artifacts ?? []) available.add(id); }
+    else for (const id of stack.artifacts ?? []) withdrawn.add(id);
+  }
+  for (const id of withdrawn) available.delete(id);
+  return { names, available };
 }

@@ -208,3 +208,8 @@ export class WeightBinding {
 export function weightBindingFor(bindings: readonly WeightBinding[] | undefined, programId: string | undefined): WeightBinding | undefined {
   return programId ? bindings?.find(binding => binding.programId === programId) : undefined;
 }
+
+/** The served name of a whole effective stack on one-adapter-per-request backends (vLLM): canonical in its entries. */
+export function stackServingName(entries: readonly { id: string; scale: number }[]): string {
+  return 'natlang-' + fingerprint(entries.map(entry => ({ id: entry.id, scale_hex: scaleHex(entry.scale) })), 'natlang.weights-stack-name/v1').slice(0, 32);
+}

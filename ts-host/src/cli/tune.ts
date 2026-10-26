@@ -23,7 +23,7 @@ import { activateRelease, currentManifest, readActive, readRelease, rollbackRele
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings } from '../tune/settings.js';
-import { uploadRelease } from './weights.js';
+import { loadVllmStacks, uploadRelease } from './weights.js';
 import { evaluateRelease, prepareData, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
 import { evaluateRoots } from '../tune/evaluate.js';
 import { protectedExamples, readRootExamples } from '../tune/collect.js';
@@ -95,6 +95,16 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             await session.prepare();
             const loaded = await uploadRelease(session.nativeArtifacts!()!, directory);
             return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
+          }
+          if (settings.backend === 'vllm') {
+            const serving = loadModelConfiguration(undefined);
+            if (serving.choice.kind !== 'external' || !serving.choice.vllm)
+              throw new Error('natlang tune: the vllm backend needs a default profile with vllm: true');
+            const session = createResolvedModelSession(serving.choice, process.env, process.stderr);
+            await session.prepare();
+            const loaded = await loadVllmStacks(serving.choice.endpoint, directory, serving.choice.headers ?? {});
+            session.vllmStacks?.(loaded.names);
+            return { driver: driverOf(session), loaded: loaded.available, close: () => session.close() };
           }
           const adapters = manifest.artifacts.filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(undefined);

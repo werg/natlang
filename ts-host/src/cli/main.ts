@@ -455,6 +455,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const program = inventory.manifest.adaptation!;
   const tuned = await discoverWeights(parsed, spec.root, program, choice);
   const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
       ...(model.neuralese ? { neuralese: true as const } : {}) });
@@ -558,6 +559,7 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const program = inventory?.manifest.adaptation;
   const tuned = tunedRoot ? await discoverWeights(parsed, tunedRoot, program, choice) : {};
   const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
   const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),

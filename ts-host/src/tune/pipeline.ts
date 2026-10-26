@@ -12,7 +12,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
-import { WeightBinding } from '../adaptation/weights/binding.js';
+import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
 import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample } from './collect.js';
@@ -159,7 +159,37 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
     }
     return sealed;
   });
+  if (options.settings.backend === 'vllm') await timed(timings, 'export-stacks', log, () => exportVllmStacks(options, manifest));
   return { manifest, reused };
+}
+
+/** One whole-stack PEFT LoRA per distinct effective stack (vLLM applies one adapter per request), named canonically. */
+async function exportVllmStacks(options: TuneOptions, manifest: WeightManifest): Promise<void> {
+  const directory = dirname(releaseFile(options.root, manifest.digest)), out = join(directory, 'vllm');
+  if (existsSync(join(out, 'stack-exports.json'))) return;
+  const binding = new WeightBinding(manifest, {});
+  const stacks = new Map<string, { identity: string; entries: { id: string; scale: number; node: string }[] }>();
+  for (const entry of manifest.bindings) {
+    const effective = binding.resolve(entry.definitionId ?? '', entry.component, entry.contextId).effective;
+    if (effective.length) stacks.set(stackServingName(effective), { identity: stackServingName(effective), entries: effective.map(({ id, scale, node }) => ({ id, scale, node })) });
+  }
+  mkdirSync(out, { recursive: true });
+  const stacksPath = join(out, 'stacks.json');
+  writeFileSync(stacksPath, JSON.stringify([...stacks.values()], null, 1));
+  const { student } = options;
+  if (!student.hfConfigDir) throw new Error('vLLM stack export needs tune.students.<name>.hfConfigDir');
+  // The student's Python entry, pointed at the stack exporter instead of the trainer.
+  const module = student.trainer.indexOf('-m');
+  if (module < 0) throw new Error('vLLM stack export derives its Python entry from a `-m` trainer argv');
+  const argv = [...student.trainer.slice(0, module + 1), 'natlang_neuralese.tune.stack_export',
+    '--release', directory, '--stacks', stacksPath, '--module-map', student.moduleMap, '--hf-config', student.hfConfigDir, '--out', out];
+  await new Promise<void>((resolveRun, reject) => {
+    const child = spawn(argv[0]!, argv.slice(1), { cwd: student.workdir ?? process.cwd(), env: { ...process.env, ...student.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let tail = ''; const keep = (chunk: Buffer) => { tail = (tail + chunk.toString()).slice(-4000); };
+    child.stdout.on('data', keep); child.stderr.on('data', keep);
+    child.once('error', reject);
+    child.once('exit', code => code === 0 ? resolveRun() : reject(new Error(`stack export exited with ${code}\n${tail.trim()}`)));
+  });
 }
 
 /** Load a stored release on the backend and evaluate it (and optionally other arms) over examples, strictly. */

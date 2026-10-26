@@ -41,7 +41,7 @@ export type TuneSettings = {
   readonly students: Readonly<Record<string, StudentSettings>>;
   /** A model profile name: the authorized teacher that executes the program during collection. */
   readonly teacher: string;
-  readonly backend: 'managed-local' | 'native';
+  readonly backend: 'managed-local' | 'native' | 'vllm';
   /** Default trainer recipe fields (natlang_neuralese.tune.trainer.Recipe), shared across programs. */
   readonly recipe?: Readonly<Record<string, unknown>>;
   /** Placement envelope (plan §5.2). */
