@@ -104,7 +104,7 @@ export type BrowserPi = {
 };
 
 const isStorage = (value: unknown): value is Storage => typeof (value as Storage).commit === 'function';
-const isStore = (value: unknown): value is NeuraleseStore => typeof (value as NeuraleseStore).put === 'function';
+const isStore = (value: unknown): value is NeuraleseStore => typeof (value as NeuraleseStore).putNativeState === 'function';
 const isModels = (agent: BrowserAgent | AgentModels): agent is AgentModels => 'models' in agent;
 
 /**

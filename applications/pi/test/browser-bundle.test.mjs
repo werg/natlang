@@ -145,26 +145,26 @@ test('a coding task runs end to end on a virtual folder with the browser modules
   await envs.cleanup(context);
 });
 
-test('the session falls back to memory where OPFS cannot hold a database; blocks go to the OPFS block store', async () => {
+test('the session falls back to memory where OPFS cannot hold a database; native artifacts go to the OPFS store', async () => {
   const reports = [];
   const { kind } = await pi.openBrowserSession('pi-session', error => reports.push(error.message));
   assert.equal(kind, 'memory');
   assert.match(reports[0], /dedicated worker/);
-  // A Neuralese agent's blocks: the browser entry archives them in OPFS (here a stand-in), and the runtime keeps them.
+  // A native-state agent's artifacts: the browser entry archives them in OPFS (here a stand-in), and the runtime keeps them.
   const opfs = fakeOpfs();
   seen.length = 0;
   const info = createServer((request, response) => {
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ dialects: ['d1'], width: 8, dtype: 'f32', max_block_length: 32 }));
+    response.end(JSON.stringify({ dialects: ['native-state/lfm2'], native_state: { enabled: true } }));
   });
   await new Promise(resolve => info.listen(0, '127.0.0.1', resolve));
   try {
     const opened = await pi.openBrowserPi({ natlang: browser.createNatlangRuntime({ model: scriptedModel(() => null).driver }),
-      agent: { endpoint: `http://127.0.0.1:${info.address().port}`, model: 'fake', reader: 'd1' },
-      folder: new pi.Folder({}), session: new (await sqlite3InitModule()).oo1.DB(':memory:'), blocks: opfs.storage });
+      agent: { endpoint: `http://127.0.0.1:${info.address().port}`, model: 'fake', reader: 'native-state' },
+      folder: new pi.Folder({}), session: new (await sqlite3InitModule()).oo1.DB(':memory:'), nativeArtifacts: opfs.storage });
     assert.equal(opened.session, 'sqlite');
-    assert.ok(opened.natlang.options.neuralese.store, 'the runtime has the block archive');
-    assert.ok(opfs.root.directories.has('natlang-neuralese-blocks'), 'the archive is in OPFS');
+    assert.ok(opened.natlang.options.neuralese.store, 'the runtime has the native artifact archive');
+    assert.ok(opfs.root.directories.has('natlang-native-artifacts'), 'the archive is in OPFS');
     await opened.close();
   } finally { info.close(); }
 });
