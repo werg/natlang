@@ -1257,3 +1257,15 @@ def test_previous_whole_facade_policy_derives_from_unchanged_validation_law():
         'hashing':scoped_python_policy(package/'common/hashing.py',('canonical_json_sha256_hex',))}
     assert converter.canonical_json_sha256_hex(previous)=='2ebde0101c9d93116285ae9f7deedacadfaca151e81943002e6317b47fef96d4'
     assert converter._content_index_policy_sha256()==converter._REVIEWED_LEGACY_CONTENT_CACHE['policy_sha256']
+
+
+def test_bound_materializer_source_planning_scope_does_not_fabricate_guided_parent_review():
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import reviewed_guided_decision_authority
+    record = {'collection_guidance': {'training_admission': False},
+              'training_admission': {'approved': True, 'kind': 'exact-native-runtime-oracle',
+                                     'collection_guidance_scope': 'source'}}
+    assert reviewed_guided_decision_authority(record, review_bound=False) == {}
+    record['training_admission']['collection_guidance_scope'] = 'actions'
+    record.update(source_ref={'trajectory_id': 'test'}, decision={'index': 0}, target={})
+    with pytest.raises(ValueError, match='exact sampled target'):
+        reviewed_guided_decision_authority(record, review_bound=False)

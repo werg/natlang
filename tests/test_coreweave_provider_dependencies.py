@@ -814,6 +814,68 @@ def test_foundation_recovery_dependency_binding_omission_and_tampering_fail_clos
         deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
 
 
+def test_checkpoint_dependency_closure_includes_selected_source_correction_proof_and_rows(tmp_path):
+    import torch
+    from natlang_neuralese.train.native_source_correction import SCHEMA
+    rows=write(tmp_path/'correction-rows.jsonl',json.dumps({'id':'edge','disposition':'deferred'})+'\n')
+    proof=write(tmp_path/'correction.json',{'schema':SCHEMA,'model_id':'lfm2:inventory',
+        'stage_id':'native_full_sft','row_bindings_path':rows['path'],'row_bindings_sha256':rows['sha256']})
+    reference={'path':proof['path'],'sha256':proof['sha256']}
+    training={'schema':'natlang.neuralese-native-sft-training/1','options':{
+        'source_correction_history':[{'proof_path':proof['path'],'proof_sha256':proof['sha256']}],
+        'source_correction_binding':reference},'sft_progress':{}}
+    checkpoint=tmp_path/'state.pt';torch.save({'training':training},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    paths={item['path'] for item in deps.dependency_closure(
+        {'parent_checkpoint':binding},namespace=str(tmp_path))['files']}
+    assert paths >= {str(checkpoint.resolve()),proof['path'],rows['path']}
+    alternate=write(tmp_path/'alternate-proof.json',Path(proof['path']).read_text())
+    training['options']['source_correction_binding']={'path':alternate['path'],'sha256':proof['sha256']}
+    torch.save({'training':training},checkpoint)
+    binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    with pytest.raises(ValueError,match='absent from its history'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    training['options']['source_correction_binding']=reference
+    torch.save({'training':training},checkpoint)
+    binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    Path(rows['path']).write_text('changed ledger\n')
+    with pytest.raises(ValueError,match='row ledger changed'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+
+def test_checkpoint_dependency_closure_keeps_held_only_correction_proof_for_other_objectives(tmp_path):
+    import torch
+    from natlang_neuralese.train.native_source_correction import SCHEMA
+    train_rows=write(tmp_path/'source-rows.jsonl',json.dumps({'id':'sft-row'})+'\n')
+    held_rows=write(tmp_path/'held-rows.jsonl',json.dumps({'id':'held-row'})+'\n')
+    proof=write(tmp_path/'sft-correction.json',{'schema':SCHEMA,'model_id':'lfm2:inventory',
+        'stage_id':'native_full_sft','row_bindings_path':train_rows['path'],
+        'row_bindings_sha256':train_rows['sha256'],
+        'protected_held_correction':{'schema':'natlang.native-protected-held-correction/1',
+            'prior_source':{'path':'/held/old.json','sha256':'a'*64},
+            'current_source':{'path':'/held/new.json','sha256':'b'*64},
+            'row_bindings_path':held_rows['path'],'row_bindings_sha256':held_rows['sha256']}})
+    record={'proof_path':proof['path'],'proof_sha256':proof['sha256'],'origin_stage_id':'native_full_sft',
+        'prior_source':{'path':'/held/old.json','sha256':'a'*64},
+        'current_source':{'path':'/held/new.json','sha256':'b'*64},
+        'row_bindings_path':held_rows['path'],'row_bindings_sha256':held_rows['sha256'],
+        'weights_optimizer_rng_exposure':'preserved','held_observation_credit_from_correction':0}
+    reference={'path':proof['path'],'sha256':proof['sha256']}
+    dpo={'schema':'natlang.neuralese-native-sft-training/1','options':{
+        'stage_id':'native_offline_preference','held_correction_history':[record],
+        'held_correction_binding':reference},'sft_progress':{}}
+    checkpoint=tmp_path/'dpo-state.pt';torch.save({'training':dpo},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    paths={row['path'] for row in deps.dependency_closure(
+        {'parent_checkpoint':binding},namespace=str(tmp_path))['files']}
+    assert paths >= {str(checkpoint.resolve()),proof['path'],train_rows['path'],held_rows['path']}
+    dpo['options']['held_correction_binding']={'path':str(tmp_path/'other.json'),
+        'sha256':proof['sha256']}
+    torch.save({'training':dpo},checkpoint);binding['sha256']=deps.sha256_file_hex_cached(checkpoint)
+    with pytest.raises(ValueError,match='absent from its history'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+
 def test_unselected_stale_foundation_bindings_are_not_runtime_dependencies(tmp_path):
     import torch
     absent={'path':str(tmp_path/'obsolete-proof.json'),'sha256':'a'*64,'bytes':1}

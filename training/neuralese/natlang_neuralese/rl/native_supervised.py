@@ -30,7 +30,7 @@ SOURCE_ARGUMENTS = {
     **{role: ('--'+role.replace('_','-'), role) for role in
        ('foundation_native_graphs', 'foundation_declaration_recovery', 'pending_native_sources', 'continued_native_graphs',
         'continued_held_native_graphs', 'withdrawn_native_graphs', 'unavailable_native_sources',
-        'ce_supervision_policy', 'source_classification_migration', 'foundation_qualification_request')},
+        'ce_supervision_policy', 'source_classification_migration', 'source_correction', 'foundation_qualification_request')},
 }
 
 

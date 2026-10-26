@@ -722,9 +722,11 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
                       previous_result=None, objective=None, stop_requested=None):
     from .native_held import held_selection
     coverage = coverage or {}
+    quality_excluded_ids = set(coverage.get('quality_excluded_ids') or ())
     indices, next_coverage, selection = held_selection(source.entries, coverage,
         source_sha256=source.file_sha256, token_budget=args.held_eval_tokens,
-        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args), previous_result=previous_result)
+        graph_budget=args.held_eval_graphs, final=final and _full_held_requested(args),
+        previous_result=previous_result, excluded_ids=quality_excluded_ids)
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
@@ -738,13 +740,24 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
         next_coverage,selection=commit_held_observations(source.entries,coverage,next_coverage,selection,observed)
         actual_count=len(observed);cursor=next_coverage['cursor']
     else:actual_count=len(indices)
-    result.update(scope='full' if actual_count == len(source) else 'cadence-subset',
+    result.update(scope='full' if actual_count == len(source) and not quality_excluded_ids else 'cadence-subset',
                   terminal_policy=getattr(args,'held_final_policy','budgeted'),
                   full_sweep_requested=bool(final and _full_held_requested(args)),
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
                   cursor_after=cursor, seconds=time.monotonic()-started,
                   selection=selection)
+    if quality_excluded_ids:
+        hold_binding = coverage.get('quality_hold_binding') or {}
+        result['held_quality_hold'] = {
+            'excluded_rows': len(quality_excluded_ids),
+            'excluded_ids_sha256': canonical_json_sha256_hex(sorted(quality_excluded_ids)),
+            'manifest_path': hold_binding.get('path'),
+            'manifest_sha256': hold_binding.get('sha256'),
+            'row_bindings_path': hold_binding.get('row_bindings_path'),
+            'row_bindings_sha256': hold_binding.get('row_bindings_sha256'),
+            'full_held_qualification': False,
+            'reason': 'known truncated held targets remain protected but are not scored'}
     declaration_path = getattr(args, 'ce_supervision_policy', None)
     if declaration_path is not None and objective is None:
         result['additional_ce_policy'] = {'path':str(declaration_path),
@@ -932,6 +945,8 @@ def build_parser():
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--source-classification-migration', type=Path,
         help='explicit source-bound index/progress classification continuation')
+    parser.add_argument('--source-correction', type=Path,
+        help='exact old-to-corrected native row transition; preserves optimizer/RNG and resets corrected-row exposure')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--refresh-foundation-readiness', action=argparse.BooleanOptionalAction, default=False,
@@ -1305,6 +1320,10 @@ def _main(argv=None, *, requested_refresh):
                 raise ValueError('native continuation changed its preserved recipe lineage')
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     checkpoint_options['source_availability_history']=list((saved_training.get('options') or {}).get('source_availability_history') or [])
+    checkpoint_options['source_correction_history']=list((saved_training.get('options') or {}).get('source_correction_history') or [])
+    checkpoint_options['source_correction_binding']=(saved_training.get('options') or {}).get('source_correction_binding')
+    checkpoint_options['held_correction_history']=list((saved_training.get('options') or {}).get('held_correction_history') or [])
+    checkpoint_options['held_correction_binding']=(saved_training.get('options') or {}).get('held_correction_binding')
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
     if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
@@ -1391,6 +1410,7 @@ def _main(argv=None, *, requested_refresh):
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     source_order = train.ordered_ids()
+    source_correction_result = {'changed': False}
     from .native_pending_sources import load_pending_sources
     checkpoint_options['_pending_native_source_declarations'] = [
         load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
@@ -1512,6 +1532,10 @@ def _main(argv=None, *, requested_refresh):
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
+    if args.source_correction is not None and resume is None:
+        raise ValueError('native source correction requires the exact saved SFT predecessor frame')
+    if args.source_correction is not None and args.continued_native_graphs is None:
+        raise ValueError('native source correction requires its declared predecessor graph source')
     ce_prior_options = (resume or {}).get('options') or saved_options
     previous_ce = ce_prior_options.get('ce_supervision_policy_binding')
     inherited_ce = saved_options.get('ce_supervision_policy_binding') or previous_ce
@@ -1596,6 +1620,44 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
+        if args.source_correction is not None:
+            from .native_source_correction import apply_source_correction
+            protected_held = None
+            correction_document = json.loads(Path(args.source_correction).read_text())
+            if correction_document.get('protected_held_correction') is not None:
+                if args.continued_held_native_graphs is None:
+                    raise ValueError('protected held correction requires its exact continued held source')
+                prior_held_source = NativeGraphSource(args.continued_held_native_graphs, fingerprint,
+                    required_split='test', role_ids=roles.ids)
+                protected_held = {
+                    'prior_receipt': source_receipt(prior_held_source),
+                    'current_receipt': source_receipts[1],
+                    'prior_bindings': prior_held_source.bindings,
+                    'current_bindings': held_row_bindings,
+                    'prior_order': prior_held_source.ordered_ids(),
+                    'current_order': held.ordered_ids(),
+                    'prior_entries': prior_held_source.entries,
+                    'current_entries': held.entries,
+                    'prior_groups': prior_held_source.groups,
+                    'current_groups': held.groups,
+                    'prior_groups_by_id': {entry['id']: entry['groups'] for entry in prior_held_source.entries},
+                    'current_groups_by_id': {entry['id']: entry['groups'] for entry in held.entries},
+                }
+            resume, source_correction_result = apply_source_correction(
+                resume, args.source_correction, model_id=config['architecture'] + ':' + config['base_inventory_sha256'],
+                stage_id=args.stage_id or 'native-graph-ce', current_source_receipt=source_receipts[0],
+                current_bindings=source_row_bindings, current_order=source_order,
+                current_communication_ids=[entry['id'] for entry in train.entries if entry.get('communication')],
+                protected_held=protected_held)
+            saved_training = resume
+            saved_options = saved_training.get('options') or {}
+            carried_progress = collect_sft_progress(saved_training)
+            checkpoint_options['source_correction_binding'] = saved_options.get('source_correction_binding')
+            checkpoint_options['source_correction_history'] = list(saved_options.get('source_correction_history') or [])
+            checkpoint_options['held_correction_binding'] = saved_options.get('held_correction_binding')
+            checkpoint_options['held_correction_history'] = list(saved_options.get('held_correction_history') or [])
+            checkpoint_options['foundation_qualification_history'] = list(
+                saved_options.get('foundation_qualification_history') or [])
         previous = _resume_identity_for_comparison(resume.get('identity'))
         verify_failure_repair_objective_continuation(previous,resume.get('options') or {},
             objective,args.stage_id or args.out.name)
@@ -1650,11 +1712,23 @@ def _main(argv=None, *, requested_refresh):
             checkpoint_options['offline_objective_revisions'].append(transition)
         if (parent_continuation and args.objective_continuation) or offline_tweak:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
-        if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
-            raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
+        identity_mismatches = [key for key in stable
+            if previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key)]
+        if identity_mismatches:
+            raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity: '
+                             + ', '.join(identity_mismatches))
         # MuonSR retains its constructor's NS variant on state restoration;
         # switching the update approximation preserves compatible moment state.
-        if restored_progress or not (parent_continuation and args.objective_continuation):
+        if (source_correction_result.get('changed', False)):
+            # The correction proof already checked every retained, corrected,
+            # deferred, and appended row against the exact predecessor source.
+            # Ordinary append-only validation cannot express a same-ID row
+            # whose supervised graph was explicitly replaced. Keep the held
+            # source immutable even across this one authorized transition.
+            if not source_correction_result.get('protected_held_rows'):
+                append_only_rows(resume.get('held_row_bindings') or {}, held_row_bindings,
+                                 label='held-source')
+        elif restored_progress or not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
             prior_order = resume.get('source_row_order') or []
@@ -1781,6 +1855,33 @@ def _main(argv=None, *, requested_refresh):
                 for key in ('held', 'task_eval', 'task_checkpoint_sha256', 'task_native_identity'):
                     metrics.pop(key, None)
                 _retain_current_held_coverage(metrics,saved_training,held)
+        held_quality_binding = ((resume or saved_training or {}).get('options') or {}).get('held_quality_hold_binding')
+        held_options = (resume or saved_training or {}).get('options') or {}
+        from .native_source_correction import validate_held_correction_history
+        held_correction_history, held_correction_binding = validate_held_correction_history(
+            held_options, held_receipt=source_receipts[1])
+        del held_options
+        checkpoint_options['held_correction_history'] = held_correction_history
+        checkpoint_options['held_correction_binding'] = held_correction_binding
+        held_quality_excluded_ids = set()
+        if held_quality_binding is not None:
+            from .native_source_correction import validate_held_quality_hold
+            if held_quality_binding.get('source_sha256') != source_receipts[1]['sha256']:
+                raise ValueError('held quality hold source differs from the active protected held receipt')
+            quality = validate_held_quality_hold(held_quality_binding,
+                held_receipt=source_receipts[1], held_entries=held.entries)
+            if (quality['row_bindings']['path'] != held_quality_binding.get('row_bindings_path')
+                    or quality['row_bindings']['sha256'] != held_quality_binding.get('row_bindings_sha256')
+                    or quality['excluded_rows'] != held_quality_binding.get('excluded_rows')):
+                raise ValueError('held quality hold binding differs from its authenticated row ledger')
+            held_quality_excluded_ids = quality['excluded_ids']
+            from .native_held import bind_held_quality_exclusions
+            metrics['held_coverage'] = bind_held_quality_exclusions(held.entries,
+                metrics.get('held_coverage'), held_quality_excluded_ids,
+                source_sha256=held.file_sha256,
+                allow_transition=bool(source_correction_result.get('changed')))
+            metrics['held_coverage']['quality_hold_binding'] = dict(held_quality_binding)
+            checkpoint_options['held_quality_hold_binding'] = dict(held_quality_binding)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
         # Avoid locals(): its cached frame dictionary retains every setup
@@ -1916,6 +2017,7 @@ def _main(argv=None, *, requested_refresh):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed
         or args.native_shared_execution is not None and args.native_shared_execution!=previous_shared_declaration

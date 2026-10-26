@@ -2,7 +2,9 @@ import copy
 
 import pytest
 
-from natlang_neuralese.train.native_held import held_selection,commit_held_observations
+from natlang_neuralese.train.native_held import (held_selection, commit_held_observations,
+    bind_held_quality_exclusions)
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 
 
 @pytest.mark.parametrize('final',[False,True])
@@ -91,6 +93,58 @@ def test_legacy_append_uses_actual_previous_source_size():
     assert state['classes']['ordinary']['visits'] == [2, 2, 1]
     assert state['classes']['communication']['visits'] == [1, 1, 1]
     assert state['graph_visits'] == 8
+
+
+def test_quality_hold_skips_bad_held_rows_and_keeps_full_coverage_incomplete():
+    entries = rows(4, 4)
+    held = {'ordinary-1', 'communication-2'}
+    indices, coverage, proof = select(entries, final=True, excluded_ids=held)
+    assert indices == [0, 2, 3, 4, 5, 7]
+    assert proof['quality_excluded_ids'] == sorted(held)
+    assert coverage['source_graphs'] == 8
+    assert coverage['quality_excluded_ids'] == sorted(held)
+    assert coverage['classes']['ordinary']['visits'] == [1, 0, 1, 1]
+    assert coverage['classes']['communication']['visits'] == [1, 1, 0, 1]
+    assert coverage['completed_sweeps'] == 0
+
+
+def test_quality_hold_transition_resets_only_excluded_visits_and_is_explicit():
+    entries = rows(3, 3)
+    _, coverage, _ = select(entries, final=True)
+    with pytest.raises(ValueError,match='explicit held correction'):
+        bind_held_quality_exclusions(entries,coverage,{'ordinary-1'},source_sha256='a'*64)
+    rebound = bind_held_quality_exclusions(entries, coverage,
+        {'ordinary-1', 'communication-2'}, source_sha256='a'*64, allow_transition=True)
+    assert rebound['classes']['ordinary']['visits'] == [1, 0, 1]
+    assert rebound['classes']['communication']['visits'] == [1, 1, 0]
+    indices, after, proof = select(entries, rebound, graph_budget=4,
+                                  excluded_ids={'ordinary-1', 'communication-2'})
+    assert not ({1, 5} & set(indices))
+    assert proof['quality_excluded_ids'] == ['communication-2', 'ordinary-1']
+    with pytest.raises(ValueError, match='exclusion set differs'):
+        select(entries, after, graph_budget=4, excluded_ids={'ordinary-1'})
+
+
+def test_new_quality_exclusion_retires_exact_visits_and_token_total_idempotently():
+    entries = rows(3, 2)
+    _, coverage, _ = select(entries, final=True)
+    assert coverage['forward_token_visits'] == 15
+    before = copy.deepcopy(coverage)
+    rebound = bind_held_quality_exclusions(entries, coverage, {'ordinary-1'},
+        source_sha256='a'*64, allow_transition=True)
+    assert coverage == before
+    assert rebound['classes']['ordinary']['visits'] == [1, 0, 1]
+    assert rebound['classes']['communication']['visits'] == [1, 1]
+    assert rebound['graph_visits'] == 4
+    assert rebound['forward_token_visits'] == 12
+    assert rebound['retired_target_visit_history'] == [{
+        'id':'ordinary-1','class':'ordinary',
+        'old_binding_sha256':canonical_json_sha256_hex('ordinary-binding-1'),
+        'visits':1,'forward_tokens_per_visit':3,'retired_forward_token_visits':3,
+        'reason':'held target excluded from loss scoring'}]
+    again = bind_held_quality_exclusions(entries, rebound, {'ordinary-1'},
+        source_sha256='a'*64, allow_transition=True)
+    assert again == rebound
 
 
 @pytest.mark.parametrize('ordinary,communication', [(0, 5), (5, 0)])

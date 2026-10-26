@@ -33,8 +33,10 @@ def live(tmp_path):
     entry=tmp_path/'supervisor.py';entry.write_text('import sys,json,subprocess;'
         'p=subprocess.Popen(json.loads(sys.argv[1]),stdin=subprocess.PIPE);'
         'print(p.pid,flush=True);sys.stdin.buffer.read();p.communicate()\n')
+    child_repo=tmp_path/'actual-child-repo';child_repo.mkdir()
+    expected_env={'PYTHONPATH':str(fake),'NATLANG_REPO':str(child_repo)}
     p=subprocess.Popen([sys.executable,str(entry),json.dumps(argv)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                       text=True,env={**os.environ,'PYTHONPATH':str(fake)})
+                       text=True,env={**os.environ,**expected_env})
     try:
         child=int(p.stdout.readline());owner=handoff.observe(p.pid);learner=handoff.observe(child)
         launch=tmp_path/'original-launch.json';write(launch,{**owner,'source':str(entry)})
@@ -42,7 +44,7 @@ def live(tmp_path):
                                 historical_package=module.parent)
         intent=handoff.capture_drain_intent(observed,tmp_path/'drain-intent.json')
         yield dict(captured=json.loads(Path(intent['path']).read_text()),observed=json.loads(Path(observed['path']).read_text()),
-                   intent=intent,owner=owner,child=learner,entry=entry,argv=argv,tmp=tmp_path)
+                   intent=intent,owner=owner,child=learner,entry=entry,argv=argv,tmp=tmp_path,expected_env=expected_env)
     finally:
         p.communicate(timeout=10)
 
@@ -51,7 +53,7 @@ def test_actual_live_bridge_follows_current_os_request_and_import_environment(li
     value,argv,refs=runtime._owned_launch_chain({'intent':live['intent']})
     assert argv==live['argv'] and value['startup_capture_claimed'] is False
     assert value['owner']['pid']==live['owner']['pid'] and value['child']['pid']==live['child']['pid']
-    assert set(value['env'])=={'PYTHONPATH'}
+    assert value['env']==live['expected_env']
     assert refs['supervisor']==binding(live['entry'])
 
 
