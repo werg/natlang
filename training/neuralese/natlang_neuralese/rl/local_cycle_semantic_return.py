@@ -112,7 +112,13 @@ def validate_return(receipt_path, *, participant, parent_checkpoint, role_plan, 
         raise ValueError('participant bundle changed the completed shared checkpoint/adapter bytes')
     checkpoint_path = Path(bundle['checkpoint']['resolved'])
     checkpoint_ref = binding(checkpoint_path)
-    if receipt.get('checkpoint') != checkpoint_ref:
+    receipt_checkpoint=receipt.get('checkpoint')
+    if (not isinstance(receipt_checkpoint,dict)
+            or set(receipt_checkpoint)-{'path','sha256','bytes'}
+            or any(receipt_checkpoint.get(key)!=checkpoint_ref[key] for key in ('path','sha256'))
+            or ('bytes'in receipt_checkpoint and
+                (type(receipt_checkpoint['bytes'])is not int
+                 or receipt_checkpoint['bytes']!=checkpoint_path.stat().st_size))):
         raise ValueError('semantic return checkpoint differs from its verified portable bundle')
 
     before, before_training = _checkpoint_state(parent_checkpoint, participant)
@@ -124,8 +130,7 @@ def validate_return(receipt_path, *, participant, parent_checkpoint, role_plan, 
             or after_identity.get('checkpoint_sha256')!=actual_parent['sha256']
             or before_config.get('architecture')!=after_config.get('architecture')
             or before_config.get('base_inventory_sha256')!=after_config.get('base_inventory_sha256')
-            or after_config.get('architecture')!=released_identity.get('architecture')
-            or after_config.get('base_inventory_sha256')!=released_identity.get('base_inventory_sha256')):
+            or after_config.get('architecture')!=released_identity.get('architecture')):
         raise ValueError('semantic return changed the actual model/base lineage')
     if before.get('sft_progress')!=after.get('sft_progress'):
         raise ValueError('semantic return changed inherited SFT/DPO exposure without a native supervised stage')

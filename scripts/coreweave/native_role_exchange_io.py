@@ -96,7 +96,11 @@ class NativeRoleExchangeIO:
             raise TimeoutError('local source-host metadata command timed out')from error
         if result.returncode:
             raise RuntimeError('local source-host metadata command failed: '+str(result.returncode))
-        return result.stdout.decode('utf-8')
+        output=result.stdout.decode('utf-8')
+        # Keep the local adapter's value contract identical to SDKIO.remote:
+        # source-host expressions print JSON, and the SDK adapter returns the
+        # decoded value rather than its serialized stdout representation.
+        return json.loads(output)if output.strip()else None
 
     def source_host_controls(self,sid):
         if sid in self.config['sandboxes']:return self.config['sandboxes'][sid].get('role_controls')

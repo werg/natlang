@@ -400,7 +400,7 @@ def test_genuine_semantic_load_after_transport_recovers_original_legacy_recipe_a
         identity={'optimizer_options':{'lr':.001,'weight_decay':.1,'latent_ns':'quintic',
             'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None},
             'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16}},
-        options={'stage_id':'graph','epochs':1},fp8=None)
+        options={'stage_id':'graph','epochs':1,'optimizer_state_storage':'cpu'},fp8=None)
     parent=tmp_path/'source-host/legacy.pt';parent.parent.mkdir()
     torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),'training':training},parent)
     identity=native_identity(model,config,checkpoint_sha256=sha256_file_hex(parent))
@@ -427,6 +427,8 @@ def test_genuine_semantic_load_after_transport_recovers_original_legacy_recipe_a
     roles.install_checkpoint_alias(original,pinned)
     loaded=load_participant('lfm',selected,semantic,'cpu')
     assert loaded.recipe_binding==receipt['recipe']
+    assert loaded.optimizer_state_storage=='cpu'
+    assert loaded.optimizer.latent.state_storage=='cpu'
     equal_tree(loaded.optimizer.state_dict(),optimizer.state_dict())
     assert loaded.sft_progress['graph']['exposure_counts']==training['exposure_counts']
     terminal.unlink()

@@ -162,6 +162,7 @@ def _immutable(path,value):
 
 
 def _local_cycle_source(plan):
+    from ..train.native_readiness import _bound
     source=plan.get('local_cycle_source')
     if not isinstance(source,dict) or source.get('schema')!='natlang.native-local-cycle-source/1':
         raise ValueError('local-cycle source owner needs its explicit current-state adapter')
@@ -364,6 +365,7 @@ def proof_dependencies(proof):
 def _local_cycle_state(plan_path,*,kind):
     """Validate current local-cycle checkpoint and build the ordinary role-proof envelope."""
     from ..train.native_readiness import validate_ready,_bound
+    from ..model.native_model import CHECKPOINT_SCHEMA
     from ..model.native_shared_checkpoint import SHARED_SCHEMA
 
     plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
@@ -475,10 +477,10 @@ def publish_local_cycle(plan_path,*,kind):
     plan,source,owned,exchange,state,ready_by_id,value=_local_cycle_state(plan_path,kind=kind)
     if state is None:return None
     lock_path=Path(source['optimizer_owner_lock'])
+    from ..train.native_resident import process_owner
     if kind=='eligible':
         # The caller is the local-cycle owner and owns the canonical lock. A
         # third-party relay cannot manufacture current eligibility.
-        from ..train.native_resident import process_owner
         from .native_raw_handoff import same_process
         if not same_process(state['owner'],process_owner())or not owner_lock_held(lock_path):
             raise ValueError('local-cycle eligibility may only be published by its live optimizer owner')
@@ -1292,8 +1294,13 @@ def export_local_cycle_returns(plan_path,completion_reference,role_plan_referenc
         'execution_signature':canonical_json_sha256_hex({'completion':completion_reference['sha256']})}})
     curriculum=json.loads(_bound(completion['curriculum']).read_text())
     adoption=curriculum.get('snapshot_adoption')or{}
+    adopted_plan=adoption.get('plan');actual_plan=binding(plan_path)
     if (adoption.get('schema')!='natlang.native-snapshot-adoption/1'
-            or adoption.get('plan')!=binding(plan_path)):
+            or not isinstance(adopted_plan,dict)
+            or set(adopted_plan)-{'path','sha256','bytes'}
+            or any(adopted_plan.get(key)!=actual_plan[key] for key in ('path','sha256'))
+            or ('bytes'in adopted_plan and (type(adopted_plan['bytes'])is not int
+                or adopted_plan['bytes']!=actual_plan['bytes']))):
         raise ValueError('shared completion does not descend from this exact role plan')
     releases={}
     for reference in adoption.get('releases',[]):
@@ -1398,6 +1405,7 @@ def _semantic_completion_dependencies(completion_path,completion):
 
 def validate_local_cycle_return(plan_path,receipt_path):
     """Verify a transported return against the exact locally released owner."""
+    from .local_cycle_semantic_return import validate_return
     plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
     source=_local_cycle_source(plan);owned,exchange=ownership(plan)
     if len(owned)!=1:raise ValueError('one local-cycle return must name one exact participant')
