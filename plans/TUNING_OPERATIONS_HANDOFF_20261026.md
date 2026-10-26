@@ -74,6 +74,13 @@ a new pool). The base student as teacher produced prose without tool calls and 0
 passes `services: example => ({ ... })` in the tune options: fresh, test or sandbox services per root, never
 production systems, because collection, evaluation and rollouts call them.
 
+## Active operations
+
+The owner adopted this capability as an operational lane on 2026-10-26.
+[PROGRAM_TUNING_RUNS_20261026.md](PROGRAM_TUNING_RUNS_20261026.md) records the first three grouped program workloads,
+earned LFM parent, authorized teacher collection, SFT/whole-graph RL progression, recovery and production feedback.
+Use its actual run receipts for status; the mechanism inventory below does not establish measured capability lift.
+
 ## Runs to perform
 
 1. **First real tune, LFM2.5-350M, GPU.** A program with ≥30 root examples with `expected` and `group`
