@@ -674,11 +674,37 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
         result = result[..., :head_width]
         return result if physical_rows is None else result.index_select(2, physical_rows)
 
-    if not q.is_cuda and q.dtype == torch.bfloat16 and k.dtype == v.dtype == torch.float32:
-        from ..common.native_attention_carrier import cpu_kv_carrier_attention
-        return cpu_kv_carrier_attention(q,k,v,mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device,window),scale=scale)[..., :head_width]
-    return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
-                                         scale=scale, enable_gqa=True)[..., :head_width]
+    mask = prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window)
+
+    def dense(query, key, value, visible):
+        if not query.is_cuda and query.dtype == torch.bfloat16 and key.dtype == value.dtype == torch.float32:
+            from ..common.native_attention_carrier import cpu_kv_carrier_attention
+            return cpu_kv_carrier_attention(query, key, value, mask=visible, scale=scale)
+        return F.scaled_dot_product_attention(query, key, value, attn_mask=visible, scale=scale, enable_gqa=True)
+
+    if not isinstance(plan, GraphPlan):
+        return dense(q, k, v, mask)[..., :head_width]
+    # Dense SDPA kernels reduce each query row in key-index order with
+    # vector-width body/tail splits and key blocks counted from key slot zero.
+    # A whole-graph call therefore gives the same logical row different
+    # arithmetic at different slot origins (another invocation's padded slots
+    # precede it), so equal invocations, and graph versus cached execution,
+    # stop being exactly equal. Like the Flex path's invocation-local tile
+    # origins, attend each invocation over its own slot range, which starts at
+    # that invocation's logical position zero exactly as a cached execution of
+    # the same sequence does. The visibility predicate is unchanged.
+    pieces = []
+    for index, (offset, node) in enumerate(zip(plan.offsets, plan.invocations)):
+        count = len(node.token_ids)
+        if not count:
+            continue
+        lo = plan.slot_offsets[index]
+        hi = lo + max(plan.own_positions[offset:offset+count]) + 1
+        pieces.append(dense(q[:, :, offset:offset+count], k[:, :, lo:hi], v[:, :, lo:hi],
+                            mask[..., offset:offset+count, lo:hi]))
+    if not pieces:
+        return q.new_empty((*q.shape[:-1], v.shape[-1]))[..., :head_width]
+    return torch.cat(pieces, dim=2)[..., :head_width]
 
 
 class SharedStateModel(nn.Module):

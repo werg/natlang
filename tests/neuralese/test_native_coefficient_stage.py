@@ -332,7 +332,9 @@ def test_real_task_collector_receives_current_coefficient_policy(tmp_path,monkey
     # Bound this mechanism fixture's output and resource demand. The action has
     # its real actual-model probability; this is no task-quality/lift claim.
     monkeypatch.setattr(engine,'_native_token',lambda sequence:(2,float(sequence.logits[0].float().log_softmax(-1)[2])))
-    original_packet=logical_root('repo')/'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
+    # A tracked held (split=test) natlang.program row: the registered protected
+    # packet under runs/ exists only on the training machines, not in a checkout.
+    original_packet=logical_root('repo')/'data/teacher/read-before-code-probe.ir.jsonl'
     packet=tmp_path/'held-case.jsonl';packet.write_text(original_packet.open().readline())
     spec=parse_task_eval({'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),

@@ -33,8 +33,11 @@ def live(tmp_path):
     entry=tmp_path/'supervisor.py';entry.write_text('import sys,json,subprocess;'
         'p=subprocess.Popen(json.loads(sys.argv[1]),stdin=subprocess.PIPE);'
         'print(p.pid,flush=True);sys.stdin.buffer.read();p.communicate()\n')
+    # The launch's import environment is exactly this fixture's PYTHONPATH; an
+    # ambient NATLANG_REPO (tests/conftest.py, check-main) is not part of it.
+    environment={key:value for key,value in os.environ.items() if key!='NATLANG_REPO'}
     p=subprocess.Popen([sys.executable,str(entry),json.dumps(argv)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                       text=True,env={**os.environ,'PYTHONPATH':str(fake)})
+                       text=True,env={**environment,'PYTHONPATH':str(fake)})
     try:
         child=int(p.stdout.readline());owner=handoff.observe(p.pid);learner=handoff.observe(child)
         launch=tmp_path/'original-launch.json';write(launch,{**owner,'source':str(entry)})

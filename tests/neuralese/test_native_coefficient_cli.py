@@ -47,7 +47,9 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
         'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
         'nodes':[{'name':'held','token_ids':[4,5,6],'target_weights':[0,1,1]}]})+'\n')
     packet=tmp_path/'held-task.jsonl'
-    original=logical_root('repo')/'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
+    # A tracked held (split=test) natlang.program row: the registered protected
+    # packet under runs/ exists only on the training machines, not in a checkout.
+    original=logical_root('repo')/'data/teacher/read-before-code-probe.ir.jsonl'
     packet.write_text(original.open().readline())
     spec={'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),
