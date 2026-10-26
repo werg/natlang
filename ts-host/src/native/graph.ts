@@ -47,6 +47,8 @@ function rememberProducer(block: string, node: string): void {
   PRODUCERS.set(block, node);
   if (PRODUCERS.size > PRODUCER_LIMIT) PRODUCERS.delete(PRODUCERS.keys().next().value!);
 }
+/** Last observed exact writer for inference contexts that intentionally have no episode recorder. */
+export function recentBlockWriter(block:string):string|undefined{return PRODUCERS.get(block);}
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
 export function blockInput(block: string, port?: string, sourceOccurrence?:string): GraphInput {
   return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : PRODUCERS.get(block) ?? 'external'), block, ...(port ? { port } : {}) };

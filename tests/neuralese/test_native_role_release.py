@@ -46,7 +46,7 @@ def fixture(tmp_path,monkeypatch,names=('lfm','mellum')):
         state_path=root/'state.json';state={'schema':raw.SCHEMA,'plan_sha256':sha256_file_hex(plan_path),
             'owner':{**process_owner(),'start_ticks':'0'},'released':True,'owned_models':[name],'models':{name:value}}
         write_json_durable(state_path,state)
-        result[name]={'plan':plan,'plan_path':plan_path,'state':state,'state_path':state_path,
+        result[name]={'path':root,'plan':plan,'plan_path':plan_path,'state':state,'state_path':state_path,
             'config':{'out':str(root/'shared'),'raw_rl_out':str(root),'raw_rl_bootstrap':raw.binding(plan_path),
                 'participants':[row['handoff_requirement']for row in entries]},'receipt':receipt}
     return result
@@ -254,7 +254,7 @@ class FileProtocolIO:
         self.config={'sandboxes':{}}
         self.collector_assets={}
         for name,row in rows.items():
-            runtime=Path(row['path']).parent/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
+            runtime=Path(row['path'])/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
             script.parent.mkdir(parents=True,exist_ok=True);script.write_text('# fixture collector\n')
             self.config['sandboxes'][name+'-actual-sid']={'runtime':str(runtime)}
             self.collector_assets[name]={'path':str(script),'kind':'task-source-file',
