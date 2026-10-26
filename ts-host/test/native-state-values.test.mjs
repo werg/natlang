@@ -577,15 +577,17 @@ test('equal native IDs retain independent writer origins through typed values, c
   assert.equal(sourceWithLiteralCalls(`return ${neuraleseRefSentinel(first)};`),`return __neuralese(${JSON.stringify(artifact.id)}, undefined, "call:first#write-0");`);
 });
 
-test('inference resolves the declared occurrence among repeated equal-content producers', async()=>{
+test('inference resolves the declared occurrence among repeated equal-content producers in its task scope', async()=>{
   const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
-  const {graphNode}=await import('../dist/native/graph.js');
+  const {graphNode,bindTraceScope}=await import('../dist/native/graph.js');
   const firstWriter=open({type:'() => boolean',instructions:'Write the same native state.'},{neuralese:runtimeFor(store)}).session;
   const secondWriter=open({type:'() => boolean',instructions:'Write the same native state again.'},{neuralese:runtimeFor(store)}).session;
+  const invocation=open({type:'() => boolean',instructions:'Use the exact supplied state.'},{neuralese:runtimeFor(store)}).session;
+  bindTraceScope(firstWriter.runtime.trace,invocation.runtime.episodeBudget);
+  bindTraceScope(secondWriter.runtime.trace,invocation.runtime.episodeBudget);
   const first='repeat-first#write-0',second='repeat-second#write-0';
   graphNode(firstWriter.runtime.trace,'block_write',{call_id:'repeat-first',turn:'repeat-first#turn0',block:artifact.id},[],first);
   graphNode(secondWriter.runtime.trace,'block_write',{call_id:'repeat-second',turn:'repeat-second#turn0',block:artifact.id},[],second);
-  const invocation=open({type:'() => boolean',instructions:'Use the exact supplied state.'},{neuralese:runtimeFor(store)}).session;
   const agent=new NativeToolAgent(Object.assign(async()=>({calls:[['return_result',{status:'success',value:true}]]}),{neuralese:true}),
     {neuralese:runtimeFor(store)});
   await agent.modelTurnNode(invocation,[{role:'user',content:[{type:'native_state',id:artifact.id,source_occurrence:first}]}],{},1);
