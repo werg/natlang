@@ -207,25 +207,34 @@ def parse_task_eval(value):
     return spec
 
 
-def task_eval_runtime_identity(value):
-    """Bind the actual task collector, built TS entry and executing Python modules."""
-    from ..common.paths import root as logical_root
+def _task_eval_runtime_files(repo,runtime):
+    """Return per-file custody for the full executing TS and Python closures."""
     from ..common.hashing import sha256_file_hex_cached
+    from ..common.runtime_inventory import task_runtime_inventory
+    from ..train.native_resident import code_inventory
+    repo=Path(repo).resolve(strict=True);runtime=Path(runtime).resolve(strict=True)
+    files={}
+    for relative,digest in task_runtime_inventory(runtime).items():
+        path=(runtime/relative).resolve(strict=True)
+        files[str(path)]={'path':str(path),'bytes':path.stat().st_size,'sha256':digest}
+    collector=(repo/'scripts/run_bonsai_queue.py').resolve(strict=True)
+    files[str(collector)]={'path':str(collector),'bytes':collector.stat().st_size,
+        'sha256':sha256_file_hex_cached(collector)}
+    package=(repo/'training/neuralese/natlang_neuralese').resolve(strict=True)
+    for relative,digest in code_inventory(package).items():
+        path=(package/relative).resolve(strict=True)
+        files[str(path)]={'path':str(path),'bytes':path.stat().st_size,'sha256':digest}
+    return [files[key] for key in sorted(files)]
+
+
+def task_eval_runtime_identity(value):
+    """Bind complete task runtime inventories and every executing Python module."""
+    from ..common.paths import root as logical_root
     repo=logical_root('repo').resolve(strict=True)
     runtime=Path(value.get('runtime') or repo/'ts-host').resolve(strict=True)
-    paths=[repo/'scripts/run_bonsai_queue.py',runtime/'dist/teacher/cli.js',
-        Path(__file__).resolve(),Path(__file__).resolve().parent/'native_state.py',
-        Path(__file__).resolve().parents[1]/'train/native_semantic_stage.py',
-        Path(__file__).resolve().parents[1]/'serve/engine.py',
-        Path(__file__).resolve().parents[1]/'serve/http.py',
-        Path(__file__).resolve().parents[1]/'model/shared_state.py']
-    files=[]
-    for path in paths:
-        path=path.resolve(strict=True)
-        files.append({'path':str(path),'bytes':path.stat().st_size,
-            'sha256':sha256_file_hex_cached(path)})
     return {'schema':'natlang.task-eval-runtime-identity/1','repo':str(repo),
-        'runtime':str(runtime),'code_commit':_git_head(),'files':files}
+        'runtime':str(runtime),'code_commit':_git_head(),
+        'files':_task_eval_runtime_files(repo,runtime)}
 
 
 def task_eval_policy_identity(value):
