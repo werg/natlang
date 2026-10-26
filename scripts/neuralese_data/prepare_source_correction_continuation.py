@@ -17,8 +17,10 @@ from pathlib import Path
 from natlang_neuralese.common.hashing import (canonical_json_sha256_hex, sha256_file_hex,
                                                sha256_file_hex_cached)
 
-ROOT = Path('/home/werg/data')
-REPAIRS = Path('/mnt/external/natlang-data-repair-20261026-v4b')
+from natlang_neuralese.common.paths import root as machine_root
+
+ROOT = machine_root('data_nvme')
+REPAIRS = machine_root('data_hdd') / 'natlang-data-repair-20261026-v4b'
 LUNA = ROOT / 'luna-generation-20261026'
 PACKAGE = LUNA / 'registered-packages'
 CORRECTION_SCHEMA = 'natlang.native-source-correction/1'
@@ -155,7 +157,7 @@ def _relocate_declared_mellum_package_leaves(train_manifest, held_manifest, mapp
                                              registry_root=None):
     """Resolve missing old cloud leaves only through their exact registry role binding."""
     registry = (Path(registry_root) if registry_root is not None else
-        Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages'))
+        ROOT / 'natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages')
     relocated = []
     pattern = re.compile(r'^/work/resume/(?:teacher-append-20261025|teacher-append-20261026-v13|training/teacher-append-20261026-v13)/artifacts/runs/'
         r'(?P<corpus>qwen36-verified-positive-native-graphs-20261023-internal-batch[0-9]{4}-tranche[0-9]{4}'
