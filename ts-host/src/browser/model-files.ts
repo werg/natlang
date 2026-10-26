@@ -32,10 +32,14 @@ async function cacheKey(file: ModelFileRef): Promise<string> {
 
 /**
  * The file at `file.url`, from the OPFS cache or downloaded into it. `onProgress(received, total)` reports a download.
- * A cached file whose size differs from the manifest's `bytes` is downloaded again.
+ * A cached file whose size differs from the manifest's `bytes`, or that fails `verify`, is downloaded again; a download
+ * that fails `verify` is removed and refused.
  */
 export async function cachedModelFile(file: ModelFileRef, options: { storage?: ModelFileStorage | null; fetcher?: typeof fetch;
-  onProgress?: (received: number, total: number | null) => void } = {}): Promise<Blob> {
+  onProgress?: (received: number, total: number | null) => void;
+  /** Content check of the whole file (e.g. its SHA-256 for small files). */
+  verify?: (file: Blob) => Promise<boolean> } = {}): Promise<Blob> {
+  const verified = async (blob: Blob) => !options.verify || await options.verify(blob);
   const fetcher = options.fetcher ?? globalThis.fetch;
   const storage = options.storage === undefined ? (globalThis.navigator?.storage as unknown as ModelFileStorage | undefined) : options.storage;
   const download = async (): Promise<Response> => {
@@ -43,12 +47,16 @@ export async function cachedModelFile(file: ModelFileRef, options: { storage?: M
     if (!response.ok || !response.body) throw new Error(`model file ${file.url}: HTTP ${response.status}`);
     return response;
   };
-  if (!storage?.getDirectory) return (await download()).blob();
+  if (!storage?.getDirectory) {
+    const blob = await (await download()).blob();
+    if (!await verified(blob)) throw new Error(`model file ${file.url}: content does not match its manifest`);
+    return blob;
+  }
   const directory = await (await storage.getDirectory()).getDirectoryHandle(DIRECTORY, { create: true });
   const name = await cacheKey(file);
   try {
     const cached = await (await directory.getFileHandle(name)).getFile();
-    if (file.bytes === undefined ? cached.size > 0 : cached.size === file.bytes) return cached;
+    if ((file.bytes === undefined ? cached.size > 0 : cached.size === file.bytes) && await verified(cached)) return cached;
   } catch { /* not cached yet */ }
   const response = await download();
   const total = file.bytes ?? (Number(response.headers.get('content-length')) || null);
@@ -71,7 +79,19 @@ export async function cachedModelFile(file: ModelFileRef, options: { storage?: M
     await directory.removeEntry(name).catch(() => undefined);
     throw new Error(`model file ${file.url}: got ${stored.size} bytes, the manifest says ${file.bytes}`);
   }
+  if (!await verified(stored)) {
+    await directory.removeEntry(name).catch(() => undefined);
+    throw new Error(`model file ${file.url}: content does not match its manifest`);
+  }
   return stored;
+}
+
+/** Remove these files from the OPFS cache (e.g. adapters of a release that was replaced). Missing files are ignored. */
+export async function removeCachedModelFiles(files: readonly ModelFileRef[], options: { storage?: ModelFileStorage | null } = {}): Promise<void> {
+  const storage = options.storage === undefined ? (globalThis.navigator?.storage as unknown as ModelFileStorage | undefined) : options.storage;
+  if (!storage?.getDirectory) return;
+  const directory = await (await storage.getDirectory()).getDirectoryHandle(DIRECTORY, { create: true });
+  for (const file of files) await directory.removeEntry(await cacheKey(file)).catch(() => undefined);
 }
 
 /**

@@ -176,7 +176,7 @@ reference server applies the stack through its exact native adapter path.
 | wllama in the page (vendored build, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
 
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
-checks each file's sha256, and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
+checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
 binding for `createNatlangRuntime({ weights })`. Adapters load at scale 0; each request lists every adapter with its
 own call's scales. A release exported for another base GGUF runs untuned. This needs the patched wllama vendored in
 `ts-host/vendor/wllama` (LoRA blobs, and a server that never reuses a prompt computed with other adapters; see its

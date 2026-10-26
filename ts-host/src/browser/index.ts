@@ -59,7 +59,7 @@ export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } fro
 export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
 export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } from './neuralese-wasm.js';
-export { cachedModelFile, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
+export { cachedModelFile, removeCachedModelFiles, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
 export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
