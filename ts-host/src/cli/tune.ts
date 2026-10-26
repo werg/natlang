@@ -260,7 +260,9 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     }
     const python = process.env.NATLANG_PYTHON ?? 'python3';
     const verifier = fileURLToPath(new URL('../../../scripts/neuralese_data/verify_tune_pool_import.py', import.meta.url));
-    const verifyArgs = [verifier, '--input', resolve(importPath!), ...(value('--import-campaign') ? ['--campaign', resolve(value('--import-campaign')!)] : [])];
+    const snapshotDir = join(tuneDirectory(root), 'pool-import-custody-snapshots');
+    const verifyArgs = [verifier, '--input', resolve(importPath!), '--snapshot-dir', snapshotDir,
+      ...(value('--import-campaign') ? ['--campaign', resolve(value('--import-campaign')!)] : [])];
     const verified = spawnSync(python, verifyArgs, { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (verified.error || verified.status !== 0) throw new Error(`reviewed tune campaign custody verification failed: ${verified.error?.message ?? verified.stderr.trim()}`);
     let custody;

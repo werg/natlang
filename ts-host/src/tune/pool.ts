@@ -170,13 +170,15 @@ export type ImportSummary = { rows: number; imported: number; failures: number; 
   unboundTurns: number; teachers: string[] };
 
 export type TunePoolImportCustody = {
-  schema: 'natlang.tune-pool-import-custody/1';
+  schema: 'natlang.tune-pool-import-custody/2';
   input: { kind: 'file'; path: string; bytes: number; sha256: string } |
     { kind: 'directory'; path: string; files: { path: string; bytes: number; sha256: string }[] };
   plan: { path: string; bytes: number; sha256: string };
   source: { path: string; bytes: number; sha256: string };
-  claim_ledger: { path: string; bytes: number; sha256: string };
-  launch_record: { path: string; bytes: number; sha256: string };
+  claim_ledger: { observed: { path: string; bytes: number; sha256: string; stat: Record<string, number>;
+    prefix: { bytes: number; sha256: string } }; snapshot: { path: string; bytes: number; sha256: string } };
+  launch_record: { observed: { path: string; bytes: number; sha256: string; stat: Record<string, number>;
+    prefix: { bytes: number; sha256: string } }; snapshot: { path: string; bytes: number; sha256: string } };
   dispatcher_identity_sha256: string;
   reviewed_artifacts: { path: string; bytes: number; sha256: string }[];
   runtime: { root: string; receipt_sha256: string; receipt: { path: string; bytes: number; sha256: string } };
@@ -199,17 +201,25 @@ function verifyImportInputBinding(path: string, custody: TunePoolImportCustody):
     return;
   }
   if (!statSync(inputPath).isDirectory()) throw new Error('reviewed campaign import directory is no longer present');
-  const current = resultFiles(inputPath).map(file => ({ path: resolve(file), bytes: readFileSync(file) }));
   const expected = [...input.files].sort((a, b) => a.path.localeCompare(b.path));
-  if (current.length !== expected.length || current.some((entry, index) => entry.path !== expected[index]?.path ||
-      entry.bytes.byteLength !== expected[index]?.bytes || sha(entry.bytes) !== expected[index]?.sha256))
-    throw new Error('reviewed campaign result directory changed after verification');
+  if (new Set(expected.map(item => item.path)).size !== expected.length)
+    throw new Error('reviewed campaign cohort repeats a result file');
+  for (const binding of expected) verifyCustodyFile(binding, 'selected closed-case result file');
 }
 
 function verifyCustodyFile(binding: { path: string; bytes: number; sha256: string }, label: string): void {
   const bytes = readFileSync(binding.path);
   if (bytes.byteLength !== binding.bytes || sha(bytes) !== binding.sha256)
     throw new Error(`reviewed dispatcher ${label} changed after verification`);
+}
+
+function verifyCampaignSnapshot(binding: TunePoolImportCustody['claim_ledger'], label: string): void {
+  const { observed, snapshot } = binding;
+  if (!observed || !snapshot || !observed.path || observed.bytes !== observed.stat?.bytes ||
+      observed.prefix?.bytes !== observed.bytes || observed.prefix?.sha256 !== observed.sha256 ||
+      observed.sha256 !== snapshot.sha256 || observed.bytes !== snapshot.bytes)
+    throw new Error(`reviewed dispatcher ${label} observation and snapshot bindings differ`);
+  verifyCustodyFile(snapshot, `${label} snapshot`);
 }
 
 /**
@@ -219,11 +229,13 @@ function verifyCustodyFile(binding: { path: string; bytes: number; sha256: strin
  */
 export function importCases(context: PoolContext, path: string, custody: TunePoolImportCustody): ImportSummary {
   const { root, program, scaffold, examples } = context;
-  if (custody?.schema !== 'natlang.tune-pool-import-custody/1') throw new Error('tune result import requires reviewed dispatcher custody');
+  if (custody?.schema !== 'natlang.tune-pool-import-custody/2') throw new Error('tune result import requires immutable reviewed dispatcher custody');
   verifyImportInputBinding(path, custody);
-  for (const [label, binding] of [['plan', custody.plan], ['source', custody.source], ['claim ledger', custody.claim_ledger],
-    ['launch record', custody.launch_record], ['runtime receipt', custody.runtime.receipt]] as const)
+  for (const [label, binding] of [['plan', custody.plan], ['source', custody.source],
+    ['runtime receipt', custody.runtime.receipt]] as const)
     verifyCustodyFile(binding, label);
+  verifyCampaignSnapshot(custody.claim_ledger, 'claim ledger');
+  verifyCampaignSnapshot(custody.launch_record, 'launch record');
   for (const binding of custody.reviewed_artifacts) verifyCustodyFile(binding, 'reviewed plan artifact');
   if (custody.runtime.receipt.sha256 !== custody.runtime.receipt_sha256)
     throw new Error('reviewed dispatcher runtime receipt identity changed');
@@ -236,7 +248,13 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
   const semantic = new Map(scaffold.bindings.map(entry => [entry.id, entry.semanticHash]));
   const summary: ImportSummary = { rows: 0, imported: 0, failures: 0, rejected: [], unboundTurns: 0, teachers: [] };
   const teachers = new Set(importedTeachers(root));
-  for (const file of resultFiles(path)) {
+  const importFiles = custody.input.kind === 'file' ? [resolve(path)] : custody.input.files.map(item => resolve(item.path));
+  if (custody.input.kind === 'directory') {
+    const selectedResultFiles = [...new Set(custody.selected_rows.map(item => resolve(item.result_file.path)))].sort();
+    if (selectedResultFiles.length !== importFiles.length || selectedResultFiles.some((file, index) => file !== [...importFiles].sort()[index]))
+      throw new Error('reviewed directory input does not exactly name the closed-case result-file cohort');
+  }
+  for (const file of importFiles) {
     const fileText = readFileSync(file, 'utf8'), fileBytes = Buffer.from(fileText), lines = fileText.split('\n');
     for (const [index, line] of lines.entries()) {
     if (!line.trim()) continue;
@@ -259,7 +277,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
     if (sourceMatches.length !== 1) { reject('complete tune task does not identify exactly one reviewed source case'); continue; }
     const caseIndex = sourceMatches[0]!.index;
     const matchingCustody = custody.selected_rows.filter(item => item.case_index === caseIndex &&
-      resolve(item.result_file.path) === resolve(file) && item.input.line === index + 1);
+      resolve(item.input.path) === resolve(file) && item.input.line === index + 1);
     const rowCustody = matchingCustody[0];
     if (matchingCustody.length !== 1 || !rowCustody || !/^[0-9a-f]{64}$/.test(rowCustody.result_row_sha256) ||
         !/^[0-9a-f]{64}$/.test(rowCustody.result_line_sha256)) {
@@ -320,7 +338,8 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
     if (bad) { reject(bad); continue; }
     const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))].map(id => [id, semantic.get(id) ?? '']));
     const record: RootRecord = { schema: 'natlang.tune-root/v1', root: example.id, teacher, sharedSources: shared, bindings,
-      outcome: { ok: rootAccepted, oracle }, turns, imported: { from: resolve(file), line: index + 1, result_row_sha256: rowCustody.result_row_sha256,
+      outcome: { ok: rootAccepted, oracle }, turns, imported: { from: resolve(file), line: index + 1,
+        result_row_sha256: rowCustody.result_row_sha256, result_line_sha256: rowCustody.result_line_sha256,
         campaign: { plan: custody.plan, source: custody.source, claim_ledger: custody.claim_ledger, launch_record: custody.launch_record,
           runtime_receipt: custody.runtime.receipt, dispatcher_identity_sha256: custody.dispatcher_identity_sha256,
           reviewed_artifacts: custody.reviewed_artifacts, source_inventory: custody.source_inventory ?? null },
@@ -333,8 +352,26 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
     const target = rootRecordPath(root, example, teacher);
     mkdirSync(join(tuneDirectory(root), 'data', 'roots'), { recursive: true });
     const encoded = JSON.stringify(record);
-    if (existsSync(target) && readFileSync(target, 'utf8') !== encoded) {
-      reject('this campaign actor/root already has different imported bytes'); continue;
+    if (existsSync(target)) {
+      const existing = JSON.parse(readFileSync(target, 'utf8')) as RootRecord;
+      const oldImport = existing.imported as Record<string, unknown> | undefined;
+      const newImport = record.imported as Record<string, unknown> | undefined;
+      const oldActor = oldImport?.actor, newActor = newImport?.actor;
+      const sameClosedResult = existing.root === record.root && existing.teacher === record.teacher &&
+        oldImport?.result_row_sha256 === newImport?.result_row_sha256 &&
+        oldImport?.result_line_sha256 === newImport?.result_line_sha256 &&
+        oldImport?.source_row_sha256 === newImport?.source_row_sha256 &&
+        oldActor !== undefined && newActor !== undefined &&
+        JSON.stringify(oldActor) === JSON.stringify(newActor);
+      if (!sameClosedResult) {
+        reject('this campaign actor/root already has different imported bytes'); continue;
+      }
+      // Campaign supervision files advance as other cases close. Keep the first
+      // immutable terminal-evidence snapshot for this exact row and make retries idempotent.
+      teachers.add(teacher);
+      summary.imported++;
+      if (!rootAccepted) summary.failures++;
+      continue;
     }
     writeFileSync(target, encoded);
     teachers.add(teacher);

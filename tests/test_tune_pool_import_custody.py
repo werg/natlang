@@ -98,13 +98,61 @@ def _bind_fixture_dispatcher(monkeypatch, identity, plan=None):
 def test_verified_campaign_import_binds_exact_row_source_actor_and_runtime(tmp_path, monkeypatch):
     root, plan, output, identity, _, _ = _campaign(tmp_path)
     _bind_fixture_dispatcher(monkeypatch, identity)
-    proof = custody.verify_import(output)
+    proof = custody.verify_import(output, snapshot_dir=root / 'custody-snapshots')
     assert proof['plan']['sha256'] == _sha(plan.read_bytes())
     assert proof['selected_rows'][0]['result_file']['sha256'] == _sha(output.read_bytes())
     assert proof['selected_rows'][0]['result_line_sha256'] == _sha(output.read_bytes())
     assert proof['selected_rows'][0]['source_row_sha256'] == identity['cases'][0]['source_row_sha256']
     assert proof['selected_rows'][0]['actor']['provider'] == 'openai-codex'
     assert proof['selected_rows'][0]['actor']['runtime_receipt_sha256'] == _sha((root / 'runtime/frozen-runtime.json').read_bytes())
+    for name in ('claim_ledger', 'launch_record'):
+        evidence = proof[name]
+        assert evidence['observed']['path'].endswith('claims.jsonl' if name == 'claim_ledger' else 'launch.json')
+        assert evidence['observed']['prefix']['sha256'] == evidence['snapshot']['sha256']
+        assert Path(evidence['snapshot']['path']).read_bytes() == Path(evidence['observed']['path']).read_bytes()
+
+
+def test_closed_evidence_snapshot_stays_exact_when_live_campaign_advances(tmp_path, monkeypatch):
+    root, _, output, identity, _, _ = _campaign(tmp_path)
+    _bind_fixture_dispatcher(monkeypatch, identity)
+    proof = custody.verify_import(output, snapshot_dir=root / 'custody-snapshots')
+    ledger = proof['claim_ledger']
+    launch = proof['launch_record']
+    Path(ledger['observed']['path']).write_bytes(Path(ledger['observed']['path']).read_bytes() + b'{"event":"later"}\n')
+    Path(launch['observed']['path']).write_text('{"status":"finished","later":true}\n')
+    assert _sha(Path(ledger['snapshot']['path']).read_bytes()) == ledger['snapshot']['sha256']
+    assert _sha(Path(launch['snapshot']['path']).read_bytes()) == launch['snapshot']['sha256']
+    assert ledger['observed']['sha256'] != _sha(Path(ledger['observed']['path']).read_bytes())
+
+
+def test_directory_input_binds_only_terminal_result_files_present_in_its_closed_case_cohort(tmp_path, monkeypatch):
+    root, _, output, identity, _, _ = _campaign(tmp_path)
+    _bind_fixture_dispatcher(monkeypatch, identity)
+    selected = custody._selected_result_files
+
+    def selected_then_new_result(path, campaign_root):
+        files = selected(path, campaign_root)
+        _write(campaign_root / 'slot-02/results/case-000099.results.jsonl', b'{"later":"not selected"}\n')
+        return files
+
+    monkeypatch.setattr(custody, '_selected_result_files', selected_then_new_result)
+    proof = custody.verify_import(root, campaign_root=root, snapshot_dir=root / 'custody-snapshots')
+    assert proof['input']['kind'] == 'directory'
+    assert proof['input']['files'] == [{'path': str(output.resolve()), 'bytes': output.stat().st_size,
+                                        'sha256': _sha(output.read_bytes())}]
+
+
+def test_detached_result_file_keeps_original_campaign_output_and_row_bindings(tmp_path, monkeypatch):
+    root, _, output, identity, _, _ = _campaign(tmp_path)
+    _bind_fixture_dispatcher(monkeypatch, identity)
+    detached = _write(tmp_path / 'merged-results.jsonl', output.read_bytes())
+    proof = custody.verify_import(detached, campaign_root=root, snapshot_dir=root / 'custody-snapshots')
+    row = proof['selected_rows'][0]
+    assert proof['input'] == {'kind': 'file', 'path': str(detached.resolve()),
+                              'bytes': detached.stat().st_size, 'sha256': _sha(detached.read_bytes())}
+    assert row['input'] == {'path': str(detached.resolve()), 'line': 1}
+    assert row['result_file']['path'] == str(output.resolve())
+    assert row['result_line_sha256'] == _sha(detached.read_bytes())
 
 
 def test_verified_campaign_import_rejects_changed_output_and_unclaimed_rows(tmp_path, monkeypatch):
@@ -113,7 +161,7 @@ def test_verified_campaign_import_rejects_changed_output_and_unclaimed_rows(tmp_
     output.write_bytes(output.read_bytes() + (json.dumps(row) + '\n').encode())
     import pytest
     with pytest.raises(ValueError, match='differ|changed'):
-        custody.verify_import(output)
+        custody.verify_import(output, snapshot_dir=output.parent / 'custody-snapshots')
 
 
 def test_pinned_dispatcher_artifact_change_after_review_is_rejected(tmp_path, monkeypatch):
@@ -135,7 +183,7 @@ def test_pinned_dispatcher_artifact_change_after_review_is_rejected(tmp_path, mo
     monkeypatch.setattr(custody, '_load_bound_dispatcher', lambda path: ChangedAfterReview)
     import pytest
     with pytest.raises(ValueError, match='artifact changed after plan validation'):
-        custody.verify_import(output)
+        custody.verify_import(output, snapshot_dir=output.parent / 'custody-snapshots')
 
 
 def test_dispatcher_rejects_mismatched_canonical_dispatcher_hash(tmp_path, monkeypatch):

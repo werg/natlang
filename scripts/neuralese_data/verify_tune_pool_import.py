@@ -12,8 +12,10 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 REPOSITORY_ROOT = str(Path(__file__).resolve().parents[2])
 SCRIPT_ROOT = str(Path(__file__).resolve().parents[1])
@@ -23,7 +25,7 @@ for entry in (REPOSITORY_ROOT, SCRIPT_ROOT, TRAINING_PACKAGE_ROOT):
         sys.path.insert(0, entry)
 
 
-SCHEMA = 'natlang.tune-pool-import-custody/1'
+SCHEMA = 'natlang.tune-pool-import-custody/2'
 
 
 def _sha_bytes(payload: bytes) -> str:
@@ -40,14 +42,75 @@ def _binding(path: Path, payload: bytes | None = None) -> dict:
     return {'path': str(resolved), 'bytes': len(data), 'sha256': _sha_bytes(data)}
 
 
-def _input_binding(path: Path) -> dict:
+def _stat_observation(path: Path) -> dict:
+    value = path.stat()
+    return {'device': value.st_dev, 'inode': value.st_ino, 'bytes': value.st_size,
+            'mtime_ns': value.st_mtime_ns, 'ctime_ns': value.st_ctime_ns}
+
+
+def _stable_read(path: Path, label: str) -> tuple[bytes, dict]:
+    path = path.resolve(strict=True)
+    for _ in range(4):
+        before = _stat_observation(path)
+        data = path.read_bytes()
+        after = _stat_observation(path)
+        if before == after and len(data) == after['bytes']:
+            return data, {'path': str(path), **after}
+    raise ValueError(f'{label} changed while it was being observed; retry the import')
+
+
+def _capture_snapshot(snapshot_dir: Path, name: str, live_path: Path,
+                      payload: bytes, observation: dict) -> dict:
+    """Durably preserve the exact bytes used for validation under a content-addressed name."""
+    digest = _sha_bytes(payload)
+    snapshot_dir = snapshot_dir.expanduser().resolve()
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    target = snapshot_dir / f'{name}-{digest}.snapshot'
+    if target.is_symlink():
+        raise ValueError(f'{name} snapshot path must not be a symlink')
+    if target.exists():
+        existing = target.read_bytes()
+        if existing != payload:
+            raise ValueError(f'{name} snapshot path is occupied by different bytes')
+    else:
+        fd, temporary_name = tempfile.mkstemp(prefix=f'.{name}-', dir=snapshot_dir)
+        try:
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary_name, 0o444)
+            try:
+                os.link(temporary_name, target)
+            except FileExistsError:
+                if target.read_bytes() != payload:
+                    raise ValueError(f'{name} snapshot raced with different bytes')
+            directory_fd = os.open(snapshot_dir, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+    binding = _binding(target, payload)
+    return {'observed': {'path': str(live_path.resolve(strict=True)), 'bytes': len(payload),
+                         'sha256': digest, 'stat': observation,
+                         'prefix': {'bytes': len(payload), 'sha256': digest}},
+            'snapshot': binding}
+
+
+def _input_binding(path: Path, selected_files: list[Path] | None = None) -> dict:
     resolved = path.resolve(strict=True)
     if resolved.is_file():
         return {'kind': 'file', **_binding(resolved)}
     if not resolved.is_dir():
         raise ValueError('import input must be a JSONL file or a directory')
-    files = sorted(item.resolve(strict=True) for item in resolved.rglob('*.jsonl')
-                   if item.is_file() and not item.name.endswith('.trace.jsonl'))
+    if selected_files is None:
+        raise ValueError('directory custody must name its exact closed-case result-file cohort')
+    files = sorted({item.resolve(strict=True) for item in selected_files})
     return {'kind': 'directory', 'path': str(resolved), 'files': [_binding(item) for item in files]}
 
 
@@ -139,7 +202,8 @@ def _source_rows(source_path: Path) -> dict[int, tuple[bytes, dict]]:
     return rows
 
 
-def verify_import(input_path: Path, *, campaign_root: Path | None = None) -> dict:
+def verify_import(input_path: Path, *, campaign_root: Path | None = None,
+                  snapshot_dir: Path) -> dict:
     input_path = input_path.resolve(strict=True)
     root = _campaign_root(input_path, campaign_root)
     plan_path = root / 'plan.json'
@@ -153,7 +217,8 @@ def verify_import(input_path: Path, *, campaign_root: Path | None = None) -> dic
         raise ValueError('reviewed dispatcher identity names another campaign root')
 
     launch_path = Path(identity['launch_record']).resolve(strict=True)
-    launch_bytes = launch_path.read_bytes()
+    launch_bytes, launch_observation = _stable_read(launch_path, 'dispatcher launch record')
+    launch_binding = _capture_snapshot(snapshot_dir, 'launch', launch_path, launch_bytes, launch_observation)
     launch = json.loads(launch_bytes)
     if launch.get('status') not in {'running', 'draining', 'finished', 'incomplete', 'drained', 'operator_stopped'}:
         raise ValueError('tune imports require a recognized reviewed dispatcher launch state')
@@ -161,7 +226,8 @@ def verify_import(input_path: Path, *, campaign_root: Path | None = None) -> dic
         raise ValueError('dispatcher launch identity differs from the validated reviewed plan')
 
     ledger_path = Path(identity['ledger']).resolve(strict=True)
-    ledger_bytes = ledger_path.read_bytes()
+    ledger_bytes, ledger_observation = _stable_read(ledger_path, 'dispatcher claim ledger')
+    ledger_binding = _capture_snapshot(snapshot_dir, 'claim-ledger', ledger_path, ledger_bytes, ledger_observation)
     events = []
     for line_no, line in enumerate(ledger_bytes.splitlines(), 1):
         if not line.strip():
@@ -300,7 +366,8 @@ def verify_import(input_path: Path, *, campaign_root: Path | None = None) -> dic
         seen_cases.add(index)
         verified.append({
             'case_index': index, 'case': expected_case,
-            'input': {'path': str(input_path), 'line': detached_line if selected_files is None else line_no},
+            'input': {'path': str(input_path) if selected_files is None else str(output_path),
+                      'line': detached_line if selected_files is None else line_no},
             'result_row_sha256': _canonical_sha(row),
             'result_line_sha256': _sha_bytes(raw_result),
             'result_file': output_binding,
@@ -339,14 +406,15 @@ def verify_import(input_path: Path, *, campaign_root: Path | None = None) -> dic
         'campaign_root': str(root),
         'plan': _binding(plan_path, plan_bytes),
         'source': _binding(source_path, source_bytes),
-        'claim_ledger': _binding(ledger_path, ledger_bytes),
-        'launch_record': _binding(launch_path, launch_bytes),
+        'claim_ledger': ledger_binding,
+        'launch_record': launch_binding,
         'dispatcher_identity_sha256': _canonical_sha(identity),
         'reviewed_artifacts': reviewed_artifacts,
         'runtime': {'root': identity['runtime'], 'receipt_sha256': identity['runtime_receipt_sha256'],
                     'receipt': _binding(Path(identity['runtime']) / 'frozen-runtime.json')},
         'source_inventory': identity.get('source_inventory'),
-        'input': _input_binding(input_path),
+        'input': (_input_binding(input_path) if input_path.is_file() else
+                  _input_binding(input_path, [Path(row['result_file']['path']) for row in verified])),
         'selected_rows': verified,
     }
 
@@ -356,8 +424,10 @@ def main(argv=None):
     parser.add_argument('--input', required=True, type=Path)
     parser.add_argument('--campaign', type=Path,
                         help='required for detached single/merged JSONL files; in-campaign paths infer their root')
+    parser.add_argument('--snapshot-dir', required=True, type=Path,
+                        help='durable importing-project directory for immutable ledger and launch snapshots')
     args = parser.parse_args(argv)
-    receipt = verify_import(args.input, campaign_root=args.campaign)
+    receipt = verify_import(args.input, campaign_root=args.campaign, snapshot_dir=args.snapshot_dir)
     print(json.dumps(receipt, sort_keys=True, ensure_ascii=False))
 
 
