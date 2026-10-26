@@ -177,7 +177,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     if 'native_checkpoint_publication' in config:
         from ..model.native_checkpoint_control import publication_trainer_parameters
         parameters.update(publication_trainer_parameters(config['native_checkpoint_publication']))
-    parameters['refresh_at_checkpoint']=True
+    parameters.setdefault('refresh_at_checkpoint', True)
     parameters['stage_id']=stage['id']
     parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_lineage(config))
     result={**config,'recipe_lineage_sha256':parameters['recipe_binding']['lineage_sha256'],'mandatory_sft_only':True,'out':str(Path(out).resolve()),'checkpoint':checkpoint,

@@ -320,7 +320,7 @@ def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path
     task={'packet':{'path':str(held),'sha256':sha256_file_hex(held)},'cases':[0],
           'neuralese_server':True,'runtime_failure_policy':'report'}
     parameters={'epochs':1,'task_eval':task,'task_eval_every':0,
-        'learned_row_learning_rate':.0003,'checkpoint_layers':True,'checkpoint_input_offload':False}
+        'learned_row_learning_rate':.0003,'checkpoint_layers':True,'checkpoint_input_offload':False,'refresh_at_checkpoint':False}
     stage={'id':'full','kind':'native_state_sft','requires':[],
         'inputs':{'native_graphs':'train','held_native_graphs':'held'},'parameters':parameters}
     recipe=tmp_path/'recipe.json';recipe.write_text(json.dumps({
@@ -330,7 +330,7 @@ def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path
     command=['python','-m','natlang_neuralese.train.native_state_sft','{trainer_args}',
         '--task-eval','{task_eval_json}','--task-eval-every=99',
         '--learned-row-learning-rate','{learned_row_learning_rate}',
-        '--no-checkpoint-layers','--checkpoint-input-offload','--chunk-tokens','128']
+        '--no-checkpoint-layers','--checkpoint-input-offload','--refresh-at-checkpoint','--chunk-tokens','128']
     config={'production_recipe':str(recipe),'recipe_lineage_sha256':'a'*64,
         'seed_command':command,'task_eval_json':'','learned_row_learning_rate':1e-6}
     declared,_=supervised.continuation_config(config,stage,checkpoint='full-parent',adapter=None,out=tmp_path/'out')
@@ -347,6 +347,7 @@ def test_declared_recipe_parameters_cannot_be_disabled_by_seed_defaults(tmp_path
     assert config['seed_command']==command
     assert argv[argv.index('--native-graphs')+1]==str(train)
     assert argv[argv.index('--held-native-graphs')+1]==str(held)
+    assert argv.count('--no-refresh-at-checkpoint') == 1 and '--refresh-at-checkpoint' not in argv
 
 
 def test_native_parameters_add_missing_splice_but_custom_launcher_keeps_its_contract():
