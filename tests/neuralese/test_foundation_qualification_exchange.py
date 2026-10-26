@@ -211,6 +211,14 @@ def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cance
     declarations=[];values={};states={};plans={}
     for name in ('lfm','mellum'):
         path,receipt,requirement=candidate_fixture(tmp_path,name)
+        # The frozen VAE preparation uses the participants' full model IDs.
+        # Match those IDs here instead of advertising bare role names as if
+        # they were the exact participants whose source-task baselines it
+        # measured.
+        participant_model_id=name+':base'
+        receipt['model_id']=participant_model_id
+        requirement['model_id']=participant_model_id
+        path.write_text(json.dumps(receipt))
         declarations.append({'model':name,'handoff_requirement':requirement,
             'foundation_qualification_generation':'qualified-generation',
             **{key:roles.binding(path)for key in ('production_recipe','cases','seed_native_graphs','held_native_graphs')}})

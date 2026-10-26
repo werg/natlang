@@ -773,6 +773,17 @@ def test_typed_producer_preserves_full_assistant_tool_result_and_marks_exact_val
     assert result['value']['relevant'] is True
     assert result['value']['facts'] == ROLE_MARKERS[0] + body + ROLE_MARKERS[1]
     assert target['tool_calls'][0]['id'] == source_target['tool_calls'][0]['id']
+    root_write_target = {'role': 'assistant', 'content': '', 'tool_calls': [{
+        'id': 'root-write-call', 'type': 'function',
+        'function': {'name': 'return_result', 'arguments': json.dumps(
+            {'$write': {'name': write_name, 'type': 'Neuralese<string>', 'source': body}},
+            ensure_ascii=False, separators=(',', ':'))},
+    }]}
+    root_write = _replace_source_target_span(root_write_target, {
+        **occurrence, 'writer_json_pointer':
+        '/target/tool_calls/0/function/arguments<json>/$write'}, body, ROLE_MARKERS)
+    assert json.loads(root_write['tool_calls'][0]['function']['arguments']) == (
+        ROLE_MARKERS[0] + body + ROLE_MARKERS[1])
 
     class ProducerTokenizer(ChatRoleAsciiTokenizer):
         all_special_tokens = list(ChatRoleAsciiTokenizer.special) + list(ROLE_MARKERS)

@@ -646,7 +646,7 @@ def _replace_source_target_span(target, occurrence, payload, role_markers):
             except json.JSONDecodeError as exc:
                 raise ValueError('producer occurrence JSON argument is malformed') from exc
             replacement = rewrite(parsed, remaining[1:])
-            parent[field] = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
+            parent[field] = json.dumps(replacement, ensure_ascii=False, separators=(',', ':'))
             return parent
         if not isinstance(parent, (dict, list)):
             raise ValueError('producer occurrence traverses a scalar target value')
@@ -683,7 +683,10 @@ def _replace_source_target_span(target, occurrence, payload, role_markers):
             parent[key] = replacement
         return parent
 
-    rewrite(target, parts)
+    rewritten_target = rewrite(target, parts)
+    if not isinstance(rewritten_target, dict):
+        raise ValueError('producer replacement cannot remove the original assistant target wrapper')
+    target = rewritten_target
     return target
 
 
