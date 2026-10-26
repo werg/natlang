@@ -52,7 +52,7 @@ def rebind_pair_source_corpus(row, corpus_id):
         view['witness']['communication_sha256'] = new_hash
         view['graph']['source_pairing']['communication_sha256'] = new_hash
     return result
-BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-full-producer-targets-v3'
+BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-native-graphs-v4'
 CHECKPOINT_TRAJECTORIES = 16
 RESUME_SCHEMA = 'natlang.native-semantic-e2e-resume/2'
 
@@ -356,7 +356,8 @@ def writer_payload(record, write_name, expected_sha):
         # exact return-result tool arguments still carry the typed `$write`
         # descriptor, which is bound by both the record and edge inventories.
         found = [value for path, value in _walk_paths(record)
-                 if path.startswith('/target/') and isinstance(value, dict) and value.get('type') == 'Neuralese<string>'
+                 if path.startswith('/target/') and isinstance(value, dict) and isinstance(value.get('type'), str)
+                 and value.get('type') in {'Neuralese<string>', 'Neuralese<unknown>'}
                  and value.get('name') == write_name and isinstance(value.get('source'), str)
                  and sha256_bytes(value['source'].encode()) == expected_sha]
         if len(found) == 1:
@@ -407,7 +408,8 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
     writer_source_kind = None
     if not (writer_record.get('native_source_conversion') or {}):
         descriptor_paths = [path for path, value in _walk_paths(writer_record)
-            if path.startswith('/target/') and isinstance(value, dict) and value.get('type') == 'Neuralese<string>'
+            if path.startswith('/target/') and isinstance(value, dict) and isinstance(value.get('type'), str)
+            and value.get('type') in {'Neuralese<string>', 'Neuralese<unknown>'}
             and value.get('name') == write_name and value.get('source') == body]
         if len(descriptor_paths) == 1:
             path = descriptor_paths[0]
@@ -464,6 +466,16 @@ def exact_span(row, tokenizer, body, *, side):
         offset = text.find(body, offset, scope_stop)
         if offset < 0: break
         starts.append(offset); offset += 1
+    if side == 'writer':
+        # A whole-turn target may repeat a literal marker wrapper in its
+        # prompt/context.  The producer is the occurrence in the supervised
+        # target, not an identical spelling in the context prefix.
+        boundary = row.get('supervised_suffix_start')
+        if type(boundary) is not int or not 0 <= boundary <= len(offset_rows):
+            raise ValueError('producer row has no exact supervised target boundary')
+        target_char_start = (offset_rows[boundary][0] if boundary < len(offset_rows)
+                             else (offset_rows[-1][1] if offset_rows else 0))
+        starts = [start for start in starts if start >= target_char_start]
     if len(starts) != 1:
         raise ValueError(f'payload has {len(starts)} visible occurrences in the authenticated {side} region')
     start, stop = starts[0], starts[0] + len(body)
@@ -489,7 +501,10 @@ def exact_span(row, tokenizer, body, *, side):
 def exact_marked_span(row, tokenizer, body, *, open_marker, close_marker, expected_sha256):
     """Bind structural markers and a separately tokenized native body segment."""
     text, ids = row['text'], row['token_ids']
-    wrapper = open_marker + body + close_marker
+    rendered_body = row.get('producer_rendered_body', body)
+    if not isinstance(rendered_body, str):
+        raise ValueError('rendered producer span is not text')
+    wrapper = open_marker + rendered_body + close_marker
     if text.count(wrapper) != 1 or sha256_bytes(body.encode()) != expected_sha256:
         raise ValueError('normalized typed payload wrapper or authenticated body is not unique')
     open_id = tokenizer.convert_tokens_to_ids(open_marker)
@@ -561,7 +576,10 @@ def exact_marked_spans(row, tokenizer, body, *, open_marker, close_marker, expec
 def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
     """Replace only the inserted typed-value boundary spellings with role IDs."""
     text, ids = row['text'], row['token_ids']
-    wrappers = {'writer': (role_markers[0] + payload + role_markers[1], (0, 1)),
+    rendered_payload = row.get('producer_rendered_body', payload) if side == 'writer' else payload
+    if not isinstance(rendered_payload, str):
+        raise ValueError('rendered role span is not text')
+    wrappers = {'writer': (role_markers[0] + rendered_payload + role_markers[1], (0, 1)),
                 'reader': (role_markers[2] + payload + role_markers[3], (2, 3))}
     if side not in wrappers:
         raise ValueError('role marker materialization requires an explicit producer or consumer side')
@@ -573,6 +591,15 @@ def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
         start = text.find(wrapper, cursor)
         if start < 0: break
         starts.append(start); cursor = start + len(wrapper)
+    if side == 'writer':
+        # A full source turn may repeat the literal wrapper in context.  The
+        # producer binding is the occurrence in the supervised target.
+        boundary = row.get('supervised_suffix_start')
+        if type(boundary) is not int or not 0 <= boundary <= len(offset_rows):
+            raise ValueError('producer row has no exact supervised target boundary')
+        target_char_start = (offset_rows[boundary][0] if boundary < len(offset_rows)
+                             else (offset_rows[-1][1] if offset_rows else 0))
+        starts = [start for start in starts if start >= target_char_start]
     if len(starts) != 1:
         # Writer values remain unique; reader fan-out is handled by the shared
         # occurrence-aware path below.
@@ -582,7 +609,7 @@ def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
         for marker_index in which:
             marker = role_markers[marker_index]
             start = (wrapper_start if marker_index in (0, 2) else
-                     wrapper_start + len(role_markers[marker_index - 1]) + len(payload))
+                     wrapper_start + len(role_markers[marker_index - 1]) + len(rendered_payload))
             stop = start + len(marker)
             token_span = [i for i, (left, right) in enumerate(offset_rows)
                           if right > left and left >= start and right <= stop]
@@ -632,6 +659,64 @@ def _replace_source_target_span(target, occurrence, payload, role_markers):
         raise ValueError('producer occurrence pointer is outside the assistant target')
     parts = parts[1:]
 
+    # `Neuralese<unknown>` is a JSON-valued result.  Its source is the exact
+    # compact JSON serialization of the structured return value, so marking it
+    # as a Python/string value would train the wrong result type.  Render the
+    # original complete tool-argument JSON with role markers around the raw
+    # JSON value, then pass it through the ordinary text-part renderer.  Once
+    # the marker spellings are removed, the original arguments parse to the
+    # same structured value and retain all sibling fields and wrapper data.
+    json_part = next((index for index, part in enumerate(parts) if part.endswith('<json>')), None)
+    if json_part is not None:
+        json_field = parts[json_part][:-6]
+        try:
+            argument_owner = target
+            for part in parts[:json_part]:
+                argument_owner = argument_owner[int(part)] if isinstance(argument_owner, list) else argument_owner[part]
+            raw_arguments = argument_owner[json_field]
+            parsed_arguments = json.loads(raw_arguments)
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError('producer occurrence JSON argument does not resolve') from exc
+        descriptor_path = parts[json_part + 1:]
+        try:
+            descriptor = parsed_arguments
+            for part in descriptor_path:
+                descriptor = descriptor[int(part)] if isinstance(descriptor, list) else descriptor[part]
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ValueError('producer occurrence descriptor does not resolve') from exc
+        if (isinstance(descriptor, dict) and isinstance(descriptor.get('type'), str)
+                and descriptor.get('type') in {'Neuralese<string>', 'Neuralese<unknown>'}
+                and descriptor.get('name') == occurrence.get('write_name')
+                and descriptor.get('source') == payload):
+            value = payload
+            if descriptor.get('type') == 'Neuralese<unknown>':
+                try:
+                    value = json.loads(payload)
+                except json.JSONDecodeError as exc:
+                    raise ValueError('unknown producer source is not its declared JSON value') from exc
+            if not descriptor_path or descriptor_path[-1] != '$write':
+                raise ValueError('unknown producer path does not identify its typed write descriptor')
+            parent = parsed_arguments
+            try:
+                for part in descriptor_path[:-1]:
+                    parent = parent[int(part)] if isinstance(parent, list) else parent[part]
+                if not isinstance(parent, dict) or parent.get('$write') != descriptor:
+                    raise ValueError('unknown producer descriptor changed during target derivation')
+                container_path = descriptor_path[:-1]
+                if not container_path:
+                    parsed_arguments = value
+                else:
+                    outer = parsed_arguments
+                    for part in container_path[:-1]:
+                        outer = outer[int(part)] if isinstance(outer, list) else outer[part]
+                    final = container_path[-1]
+                    if isinstance(outer, list): outer[int(final)] = value
+                    else: outer[final] = value
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                raise ValueError('unknown producer target path cannot be resolved') from exc
+            argument_owner[json_field] = json.dumps(parsed_arguments, ensure_ascii=False, separators=(',', ':'))
+            return target
+
     def rewrite(parent, remaining):
         if not remaining:
             raise ValueError('producer occurrence pointer has no target value')
@@ -657,10 +742,13 @@ def _replace_source_target_span(target, occurrence, payload, role_markers):
         if len(remaining) == 1:
             if key == '$write' and isinstance(child, dict):
                 descriptor = child
-                if (descriptor.get('type') != 'Neuralese<string>'
+                if (not isinstance(descriptor.get('type'), str)
+                        or descriptor.get('type') not in {'Neuralese<string>', 'Neuralese<unknown>'}
                         or descriptor.get('source') != payload
                         or descriptor.get('name') != occurrence.get('write_name')):
                     raise ValueError('producer descriptor differs from the authenticated communication edge')
+                if descriptor.get('type') == 'Neuralese<unknown>':
+                    raise ValueError('structured producer must use the typed JSON target serializer')
                 if not isinstance(parent, dict) or len(parent) != 1:
                     raise ValueError('typed producer value has unexpected sibling metadata around its write')
                 # `$write` is source-side capture metadata, not the declared
@@ -751,8 +839,83 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
     writer_source_kind = occurrence.get('writer_source_kind')
     if writer_occurrences and len(writer_occurrences) != 1:
         raise ValueError('writer target span lacks one exact source occurrence')
+    writer_target_span = None
+    inline_sidecar_span = None
+    if writer_source_kind != 'assistant-text-return':
+        source_values = dict(_walk_paths(writer_record))
+        source_descriptor = source_values.get(occurrence['writer_json_pointer'])
+        pointer_parts = [part.replace('~1', '/').replace('~0', '~')
+                         for part in occurrence['writer_json_pointer'].split('/')[1:]]
+        inline_path = (len(pointer_parts) == 7 and pointer_parts[0] == 'target'
+            and pointer_parts[1] == 'tool_calls' and pointer_parts[3:5] == ['neuralese_code', 'parts']
+            and pointer_parts[6] == '$write')
+        if (isinstance(source_descriptor, dict)
+                and isinstance(source_descriptor.get('type'), str)
+                and source_descriptor.get('type') in {'Neuralese<string>', 'Neuralese<unknown>'}
+                and not inline_path):
+            json_index = next((index for index, part in enumerate(pointer_parts)
+                               if part.endswith('<json>')), None)
+            if json_index is None or pointer_parts[json_index][:-6] != 'arguments':
+                raise ValueError('structured producer is not bound inside exact tool arguments')
+            try:
+                call_index = pointer_parts[pointer_parts.index('tool_calls') + 1]
+                if not call_index.isdigit() or pointer_parts[json_index - 1] != 'function':
+                    raise ValueError
+            except (ValueError, IndexError) as exc:
+                raise ValueError('structured producer tool-call path is malformed') from exc
+            argument_path = pointer_parts[json_index + 1:-1]
+            if not argument_path:
+                raise ValueError('structured producer value path is empty')
+            writer_target_span = {'call_index': int(call_index), 'argument_path': argument_path,
+                'body': payload, 'payload_sha256': occurrence['payload_sha256'],
+                'value_type': ('unknown' if source_descriptor.get('type') == 'Neuralese<unknown>' else 'string')}
+        elif (isinstance(source_descriptor, dict)
+                and source_descriptor.get('type') == 'Neuralese<string>'
+                and inline_path):
+            # Inline writes are metadata in a validated sidecar, while the
+            # actual producer is the exact source interval in function.arguments.code.
+            # Keep the complete original eval call and sidecar unchanged; bind
+            # rendering to the validator's code offsets instead of rewriting
+            # the sidecar descriptor into a fake standalone assistant result.
+            from natlang_neuralese.train.inline_instructions import validate_inline_instruction_code
+            try:
+                call_index = int(pointer_parts[2])
+                call = writer_record['target']['tool_calls'][call_index]
+                function = call.get('function', call)
+                checked = validate_inline_instruction_code(function.get('arguments'), call.get('neuralese_code'))
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                raise ValueError('inline producer sidecar path is malformed') from exc
+            if not checked.valid or checked.value is None:
+                raise ValueError('inline producer sidecar is not authenticated by the exact code argument: '+str(checked.reason))
+            writes = [write for write in checked.value.writes if write.name == occurrence['write_name']]
+            if len(writes) != 1:
+                raise ValueError('inline producer name does not bind one validated code span')
+            write = writes[0]
+            if write.type != 'Neuralese<string>' or write.source != payload:
+                raise ValueError('inline producer body differs from the validated typed source')
+            sidecar = call.get('neuralese_code')
+            sites = [site for site in (sidecar.get('sites') or [])
+                     if isinstance(site, dict) and site.get('name') == write.name]
+            if (len(sites) != 1 or not isinstance(sites[0].get('actual_tool_call_id'), str)
+                    or not sites[0].get('actual_tool_call_id')
+                    or sites[0].get('code_span') != {'start': write.start - 1, 'end': write.end + 1}
+                    or checked.value.code[write.start - 1:write.end + 1] != '`' + payload + '`'):
+                raise ValueError('inline producer sidecar offsets differ from the exact template source')
+            inline_sidecar_span = {'call_index': call_index, 'argument_path': ['code'],
+                'body': payload, 'payload_sha256': occurrence['payload_sha256'],
+                'value_type': 'inline-string', 'source_start': write.start,
+                'source_end': write.end, 'sidecar_code_sha256': checked.value.code_sha256,
+                'site_name': write.name,
+                'site_actual_tool_call_id': sites[0]['actual_tool_call_id']}
+            writer_target_span = inline_sidecar_span
     if writer_source_kind == 'assistant-text-return':
         writer_target = _assistant_text_target(writer_record, payload, role_markers)
+    elif inline_sidecar_span is not None:
+        # The sidecar describes source offsets; it is not the model's target.
+        # The original assistant/tool call, including its complete eval code,
+        # remains the supervised target.
+        import copy
+        writer_target = copy.deepcopy(writer_record['target'])
     else:
         writer_target = _replace_source_target_span(writer_record['target'], occurrence, payload, role_markers)
     derivations={writer_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
@@ -760,6 +923,7 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
         'producer_occurrence_id':occurrence['writer_occurrence_id'],
         'producer_source_pointer':occurrence['writer_json_pointer'],
         'producer_payload_sha256':occurrence['payload_sha256'],
+        **({'producer_span':writer_target_span} if writer_target_span else {}),
         'target':writer_target},
         reader_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
             'source_record_sha256':digest(reader_record),'context_replacements':replacements}}
