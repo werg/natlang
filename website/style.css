@@ -146,7 +146,7 @@ main > section { padding-top: 64px; }
 .plate.light .plate-cap { background: var(--mustard); }
 a.plate { transition: transform 0.15s; }
 a.plate:hover { transform: translateY(-3px); }
-.plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 26px; }
+.plates { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 26px; }
 
 /* chapter header plate */
 .chead { display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 36px; }
@@ -167,13 +167,13 @@ h1 { margin: 0; font: 700 60px/0.98 Jost, "Century Gothic", sans-serif; text-tra
 h1 em { display: block; font: italic 400 94px/1.05 "Libre Caslon Text", Georgia, serif; text-transform: none; color: var(--vermilion); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .pillbtn { display: inline-block; text-decoration: none; padding: 13px 24px; border-radius: 999px; font: 700 13.5px/1 Jost, sans-serif; letter-spacing: 0.2em; text-transform: uppercase; border: 2px solid var(--rule); color: var(--text); background: transparent; cursor: pointer; }
-.pillbtn.primary { background: var(--vermilion); border-color: var(--vermilion); color: var(--cream); }
+.pillbtn.primary { background: var(--vermilion-ink); border-color: var(--vermilion-ink); color: var(--cream); }
 .smallnote { font-size: 15px; font-style: italic; color: var(--text-2); }
 
 .codeplate .fname { display: block; padding: 14px 20px 6px; font: 700 12px/1.2 "Courier Prime", monospace; color: var(--sky); }
 .codeplate pre.code { margin: 0 20px; background: #14203a; box-shadow: none; font-size: 13.5px; }
 .codeplate .plate-cap { margin-top: 18px; }
-.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 56px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; margin-top: 56px; }
 .facts div { padding: 16px 18px 16px; border-radius: 4px; background: var(--card); color: var(--card-ink); box-shadow: var(--shadow), 0 0 0 1px var(--plate-edge), inset 0 6px 0 var(--fc); padding-top: 22px; font-size: 16px; line-height: 1.5; }
 .facts b { display: block; font: 700 15px/1.3 Jost, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
 .facts a { display: inline-block; margin-top: 6px; font: 700 12px/1 Jost, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vermilion-ink); }
@@ -207,8 +207,8 @@ h1 em { display: block; font: italic 400 94px/1.05 "Libre Caslon Text", Georgia,
 .chip[disabled] { opacity: 0.4; cursor: not-allowed; }
 .btn { font: 700 12px/1 Jost, sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--card-ink); background: transparent; border: 2px solid var(--card-ink); border-radius: 999px; padding: 10px 16px; cursor: pointer; }
 .btn:hover { background: var(--card-2); }
-.btn.primary { background: var(--vermilion); border-color: var(--vermilion); color: var(--cream); }
-.btn.primary:hover { background: #ad3a1b; }
+.btn.primary { background: var(--vermilion-ink); border-color: var(--vermilion-ink); color: var(--cream); }
+.btn.primary:hover { background: #8f2f15; }
 .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 .btn:active, .chip:active { transform: translateY(1px); }
 
@@ -244,7 +244,7 @@ pre.code { margin: 0; padding: 14px 16px; background: var(--navy); color: var(--
 
 .pill { display: inline-flex; align-items: center; gap: 5px; font: 700 11px/1 Jost, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 9px; border-radius: 99px; background: var(--card-2); color: var(--card-ink); white-space: nowrap; }
 .pill.ok { background: var(--teal); color: var(--navy); }
-.pill.err { background: var(--vermilion); color: var(--cream); }
+.pill.err { background: var(--vermilion-ink); color: var(--cream); }
 .pill.p { background: var(--mustard); color: var(--navy); }
 .pill.c { background: var(--sky); color: var(--navy); }
 .pill.s { background: var(--plum); color: var(--cream); }
@@ -327,7 +327,7 @@ ol.steps li::before { content: counter(s); display: grid; place-items: center; w
 .reading { font: italic 19px/1.6 "Libre Caslon Text", serif; padding: 12px 14px; border-radius: 4px; background: #fbf6ea; min-height: 60px; }
 .reading mark { background: var(--mustard); color: var(--navy); border-radius: 3px; padding: 0 3px; font: 700 0.82em "Courier Prime", monospace; font-style: normal; }
 .reading mark.param { background: var(--sky); }
-.reading mark.bad { background: var(--vermilion); color: var(--cream); }
+.reading mark.bad { background: var(--vermilion-ink); color: var(--cream); }
 .reading .interp { font: 0.85em "Courier Prime", monospace; font-style: normal; color: var(--crisp); }
 .fence { font: 14px/1.5 "Courier Prime", monospace; white-space: pre-wrap; word-break: break-word; padding: 12px 14px; border-radius: 4px; background: var(--readout); color: #e6e9f0; }
 .fence .f { color: #ff8a6b; font-weight: 700; }
@@ -377,7 +377,7 @@ ol.steps li::before { content: counter(s); display: grid; place-items: center; w
 .eqs .bad { color: var(--err); font-weight: 700; }
 
 /* ---------- quiz ---------- */
-.quiz { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 22px; }
+.quiz { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 22px; }
 .card { --muted: var(--card-muted); background: var(--card); color: var(--card-ink); border-radius: 4px; padding: 14px; display: grid; gap: 10px; align-content: start; box-shadow: var(--shadow), 0 0 0 1px var(--plate-edge); }
 .card pre.code { font-size: 13px; }
 .card .answers { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -399,7 +399,7 @@ ol.steps li::before { content: counter(s); display: grid; place-items: center; w
 .chart .rev { fill: var(--plum); }
 .events { font: 13px/1.5 "Courier Prime", monospace; display: grid; gap: 4px; max-height: 200px; overflow-y: auto; }
 .events div { padding: 5px 8px; border-radius: 3px; background: #fbf6ea; }
-.events .e-err { background: var(--vermilion); color: var(--cream); }
+.events .e-err { background: var(--vermilion-ink); color: var(--cream); }
 .events .e-ok { background: var(--teal); color: #10231f; }
 .events .e-rev { background: var(--plum); color: var(--cream); }
 
@@ -457,6 +457,14 @@ ol.steps li::before { content: counter(s); display: grid; place-items: center; w
 .vec { display: inline-flex; gap: 3px; vertical-align: middle; padding: 0 4px; }
 .vec i { width: 12px; height: 22px; border-radius: 2px; display: block; transition: background 0.3s; }
 .lit { font: 700 15px/2 "Courier Prime", monospace; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 12px 14px; border-radius: 4px; background: var(--readout); color: #c9b3ec; }
+.lit .st-tok { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 0 2px; }
+.lit .st-tok .vec { flex-direction: column; gap: 2px; padding: 0; }
+.lit .st-tok .vec i { width: 26px; height: 5px; }
+.lit .st-t { font: 700 12px/1.2 "Courier Prime", monospace; color: #e6e9f0; transition: color 0.3s; }
+.lit[data-mode="blocked"] .vec i { background: #3a2a3a !important; outline: 1px solid #ff8a6b; }
+.lit[data-mode="text"] .vec i { background: #2a3550 !important; }
+.lit[data-mode="text"] .st-t { color: #f6cf74; }
+.lit[data-mode="mapped"] .vec i { filter: hue-rotate(-60deg); }
 .ops { display: grid; gap: 6px; }
 .op { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 9px 11px; border-radius: 4px; border: 2px solid transparent; background: #fbf6ea; cursor: pointer; text-align: left; font: 14px/1.4 "Courier Prime", monospace; color: var(--card-ink); }
 .op:hover { border-color: var(--line-strong); }

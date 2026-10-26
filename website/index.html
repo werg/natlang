@@ -204,7 +204,7 @@ const flags = await Promise.all(
     <a class="plate" href="#termination" style="--pb: #9cc8d6; --pt: #1d2840"><div class="plate-top"><span class="plate-title">Termination</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-5"/></svg><p class="plate-cap"><b>V</b><span>Why programs end without turn or token budgets.</span></p></a>
     <a class="plate light" href="#judgment" style="--pb: #f2e9d6; --pt: #1d2840"><div class="plate-top"><span class="plate-title">Judgment, typed</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-6"/></svg><p class="plate-cap"><b>VI</b><span>Decisions as probabilities, and predicates as types.</span></p></a>
     <a class="plate" href="#jit" style="--pb: #1d2840; --pt: #f2e9d6"><div class="plate-top"><span class="plate-title">A JIT for English</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-7"/></svg><p class="plate-cap"><b>VII</b><span>How recorded calls become code that skips the model.</span></p></a>
-    <a class="plate" href="#neuralese" style="--pb: #6a4c93; --pt: #f2e9d6"><div class="plate-top"><span class="plate-title">Neuralese</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-8"/></svg><p class="plate-cap"><b>VIII</b><span>Typed values made of vectors, which only models read.</span></p></a>
+    <a class="plate" href="#neuralese" style="--pb: #6a4c93; --pt: #f2e9d6"><div class="plate-top"><span class="plate-title">Neuralese</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-8"/></svg><p class="plate-cap"><b>VIII</b><span>Typed values kept as a model's internal state.</span></p></a>
     <a class="plate" href="#policy" style="--pb: #efb02e; --pt: #1d2840"><div class="plate-top"><span class="plate-title">Policy &amp; mechanism</span></div><svg class="emblem" viewBox="0 0 300 180" aria-hidden="true"><use href="#em-9"/></svg><p class="plate-cap"><b>IX</b><span>How natlang programs divide work between prose and code.</span></p></a>
   </div>
 </section>
@@ -500,7 +500,7 @@ the ticket, report an error saying what is missing.</pre>
           <p id="dec-ticket" style="margin: 10px 0 0; font-style: italic"></p>
         </div>
         <div class="panel-b">
-          <svg class="bars" id="dec-bars" viewBox="0 0 420 210" role="slider" tabindex="0" aria-label="Probability per label. Left and right arrows choose a label; up and down change its probability."></svg>
+          <svg class="bars" id="dec-bars" viewBox="0 0 420 210" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-label="Probability per label. Left and right arrows choose a label; up and down change its probability."></svg>
           <div class="row" style="margin: 6px 0 12px"><span class="label" style="margin: 0">True label</span><span class="chips" id="dec-truth"></span></div>
           <div class="metrics" id="dec-metrics"></div>
           <pre class="code" id="dec-json" style="margin-top: 12px"></pre>
@@ -585,12 +585,12 @@ the ticket, report an error saying what is missing.</pre>
   <header class="plate chead" style="--pb: #6a4c93; --pt: #f2e9d6; --nc: #efb02e">
     <div class="ctext"><span class="numeral">VIII</span><h2>Neuralese</h2></div>
     <div class="cemb"><svg viewBox="0 0 300 180" aria-hidden="true"><use href="#em-8"/></svg></div>
-    <p class="plate-cap"><b>VIII</b><span>A research extension: typed values made of vectors, which only a model can read.</span></p>
+    <p class="plate-cap"><b>VIII</b><span>A research extension: typed values kept as a model's internal state, which only a model can read.</span></p>
   </header>
   <div class="cols">
     <div class="read">
-      <p>When one model's output goes straight into another model, turning it into text loses information. <code>Neuralese&lt;T&gt;</code> is a value of type <code>T</code> stored as vectors that only a model can read. Your code can store and pass it but cannot look inside; <code>read()</code> turns it back into a checked <code>T</code>.</p>
-      <p>Writing such a value has its own randomness setting, <code>τ</code>, separate from text sampling, and is deterministic at the default <code>τ = 0</code>. Using Neuralese on a backend that does not support it is an error; there is no silent fallback to text.</p>
+      <p>When one model call's output goes straight into another call, turning it into text and reading it again throws away the work the model did. <code>Neuralese&lt;T&gt;</code> is a value of type <code>T</code> kept as the model's own state. The producing call writes it between <code>&lt;|neuralese_produce|&gt;</code> markers, and the runtime keeps the attention keys and values for that span, plus the convolution and recurrent state on hybrid models such as LFM. A consuming call splices that state in, at its original positions, between <code>&lt;|neuralese_consume|&gt;</code> markers.</p>
+      <p>Your code can store and pass such a value but cannot look inside; <code>read()</code> turns it back into a checked <code>T</code>. The value also keeps its text and the tokenizer it came from. Its state is reused only by the same checkpoint, tokenizer and architecture; any other reader must declare that it re-encodes the text. Using Neuralese on a backend that does not support it is an error; there is no silent fallback to text.</p>
       <div class="rule"><div class="frac">
         <div class="pre"><span>v : <span class="t">Neuralese&lt;T&gt;</span></span><span><span class="t">v.f</span>, <span class="t">v + 1</span>, <span class="t">if (v)</span>: rejected</span></div>
         <div class="post"><span class="t">read(v) : Promise&lt;T&gt;</span></div>
@@ -600,9 +600,11 @@ the ticket, report an error saying what is missing.</pre>
       <div class="panel" id="nz">
         <div class="panel-h"><span class="lamps"><i></i><i></i><i></i></span><span>brief.summary : Neuralese&lt;Summary&gt;</span><span class="right sim">compile-time rules</span></div>
         <div class="panel-b">
-          <span class="label">The value as a model sees it</span>
+          <span class="label">The value as a model sees it: text, and the state of every layer at each token</span>
           <div class="lit" id="nz-lit"></div>
-          <div class="row" style="margin-top: 10px"><span class="mono" style="min-width: 90px">τ = <b id="nz-tau-v">0.00</b></span><input type="range" id="nz-tau" min="0" max="1" step="0.05" value="0" style="flex: 1" aria-label="Neuralese temperature"></div>
+          <span class="label" style="margin-top: 12px">Who reads it</span>
+          <div class="chips" id="nz-readers"></div>
+          <div id="nz-read" style="margin-top: 10px"></div>
         </div>
         <div class="panel-b">
           <span class="label">Choose an operation</span>
@@ -639,12 +641,12 @@ the ticket, report an error saying what is missing.</pre>
   </div>
   <div class="cols full" style="margin-top: 48px">
     <div class="read">
-      <p>You get this without writing Neuralese yourself. If one stage's result goes only into the next stage, as in <code>analyze(parse(source))</code>, the runtime may pass it as vectors. Any other reader, such as a log line or a field access, keeps it as text.</p>
-      <p>Research under way replaces the vectors with model state passed directly from the producing model to the consuming one. It is being trained and has no results yet.</p>
+      <p>You get this without writing Neuralese yourself. If one stage's result goes only into the next stage, as in <code>analyze(parse(source))</code>, the runtime may pass it as model state. Any other reader, such as a log line or a field access, keeps it as text.</p>
+      <p>Passing state between different models needs a learned translation: a shared space that turns one model's per-token codes into another model's state. That is the next stage of the research and has no results yet.</p>
     </div>
     <div class="ex">
       <div class="panel" id="fu">
-        <div class="panel-h"><span class="lamps"><i></i><i></i><i></i></span><span>Which hand-offs may stay as vectors</span></div>
+        <div class="panel-h"><span class="lamps"><i></i><i></i><i></i></span><span>Which hand-offs may stay as model state</span></div>
         <div class="panel-b">
           <svg class="fusion" id="fu-svg" viewBox="0 0 600 186" role="img" aria-label="Pipeline hand-offs"></svg>
           <pre class="code" id="fu-code" style="margin-top: 6px"></pre>

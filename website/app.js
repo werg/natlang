@@ -318,7 +318,7 @@ not urgent.`;
     { name: 'escalate', ty: '(v: Verdict) => Promise<void>', kind: 'fn', how: 'function type · captured by value' },
     { name: 'email', ty: 'Untrusted<string>', kind: 'const', how: 'from mail.fetch · rendered as fenced data' },
   ];
-  const byName = Object.fromEntries(SCOPE.map(s => [s.name, s]));
+  const byName = new Map(SCOPE.map(s => [s.name, s]));
   const ta = $('#cap-text');
   ta.value = 'Judge note against limit and policy. If its score clears threshold, add the verdict to verdicts and escalate it.';
   const TRIES = [
@@ -344,16 +344,16 @@ not urgent.`;
     pieces.forEach(p => {
       if (p.startsWith('${')) {
         const ids = p.slice(2, -1).match(/[A-Za-z_$][\w$]*/g) || [];
-        const untrusted = ids.find(id => byName[id] && byName[id].ty.startsWith('Untrusted'));
+        const untrusted = ids.find(id => byName.get(id)?.ty.startsWith('Untrusted'));
         if (untrusted) bad = untrusted;
-        ids.forEach(id => { if (byName[id]) hits.set(id, (hits.get(id) || 0) + 1); });
+        ids.forEach(id => { if (byName.has(id)) hits.set(id, (hits.get(id) || 0) + 1); });
         html += `<span class="interp">${untrusted ? `<mark class="bad">${esc(p)}</mark>` : esc(p)}</span>`;
         return;
       }
       html += p.replace(/`([^`]*)`|([A-Za-z_$][\w$]*)|([^A-Za-z_$`]+)/g, (m, bt, id, other) => {
         if (other !== undefined) return esc(other);
         const name = bt !== undefined ? bt : id;
-        const s = byName[name];
+        const s = byName.get(name);
         if (s) {
           hits.set(name, (hits.get(name) || 0) + 1);
           return `<mark class="${s.kind === 'param' ? 'param' : ''}">${esc(m)}</mark>`;
@@ -365,8 +365,8 @@ not urgent.`;
     $('#cap-reading').innerHTML = html || '<span class="note">(empty)</span>';
     $('#cap-scope').innerHTML = SCOPE.map(s => `<tr class="${s.kind === 'param' ? 'param' : ''} ${hits.has(s.name) ? 'hit' : ''}">
       <td class="nm">${esc(s.name)}</td><td class="ty">${esc(s.ty)}</td><td class="how">${hits.has(s.name) ? (s.kind === 'param' ? 'parameter (shadows any capture)' : 'captured · ' + esc(s.how)) : esc(s.how)}</td></tr>`).join('');
-    const caps = [...hits.keys()].filter(n => byName[n].kind !== 'param');
-    const params = [...hits.keys()].filter(n => byName[n].kind === 'param');
+    const caps = [...hits.keys()].filter(n => byName.get(n).kind !== 'param');
+    const params = [...hits.keys()].filter(n => byName.get(n).kind === 'param');
     const words = (text.match(/[A-Za-z']+/g) || []).length;
     let msgs = '';
     if (bad) {
@@ -729,7 +729,8 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       s += `<text x="${x + BW / 2}" y="${BOT + 22}">'${l}'</text>`;
     });
     svg.innerHTML = s;
-    svg.setAttribute('aria-valuetext', LABELS.map((l, i) => `${l} ${(p[i] * 100).toFixed(0)}%`).join(', '));
+    svg.setAttribute('aria-valuenow', (p[sel] * 100).toFixed(0));
+    svg.setAttribute('aria-valuetext', `${LABELS[sel]} ${(p[sel] * 100).toFixed(0)}% selected; ` + LABELS.map((l, i) => `${l} ${(p[i] * 100).toFixed(0)}%`).join(', '));
     const brier = p.reduce((a, x, i) => a + (x - (i === truth ? 1 : 0)) ** 2, 0);
     const logloss = -Math.log(p[truth]);
     const arg = p.indexOf(Math.max(...p));
@@ -899,29 +900,41 @@ await rank(tickets)   // → string[] (40), checked against the declared type
 
 /* ------------------------------------------------------------------ 08a: Neuralese is opaque */
 (function neuralese() {
-  const L = 14;
+  // A native Neuralese value: the producer's text plus, for each token, the state of every layer (keys and values,
+  // and convolution/recurrent state on hybrid models). The reader decides whether that state can be reused.
+  const TOKENS = ['3', ' users', ' locked', ' out', ' after', ' the', ' 2.4', ' deploy'];
+  const LAYERS = 6;
   const lit = $('#nz-lit');
-  lit.innerHTML = `<span class="tok">&lt;|neuralese|&gt;</span><span class="vec">${'<i></i>'.repeat(L)}</span><span class="tok">&lt;|/neuralese|&gt;</span>`;
-  const cells = $$('.vec i', lit);
   const rng = mulberry(42);
-  const mu = cells.map(() => rng()), sigma = cells.map(() => 0.15 + rng() * 0.2);
-  const tauEl = $('#nz-tau');
-  let tau = 0;
+  lit.innerHTML = `<span class="tok">&lt;|neuralese_produce|&gt;</span>` +
+    TOKENS.map(t => `<span class="st-tok"><span class="vec">${Array.from({ length: LAYERS }, () =>
+      `<i style="background: color-mix(in srgb, #c9b3ec ${Math.round(18 + rng() * 82)}%, #1d2840)"></i>`).join('')}</span><span class="st-t">${esc(t.trim())}</span></span>`).join('') +
+    `<span class="tok">&lt;|/neuralese_produce|&gt;</span>`;
+  const READERS = [
+    { k: 'same', label: 'the same model', mode: 'live', kind: 'ok', h: 'spliced',
+      msg: 'The consumer\'s attention reads the stored keys and values at their original positions, between <|neuralese_consume|> markers; on LFM the convolution and recurrent state carry over too. The span is not tokenized or run again.' },
+    { k: 'ckpt', label: 'a newer checkpoint', mode: 'blocked', kind: 'err', h: 'neuralese-native-consumer-unavailable',
+      msg: 'State is reused only when checkpoint, tokenizer and architecture all match. The reader must declare text re-encoding or a state adapter; the old tensors are never fed to new weights.' },
+    { k: 'text', label: 'another model, re-encoding text', mode: 'text', kind: 'warn', h: 're-encoded',
+      msg: 'The stored text is tokenized with the reader\'s tokenizer and read as ordinary input. This is best effort: the producer\'s state does not come along.' },
+    { k: 'adapter', label: 'another model, learned adapter', mode: 'mapped', kind: 's', h: 'research',
+      msg: 'A shared adapter turns the producer\'s per-token codes into changes to the reader\'s state. The runtime accepts one; training it is the next stage of the research and has no results yet.' },
+  ];
+  let reader = 0;
+  $('#nz-readers').innerHTML = READERS.map((r, i) => `<button class="chip s" type="button" data-i="${i}">${esc(r.label)}</button>`).join('');
+  $$('#nz-readers .chip').forEach(b => b.addEventListener('click', () => { reader = +b.dataset.i; paint(); }));
   function paint() {
-    cells.forEach((c, i) => {
-      const eps = tau ? (Math.random() * 2 - 1) : 0;
-      const v = Math.min(1, Math.max(0, mu[i] + tau * sigma[i] * eps));
-      c.style.background = `color-mix(in srgb, #c9b3ec ${Math.round(14 + v * 86)}%, #1d2840)`;
-    });
+    const r = READERS[reader];
+    $$('#nz-readers .chip').forEach((b, i) => { b.classList.toggle('on', i === reader); b.setAttribute('aria-pressed', String(i === reader)); });
+    lit.dataset.mode = r.mode;
+    $('#nz-read').innerHTML = `<div class="msg ${r.kind} fadein"><span class="h">${esc(r.h)}</span>  ${esc(r.msg)}</div>`;
   }
-  tauEl.addEventListener('input', () => { tau = +tauEl.value; $('#nz-tau-v').textContent = tau.toFixed(2); paint(); });
-  setInterval(() => { if (tau && !reduced) paint(); }, 280);
   paint();
 
   const OPS = [
     { code: 'brief.summary.length', ok: false, msg: 'neuralese-opaque-access: host code cannot read fields or indices of a soft value. Use read(v) for a T, or ask(v, question) for one answer.' },
     { code: 'if (brief.summary) notify()', ok: false, msg: 'neuralese-condition: a soft value cannot be used as a condition.' },
-    { code: 'brief.summary === other.summary', ok: false, msg: 'neuralese-opaque-access: soft values are not compared. Equality of vectors is not the equality you want.' },
+    { code: 'brief.summary === other.summary', ok: false, msg: 'neuralese-opaque-access: soft values are not compared. Two states that mean the same thing need not be equal tensors.' },
     { code: 'await store.put(brief)', ok: true, msg: 'Fine: soft values may be stored, passed and returned. Outside the model a block is a reference: { "$neuralese": { "type": "Neuralese<Summary>", "id": "nz1_…" } }' },
     { code: 'const s: Summary = await read(brief.summary)', ok: true, msg: 'The only way back to a T: read is validated like any call result and rejects with NatlangCallError otherwise.' },
     { code: 'await ask(brief.summary, "Who is affected?")', ok: true, msg: 'ask(v, q) is defined as read(map(v, q)): the answer to q from what v holds, as a string.' },
