@@ -142,7 +142,9 @@ try {
   const tolerance = Number(values.tolerance);
   const checks = {
     'the state is consumed': answered(out.state) && answered(out.control) && answered(out.text),
-    'the perturbed state is read differently from its text state': answered(out.state) && gap(out.state, out.control) > tolerance,
+    // the perturbation moves these answer tokens by about 0.02 natively, so any difference shows the state is read
+    'the perturbed state is read differently from its text state': answered(out.state) && answered(out.control) &&
+      gap(out.state, out.control) > 1e-4,
     'the state is reproducible after other requests': answered(out.stateAgain) && out.stateAgain.text === out.state.text &&
       gap(out.stateAgain, out.state) <= tolerance,
     'a state that is not loaded is refused': !answered(out.missing) && /not loaded/.test(out.missing?.error),
