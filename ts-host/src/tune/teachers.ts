@@ -1,3 +1,4 @@
+import { executionKey, type TuneExecution } from './execution.js';
 /**
  * Teacher calibration and routing (plans/HIERARCHICAL_LORA_TUNING.md §4.2).
  *
@@ -17,12 +18,12 @@ import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import type { SplitExample } from './collect.js';
 import { evaluateRoots, rootSuccess } from './evaluate.js';
 
-export type TeacherCalibration = { readonly schema: 'natlang.tune-teacher-calibration/v1'; readonly teacher: string; readonly profile: string;
+export type TeacherCalibration = { readonly schema: 'natlang.tune-teacher-calibration/v1'; readonly teacher: string; readonly profile: string; readonly execution?: TuneExecution;
   readonly examples: string; readonly roots: number; readonly success: number; readonly failures: number;
   readonly tokensPerRoot: number; readonly msPerRoot: number };
 export type TeacherChoice = { readonly schema: 'natlang.tune-teacher-choice/v1'; readonly teacher: string | null; readonly profile: string | null;
   readonly reason: string; readonly policy: 'crisp' | 'nl'; readonly minSuccess: number; readonly calibrations: readonly TeacherCalibration[] };
-export type TeacherCandidate = { readonly profile: string; readonly id: string; readonly driver: ModelDriver };
+export type TeacherCandidate = { readonly profile: string; readonly execution?: TuneExecution; readonly id: string; readonly driver: ModelDriver };
 
 const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const rate = (item: TeacherCalibration) => item.roots ? item.success / item.roots : 0;
@@ -30,20 +31,20 @@ const writeJson = (path: string, value: unknown) => { writeFileSync(path + '.tmp
 
 /** Measure each candidate on the same development roots; a stored measurement for the same identity and roots is reused. */
 export async function calibrateTeachers(options: { root: string; program: ProgramDescriptor; candidates: readonly TeacherCandidate[];
-  examples: readonly SplitExample[]; log?: (line: string) => void; services?: (example: SplitExample) => Services }): Promise<TeacherCalibration[]> {
+  examples: readonly SplitExample[]; log?: (line: string) => void; execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<TeacherCalibration[]> {
   if (!options.examples.length) throw new Error('teacher calibration needs development root examples');
   const examples = sha(options.examples.map(example => example.id).sort());
   const directory = join(tuneDirectory(options.root), 'teachers');
   mkdirSync(directory, { recursive: true });
   const results: TeacherCalibration[] = [];
   for (const candidate of options.candidates) {
-    const path = join(directory, sha([candidate.id, examples]).slice(0, 24) + '.json');
+    const path = join(directory, sha([candidate.id, examples, executionKey(options.execution)]).slice(0, 24) + '.json');
     if (existsSync(path)) { results.push(JSON.parse(readFileSync(path, 'utf8'))); continue; }
     options.log?.(`calibrating teacher ${candidate.profile} on ${options.examples.length} development roots`);
-    const arm = await evaluateRoots({ root: options.root, program: options.program, driver: candidate.driver, weights: [], services: options.services,
+    const arm = await evaluateRoots({ root: options.root, program: options.program, driver: candidate.driver, weights: [], services: options.services, execution: options.execution,
       examples: options.examples, arm: 'teacher', release: null, partition: 'development' });
     const roots = arm.roots.length;
-    const record: TeacherCalibration = { schema: 'natlang.tune-teacher-calibration/v1', teacher: candidate.id, profile: candidate.profile, examples, roots,
+    const record: TeacherCalibration = { schema: 'natlang.tune-teacher-calibration/v1', teacher: candidate.id, profile: candidate.profile, ...(options.execution ? { execution: options.execution } : {}), examples, roots,
       success: arm.roots.reduce((sum, root) => sum + rootSuccess(root), 0), failures: arm.roots.filter(root => root.error).length,
       tokensPerRoot: arm.roots.reduce((sum, root) => sum + root.promptTokens + root.completionTokens, 0) / roots,
       msPerRoot: arm.roots.reduce((sum, root) => sum + root.ms, 0) / roots };

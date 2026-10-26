@@ -190,7 +190,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   await timed(timings, 'data', log, async () => {
     if (!missing.length) return;
     mkdirSync(rootsDir, { recursive: true });
-    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services });
+    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services, execution: options.settings.execution });
     const failures = collected.roots.filter(item => !item.ok && item.error);
     if (failures.length === collected.roots.length)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
@@ -356,7 +356,7 @@ export async function evaluateRelease(options: TuneOptions, data: TuneData, mani
   try {
     const weights = manifest ? [new WeightBinding(manifest, { program: options.program, available: served.loaded,
       nativeState: !!served.nativeState, strict: true })] : [];
-    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services,
+    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services, execution: options.settings.execution,
       release: manifest?.digest ?? null, partition });
   } finally { await served.close(); }
 }
@@ -400,9 +400,9 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
       const probe = development.length ? development : examples.filter(example => example.partition === 'train').slice(0, 1);
       const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
       const validation = await timed(timings, 'validate', log, async () => {
-        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services,
+        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services, execution: options.settings.execution,
           arm: 'hierarchy', release: manifest.digest, partition: 'development' });
-        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services,
+        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services, execution: options.settings.execution,
           arm: 'untuned', release: null, partition: 'development' });
         return { tuned, base };
       });

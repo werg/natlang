@@ -1,3 +1,4 @@
+import { tuneModel, type TuneExecution } from './execution.js';
 /**
  * Whole-program data collection for `natlang tune` (plans/HIERARCHICAL_LORA_TUNING.md §4).
  *
@@ -121,7 +122,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
   /** Serve a tuned release while collecting (distillation): its strict binding labels and serves each call. */
   weights?: WeightBinding;
   /** Host services for one root, fresh per root (a test or sandbox world); every call is journaled (world.ts). */
-  services?: (example: SplitExample) => Services }): Promise<{
+  execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<{
   turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] }> {
   const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] = [];
   const binding = options.weights ?? new WeightBinding(options.scaffold);
@@ -150,7 +151,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
     const services = options.services ? journaledServices(options.services(example), world) : undefined;
-    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding], ...(services ? { services } : {}),
+    const runtime = createNatlangRuntime({ program: options.program, model: tuneModel(driver, options.execution), weights: [binding], ...(services ? { services } : {}),
       trace: trace => { outcomes.set(trace.callId, trace.outcome); events.set(trace.callId, trace.events ?? []); } });
     let ok = false, oracle: boolean | null = null, error: string | undefined;
     try {

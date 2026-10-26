@@ -1,3 +1,4 @@
+import { executionKey } from './execution.js';
 /**
  * `natlang tune --rounds`: the SFT/RL round schedule (rounds.ts) over the ordinary pipeline (plan §5.1a).
  *
@@ -34,7 +35,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
   if (schedule.includes('rl') && options.settings.backend !== 'native')
     throw new Error('RL rounds sample the student with exact sampling receipts: set tune.backend to "native" (a neuraleseServer profile), or use an SFT-only schedule');
   return async (data, _timings, log) => {
-    const directory = join(tuneDirectory(options.root), 'rounds', data.dataKey);
+    const directory = join(tuneDirectory(options.root), 'rounds', options.settings.execution ? `${data.dataKey}-execution-${executionKey(options.settings.execution)}` : data.dataKey);
     const development = data.examples.filter(example => example.partition === 'development');
     if (!development.length) throw new Error('rounds are selected on development roots; this program has none');
     const journal = await runRounds({ journal: join(directory, 'journal.json'), schedule, patience: settings.patience, minDelta: settings.minDelta, log,
@@ -53,7 +54,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
           const summary = await runRollouts({ root: options.root, program: options.program, release, driver: served.driver,
             weights: [new WeightBinding(release, { program: options.program, available: served.loaded, nativeState: !!served.nativeState, strict: true })],
             examples: data.examples, samples: settings.samples ?? 4, temperature: settings.temperature ?? 0.8, round: index,
-            out: join(directory, `round-${index}.rollouts.jsonl`), policyCheckpointSha256: options.student.base.checkpoint_sha256, log, services: options.services });
+            out: join(directory, `round-${index}.rollouts.jsonl`), policyCheckpointSha256: options.student.base.checkpoint_sha256, log, services: options.services, execution: options.settings.execution });
           return { path: summary.path, written: summary.written, reused: summary.reused, successes: summary.successes, skipped: summary.skipped.length };
         } finally { await served.close(); }
       },
@@ -66,7 +67,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
             student: served.driver, teacher: options.teacher, teacherId: options.teacherId, examples: data.examples, round: index,
             records: join(directory, `round-${index}.repairs.jsonl`), rows: join(directory, `round-${index}.repair-rows.jsonl`),
             checkpointSha256: options.student.base.checkpoint_sha256, maxPerRoot: settings.repairsPerRoot, maxBoundaries: settings.repairBoundaries, log,
-            services: options.services });
+            services: options.services, execution: options.settings.execution });
           return { records: summary.records, rows: summary.rows, admitted: summary.admitted, rejected: summary.rejected,
             studentCorrect: summary.studentCorrect, roots: summary.roots };
         } finally { await served.close(); }

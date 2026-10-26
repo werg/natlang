@@ -23,6 +23,16 @@ def _write_json(path, value):
     path.write_text(json.dumps(value, sort_keys=True, indent=2) + '\n')
 
 
+def bind_current_receipt_identities(proof, train_path, held_path):
+    """Use the loader's logical source identity after installing staging aliases."""
+    from natlang_neuralese.data.native_source_tree import _source_identity
+    for receipt, path in ((proof['current_source'], Path(train_path)),
+                          (proof['protected_held_correction']['current_source'], Path(held_path))):
+        if sha256_file_hex_cached(path) != receipt['sha256']:
+            raise ValueError('current source identity correction cannot change source bytes')
+        receipt['path'] = str(_source_identity(path).resolve())
+
+
 def revise(candidate: Path, output: Path, *, prior_held_frame_path: str):
     candidate = candidate.resolve(strict=True)
     output = output.resolve()
@@ -87,8 +97,9 @@ def revise(candidate: Path, output: Path, *, prior_held_frame_path: str):
         for evidence in proof.get('evidence') or []:
             if Path(evidence['path']).name == 'current-staged-source-map.json':
                 evidence['sha256'] = source_map_sha
-        proof['current_source']['path'] = replacement_paths[0]
-        proof['protected_held_correction']['current_source']['path'] = replacement_paths[1]
+        bind_current_receipt_identities(proof, *replacement_paths)
+        from natlang_neuralese.data.native_source_tree import _source_identity
+        current_held.source_identity_path = _source_identity(current_held.path)
         old_order, current_order = old_held.ordered_ids(), current_held.ordered_ids()
         if old_order != current_order:
             raise ValueError('quality-hold metadata revision cannot change held membership/order')

@@ -1,3 +1,4 @@
+import { executionKey, type TuneExecution } from './execution.js';
 /**
  * On-policy correction rounds for `natlang tune` (plans/HIERARCHICAL_LORA_TUNING.md §4.4).
  *
@@ -46,7 +47,7 @@ export type CorrectionProvenance = {
 };
 
 export type RepairRecord = { readonly schema: typeof REPAIR_SCHEMA; readonly root: string; readonly release: string; readonly round: number;
-  readonly boundary: number; readonly status: 'admitted' | 'rejected'; readonly reason?: string; readonly kind?: 'repair' | 'continue';
+  readonly execution?: TuneExecution; readonly boundary: number; readonly status: 'admitted' | 'rejected'; readonly reason?: string; readonly kind?: 'repair' | 'continue';
   /** The whole repaired trajectory, each turn with its role. */
   readonly turns: readonly (CollectedTurn & { readonly role: 'student-prefix' | 'correction' })[] };
 
@@ -84,11 +85,11 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
   log?: (line: string) => void;
   /** Host services for one root (TuneOptions.services): the student runs in them, journaled; a repair replays that
    * journal and is rejected when its continuation needs a call the student's world never recorded. */
-  services?: (example: SplitExample) => Services }): Promise<RepairSummary> {
+  execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<RepairSummary> {
   const maxPerRoot = options.maxPerRoot ?? 1, log = options.log ?? (() => {});
   mkdirSync(dirname(options.records), { recursive: true });
   const done = new Set((existsSync(options.records) ? readFileSync(options.records, 'utf8').split('\n').filter(Boolean) : [])
-    .map(line => JSON.parse(line) as RepairRecord).filter(record => record.release === options.release.digest && record.round === options.round)
+    .map(line => JSON.parse(line) as RepairRecord).filter(record => record.release === options.release.digest && record.round === options.round && executionKey(record.execution) === executionKey(options.execution))
     .map(record => record.root));
   const roots = options.examples.filter(example => example.partition === 'train' && !example.protected && 'expected' in example);
   const actor = `student-stack:${options.checkpointSha256}:${options.release.digest}`;
@@ -98,7 +99,7 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
     if (done.has(example.id)) continue;
     // 1. The student's own run, served by the release (strict: no silent fallback).
     const run = await collect({ root: options.root, program: options.program, scaffold: options.release, examples: [example],
-      partitions: ['train'], teacher: options.student, teacherId: actor, weights: options.weights, services: options.services });
+      partitions: ['train'], teacher: options.student, teacherId: actor, weights: options.weights, services: options.services, execution: options.execution });
     const world = run.roots[0]?.world;
     if (run.roots[0]?.oracle === true) { studentCorrect++; continue; }
     const student = run.turns;
@@ -106,7 +107,7 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
     if (!student.length || !calls) {
       const reason = !student.length ? 'the student made no model turn' : 'two invocations share an opening';
       skipped.push({ root: example.id, reason });
-      appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, root: example.id, release: options.release.digest,
+      appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, ...(options.execution ? { execution: options.execution } : {}), root: example.id, release: options.release.digest,
         round: options.round, boundary: -1, status: 'rejected', reason, turns: [] } satisfies RepairRecord) + '\n');
       continue;
     }
@@ -131,11 +132,11 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
       // The student's journaled world, replayed: no call acts on the live world again.
       const replayWorld = options.services && world ? replayServices(options.services(example), world) : undefined;
       const repaired = await collect({ root: options.root, program: options.program, scaffold: options.scaffold, examples: [example],
-        partitions: ['train'], teacher: driver, teacherId: options.teacherId, ...(replayWorld ? { services: () => replayWorld.services } : {}) });
+        partitions: ['train'], execution: options.execution, teacher: driver, teacherId: options.teacherId, ...(replayWorld ? { services: () => replayWorld.services } : {}) });
       const turns = repaired.turns.map(turn => ({ ...turn, role: scripted.get(sha(turn.messages)) ? 'student-prefix' as const : 'correction' as const }));
       const reject = (reason: string) => {
         rejected++;
-        appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, root: example.id, release: options.release.digest,
+        appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, ...(options.execution ? { execution: options.execution } : {}), root: example.id, release: options.release.digest,
           round: options.round, boundary, status: 'rejected', reason, turns } satisfies RepairRecord) + '\n');
       };
       // 3. Exact verification: the replayed prefix and the boundary saw what the student saw; the root oracle holds.
@@ -170,7 +171,7 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
       const rows = corrections.filter(turn => turn.binding).map(({ role: _role, ...turn }) => ({ ...turn,
         call: `repair:r${options.round}:b${boundary}:${turn.call ?? 'root'}`, correction: provenance(turn) }));
       for (const row of rows) appendFileSync(options.rows, JSON.stringify(row) + '\n');
-      appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, root: example.id, release: options.release.digest,
+      appendFileSync(options.records, JSON.stringify({ schema: REPAIR_SCHEMA, ...(options.execution ? { execution: options.execution } : {}), root: example.id, release: options.release.digest,
         round: options.round, boundary, status: 'admitted', kind, turns } satisfies RepairRecord) + '\n');
       admitted++; kept++;
       log(`repair ${example.id} at turn ${boundary}: ${kind}, ${rows.length} correction rows`);

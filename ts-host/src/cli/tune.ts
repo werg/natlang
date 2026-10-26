@@ -175,7 +175,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
       if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
       // The teacher reference runs as an isolated evaluator: its answers are never training data.
-      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services,
+      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services, execution: options.settings.execution,
         arm: 'teacher', release: null, partition }));
       for (const arm of arms) saveArm(root, arm);
     });
@@ -282,7 +282,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const sessions = profiles.map(profile => ({ profile, session: createResolvedModelSession(loadModelConfiguration(profile).choice, process.env, process.stderr) }));
     try {
       const examples = currentSplit(root, value('--examples')).filter(example => example.partition === 'development' && !example.protected);
-      const calibrations = await calibrateTeachers({ root, program: inventory.manifest.adaptation!, examples, log: io.err,
+      const calibrations = await calibrateTeachers({ root, program: inventory.manifest.adaptation!, examples, log: io.err, execution: settings.execution,
         candidates: sessions.map(({ profile, session }) => ({ profile, id: identityOf(profile), driver: driverOf(session) })) });
       // The natural-language policy runs on the default teacher; it only chooses among measured eligible teachers.
       const policySession = sessions.find(item => item.profile === settings.teacher)?.session ?? sessions[0]!.session;

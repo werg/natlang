@@ -1,3 +1,4 @@
+import { tuneModel, executionKey, type TuneExecution } from './execution.js';
 /**
  * Student rollouts for program RL (plans/HIERARCHICAL_LORA_TUNING.md §5.1a).
  *
@@ -36,7 +37,7 @@ export type TuneRollout = {
     readonly gates: Readonly<Record<string, number>>; readonly soft_states: Readonly<Record<string, string>>;
     readonly temperature: number; readonly seed: number };
   readonly bindings: Readonly<Record<string, string | null>>;
-  readonly episode: Json;
+  readonly execution?: TuneExecution; readonly episode: Json;
 };
 export type RolloutSkip = { readonly root: string; readonly sample: number | null; readonly reason: string };
 export type RolloutSummary = { readonly path: string; readonly written: number; readonly reused: number;
@@ -72,13 +73,13 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
   weights: readonly WeightBinding[]; driver: ModelDriver; examples: readonly SplitExample[]; samples: number; temperature: number;
   round: number; out: string; policyCheckpointSha256: string; log?: (line: string) => void;
   /** Host services for one root, fresh per rollout (TuneOptions.services). */
-  services?: (example: SplitExample) => Services }): Promise<RolloutSummary> {
+  execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<RolloutSummary> {
   if (!Number.isInteger(options.samples) || options.samples < 2)
     throw new Error('group-relative rewards need at least two rollouts per root');
   if (!(options.temperature > 0)) throw new Error('rollouts sample the student at a positive temperature');
   mkdirSync(dirname(options.out), { recursive: true });
   const existing = new Set((existsSync(options.out) ? readFileSync(options.out, 'utf8').split('\n').filter(Boolean) : [])
-    .map(line => JSON.parse(line) as TuneRollout).filter(item => item.behavior.release === options.release.digest)
+    .map(line => JSON.parse(line) as TuneRollout).filter(item => item.behavior.release === options.release.digest && executionKey(item.execution) === executionKey(options.execution))
     .map(item => `${item.group}\0${item.sample}`));
   const behavior = releaseBehavior(options.release);
   const skipped: RolloutSkip[] = [];
@@ -86,7 +87,7 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
   for (const example of options.examples) {
     if (example.partition !== 'train') { skipped.push({ root: example.id, sample: null, reason: `${example.partition} root` }); continue; }
     if (!('expected' in example)) { skipped.push({ root: example.id, sample: null, reason: 'no root oracle' }); continue; }
-    const group = `${example.id}/${options.release.digest}/round-${options.round}`;
+    const group = `${example.id}/${options.release.digest}/round-${options.round}/execution-${executionKey(options.execution)}`;
     for (let sample = 0; sample < options.samples; sample++) {
       if (existing.has(`${group}\0${sample}`)) { reused++; continue; }
       const seed = derivedSeed(options.release.digest, options.round, example.id, sample);
@@ -139,7 +140,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
   const decide = (options.driver as unknown as { decide?: (...args: unknown[]) => unknown }).decide;
   if (decide) (driver as unknown as { decide: unknown }).decide = (...args: unknown[]) => { decided = true; return decide(...args); };
-  const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights,
+  const runtime = createNatlangRuntime({ program: options.program, model: tuneModel(driver, options.execution), weights: options.weights,
     ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
     if (weights) stacks.push(weights);
@@ -159,7 +160,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   if (degraded) throw new Skip(`a call did not run its release stack (${degraded.status}${degraded.reason ? `: ${degraded.reason}` : ''})`);
   const quality = !failed && equal(value, example.expected) ? 1 : 0;
   return { schema: ROLLOUT_SCHEMA, root: example.id, component: example.component, partition: 'train', group, sample,
-    reward: { quality, source: 'root-oracle' }, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
+    ...(options.execution ? { execution: options.execution } : {}), reward: { quality, source: 'root-oracle' }, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
     episode: { task_id: example.id, split: 'train', sample, group, reward: { quality },
       policy: { checkpoint_sha256: options.policyCheckpointSha256, release: options.release.digest, temperature: options.temperature },
       turns, execution_graph: events } };

@@ -1,3 +1,4 @@
+import { tuneModel, type TuneExecution } from './execution.js';
 /**
  * Evaluation through the ordinary engine (plans/HIERARCHICAL_LORA_TUNING.md §9). An arm is a set of weight releases
  * (none for the untuned base) run over declared root examples of one partition, with strict resolution so a missing
@@ -23,7 +24,7 @@ export type RootOutcome = {
   readonly error?: string;
 };
 export type ArmResult = { readonly schema: 'natlang.tune-arm/v1'; readonly arm: string; readonly release: string | null;
-  readonly partition: string; readonly roots: readonly RootOutcome[] };
+  readonly partition: string; readonly execution?: TuneExecution; readonly roots: readonly RootOutcome[] };
 
 /** The callable's positional arguments for an example input (an object is keyed by parameter name). */
 export function exampleArguments(fn: unknown, input: unknown): unknown[] {
@@ -38,7 +39,7 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
 export async function evaluateRoots(options: { root: string; program: ProgramDescriptor; driver: ModelDriver;
   weights: readonly WeightBinding[]; examples: readonly SplitExample[]; arm: string; release: string | null; partition: string;
   /** Host services for one root, fresh per root (TuneOptions.services). */
-  services?: (example: SplitExample) => Services }): Promise<ArmResult> {
+  execution?: TuneExecution; services?: (example: SplitExample) => Services }): Promise<ArmResult> {
   const roots: RootOutcome[] = [];
   for (const example of options.examples) {
     const stacks: RootOutcome['stacks'][number][] = [];
@@ -50,7 +51,7 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
       turns++; promptTokens += turn.prompt_tokens ?? 0; completionTokens += turn.completion_tokens ?? 0;
       return turn;
     }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
-    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights,
+    const runtime = createNatlangRuntime({ program: options.program, model: tuneModel(driver, options.execution), weights: options.weights,
       ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
       const recorded = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
       if (recorded) stacks.push({ identity: recorded.identity, status: recorded.status, requested: recorded.requested.length, effective: recorded.effective.length });
@@ -70,7 +71,7 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
       function: example.function, source: example.source ?? 'real', oracle: 'expected' in example, ok, correct, ms: Date.now() - started,
       promptTokens, completionTokens, turns, stacks, ...(error ? { error: error.slice(0, 500) } : {}) });
   }
-  return { schema: 'natlang.tune-arm/v1', arm: options.arm, release: options.release, partition: options.partition, roots };
+  return { schema: 'natlang.tune-arm/v1', arm: options.arm, release: options.release, partition: options.partition, ...(options.execution ? { execution: options.execution } : {}), roots };
 }
 
 /** Success of one root: the oracle when it has one, completion otherwise. */

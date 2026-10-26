@@ -252,3 +252,10 @@ resumable round scheduler that keeps the best release by development success (`t
 them yet. Not yet
 implemented: full per-lambda fine-tuning arm. Incremental builds (candidate, shared refit, periodic full refit) are
 implemented; the native-backend soft-state carry-over of untouched bindings has no test yet.
+
+Invocation budgets can be set with `tune.execution`, for example
+`{ "maxTurns": 12, "maxTokens": 4096, "maxSeconds": 120, "maxFailureRepairs": 3 }`.
+They apply consistently to collection, evaluation, repairs, distillation and RL. Evaluation and RL receipts record
+them; a different budget gets a separate rounds journal and rollout groups. Each limit bounds an invocation, so a
+program with several calls may use more turns or time overall. Choose budgets for the program's workload and
+compare base and tuned execution under the same settings.

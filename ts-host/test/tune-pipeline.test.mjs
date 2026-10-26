@@ -270,3 +270,29 @@ writeFileSync(out + '/result.json', JSON.stringify({ artifacts: [], receipt: {},
     assert.equal(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, manifest.softStates[0].exports.gguf.file), 'utf8'), 'span');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('tune execution limits bound invalid-action loops and are recorded on evaluation arms', async () => {
+  const { evaluateRoots } = await import('../dist/tune/evaluate.js');
+  const { tuneModel, executionKey } = await import('../dist/tune/execution.js');
+  const root = project();
+  try {
+    let calls = 0;
+    const bad = scriptedModel(() => { calls++; return 'return 123'; });
+    const descriptor = program(root), scaffold = scaffoldManifest(descriptor, base);
+    const examples = splitExamples(readRootExamples(root)).filter(example => example.partition === 'train').slice(0, 1);
+    const execution = { maxTurns: 1, maxFailureRepairs: 0 };
+    const arm = await evaluateRoots({ root, program: descriptor, driver: bad.driver, weights: [], examples,
+      arm: 'limited', release: null, partition: 'train', execution });
+    assert.equal(calls, 1);
+    assert.equal(arm.roots[0].correct, false);
+    assert.deepEqual(arm.execution, execution);
+    assert.notEqual(executionKey(execution), executionKey({ maxTurns: 2 }));
+    assert.throws(() => tuneModel(bad.driver, { maxTurns: 0 }), /invalid tune execution/);
+    assert.throws(() => tuneModel(bad.driver, { maxFailureRepairs: -1 }), /invalid tune execution/);
+    calls = 0;
+    const data = await collect({ root, program: descriptor, scaffold, examples, teacher: bad.driver, teacherId: 'teacher:limited', execution });
+    assert.equal(calls, 1);
+    assert.equal(data.roots[0].ok, false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
