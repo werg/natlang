@@ -8,6 +8,8 @@ import pytest
 
 from natlang_neuralese.rl.curriculum import metadata
 from natlang_neuralese.rl.task_source import resolve_task_source
+from scripts.neuralese_data.build_rl_task_source_correction import build as build_correction
+from natlang_neuralese.rl.task_source import _ill_posed_port_record_continuation
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -190,3 +192,51 @@ def test_additional_rl_source_rejects_incomplete_qualification_proof(tmp_path, m
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
     with pytest.raises(ValueError):
         resolve_task_source(manifest_path)
+
+
+def _port_record_row(requests):
+    files = {f'items/item-{index:02d}.json': json.dumps({'request': request})
+             for index, request in enumerate(requests, 1)}
+    return {'family': 'curriculum_port_record_calls', 'semantics': {
+        'folder_files': files,
+        'expected': {f'item-{index:02d}': 'observed' for index in range(1, len(requests) + 1)},
+    }}
+
+
+def test_port_record_quarantine_predicate_is_content_based_and_complete():
+    prompt = 'Continue this session with its next assistant message.\n\nuser: request'
+    assert _ill_posed_port_record_continuation(_port_record_row([prompt, prompt]))
+    assert not _ill_posed_port_record_continuation({'family': 'curriculum_port_record_calls',
+        'semantics': {'expected': {'item-01': 'x'}, 'folder_files': {}}})
+    assert not _ill_posed_port_record_continuation(_port_record_row([prompt, 'Use the supplied record.']))
+    assert not _ill_posed_port_record_continuation({**_port_record_row([prompt]), 'family': 'other'})
+
+
+def test_corrected_task_source_is_exact_parent_order_complement_and_preserves_proofs(tmp_path):
+    parent = tmp_path / 'parent'
+    shutil.copytree(V2, parent)
+    output = tmp_path / 'corrected'
+    result = build_correction(parent / 'task-source-manifest.json', output)
+    resolved = resolve_task_source(output / 'task-source-manifest.json')
+    parent_rows = read_rows(parent / 'cases.jsonl')
+    corrected_rows = read_rows(resolved['cases'])
+    assert result['rows'] == len(corrected_rows) == 76
+    expected = [row for row in parent_rows if not _ill_posed_port_record_continuation(row)]
+    assert corrected_rows == expected
+    assert (output / 'parent-source' / 'task-source-manifest.json').read_bytes() == \
+        (parent / 'task-source-manifest.json').read_bytes()
+    for source_file in parent.iterdir():
+        if source_file.is_file():
+            assert (output / 'parent-source' / source_file.name).read_bytes() == source_file.read_bytes()
+    assert resolved['source_correction_excluded_rows'] == 52
+
+
+def test_corrected_task_source_rejects_arbitrary_row_omission(tmp_path):
+    parent = tmp_path / 'parent'
+    shutil.copytree(V2, parent)
+    output = tmp_path / 'corrected'
+    build_correction(parent / 'task-source-manifest.json', output)
+    cases = output / 'cases.jsonl'
+    cases.write_bytes(b''.join(cases.read_bytes().splitlines(keepends=True)[1:]))
+    with pytest.raises(ValueError, match='exact predicate complement|binding'):
+        resolve_task_source(output / 'task-source-manifest.json')

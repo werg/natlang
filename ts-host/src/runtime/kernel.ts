@@ -652,7 +652,7 @@ async function runDefinitionBody(frame: Frame, definition: CallableDefinition, p
         realized_instruction: options.instructions ?? definition.body } } : {}) } });
   let outcome = 'failed', detail = '';
   let hostValue: unknown, hasValue = false;
-  registerTrace(callId, runtime.trace);
+  registerTrace(callId, runtime.trace, runtime.episodeBudget);
   capture?.watch(() => runtime!.trace.events as Record<string, unknown>[]);
   try {
     const normalizedInputs = await runtime.materializeSoftStringArguments(definition, inputs, frame.parentCallId);

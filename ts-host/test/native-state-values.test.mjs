@@ -565,7 +565,8 @@ test('equal native IDs retain independent writer origins through typed values, c
   assert.equal(stopped.$neuralese.source_occurrence,first.$neuralese.source_occurrence);
   assert.notEqual(neuraleseRefSentinel(first),neuraleseRefSentinel(second));
   assert.deepEqual(soleSentinelUse(neuraleseRefSentinel(stopped)),{id:artifact.id,stop_gradient:true,source_occurrence:'call:first#write-0'});
-  assert.equal(blockInput(artifact.id,'read',first.$neuralese.source_occurrence).node,'call:first#write-0');
+  assert.equal(blockInput(artifact.id,'read',first.$neuralese.source_occurrence).node,'external',
+    'an occurrence without current execution evidence is not attributed to a writer');
   assert.notEqual(Context.empty().with({memo:first}).id,Context.empty().with({memo:second}).id);
   const body=softFunction({type:'() => string',body:stopped});
   const wire=await save({first,second,body},{store,dialect:'native-state/fixture'});
@@ -574,6 +575,25 @@ test('equal native IDs retain independent writer origins through typed values, c
   assert.equal(exports.second.$neuralese.source_occurrence,'call:second#write-0');
   assert.equal(softFunctionOf(exports.body).bodySourceOccurrence,'call:first#write-0');
   assert.equal(sourceWithLiteralCalls(`return ${neuraleseRefSentinel(first)};`),`return __neuralese(${JSON.stringify(artifact.id)}, undefined, "call:first#write-0");`);
+});
+
+test('inference resolves the declared occurrence among repeated equal-content producers in its task scope', async()=>{
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const {graphNode,bindTraceScope}=await import('../dist/native/graph.js');
+  const firstWriter=open({type:'() => boolean',instructions:'Write the same native state.'},{neuralese:runtimeFor(store)}).session;
+  const secondWriter=open({type:'() => boolean',instructions:'Write the same native state again.'},{neuralese:runtimeFor(store)}).session;
+  const invocation=open({type:'() => boolean',instructions:'Use the exact supplied state.'},{neuralese:runtimeFor(store)}).session;
+  bindTraceScope(firstWriter.runtime.trace,invocation.runtime.episodeBudget);
+  bindTraceScope(secondWriter.runtime.trace,invocation.runtime.episodeBudget);
+  const first='repeat-first#write-0',second='repeat-second#write-0';
+  graphNode(firstWriter.runtime.trace,'block_write',{call_id:'repeat-first',turn:'repeat-first#turn0',block:artifact.id},[],first);
+  graphNode(secondWriter.runtime.trace,'block_write',{call_id:'repeat-second',turn:'repeat-second#turn0',block:artifact.id},[],second);
+  const agent=new NativeToolAgent(Object.assign(async()=>({calls:[['return_result',{status:'success',value:true}]]}),{neuralese:true}),
+    {neuralese:runtimeFor(store)});
+  await agent.modelTurnNode(invocation,[{role:'user',content:[{type:'native_state',id:artifact.id,source_occurrence:first}]}],{},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node,first,'an explicit older occurrence survives a later equal-content write');
+  assert.notEqual(read.inputs[0].node,second);
 });
 
 test('actual eval compiler preserves native constant and source metadata in a typed result', async()=>{
@@ -592,6 +612,8 @@ test('tool JSON history records every actual native import with its writer and g
   const part={type:'native_state',id:artifact.id,source_occurrence:'actual-writer#6',stop_gradient:true};
   const messages=[{role:'assistant',tool_calls:[{function:{name:'return_result',arguments:JSON.stringify({value:[part],nested:{again:[part]}})}}]}];
   const before=structuredClone(messages);
+  const {graphNode}=await import('../dist/native/graph.js');
+  graphNode(invocation.runtime.trace,'block_write',{call_id:'actual-writer',turn:'actual-writer#turn6',block:artifact.id},[],'actual-writer#6');
   await agent.modelTurnNode(invocation,messages,{},2);
   const reads=invocation.runtime.trace.events.filter(event=>event.kind==='block_read');
   assert.equal(reads.length,2);
@@ -605,4 +627,130 @@ test('tool JSON history records every actual native import with its writer and g
   await agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:JSON.stringify({singleton:part,text:JSON.stringify(part)})}}]}],{},3);
   assert.equal(invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length,prior);
   await assert.rejects(()=>agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:'not json'}}]}],{},4),SyntaxError);
+});
+
+test('captured sampler prompt adds omitted external native context to the whole-turn graph', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const prompt = [{kind:'native_state',id:artifact.id,native_identity:{
+    architecture:artifact.metadata.architecture,checkpoint_sha256:artifact.metadata.checkpoint_sha256,
+    tokenizer_fingerprint:artifact.metadata.tokenizer_fingerprint,
+    embedding_weight_sha256:artifact.metadata.embedding_weight_sha256}}, {kind:'tokens',token_ids:[1,2]}];
+  await agent.modelTurnNode(invocation,[{role:'system',content:'context was supplied outside the message list'}],{
+    raw_response:{x_natlang_rl_capture:{prompt,writes:[]}},text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.ok(read);
+  assert.equal(read.block,artifact.id);
+  assert.equal(read.inputs[0].node,'external');
+  assert.deepEqual(read.positions,[0,0]);
+  assert.equal(read.position_source,'captured_prompt_segment');
+  const turn=invocation.runtime.trace.events.find(event=>event.kind==='model_turn');
+  assert.equal(turn.inputs.filter(input=>input.port==='read').length,1);
+});
+
+test('captured prompt reconciles existing native reads and rejects unexplained graph reads', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const part={type:'native_state',id:artifact.id};
+  await agent.modelTurnNode(invocation,[{role:'user',content:[part]}],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id}],writes:[]}},text:'',calls:[]},1);
+  assert.equal(invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length,1);
+  const other=await store.putNativeState(nativeStateFixture('second-fixture'));
+  await assert.rejects(()=>agent.modelTurnNode(invocation,[{role:'user',content:[{type:'native_state',id:other.id}]}],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'tokens',token_ids:[1]}],writes:[]}},text:'',calls:[]},2),
+  /request graph contains native reads absent from the captured model prompt/);
+});
+
+test('captured-only native reads bind a unique in-episode writer and reject an unknown declared writer', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const {graphNode}=await import('../dist/native/graph.js');
+  const writer = graphNode(invocation.runtime.trace,'block_write',{call_id:'producer',turn:'producer#turn1',block:artifact.id},[],'producer#write1');
+  await agent.modelTurnNode(invocation,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id}],writes:[]}},text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node,writer);
+  const second = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const secondAgent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  await assert.rejects(()=>secondAgent.modelTurnNode(second,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:'missing#writer'}],writes:[]}},
+    text:'',calls:[]},1), /names no matching in-episode writer/);
+});
+
+test('captured native reads retain the exact completed sibling writer and reject a prior execution writer', async (t) => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture('sibling-occurrence'));
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const {blockInput,graphNode,hasProducerOccurrence,registerTrace,releaseTrace}=await import('../dist/native/graph.js');
+  const {NativeTraceRecorder}=await import('../dist/native/trace.js');
+  const { setRecorderSource } = await import('../dist/native/model-recording.js');
+  const root = invocation.runtime.options.runId.split('/')[0];
+  const firstWriter = `${root}/sibling-1#write`;
+  const laterWriter = `${root}/sibling-2#write`;
+  const firstTrace = new NativeTraceRecorder({run_id:`${root}/sibling-1`});
+  const laterTrace = new NativeTraceRecorder({run_id:`${root}/sibling-2`});
+  registerTrace(`${root}/sibling-1`, firstTrace, invocation.runtime.episodeBudget);
+  registerTrace(`${root}/sibling-2`, laterTrace, invocation.runtime.episodeBudget);
+  graphNode(firstTrace, 'block_write', {call_id:`${root}/sibling-1`,turn:'sibling-1#turn1',block:artifact.id}, [], firstWriter);
+  graphNode(laterTrace, 'block_write', {call_id:`${root}/sibling-2`,turn:'sibling-2#turn1',block:artifact.id}, [], laterWriter);
+  assert.equal(hasProducerOccurrence(artifact.id, firstWriter, invocation.runtime.episodeBudget), true);
+  assert.equal(blockInput(artifact.id, 'block', firstWriter, invocation.runtime.episodeBudget).node, firstWriter);
+  releaseTrace(`${root}/sibling-1`); releaseTrace(`${root}/sibling-2`);
+  await agent.modelTurnNode(invocation,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:firstWriter}],writes:[]}},
+    text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node, firstWriter, 'a later equal-content sibling does not replace the declared producer occurrence');
+
+  const next = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store),
+    runId:invocation.runtime.options.runId}).session;
+  const nextAgent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  await assert.rejects(()=>nextAgent.modelTurnNode(next,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:firstWriter}],writes:[]}},
+    text:'',calls:[]},1), /names no matching in-episode writer/);
+
+  const conflictTrace = new NativeTraceRecorder({run_id:`${root}/conflict`});
+  registerTrace(`${root}/conflict`, conflictTrace, invocation.runtime.episodeBudget);
+  t.after(() => { setRecorderSource(() => undefined); releaseTrace(`${root}/conflict`); });
+  const reusedNode = `${root}/conflict#same`;
+  const { ModelTurnRecorder } = await import('../dist/native/model-recording.js');
+  const recorder = new ModelTurnRecorder();
+  setRecorderSource(() => recorder);
+  graphNode(conflictTrace, 'block_write', {call_id:`${root}/conflict`,turn:'conflict#turn1',block:artifact.id}, [], reusedNode);
+  const other = await store.putNativeState(nativeStateFixture('different-writer-block'));
+  const traceLength = conflictTrace.events.length, recorderNodes = recorder.graphNodes.size;
+  assert.throws(()=>graphNode(conflictTrace, 'block_write', {call_id:`${root}/conflict`,turn:'conflict#turn2',block:other.id}, [], reusedNode),
+    /writer occurrence .* reused for a different native block/);
+  assert.equal(conflictTrace.events.length, traceLength, 'rejected writer did not mutate the trace');
+  assert.equal(recorder.graphNodes.size, recorderNodes, 'rejected writer did not mutate the active recorder');
+  setRecorderSource(() => undefined);
+  releaseTrace(`${root}/conflict`);
+});
+
+test('implicit block inputs resolve writers only inside the caller execution scope', async (t) => {
+  const { blockInput, graphNode, registerTrace, releaseTrace, valueInputs } = await import('../dist/native/graph.js');
+  const { NativeTraceRecorder } = await import('../dist/native/trace.js');
+  const block = 'soft-block:shared-value';
+  const firstScope = {}, secondScope = {};
+  const firstTrace = new NativeTraceRecorder({run_id:'implicit-first'});
+  const secondTrace = new NativeTraceRecorder({run_id:'implicit-second'});
+  registerTrace('implicit-first', firstTrace, firstScope);
+  registerTrace('implicit-second', secondTrace, secondScope);
+  t.after(() => { releaseTrace('implicit-first'); releaseTrace('implicit-second'); });
+  const writer = graphNode(firstTrace, 'block_write', {block}, [], 'implicit-first#write');
+  const nativeBlock = `nzs1_${'a'.repeat(52)}`;
+  const nativeWriter = graphNode(firstTrace, 'block_write', {block:nativeBlock}, [], 'implicit-first#native-write');
+  assert.equal(blockInput(block, 'arg:value', undefined, firstScope).node, writer,
+    'the execution can resolve its own implicit sibling producer');
+  assert.equal(blockInput(block, 'arg:value', undefined, secondScope).node, 'external',
+    'another execution reusing the block ID cannot inherit the first execution writer');
+  assert.equal(valueInputs(neuraleseRef('Neuralese<string>', nativeBlock, false, 'foreign#writer'), 'arg', firstScope)[0].node,
+    'external', 'a stale declared occurrence cannot be rebound to the latest local producer');
+  assert.equal(valueInputs(neuraleseRef('Neuralese<string>', nativeBlock, false, nativeWriter), 'arg', firstScope)[0].node,
+    nativeWriter, 'an exact declared occurrence is preserved when the current scope observed it');
+  assert.equal(blockInput(block, 'arg:value').node, 'external',
+    'callers without execution scope do not consult ambient producer state');
 });

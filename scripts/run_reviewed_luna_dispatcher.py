@@ -118,8 +118,8 @@ def validate_plan(plan_path, expected_sha256):
     if plan.get('model_concurrency') != 1:
         raise ValueError('Each Luna slot must remain limited to one provider request')
     slots = plan.get('slots')
-    if type(slots) is not int or not 1 <= slots <= 5:
-        raise ValueError('slots must be an integer from one through five')
+    if type(slots) is not int or not 1 <= slots <= 6:
+        raise ValueError('slots must be an integer from one through six')
     if plan.get('reasoning_effort', 'low') not in ALLOWED_REASONING:
         raise ValueError('Invalid reasoning effort')
     if plan.get('execution_plans') is not True:
@@ -188,6 +188,7 @@ def validate_plan(plan_path, expected_sha256):
             **case,
             'program_id': inventory_by_index[case['index']]['program_id'],
             'source_group': inventory_by_index[case['index']]['source_groups'][0],
+            'source_groups': inventory_by_index[case['index']]['source_groups'],
             'split': inventory_by_index[case['index']]['split'],
             'source_row_sha256': inventory_by_index[case['index']]['row_sha256_including_lf'],
         } for case in normalized_cases]
@@ -268,7 +269,7 @@ def _verify_ledger_events(events, identity):
                 raise ValueError('Duplicate or unbound source case in claim ledger')
             expected_case = expected_cases[index]
             if identity.get('source_inventory') is not None:
-                for field in ('seed', 'program_id', 'source_group', 'split', 'source_row_sha256'):
+                for field in ('seed', 'program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
                     if row.get(field) != expected_case.get(field):
                         raise ValueError(f'Claim ledger {field} differs from the source inventory')
             queue = Path(row.get('queue', '')).resolve()
@@ -464,7 +465,7 @@ def _claim_queue(plan, identity, slot, case):
         'transport_retries': identity['max_transport_retries'],
         'text_neuralese_emulation': bool(plan.get('text_neuralese_emulation', False)),
     }
-    for field in ('program_id', 'source_group', 'split', 'source_row_sha256'):
+    for field in ('program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
         if field in case:
             entry[field] = case[field]
     if plan.get('surface') is not None:
@@ -656,7 +657,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                              'key': entry['key'], 'queue': queue, 'queue_sha256': queue_sha,
                              'journal': journal, 'source': identity['source'],
                              'runtime': identity['runtime'], 'campaign': identity['campaign_id']}
-                    for field in ('seed', 'program_id', 'source_group', 'split', 'source_row_sha256'):
+                    for field in ('seed', 'program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
                         if field in case:
                             claim[field] = case[field]
                     _append_event(ledger, {'event': 'claim', 'identity_sha256': identity['identity_sha256'],

@@ -25,7 +25,7 @@ A graph record is the trace's event sequence plus:
 | `context_bind` | Function, old and new context IDs, the interface check result. |
 | `model_turn` | Rendered input as text and block references, sampled tokens, sampling settings, seed. |
 | `block_write` | The model turn it belongs to, the context position, every stop decision with its probability, final length, `truncated`, resulting block ID; for a sampled distributional write, the sampling temperature τ and seed, and the `gaussian-diag` mean μ and scale σ blocks. |
-| `block_read` | Block ID, the model turn, the payload positions (token positions when the server reports them; otherwise `[message, part]` of the request). |
+| `block_read` | Block ID, the model turn, and the payload position. Normally `positions` is `[message, part]` in the request; when `position_source` is `captured_prompt_segment`, it is `[0, segment_index]` in the server's exact captured prompt. |
 | `readout` | `read` call: input block, produced value, validation result. |
 | `combinator` | Operator, operator body revision, inputs, output. |
 | `rewrite` | Rule, site, enabling comparison, the nodes it replaced. |

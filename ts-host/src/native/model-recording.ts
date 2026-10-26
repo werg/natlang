@@ -40,6 +40,8 @@ export interface TurnRecorder {
   linkNativeTurn?(id:string,graphTurn:string):void;
   recordGraphNode?(event:Record<string,unknown>):void;
   nativeStateWriter?(id:string):string|undefined;
+  /** Exact in-episode native writer nodes, including nested/child invocation traces. */
+  nativeStateWriters?(id:string):readonly string[];
 }
 
 let source: () => TurnRecorder | undefined = () => undefined;
@@ -85,11 +87,18 @@ export class ModelTurnRecorder implements TurnRecorder {
       else this.graphNodes.set(event.node,structuredClone(event));
     }
   }
+  nativeStateWriters(id:string):readonly string[]{
+    const writers=[...this.graphNodes.values()].filter(event=>event.kind==='block_write'&&event.block===id);
+    const nodes=writers.map(event=>event.node).filter((node):node is string=>typeof node==='string');
+    if(nodes.some(node=>this.graphConflicts.has(node)))throw Object.assign(
+      new Error(`neuralese-native-grad-invalid: native state ${id} has a conflicting in-trajectory writer occurrence`),
+      {code:'neuralese-native-grad-invalid'});
+    return nodes;
+  }
   nativeStateWriter(id:string):string|undefined{
-    const writers=[...this.graphNodes.values()].filter(event=>event.kind==='block_write'&&event.block===id&&
-      (event.format==='native-state'||event.native===true));
+    const writers=this.nativeStateWriters(id);
     if(writers.length>1)throw Object.assign(new Error(`neuralese-native-grad-invalid: native state ${id} has multiple possible in-trajectory producers`),{code:'neuralese-native-grad-invalid'});
-    return typeof writers[0]?.node==='string'?writers[0].node:undefined;
+    return writers[0];
   }
   linkNativeTurn(id:string,graphTurn:string):void{
     if(!this.turns.some(turn=>turn.native?.id===id))throw Object.assign(new Error('neuralese-native-grad-invalid: native graph link has no exact recorded model turn'),{code:'neuralese-native-grad-invalid'});
@@ -150,7 +159,13 @@ export function nativeCaptureGraphBinding(name:string,capture:Record<string,unkn
       (segment.source_occurrence===undefined||source(event)===segment.source_occurrence));
     if(!candidates.length||new Set(candidates.map(source)).size!==1)fail('native input has ambiguous or changed source occurrence');
     const event=candidates[0]!;reads.splice(reads.indexOf(event),1);
-    return {index,id:String(segment.id),source_state_id:String(segment.id),node:String(event.node),source:source(event),
+    const occurrenceSource=source(event);
+    if(occurrenceSource!=='external'){
+      const writer=nodes.get(occurrenceSource);
+      if(writer?.kind!=='block_write'||writer.block!==segment.id)
+        fail('native read references a writer occurrence absent from the exact episode graph');
+    }
+    return {index,id:String(segment.id),source_state_id:String(segment.id),node:String(event.node),source:occurrenceSource,
       ...(segment.stop_gradient===true?{stop_gradient:true}:{})};
   });
   const count=(items:string[])=>{const counts=new Map<string,number>();for(const id of items)counts.set(id,(counts.get(id)??0)+1);return counts;};

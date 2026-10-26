@@ -45,6 +45,51 @@ def _readonly_file(path, roots, *, namespace=None):
     return path
 
 
+def source_task_baseline_dependencies(training):
+    """Verify and enumerate the source-weight TaskEval closure in a shared state."""
+    rows=training.get('source_task_baselines') if isinstance(training,dict) else None
+    if rows is None:return []
+    if not isinstance(rows,dict):raise ValueError('shared source task baselines must map participant IDs to proofs')
+    from natlang_neuralese.eval.native_state import validate_task_execution_receipt
+    references=[]
+    for participant,baseline in rows.items():
+        if not isinstance(participant,str)or not isinstance(baseline,dict):
+            raise ValueError('shared source task baseline entry is malformed')
+        identity=baseline.get('native_identity');task_ref=baseline.get('task_execution_receipt')
+        if not isinstance(identity,dict)or not isinstance(task_ref,dict):
+            raise ValueError('shared source task baseline omitted its exact source receipt')
+        task_path=Path(task_ref.get('path','')).resolve(strict=True)
+        if sha256_file_hex_cached(task_path)!=task_ref.get('sha256'):
+            raise ValueError('shared source task baseline receipt bytes changed')
+        task=json.loads(task_path.read_text())
+        if (not validate_task_execution_receipt(task,identity)
+                or task.get('source_baseline') is not True
+                or task.get('baseline_comparison_floor')!=0
+                or task.get('native_identity')!=identity
+                or task.get('task_successes')!=baseline.get('task_successes')
+                or task.get('task_eval_policy_sha256')!=baseline.get('task_eval_policy_sha256')):
+            raise ValueError('shared source task baseline receipt no longer matches its participant')
+        score=baseline.get('score')
+        if (not isinstance(score,dict)or task.get('score_path')!=score.get('path')
+                or task.get('score_sha256')!=score.get('sha256')):
+            raise ValueError('shared source task baseline score binding changed')
+        runtime=baseline.get('task_runtime_identity')
+        if (not isinstance(runtime,dict)or runtime.get('schema')!='natlang.task-eval-runtime-identity/1'
+                or task.get('task_runtime_identity')!=runtime or not isinstance(runtime.get('files'),list)):
+            raise ValueError('shared source task baseline omitted its evaluator runtime')
+        references.extend((task_ref,score))
+        references.extend(runtime['files'])
+    unique={}
+    for reference in references:
+        key=(reference.get('path'),reference.get('sha256'))
+        if not all(isinstance(value,str)and value for value in key):
+            raise ValueError('shared source task dependency lacks its exact binding')
+        if reference.get('bytes') is not None and type(reference['bytes'])is not int:
+            raise ValueError('shared source task dependency has an invalid byte count')
+        unique[key]=reference
+    return list(unique.values())
+
+
 def dependency_closure(request, *, namespace='/work/native-production', readonly_input_roots=(),
                        _checkpoint_payload=None):
     files, assets, active_configs, relocations = {}, {}, set(), {}
@@ -140,6 +185,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             return
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
+        for reference in source_task_baseline_dependencies(training):
+            bound(reference)
         policy_sources(training.get('policy_source_history', []))
         history = training.get('config_history') or []
         supervision = (history[-1].get('config') or {}).get('ce_supervision_policy') if history else None
@@ -518,6 +565,18 @@ def verify_assets(assets, *, readonly_input_roots=(), namespace='/work/native-pr
                     or path.stat().st_size != item['bytes']
                     or sha256_file_hex_cached(path) != item['sha256']):
                 raise ValueError('provider pre-staged input file content differs: ' + str(path))
+            continue
+        if item['kind'] == 'task-source-file':
+            if (type(item.get('bytes')) is not int or item['bytes'] < 0
+                    or not path.is_absolute() or '..' in path.parts):
+                raise ValueError('provider TaskEval source file has no exact safe binding')
+            cursor=path
+            while cursor!=cursor.parent:
+                if cursor.is_symlink():raise ValueError('provider TaskEval source traverses a symlink')
+                cursor=cursor.parent
+            if (not path.is_file() or path.stat().st_size!=item['bytes']
+                    or sha256_file_hex_cached(path)!=item['sha256']):
+                raise ValueError('provider TaskEval source file differs from its exact runtime binding: '+str(path))
             continue
         if item['kind'] == 'base':
             from natlang_neuralese.model.native_model import base_inventory

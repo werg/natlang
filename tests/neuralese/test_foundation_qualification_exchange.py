@@ -36,6 +36,44 @@ def test_source_host_candidates_seal_one_request_per_declared_generation(tmp_pat
     assert reference['sha256']!=roles.foundation_request(plan,tmp_path/'requests',generation='repair-after-feedback')['sha256']
     checked=validate_foundation_qualification_request(reference['path'],'lfm',request['candidates']['lfm']['communication_foundation'])
     assert checked['sha256']==reference['sha256']
+    plan_path=tmp_path/'lfm-plan.json';plan_path.write_text(json.dumps(plan))
+    installed=roles.publish_foundation_request(plan_path,request)
+    from natlang_neuralese.train.native_readiness import _bound
+    assert json.loads(_bound(installed).read_text())==request
+    assert roles.current_foundation_request(plan_path)['sha256']==installed['sha256']
+
+
+def test_foundation_request_changes_when_current_candidate_binding_changes(tmp_path):
+    from natlang_neuralese.rl import native_role_release as roles
+    declarations=[];advertisements={}
+    for name in ('lfm','mellum'):
+        path,receipt,requirement=candidate_fixture(tmp_path,name)
+        declarations.append({'model':name,'handoff_requirement':requirement})
+        advertisements[name]={'foundation_candidate':{'path':str(path),'sha256':sha256_file_hex(path)},
+            'checkpoint':receipt['checkpoint']}
+    plan={'models':declarations,'owned_models':['lfm'],'role_exchange':{
+        'schema':roles.EXCHANGE,'role':'lfm','directory':str(tmp_path/'exchange'),
+        'semantic_consumer':'mellum','roles':{name:{'owned_models':[name],'source_host_id':name+'-fixture'}
+            for name in ('lfm','mellum')}}}
+    def advertise(name):
+        current=copy.deepcopy(plan);current['owned_models']=[name];current['role_exchange']['role']=name
+        state=tmp_path/f'{name}-state.json';state.write_text(json.dumps({'models':{name:advertisements[name]},
+            'owner':{'protocol':'source-host fixture'}}))
+        roles.withdraw(current,state)
+    advertise('lfm');advertise('mellum')
+    first=roles.foundation_request(plan,tmp_path/'requests',generation='current-head')
+    request=json.loads(Path(first['path']).read_text())
+    # A new exact checkpoint with the old candidate receipt is not admissible
+    # as a current source-host candidate.
+    for name in ('lfm','mellum'):
+        location=tmp_path/f'new-{name}';location.mkdir()
+        path,receipt,requirement=candidate_fixture(location,name)
+        advertisements[name]={'foundation_candidate':{'path':str(path),'sha256':sha256_file_hex(path)},
+            'checkpoint':receipt['checkpoint']}
+        advertise(name)
+    second=roles.foundation_request(plan,tmp_path/'requests',generation='current-head')
+    assert second['sha256']!=first['sha256']
+    assert json.loads(Path(second['path']).read_text())['candidates']!=request['candidates']
 
 
 def test_snapshot_adoption_requires_current_real_releases_not_stale_eligibility(tmp_path,monkeypatch):
@@ -146,7 +184,10 @@ def test_snapshot_metadata_and_recipe_recovery_work_after_entire_source_host_is_
     participant=setup_pair()[0]['lfm']
     config={'architecture':'lfm2'}
     monkeypatch.setattr(stage,'load_native_checkpoint',lambda *args,**kwargs:
-        (participant.model,participant.tokenizer,None,config,{'training':{}}))
+        (participant.model,participant.tokenizer,None,config,{'training':{'identity':{
+            'optimizer_options':{'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic',
+                'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None},
+            'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16}}}}))
     monkeypatch.setattr(stage,'native_identity',lambda *args,**kwargs:binding['native_identity'])
     loaded=stage.load_participant(name,binding,{'backbone_lr':1e-4},'cpu')
     assert loaded.recipe_binding==binding['recipe']
@@ -170,6 +211,14 @@ def test_post_vae_offers_require_live_owned_per_row_candidates_and_failure_cance
     declarations=[];values={};states={};plans={}
     for name in ('lfm','mellum'):
         path,receipt,requirement=candidate_fixture(tmp_path,name)
+        # The frozen VAE preparation uses the participants' full model IDs.
+        # Match those IDs here instead of advertising bare role names as if
+        # they were the exact participants whose source-task baselines it
+        # measured.
+        participant_model_id=name+':base'
+        receipt['model_id']=participant_model_id
+        requirement['model_id']=participant_model_id
+        path.write_text(json.dumps(receipt))
         declarations.append({'model':name,'handoff_requirement':requirement,
             'foundation_qualification_generation':'qualified-generation',
             **{key:roles.binding(path)for key in ('production_recipe','cases','seed_native_graphs','held_native_graphs')}})

@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+import tempfile
 from pathlib import Path
 
 from natlang_neuralese.common.jsonio import write_json_durable
@@ -853,8 +854,29 @@ def registered_dedup_args(root: Path, ident: str, model: str) -> list[str]:
 
 def _registered_model_identity(root: Path, model: str, direct_inputs: list[Path], output: Path) -> Path:
     registry_path = root / 'training/neuralese_corpora.json'
-    registry_ref = file_binding(registry_path)
-    registry = read_bound(registry_ref)
+    observed_registry = file_binding(registry_path)
+    registry = read_bound(observed_registry)
+    # Registration appends to the live registry. Historical model-identity
+    # evidence must keep the exact registry it actually checked, rather than
+    # becoming invalid as soon as its own new corpus is published.
+    registry_snapshot = output / ('identity-registry-'+observed_registry['sha256']+'.json')
+    if registry_snapshot.exists():
+        if file_binding(registry_snapshot)['sha256'] != observed_registry['sha256']:
+            raise ValueError('immutable model-identity registry snapshot changed')
+    else:
+        raw_registry = registry_path.read_bytes()
+        if hashlib.sha256(raw_registry).hexdigest() != observed_registry['sha256']:
+            raise ValueError('registry changed before its exact snapshot was captured')
+        with tempfile.NamedTemporaryFile(dir=output,prefix='.registry-',delete=False) as stream:
+            pending=Path(stream.name)
+            try:
+                stream.write(raw_registry);stream.flush();os.fsync(stream.fileno())
+                pending.replace(registry_snapshot)
+                directory=os.open(output,os.O_DIRECTORY)
+                try:os.fsync(directory)
+                finally:os.close(directory)
+            finally:pending.unlink(missing_ok=True)
+    registry_ref = file_binding(registry_snapshot)
     sources, model_ids = [], set()
     for graph_path in direct_inputs:
         ident = graph_path.parents[2].name
@@ -891,11 +913,13 @@ def _registered_model_identity(root: Path, model: str, direct_inputs: list[Path]
         raise ValueError('available admitted predecessor receipts do not agree on one exact model identity')
     proof = {'schema': 'natlang.teacher-registered-model-identity/1', 'model_key': model,
         'model_id': next(iter(model_ids)), 'registry': registry_ref, 'sources': sources,
+        'registry_observation': {'source_path':str(registry_path),
+                                 'source_sha256':observed_registry['sha256']},
         'basis': 'all locally available admitted predecessor receipts agree; unavailable registered packages remain content-index-bound separately',
         'training_admission': False}
     path = output / f'model-identity-{model}.json'
     write_json_durable(path, proof)
-    if file_binding(registry_path) != registry_ref:
+    if file_binding(registry_path) != observed_registry:
         raise ValueError('registry changed during model identity declaration')
     return path
 

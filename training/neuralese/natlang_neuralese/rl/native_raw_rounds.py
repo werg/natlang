@@ -81,9 +81,12 @@ def _inputs(declaration):
 
 def _seed_quantum(config,record):
     """Bind the complete supervised settings to the finite seed operation."""
+    from .native_supervised import bind_foundation_policy
     config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
         **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True,
         'stage_id':config['production_stage']}
+    for key in ('trainer_parameters', 'seed_trainer_parameters'):
+        bind_foundation_policy(config, config.setdefault(key, {}))
     if config.get('foundation_readiness_policy'):
         for key in ('trainer_parameters','seed_trainer_parameters'):
             config.setdefault(key,{})['foundation_readiness_policy']=config['foundation_readiness_policy']
@@ -301,8 +304,11 @@ def configure_model(plan_path,declaration,handoff,out,*,verified_handoff=None,ow
 
 def _published_checkpoint_state(state,checkpoint):
     """One publication rule for ordinary bridge and owned-operation commits."""
-    return {**state,'checkpoint':str(_bound(checkpoint)),'phase':'collect',
+    from .production import invalidate_checkpoint_readiness
+    next_state={**state,'checkpoint':str(_bound(checkpoint)),'phase':'collect',
             'actor_policy_pending_load':checkpoint['sha256']}
+    invalidate_checkpoint_readiness(next_state,checkpoint,reason='completed-native-supervised-publication')
+    return next_state
 
 
 def _supervised_stage_inventory(recipe,foundation_id):

@@ -182,8 +182,8 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
         neuralese_server=True,expected_native=bound)
 
 
-def test_all_correct_ordinary_native_batch_updates_policy_without_semantic_refresh(tmp_path,monkeypatch):
-    """Controller behavior only; exact real optimizer continuation is tested separately."""
+def test_synthetic_learner_result_cannot_complete_raw_policy_round(tmp_path,monkeypatch):
+    """A controller-only fake checkpoint/report must not receive completed-round credit."""
     import json
     from natlang_neuralese.rl import production,native_raw_policy,native_refresh
     source=tmp_path/'cases.jsonl';source.write_text('{"id":"ordinary","split":"train"}\n')
@@ -210,11 +210,13 @@ def test_all_correct_ordinary_native_batch_updates_policy_without_semantic_refre
             {'task_id':'ordinary','split':'train'}]}))
         (destination/'train.jsonl').write_text('{"step":1,"target_tokens":2,"supervised_tokens":2}\n')
     monkeypatch.setattr(production,'run_command',command)
-    state=production.run(config,rounds=1)
+    with pytest.raises(ValueError,match='exact published checkpoint'):
+        production.run(config,rounds=1)
+    state=json.loads((out/'state.json').read_text())
     current=out/'round-000000/learner/checkpoint.pt'
     assert calls==[('learn','rft',str(parent)),('publish','rft',str(current))]
-    assert state['checkpoint']==str(current) and state['trained_task_ids']==['ordinary']
-    assert state['trained_target_tokens']==2 and not state.get('pending_native_checkpoint')
+    assert state['round']==0 and state['trained_rounds']==0
+    assert 'last_completed_update' not in state and state['active_update_round'].endswith('round-000000')
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
 def test_sampled_actor_profile_overrides_future_seed_profile_in_actual_stage_cli(tmp_path,monkeypatch,family):

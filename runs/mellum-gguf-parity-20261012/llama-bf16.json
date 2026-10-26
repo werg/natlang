@@ -1,7 +1,0 @@
-{
- "chat-nothink-tool": {
-  "n_tokens": 82,
-  "n_vocab": 98304,
-  "greedy": []
- }
-}

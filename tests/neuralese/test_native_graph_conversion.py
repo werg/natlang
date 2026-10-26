@@ -523,7 +523,13 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         def apply_chat_template(self, messages, *, add_generation_prompt=False, **_kwargs):
             rendered = []
             for message in messages:
-                rendered.extend((f"<|{message['role']}|>", message.get('content') or '', '<|end|>'))
+                rendered.extend((f"<|{message['role']}|>", message.get('content') or ''))
+                for call in message.get('tool_calls') or []:
+                    function = call.get('function', call)
+                    rendered.extend(('<|tool-call|>', function.get('name', ''),
+                        json.dumps(function.get('arguments'), ensure_ascii=False, separators=(',', ':')),
+                        '<|end-call|>'))
+                rendered.append('<|end|>')
             if add_generation_prompt:
                 rendered.append('<|assistant|>')
             return ''.join(rendered)
@@ -666,11 +672,444 @@ def test_assistant_text_return_survives_e2e_pair_render_and_native_graph_parse()
         assert tok.decode(list(producer.token_ids[start:stop])) == body
         assert selected_writer['target']['content'] == raw
         assert not selected_writer['target'].get('tool_calls')
+        # The complete assistant text return remains the training target. The
+        # marked state occupies only the authenticated substring, preserving
+        # the original surrounding assistant response.
+        expected = raw[:2] + ROLE_MARKERS[0] + body + ROLE_MARKERS[1] + raw[2+len(body):]
+        assert expected in writer_row['text']
 
     forged = copy.deepcopy(writer)
     forged['native_source_conversion']['source_target']['assistant_text_result']['body_start'] += 1
     with pytest.raises(ValueError, match='invalid assistant-text-result writer sidecar'):
         builder.source_occurrences(forged, reader, name, body, body_sha)
+
+    # Exercise the nested JSON return-result path through the actual shared
+    # gold renderer, role-marker materializer, pair graph builder and parser.
+    tool_name = 'typed-result-event'
+    tool_writer = copy.deepcopy(writer)
+    tool_writer['id'] = 'writer-typed-record-result'
+    tool_writer['source_ref']['invocation_id'] = 'writer-tool-call'
+    tool_writer['decision'] = {'training_approved': True, 'failed_action': False}
+    tool_args = {'status': 'success', 'value': {
+        'relevant': True,
+        'facts': {'$write': {'name': tool_name, 'type': 'Neuralese<string>', 'source': body}},
+    }}
+    tool_writer['target'] = {'role': 'assistant', 'content': '', 'tool_calls': [{
+        'id': 'return-result-call', 'type': 'function',
+        'function': {'name': 'return_result',
+                     'arguments': json.dumps(tool_args, ensure_ascii=False, separators=(',', ':'))},
+    }]}
+    tool_writer['native_source_conversion']['occurrences'][0].update(
+        id='nso_' + '2' * 64, reference=tool_name, source_kind='typed-result-field',
+        path=['target', 'tool_calls', '0', 'function', 'arguments<json>', 'value', 'facts', '$write'])
+    tool_reader = copy.deepcopy(reader)
+    tool_reader['id'] = 'reader-after-typed-result'
+    tool_reader['native_source_conversion']['occurrences'][0].update(
+        id='nso_' + '3' * 64, reference=tool_name)
+    bind_native_source(tool_writer)
+    bind_native_source(tool_reader)
+    tool_occurrence = builder.source_occurrences(tool_writer, tool_reader, tool_name, body, body_sha)
+    assert tool_occurrence['writer_json_pointer'] == (
+        '/target/tool_calls/0/function/arguments<json>/value/facts/$write')
+    tool_writer_row, tool_reader_row = builder.normalized_pair_rows(
+        tool_writer, tool_reader, {}, tokenizer=tok, payload=body, occurrence=tool_occurrence,
+        role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64,
+        source_records=[tool_writer, tool_reader])
+    tool_writer_span = builder.exact_marked_span(tool_writer_row, tok, body,
+        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
+    tool_reader_spans = builder.exact_marked_spans(tool_reader_row, tok, body,
+        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=body_sha,
+        expected_count=len(tool_occurrence['reader_json_pointers']))
+    tool_edge = {'write_name': tool_name, 'body_sha256': body_sha, 'trajectory': 'trajectory-1',
+        'writer_record_id': tool_writer['id'], 'reader_record_id': tool_reader['id'], 'split': 'train'}
+    tool_view = builder.model_view(tool_edge, tool_writer_row, tool_reader_row,
+        tool_writer, tool_reader, tokenizer=tok, source_fingerprint='b' * 64,
+        expanded_fingerprint='b' * 64, role_ids=tuple(tok.convert_tokens_to_ids(x) for x in ROLE_MARKERS),
+        communication_sha256='f' * 64, writer_span=tool_writer_span, reader_span=tool_reader_spans)
+    tool_graph = parse_graph(tool_view['graph'], tokenizer_fingerprint='b' * 64)
+    tool_producer, tool_consumer = tool_graph.plan.invocations
+    tool_start, tool_stop = tool_producer.producing[0]
+    tool_target = tok.decode(list(tool_producer.token_ids[tool_writer_row['supervised_suffix_start']:]))
+    assert tok.decode(list(tool_producer.token_ids[tool_start:tool_stop])) == body
+    assert 'return_result' in tool_target and 'relevant' in tool_target and 'true' in tool_target
+    assert '"facts":"' + ROLE_MARKERS[0] + body in tool_target
+    assert tool_consumer.imports
+
+
+def test_typed_producer_preserves_full_assistant_tool_result_and_marks_exact_value():
+    """A typed record result keeps sibling fields and the actual tool wrapper."""
+    import hashlib
+    import json
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.data.native_graph_conversion import witnessed_pair_graph
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import (
+        _replace_source_target_span, exact_marked_span, materialize_role_markers,
+    )
+
+    body = 'The article names Milwaukee as its base.'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    write_name = 'result:typed-record'
+    arguments = {'status': 'success', 'value': {
+        'relevant': True,
+        'facts': {'$write': {'name': write_name, 'type': 'Neuralese<string>', 'source': body}},
+    }}
+    source_target = {'role': 'assistant', 'content': '', 'tool_calls': [{
+        'id': 'result-call', 'type': 'function',
+        'function': {'name': 'return_result',
+                     'arguments': json.dumps(arguments, ensure_ascii=False, separators=(',', ':'))},
+    }]}
+    occurrence = {
+        'write_name': write_name,
+        'writer_json_pointer': '/target/tool_calls/0/function/arguments<json>/value/facts/$write',
+        'payload_sha256': body_sha,
+    }
+    target = _replace_source_target_span(source_target, occurrence, body, ROLE_MARKERS)
+    assert target['role'] == 'assistant' and target['content'] == ''
+    call = target['tool_calls'][0]
+    assert call['function']['name'] == 'return_result'
+    result = json.loads(call['function']['arguments'])
+    assert result['status'] == 'success'
+    assert result['value']['relevant'] is True
+    # The source target is first restored to its exact crisp value. The
+    # source-bound renderer inserts role tokens at this exact argument path,
+    # avoiding a global text search when the same payload appears elsewhere.
+    assert result['value']['facts'] == body
+    assert target['tool_calls'][0]['id'] == source_target['tool_calls'][0]['id']
+    root_write_target = {'role': 'assistant', 'content': '', 'tool_calls': [{
+        'id': 'root-write-call', 'type': 'function',
+        'function': {'name': 'return_result', 'arguments': json.dumps(
+            {'$write': {'name': write_name, 'type': 'Neuralese<string>', 'source': body}},
+            ensure_ascii=False, separators=(',', ':'))},
+    }]}
+    root_write = _replace_source_target_span(root_write_target, {
+        **occurrence, 'writer_json_pointer':
+        '/target/tool_calls/0/function/arguments<json>/$write'}, body, ROLE_MARKERS)
+    assert json.loads(root_write['tool_calls'][0]['function']['arguments']) == body
+
+    class ProducerTokenizer(ChatRoleAsciiTokenizer):
+        all_special_tokens = list(ChatRoleAsciiTokenizer.special) + list(ROLE_MARKERS)
+        def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False,
+                     split_special_tokens=False):
+            ids, offsets, position = [], [], 0
+            # Match production's escaped-content path: special role spellings
+            # first tokenize as literal text, then the source-bound converter
+            # materializes only the authorized exact occurrence.
+            specials = tuple(sorted(self.special, key=len, reverse=True))
+            special_ids = dict(self.token_ids)
+            while position < len(text):
+                marker = next((item for item in specials if text.startswith(item, position)), None)
+                if marker is None:
+                    ids.append(ord(text[position])); offsets.append((position, position + 1)); position += 1
+                else:
+                    ids.append(special_ids[marker]); offsets.append((position, position + len(marker)))
+                    position += len(marker)
+            result = {'input_ids': ids}
+            if return_offsets_mapping: result['offset_mapping'] = offsets
+            return result
+        def convert_tokens_to_ids(self, token):
+            return (3000 + ROLE_MARKERS.index(token)) if token in ROLE_MARKERS else super().convert_tokens_to_ids(token)
+        def apply_chat_template(self, messages, *, add_generation_prompt=False, **_kwargs):
+            rendered = []
+            for message in messages:
+                content = message.get('content') or ''
+                if isinstance(content, list):
+                    content = ''.join(part.get('text', '') for part in content if isinstance(part, dict))
+                rendered.extend((f"<|{message['role']}|>", content))
+                for call in message.get('tool_calls') or []:
+                    function = call.get('function', call)
+                    rendered.extend(('<|tool-call|>', function.get('name', ''),
+                        json.dumps(function.get('arguments'), ensure_ascii=False, separators=(',', ':')),
+                        '<|end-call|>'))
+                rendered.append('<|end|>')
+            if add_generation_prompt: rendered.append('<|assistant|>')
+            return ''.join(rendered)
+        def decode(self, ids, skip_special_tokens=False):
+            reverse = {value: key for key, value in self.token_ids.items()}
+            reverse.update({3000 + index: marker for index, marker in enumerate(ROLE_MARKERS)})
+            return ''.join(reverse[value] if value in reverse else chr(value) for value in ids)
+
+    tokenizer = ProducerTokenizer()
+    target_for_graph = json.loads(json.dumps(target))
+    target_arguments = json.loads(target_for_graph['tool_calls'][0]['function']['arguments'])
+    target_arguments['value']['facts'] = ROLE_MARKERS[0] + body + ROLE_MARKERS[1]
+    target_for_graph['tool_calls'][0]['function']['arguments'] = json.dumps(
+        target_arguments, ensure_ascii=False, separators=(',', ':'))
+    target_text = json.dumps(target_for_graph, ensure_ascii=False, separators=(',', ':'))
+    writer_text = 'authenticated call: ' + target_text
+    reader_text = 'consume ' + ROLE_MARKERS[2] + body + ROLE_MARKERS[3] + ' then answer'
+    writer_encoded = tokenizer(writer_text, return_offsets_mapping=True)
+    reader_encoded = tokenizer(reader_text, return_offsets_mapping=True)
+    boundary = len(tokenizer('authenticated call: ')['input_ids'])
+    writer_row = {'id': 'typed-writer', 'text': writer_text,
+        'token_ids': writer_encoded['input_ids'], 'tokenizer_sha256': 'a' * 64,
+        'token_offsets': writer_encoded['offset_mapping'],
+        'split': 'train', 'source_groups': ['source:typed'],
+        'supervised_suffix_start': boundary}
+    reader_boundary = len(tokenizer('consume ')['input_ids'])
+    reader_row = {'id': 'typed-reader', 'text': reader_text,
+        'token_ids': reader_encoded['input_ids'], 'tokenizer_sha256': 'a' * 64,
+        'token_offsets': reader_encoded['offset_mapping'],
+        'split': 'train', 'source_groups': ['source:typed'],
+        'supervised_suffix_start': reader_boundary}
+    role_ids = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
+    materialize_role_markers(writer_row, role_markers=ROLE_MARKERS, role_ids=role_ids,
+        payload=body, side='writer')
+    materialize_role_markers(reader_row, role_markers=ROLE_MARKERS, role_ids=role_ids,
+        payload=body, side='reader')
+    writer_span = exact_marked_span(writer_row, tokenizer, body,
+        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import exact_marked_spans
+    reader_spans = exact_marked_spans(reader_row, tokenizer, body,
+        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3],
+        expected_sha256=body_sha, expected_count=1)
+    graph = witnessed_pair_graph(writer_row, reader_row, source_tokenizer=tokenizer,
+        source_tokenizer_fingerprint='a' * 64, expanded_tokenizer_fingerprint='b' * 64,
+        role_ids=role_ids, writer_span=writer_span, reader_span=reader_spans,
+        payload_sha256=body_sha, source_span_id=write_name, edge_id='typed-edge',
+        chain_id='typed-source')
+    parsed = parse_graph(graph, tokenizer_fingerprint='b' * 64)
+    producer = parsed.plan.invocations[0]
+    start, stop = producer.producing[0]
+    assert tokenizer.decode(list(producer.token_ids[start:stop])) == body
+    rendered_target = tokenizer.decode(list(producer.token_ids[boundary:]))
+    assert 'return_result' in rendered_target and 'relevant' in rendered_target and 'true' in rendered_target
+    relevant_token = writer_text.index('relevant')
+    assert float(parsed.target_weights[relevant_token]) == 1.0
+    assert all(float(weight) == 1.0 for weight in parsed.target_weights[start:stop])
+    assert any(float(weight) > 0.0 for weight in parsed.target_weights[boundary:])
+
+    raw_writer = {'id': 'raw-typed-writer', 'split': 'train', 'source_groups': ['source:typed'],
+        'training_admission': {'approved': True},
+        'decision': {'training_approved': True, 'failed_action': False},
+        'messages': [{'role': 'user', 'content': 'Return the complete record.'}], 'target': source_target}
+    raw_reader = {'id': 'raw-typed-reader', 'split': 'train', 'source_groups': ['source:typed'],
+        'training_admission': {'approved': True},
+        'decision': {'training_approved': True, 'failed_action': False},
+        'messages': [{'role': 'user', 'content': [{'type': 'read', 'name': write_name, 'source': body}]}],
+        'target': {'role': 'assistant', 'content': 'Use the imported facts.'}}
+    recovered_occurrence = __import__(
+        'scripts.neuralese_data.build_native_semantic_pairs_e2e', fromlist=['source_occurrences']).source_occurrences(
+            raw_writer, raw_reader, write_name, body, body_sha)
+    assert recovered_occurrence['writer_source_kind'] == 'target-write-descriptor'
+    assert recovered_occurrence['reader_json_pointers'] == ['/messages/0/content/0']
+    recovered_writer, recovered_reader = __import__(
+        'scripts.neuralese_data.build_native_semantic_pairs_e2e', fromlist=['normalized_pair_rows']).normalized_pair_rows(
+            raw_writer, raw_reader, {}, tokenizer=tokenizer, payload=body, occurrence=recovered_occurrence,
+            role_markers=ROLE_MARKERS, tokenizer_sha256='b' * 64, source_records=[raw_writer, raw_reader])
+    recovered_writer_span = exact_marked_span(recovered_writer, tokenizer, body,
+        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1], expected_sha256=body_sha)
+    recovered_reader_spans = exact_marked_spans(recovered_reader, tokenizer, body,
+        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3], expected_sha256=body_sha,
+        expected_count=1)
+    recovered_target = tokenizer.decode(recovered_writer['token_ids'][recovered_writer['supervised_suffix_start']:])
+    assert 'return_result' in recovered_target and 'relevant' in recovered_target and 'true' in recovered_target
+    assert ROLE_MARKERS[0] + body + ROLE_MARKERS[1] in recovered_target
+    assert recovered_reader['text'].find(ROLE_MARKERS[2] + body + ROLE_MARKERS[3]) >= 0
+
+
+def test_unknown_producer_keeps_structured_tool_value_and_all_exact_reader_occurrences():
+    import copy
+    import hashlib
+    import json
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import (
+        source_occurrences, _replace_source_target_span,
+    )
+
+    write_name = 'result:structured'
+    body = '{"decision":"unknown","evidence":["source-a",3]}'
+    body_sha = hashlib.sha256(body.encode()).hexdigest()
+    writer = {'id': 'writer-structured', 'target': {'role': 'assistant', 'content': '',
+        'tool_calls': [{'id': 'result-call', 'type': 'function', 'function': {
+            'name': 'return_result', 'arguments': json.dumps({'status': 'success', 'value': {
+                '$write': {'name': write_name, 'type': 'Neuralese<unknown>', 'source': body}}},
+                separators=(',', ':'))}}]}}
+    reader = {'id': 'reader-structured', 'messages': [{'role': 'user', 'content': [
+        {'type': 'read', 'name': write_name, 'source': body},
+        {'type': 'read', 'name': write_name, 'source': body}]}]}
+
+    occurrence = source_occurrences(writer, reader, write_name, body, body_sha)
+    assert occurrence['writer_json_pointer'] == '/target/tool_calls/0/function/arguments<json>/value/$write'
+    assert len(occurrence['reader_json_pointers']) == 2
+    assert len(set(occurrence['reader_occurrence_ids'])) == 2
+    marked = _replace_source_target_span(writer['target'], occurrence, body, ROLE_MARKERS)
+    assert marked['tool_calls'][0]['id'] == 'result-call'
+    assert marked['tool_calls'][0]['function']['name'] == 'return_result'
+    # The regular crisp renderer joins the exact text argument part. Removing
+    # only role markers must recover the original object-valued result, not a
+    # quoted JSON string, while preserving the complete call wrapper.
+    class TargetTokenizer:
+        all_special_tokens = list(ROLE_MARKERS)
+        natlang_history_reasoning = {'policy': 'undeclared'}
+        def apply_chat_template(self, messages, *, tools=None, tokenize=False, add_generation_prompt=False):
+            prefix = '<|assistant|>'
+            if add_generation_prompt:
+                return prefix
+            target = messages[-1]
+            calls = target.get('tool_calls') or []
+            return prefix + ''.join(call['function']['name'] + '(' + json.dumps(
+                call['function']['arguments'], ensure_ascii=False, separators=(',', ':')) + ')'
+                for call in calls)
+        def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False, split_special_tokens=False):
+            ids, offsets, position = [], [], 0
+            while position < len(text):
+                marker = next((item for item in ROLE_MARKERS if text.startswith(item, position)), None)
+                if marker:
+                    ids.append(1000 + ROLE_MARKERS.index(marker)); offsets.append((position, position + len(marker)))
+                    position += len(marker)
+                else:
+                    ids.append(ord(text[position])); offsets.append((position, position + 1)); position += 1
+            result = {'input_ids': ids}
+            if return_offsets_mapping: result['offset_mapping'] = offsets
+            return result
+
+    rendered = native_gold_packet(TargetTokenizer(), [], marked, [], return_offsets=True,
+        producer_span={'call_index': 0, 'argument_path': ['value'], 'body': body,
+                       'payload_sha256': body_sha, 'value_type': 'unknown'})
+    target_text = rendered[0][rendered[2]:]
+    arguments_start = target_text.index('(') + 1
+    arguments_stop = target_text.rindex(')')
+    arguments = target_text[arguments_start:arguments_stop]
+    assert ROLE_MARKERS[0] + body + ROLE_MARKERS[1] in arguments
+    clean_arguments = arguments.replace(ROLE_MARKERS[0], '').replace(ROLE_MARKERS[1], '')
+    assert json.loads(clean_arguments) == {'status': 'success', 'value': json.loads(body)}
+    assert json.loads(clean_arguments)['value'] != body
+
+    malformed = copy.deepcopy(writer)
+    malformed['target']['tool_calls'][0]['function']['arguments'] = json.dumps({
+        'status': 'success', 'value': {'$write': {'name': write_name,
+            'type': 'Neuralese<unknown>', 'source': 'not-json'}}}, separators=(',', ':'))
+    bad_source = 'not-json'
+    malformed_reader = copy.deepcopy(reader)
+    for part in malformed_reader['messages'][0]['content']:
+        part['source'] = bad_source
+    bad_occurrence = source_occurrences(malformed, malformed_reader, write_name, bad_source,
+        hashlib.sha256(bad_source.encode()).hexdigest())
+    with pytest.raises(ValueError, match='unknown producer source is not its declared JSON value'):
+        _replace_source_target_span(malformed['target'], bad_occurrence, bad_source, ROLE_MARKERS)
+
+
+def test_inline_producer_span_preserves_escaped_eval_target_and_uses_raw_source_tokens():
+    import hashlib
+    import json
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.train.inline_instructions import INLINE_CODE_SCHEMA, validate_inline_instruction_code
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import exact_marked_span, materialize_role_markers
+
+    body = 'first line\nsecond "quoted" line <|literal|>'
+    prefix, suffix = 'const answer = await nl<string>`', '`(item);'
+    code = prefix + body + suffix
+    arguments = json.dumps({'code': code}, ensure_ascii=False, separators=(',', ':'))
+    call = {'id': 'inline-call', 'type': 'function', 'function': {'name': 'eval', 'arguments': arguments}}
+    sidecar = {'schema': INLINE_CODE_SCHEMA, 'code_sha256': hashlib.sha256(code.encode()).hexdigest(),
+        'parts': [{'type': 'text', 'text': prefix}, {'$write': {'name': 'inline:source',
+            'type': 'Neuralese<string>', 'source': body}}, {'type': 'text', 'text': suffix}],
+        'sites': [{'name': 'inline:source', 'actual_tool_call_id': 'inline-call',
+            'code_span': {'start': len(prefix) - 1, 'end': len(prefix) + len(body) + 1}, 'plan': {}}]}
+    call['neuralese_code'] = sidecar
+    checked = validate_inline_instruction_code(arguments, sidecar)
+    assert checked.valid and checked.value is not None
+    write = checked.value.writes[0]
+    assert (write.name, write.source, checked.value.code[write.start:write.end]) == ('inline:source', body, body)
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [call]}
+
+    class InlineTokenizer:
+        all_special_tokens = [*ROLE_MARKERS, '<|literal|>']
+        natlang_history_reasoning = {'policy': 'undeclared'}
+        def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False, split_special_tokens=False):
+            ids, offsets, position = [], [], 0
+            while position < len(text):
+                marker = next((value for value in ROLE_MARKERS if text.startswith(value, position)), None)
+                if marker:
+                    ids.append(7000 + ROLE_MARKERS.index(marker)); offsets.append((position, position + len(marker)))
+                    position += len(marker)
+                else:
+                    ids.append(ord(text[position])); offsets.append((position, position + 1)); position += 1
+            result = {'input_ids': ids}
+            if return_offsets_mapping: result['offset_mapping'] = offsets
+            return result
+        def convert_tokens_to_ids(self, token): return 7000 + ROLE_MARKERS.index(token)
+        def decode(self, ids, skip_special_tokens=False):
+            return ''.join(ROLE_MARKERS[token - 7000] if 7000 <= token < 7004 else chr(token) for token in ids)
+        def apply_chat_template(self, messages, *, add_generation_prompt=False, **_kwargs):
+            rendered = []
+            for message in messages:
+                rendered.extend((f"<|{message['role']}|>", message.get('content') or ''))
+                for item in message.get('tool_calls') or []:
+                    function = item.get('function', item)
+                    rendered.extend(('<|tool-call|>', function.get('name', ''),
+                        json.dumps(function.get('arguments'), ensure_ascii=False, separators=(',', ':'))))
+            if add_generation_prompt: rendered.append('<|assistant|>')
+            return ''.join(rendered)
+
+    tokenizer = InlineTokenizer()
+    span = {'call_index': 0, 'argument_path': ['code'], 'body': body,
+        'payload_sha256': hashlib.sha256(body.encode()).hexdigest(), 'value_type': 'inline-string',
+        'source_start': write.start, 'source_end': write.end,
+        'sidecar_code_sha256': checked.value.code_sha256, 'site_name': write.name,
+        'site_actual_tool_call_id': 'inline-call'}
+    messages = [{'role': 'user', 'content': 'run the exact program'}]
+    baseline = native_gold_packet(tokenizer, messages, target, [], return_offsets=True)[0]
+    rendered, ids, boundary, offsets, rendered_binding = native_gold_packet(tokenizer, messages, target, [],
+        return_offsets=True, producer_span=span, return_producer_span=True)
+    rendered_body = rendered_binding['rendered_body']
+    assert isinstance(rendered_body, str) and rendered_body != body  # JSON escaping is retained in the call.
+    assert rendered.replace(ROLE_MARKERS[0] + rendered_body + ROLE_MARKERS[1], rendered_body) == baseline
+    row_value = {'text': rendered, 'token_ids': ids, 'token_offsets': offsets,
+        'supervised_suffix_start': boundary, 'producer_rendered_body': rendered_body}
+    marker_ids = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
+    materialize_role_markers(row_value, role_markers=ROLE_MARKERS, role_ids=marker_ids, payload=body, side='writer')
+    writer_span = exact_marked_span(row_value, tokenizer, body, open_marker=ROLE_MARKERS[0],
+        close_marker=ROLE_MARKERS[1], expected_sha256=hashlib.sha256(body.encode()).hexdigest())
+    assert tokenizer.decode(writer_span['payload_token_ids']) == body
+    start, stop = writer_span['container_start'], writer_span['container_stop']
+    assert row_value['token_ids'][start] == marker_ids[0]
+    assert row_value['token_ids'][stop - 1] == marker_ids[1]
+    row_value.update({'id': 'inline-writer', 'split': 'train', 'source_groups': ['inline-source'],
+        'tokenizer_sha256': 'c' * 64, 'neuralese_context_attestations': []})
+    reader_text = '<|user|>read ' + ROLE_MARKERS[2] + body + ROLE_MARKERS[3] + ' then answer<|end|>'
+    encoded_reader = tokenizer(reader_text, return_offsets_mapping=True)
+    reader_row = {'id': 'inline-reader', 'text': reader_text, 'token_ids': encoded_reader['input_ids'],
+        'token_offsets': encoded_reader['offset_mapping'], 'tokenizer_sha256': 'c' * 64,
+        'split': 'train', 'source_groups': ['inline-source'], 'supervised_suffix_start': 1,
+        'neuralese_context_attestations': []}
+    read_open = reader_row['token_ids'].index(marker_ids[2])
+    read_close = reader_row['token_ids'].index(marker_ids[3])
+    reader_span = {'container_start': read_open, 'container_stop': read_close + 1,
+        'body_text': body, 'payload_token_ids': tokenizer(body)['input_ids'], 'tokenize_payload_alone': True}
+    from natlang_neuralese.data.native_graph_conversion import witnessed_pair_graph
+    from natlang_neuralese.data.native_graph import parse_graph
+    graph = witnessed_pair_graph(row_value, reader_row, source_tokenizer=tokenizer,
+        source_tokenizer_fingerprint='c' * 64, expanded_tokenizer_fingerprint='c' * 64,
+        role_ids=marker_ids, writer_span=writer_span, reader_span=reader_span,
+        payload_sha256=hashlib.sha256(body.encode()).hexdigest(), source_span_id='inline:source',
+        edge_id='inline-edge', chain_id='inline-trajectory')
+    parsed = parse_graph(graph, tokenizer_fingerprint='c' * 64)
+    producer = parsed.plan.invocations[0]
+    assert tokenizer.decode(producer.token_ids[producer.producing[0][0]:producer.producing[0][1]]) == body
+
+
+def test_writer_marker_materialization_ignores_identical_context_prefix_occurrence():
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import materialize_role_markers
+
+    body = 'the exact output'
+    wrapper = ROLE_MARKERS[0] + body + ROLE_MARKERS[1]
+    prefix = 'context repeated earlier: ' + wrapper + '\n'
+    text = prefix + 'assistant target: ' + wrapper
+    offsets = [(index, index + 1) for index in range(len(text))]
+    row_value = {'text': text, 'token_ids': list(text.encode()), 'token_offsets': offsets,
+        'supervised_suffix_start': len(prefix.encode())}
+    role_ids = (9001, 9002, 9003, 9004)
+    materialize_role_markers(row_value, role_markers=ROLE_MARKERS, role_ids=role_ids,
+        payload=body, side='writer')
+    assert row_value['text'].startswith(prefix)
+    assert row_value['token_ids'][:len(prefix)] == list(prefix.encode())
+    assert row_value['token_ids'][len(prefix):].count(role_ids[0]) == 1
+    assert row_value['token_ids'][len(prefix):].count(role_ids[1]) == 1
 
 
 def test_witnessed_pair_imports_every_exact_static_read_occurrence():

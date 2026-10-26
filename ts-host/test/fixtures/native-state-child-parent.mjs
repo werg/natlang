@@ -48,7 +48,7 @@ assert.ok(read?.inputs.some(input => input.node === write.node), 'parent reads t
 if (recorder) {
   const decisions = [0,1].map(index => open({ type: "(memo: Neuralese<string>) => 'yes' | 'no'",
     instructions:'Choose the result from the memo.', args:{memo:child.lam.return} }, {neuralese}).session);
-  const decisionRecorders=decisions.map(()=>new ModelTurnRecorder());
+  const decisionRecorders=decisions.map(()=>{const own=new ModelTurnRecorder();own.absorb(recorder);return own;});
   await Promise.all(decisions.map((session,index)=>recordingScope.run(decisionRecorders[index],()=>
     new NativeToolAgent(driver,{maxTurns:2,neuralese,decisionReadout:'finite-returns'}).run(session))));
   for(const own of decisionRecorders){

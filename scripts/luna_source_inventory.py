@@ -45,14 +45,28 @@ def inventory(source: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
         seen.add(index)
         row_bytes, row = indexed[index]
         source_groups = row.get("source_groups")
-        if not isinstance(source_groups, list) or len(source_groups) != 1 or not isinstance(source_groups[0], str):
-            raise ValueError(f"source row {index} must identify exactly one source group")
+        if (not isinstance(source_groups, list) or not source_groups
+                or any(not isinstance(group, str) or not group for group in source_groups)
+                or len(set(source_groups)) != len(source_groups)):
+            raise ValueError(f"source row {index} must identify its complete distinct source groups")
         program = row.get("curriculum", {}).get("reference", {}).get("root")
         if not isinstance(program, list) or not program or not isinstance(program[0], list) or len(program[0]) < 2:
             raise ValueError(f"source row {index} has no canonical root program")
+        if any(not isinstance(call, list) or len(call) != 2
+               or not isinstance(call[0], str) or not call[0]
+               or not isinstance(call[1], dict) for call in program):
+            raise ValueError(f"source row {index} root program has malformed tool calls")
         root_code = program[0][1].get("code")
-        if not isinstance(root_code, str):
-            raise ValueError(f"source row {index} root program has no code")
+        # References can legitimately read a file or apply a reducer before
+        # their first eval. Preserve existing exact inventories for eval-first
+        # recovery sources; bind the complete tool sequence for other roots.
+        root_binding = ({"root_code_sha256": sha256(root_code.encode("utf-8"))}
+                        if isinstance(root_code, str) else {
+                            "root_reference_format": "tool-calls-v1",
+                            "root_reference_sha256": sha256(json.dumps(
+                                program, sort_keys=True, separators=(",", ":"),
+                                ensure_ascii=False).encode("utf-8")),
+                        })
         files = row.get("semantics", {}).get("files", {})
         skills = []
         for file_path, body in sorted(files.items()):
@@ -75,7 +89,7 @@ def inventory(source: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
             "split": row.get("split"),
             "source_revisions": row.get("source_revisions"),
             "row_sha256_including_lf": sha256(row_bytes),
-            "root_code_sha256": sha256(root_code.encode("utf-8")),
+            **root_binding,
             "skill_bindings": skills,
         })
     return {

@@ -31,6 +31,12 @@ def fixture(tmp_path,*,use_expert_backend=True):
     if use_expert_backend:
         participants['mellum'].backend=make_backend('triton-experts',participants['mellum'].model.port.hf,device=device)
         participants['mellum'].model.port.activation_checkpoint=participants['mellum'].backend.checkpoint
+    for value in participants.values():
+        value.optimizer_options={'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None}
+        value.optimizer_state_storage='device'
+        value.fp8_profile={'kind':'triton-experts' if value.backend is not None else 'off',
+            'recipe':'delayed','amax_history_len':16}
     config={'schema':stage.CONFIG_SCHEMA,'backbone_lr':1e-4,'vae_lr':1e-3,'latent_width':4,'hidden_width':8,
         'models':{name:{'fp8_training':'triton-experts' if name=='mellum' else 'off'} for name in participants},
         'checkpoint_every':1,'eval_every':100,'phases':[{'id':kind,'kind':kind,'epochs':1} for kind in ('vae','joint','distill')]}
@@ -78,6 +84,24 @@ def fixture(tmp_path,*,use_expert_backend=True):
     manifest=tmp_path/'participants.json';manifest.write_text(json.dumps({'schema':'natlang.native-shared-participants/1',
         'models':models,'signature':canonical_json_sha256_hex(models)}))
     return path,manifest,config,tmp_path/'parent'/'checkpoint.pt'
+
+
+def test_shared_participant_checkpoint_requires_exact_optimizer_and_backend_bindings():
+    from types import SimpleNamespace
+    valid=SimpleNamespace(optimizer_options={'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic'},
+        optimizer_state_storage='device',fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16})
+    assert stage._participant_execution_binding(valid,name='lfm')[0]['lr']==1e-4
+    valid.optimizer_options=None
+    with pytest.raises(ValueError,match='exact optimizer construction settings'):
+        stage._participant_execution_binding(valid,name='lfm')
+    valid.optimizer_options={'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic'}
+    valid.fp8_profile=None
+    with pytest.raises(ValueError,match='exact FP8 execution profile'):
+        stage._participant_execution_binding(valid,name='lfm')
+    valid.fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
+    valid.optimizer_state_storage=None
+    with pytest.raises(ValueError,match='optimizer state placement'):
+        stage._participant_execution_binding(valid,name='lfm')
 
 
 def assert_same(a,b):
@@ -145,9 +169,14 @@ def test_real_cpu_policy_stage_qualifies_policy_and_preserves_exact_interrupted_
     def load(name,binding,config,device):
         model,tokenizer,_,model_config,_=load_native_checkpoint(binding['checkpoint']['path'],
             device=device,participant=binding['checkpoint'].get('participant'))
-        return SemanticParticipant(model,tokenizer,model_config,
+        participant=SemanticParticipant(model,tokenizer,model_config,
             native_identity(model,model_config,checkpoint_sha256=binding['checkpoint']['sha256']),
             make_native_optimizer(model,lr=config['backbone_lr'],in_backward=False)[0])
+        participant.optimizer_options={'lr':config['backbone_lr'],'weight_decay':.1,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None}
+        participant.optimizer_state_storage='device'
+        participant.fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
+        return participant
     monkeypatch.setattr(stage,'load_participant',load)
     torch.manual_seed(1973)
     whole=stage.run(path,manifest,tmp_path/'whole-cpu',resume=parent,device='cpu')

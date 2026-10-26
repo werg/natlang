@@ -168,8 +168,13 @@ def resolve_detail(proof,*,checkpoint_loader=None,source=None):
 
 def control_progress(progress,report_path):
     """Keep every control field, including future guards, without bulky payloads."""
-    if progress.get('schema')!='natlang.neuralese-native-sft-report/1':return progress
     report=_binding(report_path)
+    if progress.get('schema')!='natlang.neuralese-native-sft-report/1':
+        # Coefficient-policy reports are compact already. Persist their exact
+        # output binding too; an active production round must not infer report
+        # provenance from a mutable learner-output filename.
+        result=dict(progress);result['full_report']=report
+        return result
     result=dict(progress)
     checkpoint_path=Path(progress.get('checkpoint') or Path(report_path).parent/'checkpoint.pt')
     checkpoint=_binding(checkpoint_path)

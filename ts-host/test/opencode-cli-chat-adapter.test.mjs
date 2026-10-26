@@ -160,10 +160,21 @@ setInterval(()=>{},1000);
   const client = { mcp: { status: async () => ({ data: { natlang_action_bridge: { status: 'connected' } } }), connect: async () => ({ data: true }) },
     tool: { ids: async () => ({ data: ['read', 'bash'] }) }, permission: { reply: async () => ({ data: true }) },
     session: { permission: { reply: async () => ({}) }, abort: async () => ({ data: true }) } };
-  const eventServer = createServer((req, res) => {
+  const eventServer = createServer(async (req, res) => {
     if (req.url.startsWith('/event')) {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      setTimeout(() => res.write(`data: ${JSON.stringify({ type: 'session.status', properties: { sessionID: 'fake-session', status: { type: 'retry', attempt: 1, message: 'endpoint unavailable' } } })}\n\n`), 40);
+      // Wait until the adapter has actually received and durably recorded the
+      // CLI step and action events before delivering the retry that cancels it.
+      const deadline = Date.now() + 2500;
+      let observed = false;
+      while (Date.now() < deadline) {
+        const stdout = await readFile(join(output, 'cli-stdout.raw'), 'utf8').catch(() => '');
+        observed = stdout.includes('step_start') && stdout.includes('step_finish') && stdout.includes('call-bridge');
+        if (observed) break;
+        await new Promise(resolveWait => setTimeout(resolveWait, 5));
+      }
+      if (!observed) { res.end(); return; }
+      res.write(`data: ${JSON.stringify({ type: 'session.status', properties: { sessionID: 'fake-session', status: { type: 'retry', attempt: 1, message: 'endpoint unavailable' } } })}\n\n`);
       return;
     }
     res.writeHead(404); res.end();

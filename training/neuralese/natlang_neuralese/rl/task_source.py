@@ -9,10 +9,132 @@ from ..common.hashing import sha256_file_hex
 from ..common.jsonio import iter_jsonl_rows
 
 
+_QUARANTINE_SCHEMA = 'natlang.rl-task-source-correction/1'
+_PORT_CONTINUATION_PREFIX = 'Continue this session with its next assistant message.'
+
+
+def _ill_posed_port_record_continuation(row):
+    """Exact source predicate for the unauthenticated port-record continuation tasks.
+
+    These tasks ask for a historical next assistant turn while grading a result
+    assembled from the record packet. The packet never supplies that turn as
+    evidence. Keep this predicate deliberately narrow and data-derived: it
+    does not accept task IDs, caller-provided exclusion lists, or family-only
+    matches.
+    """
+    if not isinstance(row, dict) or row.get('family') != 'curriculum_port_record_calls':
+        return False
+    semantics = row.get('semantics')
+    files = semantics.get('folder_files') if isinstance(semantics, dict) else None
+    if not isinstance(files, dict):
+        return False
+    items = []
+    for name, payload in files.items():
+        if not (isinstance(name, str) and name.startswith('items/') and name.endswith('.json')):
+            continue
+        if not isinstance(payload, str):
+            return False
+        try:
+            item = json.loads(payload)
+        except (TypeError, json.JSONDecodeError):
+            return False
+        if not isinstance(item, dict) or not isinstance(item.get('request'), str):
+            return False
+        items.append((name, item))
+    if not items:
+        return False
+    expected = semantics.get('expected')
+    if not isinstance(expected, dict) or set(expected) != {name.rsplit('/', 1)[-1][:-5] for name, _ in items}:
+        return False
+    return all(item['request'].startswith(_PORT_CONTINUATION_PREFIX) for _, item in items)
+
+
+def _resolve_corrected_task_source(manifest_path, manifest):
+    """Validate a successor packet as the exact predicate complement of its parent."""
+    def bound(name, digest_name):
+        value = manifest.get(name)
+        if not isinstance(value, str):
+            raise ValueError(f'RL correction {name} path is missing')
+        path = (manifest_path.parent / value).resolve(strict=True)
+        if not path.is_relative_to(manifest_path.parent):
+            raise ValueError('RL task source correction member escapes its immutable directory')
+        digest = sha256_file_hex(path)
+        if digest != manifest.get(digest_name):
+            raise ValueError(f'RL task source correction {name} differs from its binding')
+        return path
+
+    parent_manifest = bound('parent_manifest', 'parent_manifest_sha256')
+    parent = resolve_task_source(parent_manifest)
+    cases = bound('cases', 'cases_sha256')
+    proof_path = bound('correction_proof', 'correction_proof_sha256')
+    proof = json.loads(proof_path.read_text())
+    parent_raw_lines = parent['cases'].read_bytes().splitlines(keepends=True)
+    source_rows = []
+    for line_no, raw_line in enumerate(parent_raw_lines, 1):
+        if raw_line.strip():
+            source_rows.append((line_no, json.loads(raw_line)))
+    expected_excluded = []
+    expected_retained = []
+    for line_no, row in source_rows:
+        if _ill_posed_port_record_continuation(row):
+            semantics = row['semantics']
+            items = semantics['folder_files']
+            item_refs = []
+            for name in sorted(items):
+                if name.startswith('items/') and name.endswith('.json'):
+                    item = json.loads(items[name])
+                    item_refs.append({'path': name,
+                                      'request_sha256': hashlib.sha256(item['request'].encode()).hexdigest()})
+            expected_excluded.append({
+                'line': line_no, 'id': row['id'],
+                'row_sha256': hashlib.sha256(json.dumps(row, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':')).encode()).hexdigest(),
+                'predicate': 'port-record-next-assistant-turn-unprovided-v1',
+                'reason': 'asks for historical next assistant message without supplying that message as evidence',
+                'items': item_refs,
+            })
+        else:
+            expected_retained.append((line_no, row))
+    if (proof.get('schema') != 'natlang.rl-task-source-correction-proof/1'
+            or proof.get('predicate') != 'port-record-next-assistant-turn-unprovided-v1'
+            or proof.get('parent_manifest_sha256') != parent['manifest_sha256']
+            or proof.get('parent_cases_sha256') != parent['cases_sha256']
+            or proof.get('parent_rows') != parent['rows']
+            or proof.get('excluded') != expected_excluded
+            or proof.get('retained_rows') != len(expected_retained)
+            or proof.get('excluded_rows') != len(expected_excluded)
+            or proof.get('cases_sha256') != manifest.get('cases_sha256')
+            or proof.get('cases_rows') != manifest.get('rows')):
+        raise ValueError('RL correction proof does not attest the exact predicate complement')
+    expected_bytes = b''.join(parent_raw_lines[line_no - 1] for line_no, _ in expected_retained)
+    if cases.read_bytes() != expected_bytes:
+        raise ValueError('RL corrected cases are not the byte-preserving retained source rows in original order')
+    actual_rows = [row for _, row in iter_jsonl_rows(cases)]
+    parent_declaration = json.loads(parent_manifest.read_text())
+    if (manifest.get('schema') != _QUARANTINE_SCHEMA or manifest.get('split') != parent_declaration.get('split')
+            or manifest.get('rows') != len(expected_retained)
+            or sha256_file_hex(cases) != proof.get('cases_sha256')):
+        raise ValueError('RL corrected task source manifest differs from its verified retained packet')
+    ids = [row.get('id') for row in actual_rows]
+    if any(not isinstance(task_id, str) or not task_id for task_id in ids) or len(ids) != len(set(ids)):
+        raise ValueError('RL corrected task source has invalid or duplicate task identities')
+    return {'manifest': manifest_path, 'manifest_sha256': sha256_file_hex(manifest_path),
+            'cases': cases, 'cases_sha256': manifest['cases_sha256'], 'rows': len(actual_rows),
+            'audit': parent['audit'], 'audit_sha256': parent['audit_sha256'],
+            'selection_proof': parent['selection_proof'],
+            'selection_proof_sha256': parent['selection_proof_sha256'],
+            'additional_sources': parent['additional_sources'],
+            'source_correction': proof_path,
+            'source_correction_sha256': manifest['correction_proof_sha256'],
+            'source_correction_excluded_rows': len(expected_excluded)}
+
+
 def resolve_task_source(manifest_path):
     """Verify and return one exact train-only task packet and its provenance."""
     manifest_path = Path(manifest_path).resolve(strict=True)
     manifest = json.loads(manifest_path.read_text())
+    if manifest.get('schema') == _QUARANTINE_SCHEMA:
+        return _resolve_corrected_task_source(manifest_path, manifest)
     if manifest.get('schema') != 'natlang.rl-task-source/1':
         raise ValueError('RL task source manifest has an unsupported schema')
 

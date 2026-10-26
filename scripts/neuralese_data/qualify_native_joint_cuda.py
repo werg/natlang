@@ -172,6 +172,11 @@ def run(args):
         optimizer,named=make_native_optimizer(model,lr=1e-5,in_backward=False)
         model.port.checkpoint_layers=True;model.train()
         participant=SemanticParticipant(model,tokenizer,config,identity(model,config),optimizer,backend)
+        participant.optimizer_options={'lr':1e-5,'weight_decay':.1,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None}
+        participant.optimizer_state_storage='device'
+        participant.fp8_profile={'kind':'triton-experts' if backend is not None else 'off',
+            'recipe':'delayed','amax_history_len':16}
         participants[name]=participant;roles_by_name[name]=roles;trainable[name]={id(parameter) for _,parameter in named}
         report['models'][name]={'base':str(base),'config':config,'identity':participant.identity,'sparse_upgrade':upgrade}
         event('loaded',model=name,memory=memory())

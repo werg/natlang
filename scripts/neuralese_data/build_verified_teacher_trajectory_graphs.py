@@ -25,6 +25,7 @@ from transformers import AutoTokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import CompressedRows, provision
 from scripts import source_review
+from scripts.neuralese_data.teacher_outcome_contract import exact_honest_root_block
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
@@ -373,6 +374,9 @@ def restore_transfer_row_ids(transfer, additions):
 
 
 def source_binding(args):
+    if getattr(args, 'provider_source_manifest', None) is not None:
+        from scripts.neuralese_data.provider_campaign_source import source_binding as provider_binding
+        return provider_binding(args, protection_reader=current_protection)
     if getattr(args, 'scaffold_harvest', None) is not None:
         return scaffold_source_binding(args)
     root = args.source.parent
@@ -695,11 +699,13 @@ def teacher_collection_source(file_receipt, binding):
 def validate_teacher_row(row, binding):
     program = (row.get("task") or {}).get("program_ir") or {}
     outcome = row.get("outcome") or {}
+    accepted_block = exact_honest_root_block(row, program)
     if (row.get("version") != "natlang.teacher_trajectory.native/1"
             or program.get("version") != "natlang.program/2"
             or program.get("split") != "train"
             or program.get("id") not in binding["selected_ids"]
-            or outcome.get("status") != "done" or outcome.get("accepted") is not True
+            or (outcome.get("status") != "done" and not accepted_block)
+            or outcome.get("accepted") is not True
             or outcome.get("oracle", {}).get("accepted") is not True
             or not outcome.get("checks")
             or any(value is not True for value in outcome["checks"].values())):
@@ -1308,6 +1314,15 @@ def registered_base_inventory_reference(reference_path, model_key, *, tokenizer_
         raise ValueError('remote base inventory identity differs from admitted native model receipts')
     identity_registry_ref = identity.get('registry') or {}
     identity_registry = read_bound(identity_registry_ref)
+    observation = identity.get('registry_observation')
+    registry_origin = Path(identity_registry_ref['path'])
+    if observation is not None:
+        registry_origin = Path(observation.get('source_path',''))
+        if (not registry_origin.is_absolute() or registry_origin.name!='neuralese_corpora.json'
+                or registry_origin.parent.name!='training'
+                or observation.get('source_sha256')!=identity_registry_ref['sha256']):
+            raise ValueError('model identity registry snapshot differs from its exact observed origin')
+    identity_repository = registry_origin.parent.parent
     identity_seen = set()
     for item in identity.get('sources', []):
         ident = item.get('corpus_id')
@@ -1319,6 +1334,8 @@ def registered_base_inventory_reference(reference_path, model_key, *, tokenizer_
                 or canonical_json_sha256_hex(entries[0]) != item.get('registry_entry_sha256')):
             raise ValueError('registered identity source differs from exact admitted registry entry')
         manifest_ref = item.get('manifest') or {}
+        if manifest_ref.get('path') != str(identity_repository/'training/corpus-manifests'/f'{ident}.json'):
+            raise ValueError('registered identity manifest differs from its declared repository')
         manifest = read_bound(manifest_ref)
         if manifest.get('id') != ident or manifest.get('path') != entries[0].get('path'):
             raise ValueError('registered identity source manifest differs from registry binding')
@@ -1327,7 +1344,7 @@ def registered_base_inventory_reference(reference_path, model_key, *, tokenizer_
         receipt_relative = f'{model_key}/receipt.json'
         receipt_members = [member for member in manifest.get('files', [])
                            if member.get('path') == receipt_relative]
-        expected_receipt_path = Path(identity_registry_ref['path']).parent.parent / entries[0]['path'] / receipt_relative
+        expected_receipt_path = identity_repository / entries[0]['path'] / receipt_relative
         if (receipt_ref.get('path') != str(expected_receipt_path) or len(receipt_members) != 1
                 or any(receipt_members[0].get(key) != receipt_ref.get(key) for key in ('sha256', 'bytes'))
                 or receipt.get('status') != 'passed' or receipt.get('model_key') != model_key
@@ -1447,6 +1464,8 @@ def explicit_history_profile_receipt(args, tokenizer):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument('--provider-source-manifest', type=Path,
+                        help='exact closed provider-campaign source custody; no sandbox actor substitution')
     parser.add_argument('--scaffold-harvest', type=Path,
                         help='authenticate a separately harvested scaffold batch; never treats it as a standard Qwen batch')
     parser.add_argument('--decision-review', type=Path, help='exact reviewed decisions; never promotes a held parent')

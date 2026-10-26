@@ -103,6 +103,11 @@ const failureNote = (error: unknown) => error === undefined ? '' :
 async function capture(rec: Recorder, output: unknown, where: string): Promise<RecordedTurn[] & { failure?: unknown }> {
   if (typeof output === 'function') {
     const own = new Recorder();
+    // Nested/concurrent objective calls need an isolated turn list, but their
+    // imports still resolve against writers already captured in this exact
+    // trajectory. Seed the child recorder with those immutable graph events;
+    // newly emitted child/parent nodes are merged back below.
+    own.absorb(rec);
     const failure = await recording.run(own, () => settle(output));
     rec.nested.push(...own.turns, ...own.nested);
     rec.absorb(own);
