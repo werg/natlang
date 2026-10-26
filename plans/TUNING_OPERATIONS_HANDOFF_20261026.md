@@ -95,12 +95,20 @@ and timings. Tuning a program does not train the production lineages and gives t
 
 ## Not yet implemented (implementation work, not operations)
 
-Open: refitting only dirty nodes, a family schedule and member-vs-non-member transfer
+Open: a family schedule and member-vs-non-member transfer
 reports, soft states on the llama.cpp fork's Neuralese server and in the browser, OPFS caching, upstreaming the
 llama.cpp and wllama patches. Earlier list for reference:
 
 Cross-program families (`--families`), base distillation, on-policy repair rounds, refitting only dirty nodes,
 wllama LoRA blobs, soft states on the fork's Neuralese server.
+
+## Incremental builds
+
+`natlang tune ./prog --incremental` after an edit builds a candidate (edited leaves against pinned released
+parents), then the shared refit of dirty ancestors; every `tune.incremental.fullRefitEvery` (default 5) builds, or with
+`--full`, a full joint refit. For operations: after the first real tune, edit one definition, run `--incremental`, and
+record the candidate's and the shared refit's paired development success and wall time against a `--full` refit of
+the same edit (the measurement that decides whether candidates are worth activating, and the cadence default).
 
 ## Collecting tune data through the six-worker Luna pool
 

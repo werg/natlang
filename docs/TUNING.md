@@ -40,8 +40,25 @@ No adapter manifest, adapter IDs, export, conversion or server-loading step is p
 Rerunning the same command reuses collected data and training receipts. Splits are persisted
 (`.natlang/tune/splits.json`), so later edits never move an example between partitions. Collected data is kept per
 root and recollected only when a definition that root reached changed, or when non-instruction sources (helpers,
-services, types) changed; `--incremental` prints which bindings changed and which shared nodes and dependents must
-be refit. The report prints the time from invoking
+services, types) changed.
+
+`natlang tune ./my-program --incremental` refits only what an edit dirtied, against the active release:
+
+- A **candidate** trains the edited lambda leaves (and new bindings) against every other node pinned at its exact
+  released residual, warm-started from the released leaf. Only rows whose stack contains a trained node are fitted.
+  A dirty shared ancestor (a folder or the program root trained on the old semantics) stays pinned at its older
+  version, and the release receipts record which older binding semantics it was trained on (`stalePins`).
+- A **shared refit** then trains the dirty shared ancestors and every residual fit against them, the rest pinned;
+  it is planned against the release the candidate pinned and seeded with the candidate's leaves. If it does not
+  complete, the next `--incremental` run finishes it rather than reporting the program fresh.
+  `tune.incremental.sharedEdits: "refit"` skips the candidate.
+- A **full** joint refit runs after `tune.incremental.fullRefitEvery` incremental builds (default 5), on `--full`,
+  or when the recipe changed (pinned residuals of another rank cannot compose).
+
+Warm-started nodes continue their optimizer moments only when the released optimizer state binds the exact artifact
+and algorithm; otherwise their history starts new and the receipt says so. Families with their learned gates and the
+soft states of untouched bindings carry over unchanged. `--watch` makes the same incremental builds. `--report`
+shows the active release's build kind and any stale pinned parents. The report prints the time from invoking
 `tune` to the first tuned call, split by stage.
 
 ## Edits and renames
@@ -212,5 +229,5 @@ bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for v
 oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
 resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
 them yet. Not yet
-implemented: full per-lambda fine-tuning arm, base distillation, a CLI
-command for the RL rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.
+implemented: full per-lambda fine-tuning arm. Incremental builds (candidate, shared refit, periodic full refit) are
+implemented; the native-backend soft-state carry-over of untouched bindings has no test yet.

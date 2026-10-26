@@ -29,6 +29,8 @@ export type TuneReport = {
   data: { examples: number; protected: number; components: Record<string, number>; turns: number; trainTurns: number };
   validation: { tuned: { roots: number; ok: number; oracle: number }; base: { roots: number; ok: number; oracle: number } } | null;
   timings: StageTiming[]; totalMs: number; manualActions: 0;
+  /** What kind of build produced the release (§8): a full joint fit, an incremental candidate or a shared refit. */
+  build?: string;
 };
 
 export type TuneOptions = {
@@ -179,7 +181,14 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   /** Scored student rollouts (natlang.tune-rollout/v1 JSONL): the RL rows of this fit (§5.1a). */
   readonly rollouts?: string;
   /** Directories of published artifacts the fit imports first (frozen family versions, §5.4). */
-  readonly artifactDirs?: readonly string[] };
+  readonly artifactDirs?: readonly string[];
+  /** Incremental builds (§8): nodes frozen at earlier artifacts, and trainable nodes seeded from earlier ones. */
+  readonly pinned?: Readonly<Record<string, string>>;
+  readonly warm?: Readonly<Record<string, { readonly artifact: string; readonly optimizer?: string }>>;
+  /** Soft states of bindings this fit does not train, carried from an earlier release directory unchanged. */
+  readonly carrySoftStates?: { readonly states: readonly SoftState[]; readonly directory: string };
+  /** Extra release receipts (build kind, pinned parents and the semantics they saw). */
+  readonly receipts?: Readonly<Record<string, unknown>> };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
@@ -190,7 +199,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
   const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
     variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null, variant.parent ?? null,
-    variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null]).slice(0, 24);
+    variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null,
+    ...(variant.pinned || variant.warm ? [variant.pinned ?? {}, variant.warm ?? {}] : [])]).slice(0, 24);
   const jobDir = join(tuneDirectory(root), 'jobs', trainKey), out = join(jobDir, 'out');
   const reused = existsSync(join(out, 'result.json'));
   const result = await timed(timings, 'train', log, async () => {
@@ -206,19 +216,27 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
         softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}),
         ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
-        ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}) }, null, 2));
+        ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
+        ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}) }, null, 2));
       await runTrainer(student, plan, out, log);
     }
     return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
   }, reused);
   const manifest = await timed(timings, 'export', log, () => {
     const { digest: _digest, ...base } = variant.manifest;
-    const sealed = sealManifest({ ...base, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [], softStates: result.softStates ?? [],
+    const sealed = sealManifest({ ...base, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [],
+      softStates: [...(result.softStates ?? []), ...(variant.carrySoftStates?.states ?? [])],
       validatedReductions: result.validatedReductions ?? [], receipts: { data: data.dataKey, training: result.receipt, recipe,
-        ...(variant.label ? { variant: variant.label } : {}) } } as Omit<WeightManifest, 'digest'>);
+        ...(variant.label ? { variant: variant.label } : {}), ...variant.receipts } } as Omit<WeightManifest, 'digest'>);
     storeRelease(root, sealed);
     const directory = dirname(releaseFile(root, sealed.digest));
     // Native artifacts (coefficients, bases) and soft states, for backends that serve them exactly.
+    // Carried soft states keep their exact files (and derivation parents) from the earlier release.
+    const carried = variant.carrySoftStates && join(variant.carrySoftStates.directory, 'states');
+    if (carried && existsSync(carried)) {
+      mkdirSync(join(directory, 'states'), { recursive: true });
+      for (const file of readdirSync(carried)) if (!existsSync(join(directory, 'states', file))) copyFileSync(join(carried, file), join(directory, 'states', file));
+    }
     for (const folder of ['artifacts', 'states']) if (existsSync(join(out, folder))) {
       mkdirSync(join(directory, folder), { recursive: true });
       for (const file of readdirSync(join(out, folder))) if (!existsSync(join(directory, folder, file)))
@@ -304,6 +322,7 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
     const examples = data.examples;
     // 3-4. One joint run over all bindings against one input snapshot, then the content-addressed release.
     const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, { manifest: data.scaffold }, timings, log)).manifest;
+    report.build = typeof manifest.receipts.build === 'string' ? manifest.receipts.build : 'full';
     report.release = manifest.digest;
     // 5. Load on the backend and validate through the normal engine, strict: nothing may silently fall back.
     const directory = dirname(releaseFile(root, manifest.digest));
