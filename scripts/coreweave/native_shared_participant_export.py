@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -333,7 +334,7 @@ def export_with_runfile_exporter(prepared, inventory_path, *, role, exporter,
         if source_mode=='sandbox':env['CW_EXPORT_SANDBOX_ID']=sandbox_id
         else:env.pop('CW_EXPORT_SANDBOX_ID',None)
         try:
-            subprocess.run([str(exporter),role,source],check=True,env=env,
+            subprocess.run([sys.executable,str(exporter),role,source],check=True,env=env,
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
             receipt=json.loads(receipt_path.read_text())
             validate_receipt(receipt,identity)
