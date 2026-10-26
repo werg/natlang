@@ -35,13 +35,36 @@ def import_artifacts(engine, directory):
             raise ValueError(f'artifact file {path} does not hold its named content')
 
 
-def persist_artifacts(engine, ids, directory):
-    """Write each artifact and its source closure once; content addressing makes rewrites unnecessary."""
+def persist_artifacts(engine, ids, directory, states=None):
+    """Write each artifact and its source closure once; content addressing makes rewrites unnecessary.
+
+    Native states (`nzs1_`) go to ``states`` with their full derivation closure (parents, gradients, updates and
+    optimizer histories), so the tuned soft states and their immutable lineage can be restored and verified."""
     from ..model.native_artifact import encode_native_tensor_artifact
     directory.mkdir(parents=True, exist_ok=True)
     pending = [ident for ident in ids if ident]
+    seen = set()
     while pending:
         ident = pending.pop()
+        if ident in seen:
+            continue
+        seen.add(ident)
+        if ident.startswith('nzs1_'):
+            if states is None:
+                continue  # a state-gradient's parent; persisted by the caller that owns states
+            from ..model.native_derivative_contract import derivation_dependencies
+            from ..serve.store import encode_native_state
+            record = engine.store.get_native_state(ident)
+            if record is None:
+                raise ValueError(f'trainer state references unavailable native state {ident}')
+            states.mkdir(parents=True, exist_ok=True)
+            path = states / f'{ident}.nzs'
+            if not path.exists():
+                temporary = path.with_suffix('.tmp')
+                temporary.write_bytes(encode_native_state(record.block))
+                os.replace(temporary, path)
+            pending.extend(derivation_dependencies(record.block.derivation))
+            continue
         path = directory / f'{ident}.nnt'
         record = engine.store.get_native_tensor_artifact(ident)
         if record is None:
@@ -52,6 +75,25 @@ def persist_artifacts(engine, ids, directory):
             os.replace(temporary, path)
         if record.artifact.source_artifact_id:
             pending.append(record.artifact.source_artifact_id)
+
+
+def import_states(engine, directory):
+    """Restore archived states parents first (each one's derivation names its parent)."""
+    from ..serve.store import decode_native_state
+    pending = {}
+    for path in sorted(Path(directory).glob('*.nzs')):
+        block, ident = decode_native_state(path.read_bytes())
+        if path.stem != ident:
+            raise ValueError(f'state file {path} does not hold its named content')
+        pending[ident] = block
+    while pending:
+        ready = [ident for ident, block in pending.items()
+                 if block.derivation is None or block.derivation.get('parent_state_id') not in pending]
+        if not ready:
+            raise ValueError('archived native states have a cyclic derivation')
+        for ident in sorted(ready):
+            if engine.store.put_native_state(pending.pop(ident)).id != ident:
+                raise ValueError(f'archived state {ident} changed its content ID')
 
 
 def load_plan(path):
@@ -79,12 +121,27 @@ def main(argv=None):
     for directory in [*(Path(args.plan).parent / item for item in plan.get('artifacts', [])), out / 'artifacts']:
         if directory.is_dir():
             import_artifacts(engine, directory)
+    if (out / 'states').is_dir():
+        import_states(engine, out / 'states')
     state_path = out / 'state.json'
-    save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(), *trainer.state['optimizer_states'].values()],
-                                      out / 'artifacts'), _write(state_path, trainer.state))
+    save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(), *trainer.state['optimizer_states'].values(),
+                                               *trainer.state.get('soft_states', {}).values(),
+                                               *trainer.state.get('soft_optimizer_states', {}).values()],
+                                      out / 'artifacts', out / 'states'), _write(state_path, trainer.state))
     state = json.loads(state_path.read_text()) if state_path.exists() else None
+    soft = {}
+    if plan.get('softStates'):
+        # Plan §3.3: initialize once (in context, under the base = the zero-residual initial stack); a resumed run
+        # reuses the recorded initial states rather than writing them again.
+        from .soft import initialize_soft_states
+        init_path = out / 'soft-init.json'
+        soft = json.loads(init_path.read_text()) if init_path.exists() else initialize_soft_states(engine, rows)
+        if not init_path.exists():
+            persist_artifacts(engine, [record['state'] for record in soft.values()], out / 'artifacts', out / 'states')
+            _write(init_path, soft)
     from .rows import lower_rows
-    rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1))
+    rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1),
+                      soft={key: record['state'] for key, record in soft.items()})
     trainer = JointTrainer(engine, manifest, rows, Recipe.from_json(plan.get('recipe', {})), state=state)
     save()
     while trainer.state['step'] < trainer.recipe.steps:
@@ -94,7 +151,10 @@ def main(argv=None):
     fragment = trainer.manifest_fragment()
     if 'gguf' in plan.get('exports', []):
         export_nodes(trainer, engine, plan, out, fragment['artifacts'])
-    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': [], 'receipt': trainer.receipt()})
+    soft_states = trainer.soft_fragment(soft) if soft else []
+    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': [], 'softStates': soft_states,
+                                 'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
+                                 'receipt': trainer.receipt()})
     return 0
 
 

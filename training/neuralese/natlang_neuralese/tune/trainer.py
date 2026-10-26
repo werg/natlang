@@ -47,6 +47,8 @@ class Recipe:
     gate_learning_rate: float = 1e-2
     target_classes: list | None = None
     free_lora_alpha: float | None = None
+    # Soft instruction/skill states (plan §3.3): the shared native-state optimizer's settings.
+    state_optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 1e-3})
 
     @classmethod
     def from_json(cls, value):
@@ -86,6 +88,7 @@ class JointTrainer:
         self.bindings = {binding['id']: binding for binding in manifest['bindings']}
         self.families = {(item['family'], item['version']): item for item in manifest['families']}
         self.memberships = [item for item in manifest['memberships'] if item['binding'] in self.bindings]
+        self._soft_initial = {}
         self.rows = self._admit(rows)
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
@@ -124,11 +127,24 @@ class JointTrainer:
                 raise TuneMathError(f'occurrence {occurrence} appears twice; each recorded occurrence is one loss row')
             occurrences.add(occurrence)
             example = parse_graph(graph, tokenizer_fingerprint=self.engine.model_config['tokenizer_fingerprint'])
+            soft = row.get('soft') or {}
             if example.external_states:
-                raise NotImplementedError('rows importing stored external native state need per-occurrence state '
-                                          'receipts in the joint trainer; train them through native_grad until wired')
+                # Only soft parameters of the row's own binding are imported here; any other stored state would be
+                # an external input this trainer does not own.
+                if set(soft) != set(example.external_states):
+                    raise NotImplementedError('rows importing stored external native state other than their binding\'s '
+                                              'soft states need per-occurrence state receipts; train them through native_grad')
+                for name, key in soft.items():
+                    owner_binding, kind, target = json.loads(key)
+                    if owner_binding != binding or kind not in ('instructions', 'skill'):
+                        raise TuneMathError(f'row {index} imports a soft state of another binding')
+                    initial = example.external_states[name]['id']
+                    if self._soft_initial.setdefault(key, initial) != initial:
+                        raise TuneMathError(f'soft state {key} has two initial states across rows')
+            elif soft:
+                raise TuneMathError(f'row {index} declares soft states it does not import')
             admitted.append({'binding': binding, 'graph': graph, 'example': example, 'evidence_weight': float(weight),
-                             'occurrence': occurrence})
+                             'occurrence': occurrence, 'soft': soft})
         if not admitted:
             raise TuneMathError('no admitted training rows')
         return admitted
@@ -167,6 +183,8 @@ class JointTrainer:
             gates[json.dumps([item['binding'], item['family'], item['version']])] = float(min(max(item['gate'], 0.), self.recipe.a_max)).hex()
         state = {'schema': STATE_SCHEMA, 'step': 0, 'epoch': 0, 'position': 0, 'node_artifacts': artifacts,
                  'optimizer_states': {node: None for node in nodes}, 'gates': gates, 'gate_optimizer': None,
+                 'soft_states': dict(sorted(self._soft_initial.items())),
+                 'soft_optimizer_states': {key: None for key in sorted(self._soft_initial)},
                  'exposure': {}, 'losses': []}
         state['input_sha256'] = self.input_sha256
         return state
@@ -219,6 +237,14 @@ class JointTrainer:
         leaves = {node: {key: value.detach().clone().requires_grad_(True)
                          for key, value in engine.store.get_native_tensor_artifact(artifact).artifact.tensors.items()}
                   for node, artifact in self.state['node_artifacts'].items()}
+        from ..serve.native_grad import _leaf_block
+        from ..model.native_adapters import adapter_state_input_receipt
+        active_soft = sorted({key for index in batch for key in self.rows[index]['soft'].values()})
+        soft_leaves = {}
+        for key in active_soft:
+            block = engine.store.get_native_state(self.state['soft_states'][key]).block
+            copied, values = _leaf_block(block)
+            soft_leaves[key] = (block, copied, values)
         per_binding = {}
         for index in batch:
             per_binding[self.rows[index]['binding']] = per_binding.get(self.rows[index]['binding'], 0) + 1
@@ -241,8 +267,16 @@ class JointTrainer:
                     entries.append({'id': artifact, 'scale': float(self.manifest.get('scales', {}).get(item, 1))})
             # §5.1: mean over lambdas of the mean evidence-weighted row loss, as an exact per-row coefficient.
             coefficient = row['evidence_weight'] / (len(per_binding) * per_binding[row['binding']])
-            def execute(example=row['example']):
-                loss, _ = graph_loss(engine.shared_model, example)
+            def execute(example=row['example'], soft=row['soft']):
+                blocks = {name: soft_leaves[key][1] for name, key in soft.items()}
+                identities = {}
+                for name, key in soft.items():
+                    source = soft_leaves[key][0]
+                    # Same-base adapter-state exchange: the base-written soft state read by this binding's actor.
+                    identities[name] = adapter_state_input_receipt(engine, source, self.state['soft_states'][key],
+                                                                   target_position_start=0)['source_native_identity']
+                loss, _ = graph_loss(engine.shared_model, example, external_blocks=blocks or None,
+                                     external_identity=identities or None)
                 (loss * coefficient).backward()
                 return loss.detach()
             row_losses.append(float(run_native(engine, execute, entries, leaves=row_leaves, gradient_precision='fp32')))
@@ -270,12 +304,27 @@ class JointTrainer:
                                             {key: grad.detach().cpu() for key, grad in grads.items()}, artifact)
             result = optimize_adapter(engine, gradient, dict(recipe.optimizer), self.state['optimizer_states'][node], self.owner)
             updates[node] = (result['adapter']['id'], result['optimizer_state_id'])
+        soft_updates = {}
+        from ..model.native_state_derivation import optimize_state
+        for key in active_soft:
+            grads = {name: value.grad for name, value in soft_leaves[key][2].items() if value.grad is not None}
+            if not grads:
+                continue
+            parent = self.state['soft_states'][key]
+            gradient = engine.store.put_native_tensor_artifact(NativeTensorArtifact('state-gradient', engine.native_identity,
+                {name: grad.detach().cpu() for name, grad in grads.items()}, parent,
+                {'scope': 'natlang.tune.soft-state/1', 'step': self.state['step'] + 1, 'soft_key': key}), self.owner)
+            result, _, _ = optimize_state(engine, gradient, dict(recipe.state_optimizer),
+                                          self.state['soft_optimizer_states'][key], self.owner)
+            soft_updates[key] = (result['native_state_id'], result['optimizer_state_id'])
         if any(value.grad is not None for value in self.gates.values()):
             self.gate_optimizer.step()
             project_gates(self.gates, recipe.a_max)
             self.gate_optimizer.zero_grad(set_to_none=True)
         for node, (artifact, optimizer_state) in updates.items():
             self.state['node_artifacts'][node], self.state['optimizer_states'][node] = artifact, optimizer_state
+        for key, (state_id, optimizer_state) in soft_updates.items():
+            self.state['soft_states'][key], self.state['soft_optimizer_states'][key] = state_id, optimizer_state
         for index in batch:
             occurrence = self.rows[index]['occurrence']
             self.state['exposure'][occurrence] = self.state['exposure'].get(occurrence, 0) + 1
@@ -286,7 +335,8 @@ class JointTrainer:
             self.state['gate_optimizer'] = {'param_groups': saved['param_groups'], 'state': {str(index): {
                 key: float(value).hex() for key, value in item.items()} for index, item in saved['state'].items()}}
         record = {'step': self.state['step'], 'row_losses': row_losses, 'penalty': float(penalty.detach()),
-                  'gate_l1': float(gate_term.detach()), 'active_nodes': active_nodes, 'updated_nodes': sorted(updates)}
+                  'gate_l1': float(gate_term.detach()), 'active_nodes': active_nodes, 'updated_nodes': sorted(updates),
+                  'updated_soft_states': sorted(soft_updates)}
         self.state['losses'].append(record)
         return record
 
@@ -352,6 +402,20 @@ class JointTrainer:
                        for key, value in sorted(self.state['gates'].items()) for binding, family, version in [json.loads(key)]]
         return {'artifacts': artifacts, 'memberships': memberships}
 
+    def soft_fragment(self, records):
+        """The release's `softStates`: each initialized soft state's current tuned ID with its text digest."""
+        result = []
+        for key, state_id in sorted(self.state.get('soft_states', {}).items()):
+            record = records.get(key)
+            if record is None:
+                raise TuneMathError(f'soft state {key} has no initialization record')
+            block = self.engine.store.get_native_state(state_id).block
+            if len(block.token_ids) != record['tokens']:
+                raise TuneMathError(f'soft state {key} changed its token count')
+            result.append({'binding': record['binding'], 'kind': record['kind'], 'target': record['target'],
+                           'state': state_id, 'textSha256': record['textSha256'], 'tokens': record['tokens']})
+        return result
+
     def receipt(self):
         exposure = self.state['exposure']
         return {'schema': 'natlang.tune.training-receipt/1', 'input_sha256': self.input_sha256,
@@ -363,4 +427,5 @@ class JointTrainer:
                                                          if any(row['occurrence'] == occurrence and row['binding'] == binding for row in self.rows))
                                             for binding in sorted({row['binding'] for row in self.rows})}},
                 'losses': self.state['losses'], **self.manifest_fragment(),
+                'soft_states': dict(self.state.get('soft_states', {})),
                 'optimizer_states': self.state['optimizer_states']}

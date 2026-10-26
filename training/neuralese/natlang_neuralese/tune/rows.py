@@ -29,8 +29,13 @@ def reply_message(reply):
     return message
 
 
-def turn_graph(engine, turn, *, prompt_weight):
-    """One collected turn as a single-node native graph row bound to its program binding."""
+def turn_graph(engine, turn, *, prompt_weight, soft=None):
+    """One collected turn as a single-node native graph row bound to its program binding.
+
+    ``soft`` maps soft keys (`tune.soft.soft_key`) to the initial state IDs: the binding's instruction text and
+    disclosed skill documents are then imported as those states at their positions (plan §3.3), and the row records
+    which trained soft parameter each import name is.
+    """
     if turn.get('schema') != TURN_SCHEMA:
         raise TuneMathError('expected a natlang.tune-turn/v1 row')
     if turn.get('partition') != 'train':
@@ -39,21 +44,31 @@ def turn_graph(engine, turn, *, prompt_weight):
         raise TuneMathError('prompt weight must lie in [0, 1]')
     weight = evidence_weight(turn)
     from ..serve.targets import target_items
-    prompt, target = target_items(engine, turn['messages'], turn['tools'], reply_message(turn['reply']))
-    if any(item[0] != 'tok' for item in [*prompt, *target]):
-        raise TuneMathError('a teacher text turn rendered native-state items; it is not a text trajectory')
-    ids = [item[1] for item in prompt] + [item[1] for item in target]
+    from .soft import import_name, place_states, soft_items_to_node
+    mine = {key: state for key, state in (soft or {}).items() if json.loads(key)[0] == turn['binding']}
+    messages, placed = place_states(turn, mine) if mine else (turn['messages'], [])
+    prompt, target = target_items(engine, messages, turn['tools'], reply_message(turn['reply']))
     if not target:
         raise TuneMathError('the reply rendered no target tokens')
-    weights = [0.] + [float(prompt_weight)] * (len(prompt) - 1) + [1.] * len(target)
+    names = {mine[key]: import_name(*json.loads(key)[1:]) for key in placed}
+    if not names and any(item[0] != 'tok' for item in [*prompt, *target]):
+        raise TuneMathError('a teacher text turn rendered native-state items; it is not a text trajectory')
+    ids, weights, imports, external = soft_items_to_node(engine, prompt, target, prompt_weight=prompt_weight, state_names=names)
     occurrence = f"{turn['root']}:{turn.get('call') or 'root'}:{turn['turn']}"
+    import dataclasses
     graph = {'schema': GRAPH_SCHEMA, 'id': 'tune:' + occurrence, 'split': 'train',
              'source_groups': ['tune-component:' + turn['component']],
              'tokenizer_fingerprint': engine.model_config['tokenizer_fingerprint'],
-             'nodes': [{'name': 'turn', 'token_ids': ids, 'imports': [], 'producing': [], 'target_weights': weights}],
+             'nodes': [{'name': 'turn', 'token_ids': ids, 'imports': [dataclasses.asdict(edge) for edge in imports],
+                        'producing': [], 'target_weights': weights}],
+             **({'external_states': external} if external else {}),
              'source': {'schema': TURN_SCHEMA, 'sha256': canonical_json_sha256_hex(turn), 'teacher': turn['teacher'],
                         'source': turn['source'], 'evidence': turn['evidence']}}
-    return {'binding': turn['binding'], 'graph': graph, 'occurrence': occurrence, 'evidence_weight': weight}
+    row = {'binding': turn['binding'], 'graph': graph, 'occurrence': occurrence, 'evidence_weight': weight}
+    if external:
+        keys = {import_name(*json.loads(key)[1:]): key for key in placed}
+        row['soft'] = {name: keys[name] for name in external}
+    return row
 
 
 def evidence_weight(turn):
@@ -67,5 +82,6 @@ def evidence_weight(turn):
     raise TuneMathError('a turn from an unsuccessful root is not a positive target')
 
 
-def lower_rows(engine, rows, *, prompt_weight=.1):
-    return [turn_graph(engine, row, prompt_weight=prompt_weight) if row.get('schema') == TURN_SCHEMA else row for row in rows]
+def lower_rows(engine, rows, *, prompt_weight=.1, soft=None):
+    return [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
+            for row in rows]
