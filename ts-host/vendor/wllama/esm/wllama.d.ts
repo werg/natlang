@@ -4,7 +4,7 @@ import { type WllamaWorkerResources } from './worker';
 import CacheManager, { type DownloadOptions } from './cache-manager';
 import { ModelManager, Model, type ModelSource } from './model-manager';
 import type { LoadedContextInfo, LoadModelParams, StreamParams } from './types/types';
-import type { ChatCompletionChunk, ChatCompletionParams, ChatCompletionResponse, CreateEmbeddingResponse, EmbeddingCreateParams, RawCompletionChunk, RawCompletionParams, RawCompletionResponse, RerankParams, RerankResponse } from './types/oai-compat';
+import type { ChatCompletionChunk, ChatCompletionParams, ChatCompletionResponse, CreateEmbeddingResponse, EmbeddingCreateParams, RawCompletionChunk, RawCompletionParams, RawCompletionResponse, RerankParams, RerankResponse, SystemOneParams, SystemOneResponse } from './types/oai-compat';
 import { type HuggingFaceParams } from './huggingface';
 export interface WllamaLogger {
     debug: typeof console.debug;
@@ -331,6 +331,13 @@ export declare class Wllama {
      */
     createRerank(options: RerankParams): Promise<RerankResponse>;
     /**
+     * Answer typed questions about a state, using a decision model (TypeSafe-compatible System One API).
+     * Image input is not supported yet.
+     * @param options The state and the questions
+     * @returns The answer of each question
+     */
+    createSystemOne(options: SystemOneParams): Promise<SystemOneResponse>;
+    /**
      * Make chat completion for a given chat messages.
      * @param options OAI-compatible chat completion options
      * @returns OAI-compatible chat completion response (only the final result when stream=false) or an async iterator of completion chunks (when stream=true)
@@ -396,7 +403,7 @@ export declare class Wllama {
     private jsonDecode;
     private prepareMultimodalInput;
     private cancelRequest;
-    private getRerankResult;
+    private getSingleResult;
     private getResponse;
     getWorkerResources(): WllamaWorkerResources;
 }

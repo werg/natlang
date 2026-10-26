@@ -1,3 +1,12 @@
+diff --git a/.gitmodules b/.gitmodules
+index 81bc6f3..8d32cb0 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -1,3 +1,3 @@
+ [submodule "llama.cpp"]
+ 	path = llama.cpp
+-	url = https://github.com/ggerganov/llama.cpp
++	url = https://github.com/werg/llama.cpp-neuralese
 diff --git a/src/types/types.ts b/src/types/types.ts
 index de08636..7f8fc23 100644
 --- a/src/types/types.ts
@@ -17,7 +26,7 @@ index de08636..7f8fc23 100644
    spec_draft_model?: string;
    spec_draft_ngl?: number;
 diff --git a/src/wllama.ts b/src/wllama.ts
-index c04abf2..3fca1bc 100644
+index 6ecbb68..8439e92 100644
 --- a/src/wllama.ts
 +++ b/src/wllama.ts
 @@ -12,6 +12,7 @@ import {
@@ -28,7 +37,7 @@ index c04abf2..3fca1bc 100644
  } from './utils';
  import CacheManager, { type DownloadOptions } from './cache-manager';
  import { ModelManager, Model, type ModelSource } from './model-manager';
-@@ -168,6 +169,8 @@ export class Wllama {
+@@ -171,6 +172,8 @@ export class Wllama {
    // The CacheManager and ModelManager are singleton, can be accessed by user
    public cacheManager: CacheManager;
    public modelManager: ModelManager;
@@ -37,7 +46,7 @@ index c04abf2..3fca1bc 100644
  
    private compat: WllamaCompat | null = null;
  
-@@ -504,7 +507,24 @@ export class Wllama {
+@@ -507,7 +510,24 @@ export class Wllama {
      }
  
      const modelFiles = await prepareBlobs(blobs);
@@ -63,7 +72,7 @@ index c04abf2..3fca1bc 100644
  
      // run it
      this.logger().debug('Calling wllamaStart...');
-@@ -564,7 +584,7 @@ export class Wllama {
+@@ -567,7 +587,7 @@ export class Wllama {
        ctx_shift: params.ctx_shift,
        cache_idle_slots: params.cache_idle_slots,
        n_cache_reuse: params.n_cache_reuse,

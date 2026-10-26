@@ -32,7 +32,7 @@ not train the production lineages and earns them no exposure credit.
 | llama.cpp fork soft states (`--native-state`, `llama_state_span_register`) | same fork, commit `6eff8834f`; `tune/soft_export.py`; `tune.softStates: true` | real LFM2.5-350M on CPU: max \|Δlogit\| 0.043 vs the Python splice (plain-text baseline 0.075), top-1 1.0, perturbation control 2.68, plain-text logits bitwise unchanged; GPU smoke only |
 | Native reference server (exact coefficients + soft states) | profile `neuraleseServer: true` | unit tests |
 | vLLM whole-stack PEFT LoRAs | profile `vllm: true`, `tune/stack_export.py` | mock-vLLM test; no real vLLM run |
-| wllama (browser) per-request LoRA, OPFS adapter cache | `ts-host/vendor/wllama` (patched; source `~/wllama-natlang` branch `natlang-lora`, unpushed), `loadBrowserRelease` | headless Chromium on real LFM2.5-350M, 7/7 checks; cache with an OPFS stand-in |
+| wllama (browser) per-request LoRA, OPFS adapter cache | `ts-host/vendor/wllama` (patched wllama 3.12.0; source https://github.com/werg/wllama master), `loadBrowserRelease` | headless Chromium on real LFM2.5-350M, 7/7 checks (rerun after the upstream merge); cache with an OPFS stand-in |
 
 ## Configuration
 
@@ -154,5 +154,7 @@ byte-equal to the serving runtime's rendering in `ts-host/test/tune-luna-bridge.
   a pluggable policy.
 - Natural-language policies (`routeTeacher.nl`, `proposeFamilies.nl`) are off by default and unmeasured
   (`plans/MODEL_FACING_CHANGES.md`).
-- Upstreaming the llama.cpp and wllama patches, and pushing their branches, is an owner decision (external
-  publication); both remain local on the DGX.
+- Upstreaming the llama.cpp and wllama patches to their original projects is an owner decision (external
+  publication). Our copies are on GitHub: https://github.com/werg/llama.cpp-neuralese (branch `neuralese`, the fork's
+  default) and https://github.com/werg/wllama (master; its llama.cpp submodule commit is the tag
+  `wllama-natlang-lora-5aeac37` in werg/llama.cpp-neuralese).
