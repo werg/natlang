@@ -62,9 +62,8 @@ export function coalescingScorer(base: DecisionScorer, options: { windowMs?: num
  *   200         { results: [{ log_probs: number[], tokens?: number[] } | { error: string }] }
  *
  * `continuations[k]` is the k-th option written as the closed final assistant message after `messages`. The server
- * prefills each distinct prefix once and scores the K continuations from it. `log_probs[k]` and `tokens[k]` mean what
- * they mean in `DecisionScores`: total log-probability over the tokens where the options differ, end of message
- * included. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
+ * prefills each item's prompt once and scores its K continuations from it. `log_probs[k]` and `tokens[k]` mean what
+ * they mean in `DecisionScores`. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
  */
 export type ExplicitBatchOptions = { url: string; headers?: Record<string, string>; extra?: Record<string, unknown>;
   scheduler?: Scheduler; maxItems?: number };

@@ -133,8 +133,9 @@ In the browser:
   `onReport` says why. A `Storage` or a sqlite-wasm database can be given instead.
 - The executor is the page's natlang runtime. The agent model is reached through natlang's model transport (default
   here; `transport: 'pi-ai'` uses pi-ai's OpenAI-compatible provider): an HTTP endpoint, or the in-page WebAssembly
-  Neuralese engine's endpoint (`startBrowserNeuralese`). A Neuralese reader (`reader: DIALECT`) is checked against the
-  server as on the CLI, and its blocks are archived in the OPFS block store (ts-host `OpfsNeuraleseStore`).
+  engine's endpoint (`startBrowserNeuralese`) for plain chat. The WebAssembly build predates native shared state, so a
+  Neuralese reader (`reader: DIALECT`) needs a native-state server; it is checked against that server as on the CLI,
+  and its states are archived in the OPFS store (ts-host `OpfsNeuraleseStore`).
 - The companion (`companion: true`, or `{ shaping, hints, offers }` to choose its policies) reads, lists and searches
   the workspace through the conversation's environment, so it sees the folder; its search is the environment's grep.
 - `pi.drafts` is the drafts API above: the page sends the draft's edit deltas while the user types, shows the offers,

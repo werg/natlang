@@ -311,10 +311,12 @@ Native graph learning targets explicitly named model parameters or consumed raw
 KV/hybrid-state tensors. Native optimizer updates can publish backbone and
 interface changes as a new checkpoint; reload that checkpoint and restore its
 archived optimizer state before continuing. A prior semantic adapter needs
-refresh against changed weights. `neuralese-native-grad-order` means the service
-supports first order only; remove derived computations or choose a service
-advertising `grad.order2`. `neuralese-adapters-unavailable` means load the applied,
-identity-bound checkpoint before requesting native graph gradients.
+refresh against changed weights. `neuralese-native-grad-order` means a graph
+gradient request carried a derived or second-order computation; graph requests are
+first order, so take a second-order gradient with `grad(f, a, { order: 2 })`, which
+sends a derivative program. `neuralese-native-adapters-unavailable` means the call
+binds weight adapters but its model server does not apply them; call it through a
+native-state server that lists `native.adapters`.
 If a native gradient/update binding error occurs, restore the artifacts for the
 exact current checkpoint and repeat the request; never relabel tensors or reuse
 an adapter against changed weights.
@@ -524,8 +526,8 @@ that value through the usual exact result check. Mixed text and state parts keep
 their reported order. This applies to inferred assistant completions; an
 explicit `return_result` call still follows its existing value validation.
 
-For a decision-objective `neuralese-grad-term` or native objective validation
-error, provide finite numeric rewards or nonnegative finite probabilities with
+For a `neuralese-native-grad-invalid` from a decision objective or other native
+objective validation, provide finite numeric rewards or nonnegative finite probabilities with
 positive total mass, exactly one entry per declared option. Keep the recorded
 conditional token queries bound to their actual graph and avoid assigning a
 likelihood to a forced input after an imported state.

@@ -304,10 +304,12 @@ Native graph learning preserves named tensor artifacts through the normal store.
 publishes a new immutable checkpoint; reload it and restore the returned
 optimizer-state artifact for continuation. SGD supports explicit momentum.
 Refresh semantic adapters for changed participant identities before promotion.
-Do not send second-order/derived requests to a first-order native service:
-`neuralese-native-grad-order` requires removing derived computations or selecting
-a `grad.order2` service. `neuralese-adapters-unavailable` requires loading an
-applied identity-bound checkpoint rather than sending an ignored adapter value.
+Graph gradient requests are first order: `neuralese-native-grad-order` means a
+derived or second-order computation was sent as a graph request; send it as a
+derivative program (`grad(f, a, { order: 2 })` does). `neuralese-native-adapters-unavailable`
+means a call binding weight adapters reached a transport or server that does not
+apply them; route it to a native-state server that lists `native.adapters` instead
+of sending an adapter value that would be ignored.
 For `neuralese-native-gradient-binding` or `neuralese-native-update-binding`,
 restore the exact current checkpoint's gradient/update/optimizer artifacts and
 retry; never change identity metadata to make unrelated tensors appear compatible.
@@ -535,8 +537,8 @@ stored text in order and then use the normal exact return checker. Mixed text
 and state parts preserve their order. This rule does not change explicit
 `return_result` calls or weaken type validation.
 
-For a decision-objective `neuralese-grad-term` or native objective validation
-error, provide finite numeric rewards or nonnegative finite probabilities with
+For a `neuralese-native-grad-invalid` from a decision objective or other native
+objective validation, provide finite numeric rewards or nonnegative finite probabilities with
 positive total mass, exactly one entry per declared option. Keep the recorded
 conditional token queries bound to their actual graph and avoid assigning a
 likelihood to a forced input after an imported state.

@@ -1047,7 +1047,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       <div class="metric"><div class="v">${calls(expr)}</div><div class="l">model calls on the data path</div></div>
       <div class="metric"><div class="v">${depth(expr)}</div><div class="l">critical path (sequential calls)</div></div>
       <div class="metric"><div class="v">${history.length}</div><div class="l">rewrites applied, each traced</div></div>`;
-    $('#rw-log').innerHTML = history.map(h => `<div class="note fadein" style="margin-top:4px">${h}</div>`).join('') + (JSON.stringify(expr).includes('"compose"') ? '<p class="note" style="margin-top:6px"><code>compose(f, g)</code> is itself a system natural-language function with a trained soft body. It produces a function value once per program, not per value, and adds no executable node.</p>' : '');
+    $('#rw-log').innerHTML = history.map(h => `<div class="note fadein" style="margin-top:4px">${h}</div>`).join('') + (JSON.stringify(expr).includes('"compose"') ? '<p class="note" style="margin-top:6px"><code>compose(f, g)</code> is exact function composition from <code>natlang:neuralese</code>: one function that applies <code>f</code> to what <code>g</code> returns. It makes no model call itself, so the fused program runs one <code>map</code> instead of two.</p>' : '');
   }
   reset();
 })();

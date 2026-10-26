@@ -7,8 +7,9 @@
  * - the session is pi-durable's SQLite storage in the origin private file system (sqlite-wasm through ts-host's
  *   `openOpfsSqlite`, host/sqlite-wasm.ts), which needs a dedicated worker; elsewhere it is kept in memory;
  * - the executor is the page's natlang runtime (`@natlang/browser`), and the agent model is reached through natlang's
- *   model transport (host/agent-models.ts): an HTTP endpoint, or the in-page WebAssembly Neuralese engine's endpoint
- *   (`startBrowserNeuralese`), whose blocks are archived in the OPFS block store.
+ *   model transport (host/agent-models.ts): an HTTP endpoint, or the in-page WebAssembly engine's endpoint
+ *   (`startBrowserNeuralese`) for plain chat; Neuralese values need a native-state server, whose states are archived
+ *   in the OPFS store.
  *
  * Built by ts-host/scripts/build-application-browser.mjs under the browser policy (no `node:*` module in its graph);
  * the runtime is the page's `@natlang/browser` module (an import map names it). See README.md "In the browser".

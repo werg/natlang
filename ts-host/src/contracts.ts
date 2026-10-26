@@ -12,6 +12,10 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
    * `value` argument; `write` makes the value a written native state span and closes the call, `decode` decodes the value.
    */
   template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode';
+    /** The argument the value is written into (default `value`). */
+    argument?: string;
+    /** Keys addressing the value inside nested arguments, starting at `argument`. */
+    argument_path?: (string | number)[];
     /** Native value syntax in the model prefix; opaque placeholders remain strings on the wire. */
     value_type?: 'string' | 'unknown' };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
@@ -31,7 +35,11 @@ export type ModelTurnRequestWithOccurrence = ModelTurnRequest & { native_executi
  * parts instead of strings, where they carry archived `nzs1` state. Drivers that carry these parts declare native
  * state transport explicitly; the runtime never sends them through a flat vector-block adapter.
  */
-export type ModelContentPart = { type: 'text'; text: string } | { type: 'native_state'; id: string };
+export type ModelContentPart = { type: 'text'; text: string } | { type: 'native_state'; id: string;
+  /** This use is a constant in gradients and captures. */
+  stop_gradient?: true;
+  /** The producer occurrence that wrote the state, copied to the import receipt. */
+  source_occurrence?: string };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 /** A server-observed malformed native control turn, never executable model text. */
 export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
@@ -85,7 +93,9 @@ export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void;
 /**
  * Decision readout (single pass over the prompt): score a finite set of assistant replies after `messages`. A
  * driver that can do this carries a `decide` function. `log_probs[i]` is the total log-probability of `options[i]`
- * as the whole reply, end of message included, over the tokens where the options differ; `tokens[i]` counts them.
+ * as the reply, end of message included, and `tokens[i]` counts the tokens scored. A scorer may leave out the tokens
+ * every option shares at the start (the chat-completion scorer does; the native server scores each whole reply):
+ * that changes every option's score by the same amount, so normalized scores and the choice agree.
  * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
  */
 export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[];

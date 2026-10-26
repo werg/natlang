@@ -1,5 +1,5 @@
 /**
- * `natlang:learning` (spec/SPEC.md, Neuralese chapter "Learning"; S0 §9): `grad`, `valueAndGrad`, `stopGradient`,
+ * `natlang:learning` (spec/ext/learning.md; S0 §9): `grad`, `valueAndGrad`, `stopGradient`,
  * objectives, immutable optimisers and `save`, backed by a Neuralese server's gradient replay sessions.
  *
  * `grad(f, a)` runs `f(a)` while recording every model turn the Neuralese driver makes (`recording.ts`). The loss
@@ -261,7 +261,7 @@ export const objectives = {
       target: { rewards: rewards.map(value => value - mean) }, ...adapted(turn) }]);
   },
   /**
-   * REINFORCE over sampled trajectories (run at Neuralese and text temperature > 0 so they differ): each trajectory's
+   * REINFORCE over sampled trajectories (run at temperature > 0 so they differ): each trajectory's
    * negative log-likelihood is weighted by its advantage, reward − baseline (the mean reward of the group by default,
    * as in group-relative policy optimisation), divided by the group size. Trajectories with equal rewards contribute
    * nothing.
@@ -281,7 +281,7 @@ export const objectives = {
     }
     return new Loss(terms);
   },
-  /** Negative log-probability of a recorded trajectory: text, stop decisions, sampled payloads. */
+  /** Negative log-probability of a recorded trajectory: its sampled tokens, producer spans included. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
       target: turn.reply, weight, likelihood_law: 'model-conditional', ...adapted(turn) })));
@@ -728,7 +728,8 @@ function optimizer(service: () => LearningService, name: 'sgd' | 'adam', hyper: 
         const betas = hyper.betas as [number, number] | undefined;
         const spec: NativeOptimizerSpec = { name, ...(typeof hyper.lr === 'number' ? { learning_rate: hyper.lr } : {}),
           ...(typeof hyper.weightDecay === 'number' ? { weight_decay: hyper.weightDecay } : {}),
-          ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}) };
+          ...(betas ? { beta1: betas[0], beta2: betas[1] } : {}),
+          ...(typeof hyper.momentum === 'number' ? { momentum: hyper.momentum } : {}) };
         const histories = (current.opt.$optimizer.state?.native_optimizer_state_ids ?? {}) as Record<string, string>;
         const updatedIds = new Map<string, string>(), nextHistories: Record<string, string> = {};
         let latestStep = 0;

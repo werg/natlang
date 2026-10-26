@@ -637,7 +637,7 @@ export class NativeToolAgent {
       decoded.text = '';
       decoded.calls = [await decodeCall(['return_result', { status: 'success', value: content }], true)];
     }
-    // Each native state the turn wrote is a node. Stop decisions come from the server's recorded writer metadata.
+    // Each native state the turn wrote is a node. A producer span ends at the model's end marker, so it records no stops.
     const reportedArtifacts = new Set<string>();
     for (const block of written) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;

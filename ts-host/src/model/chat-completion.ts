@@ -54,6 +54,11 @@ export type ChatCompletionOptions = {
   onRequestStart?: (request: ModelTurnRequest, retryIndex: number) => void | Promise<void>;
   /** Called once per turn with its token counts and duration. */
   onTurn?: (stats: ChatTurnStats) => void;
+  /**
+   * The transport carries weight adapters (`x_natlang_adapters`, a native-state server). Other transports refuse a
+   * request that names adapters instead of sending a field the server would ignore.
+   */
+  adapters?: boolean;
 };
 
 /** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
@@ -257,7 +262,12 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (!tools.length) { delete wireRequest.tools; delete wireRequest.tool_choice; }
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
-      if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;
+      if (request.adapters?.length) {
+        if (!options.adapters) throw Object.assign(new Error('neuralese-native-adapters-unavailable: this call binds weight ' +
+          'adapters, which only a native-state model server applies; call it through that server'),
+          { code: 'neuralese-native-adapters-unavailable' });
+        wireRequest.x_natlang_adapters = request.adapters;
+      }
       if (request.guidance) wireRequest.guidance = request.guidance;
       if (request.native_teacher_forced_turn) {
         wireRequest.x_natlang_forced_message = request.native_teacher_forced_turn;

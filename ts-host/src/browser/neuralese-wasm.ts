@@ -1,8 +1,10 @@
 /**
- * The Neuralese service as WebAssembly: the llama.cpp fork's server engine (tools/neuralese/neuralese-service.cpp,
- * built by tools/neuralese/wasm/build.sh) running in the browser or in Node, answering the same protocol as the
- * reference and fork servers. The runtime reaches it through an in-process endpoint, so `neuraleseServerModelTurn`,
- * `HttpNeuraleseStore`, decision readout, native state writing and view work unchanged.
+ * The llama.cpp fork's server engine as WebAssembly (tools/neuralese/neuralese-service.cpp in the fork named by
+ * training/neuralese/llama-cpp-fork.json, built by its tools/neuralese/wasm/build.sh; vendor/neuralese-wasm/provenance.json
+ * pins the build) running in the browser or in Node. The runtime reaches it through an in-process endpoint for chat
+ * completions, decision readout and guidance. The build predates native shared state: it declares no `native_state`
+ * in `/v1/neuralese/info`, so a runtime configured for Neuralese values fails at setup with
+ * `neuralese-native-state-unavailable` (nativeStateRuntimeOptions) rather than sending native-state requests to it.
  *
  * In a browser the module runs in a Web Worker (computation is synchronous; model files are mounted from Blobs with
  * WORKERFS, without copying them into memory twice): `startBrowserNeuralese`. In Node it runs in process with the

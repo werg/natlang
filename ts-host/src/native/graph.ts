@@ -12,7 +12,7 @@ import type { NativeTraceRecorder, TraceEvent } from './trace.js';
 
 export const GRAPH_VERSION = 'natlang.exec-graph/1';
 export const GRAPH_NODE_KINDS = ['invocation', 'context_bind', 'model_turn', 'block_write', 'block_read', 'readout',
-  'combinator', 'rewrite', 'effect', 'iteration_step', 'grad', 'literal'] as const;
+  'combinator', 'rewrite', 'effect', 'iteration_step', 'literal'] as const;
 export type GraphNodeKind = typeof GRAPH_NODE_KINDS[number];
 export type GraphInput = { node: string; port?: string; block?: string; source?: string; stop?: boolean };
 

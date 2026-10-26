@@ -10,17 +10,11 @@ export type NeuraleseServerInfo = { dialects: string[]; width?: number; dtype?: 
   capabilities?: string[] } & Record<string, unknown>;
 
 /**
- * Whether a server serves `capability` (spec/NEURALESE_PORT.md "Capabilities"), from its `capabilities` list. Older
- * servers get the conservative fallback for the shared endpoints; retired LoRA and generic adapter capabilities are
- * never inferred from stale `adapters` metadata.
+ * Whether a server serves `capability` (spec/NEURALESE_PORT.md "Capabilities"): it is in the server's `capabilities`
+ * list. A server that lists none serves none.
  */
 export function serves(info: Record<string, unknown>, capability: string): boolean {
-  if (Array.isArray(info.capabilities)) return info.capabilities.includes(capability);
-  if (capability.startsWith('adapters.') && capability !== 'native.adapters') return false;
-  const legacyFork = info.adapters === 'lora';
-  const unavailableOnLegacyFork = ['grad', 'grad.order2', 'embed', 'optim',
-    'chat.stream', 'template.value-type', 'template.argument-path', 'parts.value-type'];
-  return !(legacyFork && unavailableOnLegacyFork.includes(capability));
+  return Array.isArray(info.capabilities) && info.capabilities.includes(capability);
 }
 
 /**
