@@ -759,6 +759,11 @@ def reviewed_guided_decision_authority(record, *, review_bound):
     guidance = record.get('collection_guidance') or {}
     if guidance.get('training_admission') is not False or admission.get('approved') is not True:
         return {}
+    # The bound native materializer owns guidance classification. Source
+    # planning readiness is not authored-parent guidance or a child-review
+    # authority, and must not be relabelled as either during transport.
+    if admission.get('collection_guidance_scope') == 'source':
+        return {}
     reference, decision = record['source_ref'], record['decision']
     review = admission.get('semantic_review') or {}
     digest = review.get('assistant_history_input_sha256')

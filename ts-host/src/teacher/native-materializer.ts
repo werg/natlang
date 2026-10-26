@@ -2219,6 +2219,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           authoredGuidanceBlocked ? 'authored-root-guided-pending-review' :
           semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle',
           approved: options.candidateSelectionOnly ? false : decisionApproved,
+          ...(sourcePlanningGuidance ? { collection_guidance_scope: 'source' } :
+            authoredGuidancePending ? { collection_guidance_scope: 'actions' } : {}),
           ...(semanticApproval && !options.candidateSelectionOnly ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
           ...(options.candidateSelectionOnly ? { reason: sourceQualityHeldReview ?

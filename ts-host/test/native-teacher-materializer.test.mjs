@@ -1891,6 +1891,7 @@ test('source planning readiness does not replace captured task and action outcom
     const result = materializeNativeRows([row], { directAnswers: true });
     assert.equal(result.turns.length, 2);
     assert.ok(result.turns.every(turn => turn.training_admission.approved));
+    assert.ok(result.turns.every(turn => turn.training_admission.collection_guidance_scope === 'source'));
     assert.deepEqual(result.turns.map(turn => turn.target),
       materializeNativeRows([nativeRow('baseline')], { directAnswers: true }).turns.map(turn => turn.target));
     const rejected = structuredClone(row);
