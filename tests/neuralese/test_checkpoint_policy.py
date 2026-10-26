@@ -172,7 +172,7 @@ def test_disk_reserve_holds_the_next_write_and_grows_with_optimizer_state(tmp_pa
     assert not (tmp_path / '.checkpoint-space.reserve').exists()
 
 
-def test_atomic_checkpoint_admission_sizes_first_write_and_holds_transfer_reserve(tmp_path):
+def test_atomic_checkpoint_admission_sizes_first_write_and_holds_transfer_reserve(tmp_path, monkeypatch):
     from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission, checkpoint_size_upper_bound
     from natlang_neuralese.train.trajectory_state import atomic_checkpoint
 
@@ -182,6 +182,7 @@ def test_atomic_checkpoint_admission_sizes_first_write_and_holds_transfer_reserv
     assert bound >= tensor.numel() * tensor.element_size()
     assert bound < tensor.numel() * tensor.element_size() * 2
     target = tmp_path / 'new' / 'checkpoint.pt'
+    monkeypatch.setenv('NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT', str(tmp_path/'shared-locks'))
     with CheckpointWriteAdmission(target, 2 * 1024**2, transfer_bytes=1024**2,
                                   minimum_free_bytes=0) as admission:
         reserve = target.parent / f'.natlang-transfer-reserve-{target.parent.stat().st_dev}'
@@ -205,16 +206,49 @@ def test_checkpoint_admission_refuses_insufficient_first_write_without_target(tm
 def test_checkpoint_admission_serializes_same_filesystem_writers(tmp_path):
     from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission
 
-    target = tmp_path / 'checkpoint.pt'
-    first = CheckpointWriteAdmission(target, 1, transfer_bytes=0, minimum_free_bytes=0)
-    second = CheckpointWriteAdmission(target, 1, transfer_bytes=0, minimum_free_bytes=0,
+    lock_root = tmp_path/'shared-locks'
+    os.environ['NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT'] = str(lock_root)
+    first_target = tmp_path/'left'/'checkpoint.pt'
+    second_target = tmp_path/'right'/'checkpoint.pt'
+    first = CheckpointWriteAdmission(first_target, 1, transfer_bytes=0, minimum_free_bytes=0)
+    second = CheckpointWriteAdmission(second_target, 1, transfer_bytes=0, minimum_free_bytes=0,
                                       lock_timeout_seconds=0.05)
+    from natlang_neuralese.train.checkpoint_safety import _checkpoint_admission_lock_path
+    assert _checkpoint_admission_lock_path(tmp_path.stat().st_dev) == \
+        _checkpoint_admission_lock_path(second_target.parent.parent.stat().st_dev)
     first.__enter__()
     try:
         with pytest.raises(Exception, match='timed out waiting'):
             second.__enter__()
     finally:
         first.__exit__(None, None, None)
+
+
+def test_checkpoint_size_bound_supports_serialized_sparse_native_state(tmp_path, monkeypatch):
+    from natlang_neuralese.train.checkpoint_safety import checkpoint_size_upper_bound
+
+    monkeypatch.setenv('NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT', str(tmp_path/'shared-locks'))
+    indices = torch.tensor([[0, 1, 2], [1, 0, 2]], dtype=torch.int64)
+    values = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
+    sparse_coo = torch.sparse_coo_tensor(indices, values, (4, 4)).coalesce()
+    sparse_csr = sparse_coo.to_sparse_csr()
+    state = {'schema': 'natlang.native-state-checkpoint/1',
+             'model': {'sparse_rows': sparse_coo, 'sparse_optimizer_history': sparse_csr},
+             'training': {'global_step': 12, 'optimizer': {'state': {'sparse': sparse_coo}}}}
+    bound = checkpoint_size_upper_bound(state, margin=1.0, minimum_overhead=0)
+    storages = {}
+    for tensor in (sparse_coo._indices(), sparse_coo._values(), sparse_csr.crow_indices(),
+                   sparse_csr.col_indices(), sparse_csr.values()):
+        storage = tensor.untyped_storage()
+        storages[(storage.data_ptr(), storage.nbytes(), tensor.device.type, tensor.device.index)] = storage.nbytes()
+    expected = sum(storages.values())
+    assert bound >= expected
+    path = tmp_path/'native.pt'
+    torch.save(state, path)
+    restored = torch.load(path, map_location='cpu', weights_only=True)
+    assert restored['model']['sparse_rows'].layout == torch.sparse_coo
+    assert restored['model']['sparse_optimizer_history'].layout == torch.sparse_csr
+    assert checkpoint_size_upper_bound(restored, margin=1.0, minimum_overhead=0) >= expected
 
 
 def test_checkpoint_admission_reuses_owned_reserve_left_by_interrupted_writer(tmp_path, monkeypatch):

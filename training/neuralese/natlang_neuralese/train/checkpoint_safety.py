@@ -17,9 +17,9 @@ class CheckpointReserveError(RuntimeError):
 def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024 * 1024):
     """Bound the next serialization without materializing another checkpoint copy.
 
-    Tensor storage is counted once by storage identity; aliased views therefore do
-    not inflate the estimate, while non-tensor metadata receives a conservative
-    fixed allowance. Unsupported tensor layouts fail closed.
+    Dense and sparse tensor storage is counted once by storage identity; aliased
+    views therefore do not inflate the estimate, while non-tensor metadata
+    receives a conservative fixed allowance. Unknown tensor layouts fail closed.
     """
     import torch
 
@@ -29,16 +29,37 @@ def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024
     tensor_bytes = 0
     metadata_bytes = 0
 
+    def visit_tensor_storage(value):
+        nonlocal tensor_bytes
+        storage = value.untyped_storage()
+        key = (storage.data_ptr(), storage.nbytes(), value.device.type, value.device.index)
+        if key not in seen:
+            seen.add(key)
+            tensor_bytes += int(storage.nbytes())
+
     def visit(value):
         nonlocal tensor_bytes, metadata_bytes
         if isinstance(value, torch.Tensor):
-            if value.layout != torch.strided or value.is_conj() or value.is_neg():
+            if value.layout == torch.strided:
+                if value.is_conj() or value.is_neg():
+                    raise CheckpointReserveError('cannot bound conjugate/negative tensor views for checkpoint admission')
+                visit_tensor_storage(value)
+                return
+            if value.layout == torch.sparse_coo:
+                visit(value._indices())
+                visit(value._values())
+                return
+            compressed = {
+                torch.sparse_csr: ('crow_indices', 'col_indices', 'values'),
+                torch.sparse_csc: ('ccol_indices', 'row_indices', 'values'),
+                torch.sparse_bsr: ('crow_indices', 'col_indices', 'values'),
+                torch.sparse_bsc: ('ccol_indices', 'row_indices', 'values'),
+            }
+            members = compressed.get(value.layout)
+            if members is None:
                 raise CheckpointReserveError('cannot bound unsupported tensor storage for checkpoint admission')
-            storage = value.untyped_storage()
-            key = (storage.data_ptr(), storage.nbytes(), value.device.type, value.device.index)
-            if key not in seen:
-                seen.add(key)
-                tensor_bytes += int(storage.nbytes())
+            for member in members:
+                visit(getattr(value, member)())
             return
         if isinstance(value, dict):
             metadata_bytes += len(value) * 128
@@ -67,13 +88,26 @@ def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024
     return int(math.ceil((tensor_bytes + max(minimum_overhead, metadata_bytes)) * margin))
 
 
+def _checkpoint_admission_lock_path(device):
+    configured = os.environ.get('NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT')
+    root = (Path(configured).expanduser() if configured else
+            Path.home() / '.local' / 'state' / 'natlang' / 'checkpoint-admission')
+    root.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink() or not root.is_dir():
+        raise CheckpointReserveError('checkpoint admission lock root must be a real shared directory')
+    return root / f'checkpoint-admission-{os.getuid()}-{int(device)}.lock'
+
+
 class CheckpointWriteAdmission:
     """Serialize checkpoint writers per filesystem and hold concurrent-transfer space.
 
     The reserved blocks remain allocated while the atomic writer is active, so
     a same-filesystem checkpoint copy cannot consume the space needed for the
     checkpoint being committed. Writers recheck available bytes only after
-    taking the shared per-device lock.
+    taking the shared per-device lock. Host processes use a stable user-state
+    lock root; writers in isolated container mount namespaces must set
+    ``NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT`` to the same shared directory.
+    The lock coordinates processes that can see that same lock file.
     """
 
     _MAGIC = b'NATLANG-CHECKPOINT-TRANSFER-RESERVE/1\n'
@@ -103,7 +137,10 @@ class CheckpointWriteAdmission:
     def __enter__(self):
         self.target.parent.mkdir(parents=True, exist_ok=True)
         device = os.stat(self.target.parent).st_dev
-        lock_path = Path('/tmp') / f'natlang-checkpoint-admission-{os.getuid()}-{device}.lock'
+        # /tmp may be private to systemd/container namespaces. A stable user
+        # state path is shared by host writers; container writers must set the
+        # same explicit NATLANG_CHECKPOINT_ADMISSION_LOCK_ROOT on their shared mount.
+        lock_path = _checkpoint_admission_lock_path(device)
         self._lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
         if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
             os.close(self._lock_fd)
