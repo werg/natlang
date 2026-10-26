@@ -304,7 +304,7 @@ def export_bundle_files(prepared, inventory_path, *, role, export_file):
             'all_bundle_files_independently_verified':True,'training_credit':0}
 
 
-def export_with_runfile_exporter(prepared, inventory_path, *, role, exporter,
+def export_with_runfile_exporter(prepared, inventory_path, *, role, exporter, exporter_python,
                                  source_mode, sandbox_id=None):
     """Invoke the existing owner-host exporter for every missing closure file.
 
@@ -314,6 +314,9 @@ def export_with_runfile_exporter(prepared, inventory_path, *, role, exporter,
     the owner-host process; none are added to prepared bundle metadata.
     """
     exporter=Path(exporter).resolve(strict=True)
+    interpreter=Path(exporter_python).resolve(strict=True)
+    if not interpreter.is_file() or not os.access(interpreter,os.X_OK):
+        raise ValueError('private exporter needs its bound executable Python interpreter')
     if not exporter.is_file() or source_mode not in ('local','sandbox'):
         raise ValueError('private runfile export needs an exact exporter and source mode')
     if source_mode=='sandbox' and (not isinstance(sandbox_id,str) or not sandbox_id):
@@ -334,7 +337,7 @@ def export_with_runfile_exporter(prepared, inventory_path, *, role, exporter,
         if source_mode=='sandbox':env['CW_EXPORT_SANDBOX_ID']=sandbox_id
         else:env.pop('CW_EXPORT_SANDBOX_ID',None)
         try:
-            subprocess.run([sys.executable,str(exporter),role,source],check=True,env=env,
+            subprocess.run([str(interpreter),str(exporter),role,source],check=True,env=env,
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
             receipt=json.loads(receipt_path.read_text())
             validate_receipt(receipt,identity)
@@ -372,6 +375,7 @@ def main(argv=None):
     export.add_argument('--manifest',required=True);export.add_argument('--inventory',required=True)
     export.add_argument('--role',choices=('lfm','mellum'),required=True)
     export.add_argument('--exporter',required=True)
+    export.add_argument('--exporter-python',required=True)
     export.add_argument('--source-mode',choices=('local','sandbox'),required=True)
     export.add_argument('--sandbox-id')
     args=parser.parse_args(argv)
@@ -383,7 +387,8 @@ def main(argv=None):
         value=pending_private_exports(json.loads(Path(args.manifest).read_text()),args.inventory,role=args.role)
     elif args.action=='export':
         value=export_with_runfile_exporter(json.loads(Path(args.manifest).read_text()),args.inventory,
-            role=args.role,exporter=args.exporter,source_mode=args.source_mode,sandbox_id=args.sandbox_id)
+            role=args.role,exporter=args.exporter,exporter_python=args.exporter_python,
+            source_mode=args.source_mode,sandbox_id=args.sandbox_id)
     else:
         value=record_private_receipt(json.loads(Path(args.manifest).read_text()),args.inventory,
             role=args.role,source_path=args.source,receipt=json.loads(Path(args.receipt).read_text()))

@@ -97,6 +97,7 @@ def _bundle_export_descriptor(role,item,participant,provider,inventory_path):
             {'role':role,'participant':participant})[:24]+'/current-prepared.json'))
     export_command=[export_python,'-m',entrypoint,'export','--manifest',export_manifest,
         '--inventory',inventory_path,'--role',role,'--exporter','{bound_private_exporter}',
+        '--exporter-python','{bound_private_exporter_python}',
         '--source-mode',export_source_mode]
     if role=='mellum':export_command.extend(['--sandbox-id',item['source_host_id']])
     return {'schema':'natlang.native-shared-participant-export-follow/1','role':role,

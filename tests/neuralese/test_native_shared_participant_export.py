@@ -92,11 +92,17 @@ def test_existing_runfile_exporter_cli_is_invoked_with_bound_local_bytes(tmp_pat
     policy,participants,channel,optimizer,adapter=actual_shared(tmp_path)
     adapter_path=policy.out/'semantic-adapter.json'
     selected=prepare_bundle(policy.slot,'lfm',tmp_path/'bundle',semantic_adapter=adapter_path)
+    interpreter=tmp_path/'separate exporter python'
+    interpreter.write_text('#!'+sys.executable+'\nimport os,sys\n'
+        'os.environ["NATLANG_TEST_EXPORTER_CONTEXT"]="sdk"\n'
+        'os.execv(sys.executable,[sys.executable,*sys.argv[1:]])\n')
+    interpreter.chmod(0o755)
     exporter=tmp_path/'fake-private-exporter.py'
     exporter.write_text('''#!/usr/bin/env python3
 import hashlib,json,os,sys
 from pathlib import Path
 role,source=sys.argv[1:]
+assert os.environ['NATLANG_TEST_EXPORTER_CONTEXT']=='sdk'
 raw=Path(source).read_bytes();identity={'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}
 assert identity=={'sha256':os.environ['CW_EXPORT_EXPECTED_SHA256'],'bytes':int(os.environ['CW_EXPORT_EXPECTED_BYTES'])}
 receipt={'private':True,'role':role,'source':source,'identity':identity,
@@ -106,7 +112,7 @@ Path(os.environ['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps(receipt))
     exporter.chmod(0o755)
     inventory=tmp_path/'inventory.json'
     result=export_with_runfile_exporter(selected,inventory,role='lfm',
-        exporter=exporter,source_mode='local')
+        exporter=exporter,exporter_python=interpreter,source_mode='local')
     assert result['all_bundle_files_independently_verified'] is True
     assert len(result['entries'])==len(selected['files'])
     assert json.loads(inventory.read_text())['role']=='lfm'
@@ -138,7 +144,7 @@ Path(os.environ['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps({'private':True
     exporter.chmod(0o755)
     inventory=tmp_path/'remote-inventory.json'
     result=export_with_runfile_exporter(selected,inventory,role='mellum',
-        exporter=exporter,source_mode='sandbox',sandbox_id='mellum-box')
+        exporter=exporter,exporter_python=sys.executable,source_mode='sandbox',sandbox_id='mellum-box')
     assert result['all_bundle_files_independently_verified'] is True
     assert {row['source_path']for row in result['entries']}=={row['path']for row in selected['files']}
     assert all(not Path(row['source_path']).is_file() for row in result['entries'])
