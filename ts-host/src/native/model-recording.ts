@@ -62,6 +62,14 @@ export function setNativeAdapterSource(next: () => readonly NativeAdapterBinding
 export function setNativeStateSource(next: () => readonly NativeStateBinding[] | undefined): void { nativeStateSource = next; }
 
 let lexicalAdapterSource: () => readonly NativeAdapterBinding[] | undefined = () => undefined;
+let lexicalSoftStateSource: () => readonly string[] | undefined = () => undefined;
+
+/** Install where the current invocation's tuned soft instruction/skill state IDs come from (the runtime does this). */
+export function setLexicalSoftStateSource(next: () => readonly string[] | undefined): void { lexicalSoftStateSource = next; }
+
+/** Soft states the current invocation consumes: written by the exact base and read by its tuned stack, so their
+ * consumption is the explicit same-base adapter-state exchange (plan §3.3). */
+export function activeSoftStates(): readonly string[] { return lexicalSoftStateSource() ?? []; }
 
 /** Install where the current invocation's lexical (tuned) weight stack comes from (the runtime does this). */
 export function setLexicalNativeAdapterSource(next: () => readonly NativeAdapterBinding[] | undefined): void { lexicalAdapterSource = next; }

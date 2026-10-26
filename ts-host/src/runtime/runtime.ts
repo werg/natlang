@@ -1,5 +1,5 @@
 import type { WeightBinding } from '../adaptation/weights/binding.js';
-import { setLexicalNativeAdapterSource, type NativeAdapterBinding } from '../native/model-recording.js';
+import { setLexicalNativeAdapterSource, setLexicalSoftStateSource, type NativeAdapterBinding } from '../native/model-recording.js';
 import { ProgramView } from '../adaptation/program-view.js';
 import { nativeProgramGuidance as validateNativeProgramGuidance } from '../adaptation/prompts.js';
 import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
@@ -176,6 +176,11 @@ setLexicalNativeAdapterSource(() => {
   let adapters = lexicalAdapters.get(stack);
   if (!adapters) lexicalAdapters.set(stack, adapters = Object.freeze(stack.effective.map(({ id, scale }) => Object.freeze({ id, scale }))));
   return adapters;
+});
+
+setLexicalSoftStateSource(() => {
+  const soft = currentFrame()?.weights?.soft;
+  return soft ? [...(soft.instructions ? [soft.instructions.state] : []), ...Object.values(soft.skills).map(use => use.state)] : undefined;
 });
 
 let taskSequence = 0;

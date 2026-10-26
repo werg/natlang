@@ -21,7 +21,7 @@ import { assembleChatCompletion, chatCompletionModelTurn, fetchModel, httpChatTr
   type HttpChatOptions } from './chat-completion.js';
 import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
-import { activeNativeAdapters, activeNativeStates, activeRecorder, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
+import { activeNativeAdapters, activeNativeStates, activeRecorder, activeSoftStates, type NativeAdapterBinding, type TurnRecorder } from '../native/model-recording.js';
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
@@ -483,6 +483,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       const artifact = await store.getNativeState(id);
       if (artifact?.metadata.adapter_binding) modes[id] = 'same-base-adapter-state';
     }
+    // A tuned call's own soft states were written by the exact base and are read by its adapted stack.
+    if (activeNativeAdapters().length) for (const id of activeSoftStates()) if (actualIds.has(id)) modes[id] = 'same-base-adapter-state';
     return coefficientStateModes(coefficientPolicy, ids, Object.keys(modes).length ? modes : undefined);
   };
   const requireExactNativeImports = (capture: unknown, ids: readonly string[],

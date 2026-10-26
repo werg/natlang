@@ -72,14 +72,27 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
  */
 export async function uploadRelease(store: HttpNeuraleseStore, directory: string): Promise<Set<string>> {
   const served = new Set<string>();
-  for (const [folder, put] of [['artifacts', async (bytes: Uint8Array) => (await store.putNativeTensorArtifact(decodeNativeTensorArtifact(bytes))).id],
-      ['states', async (bytes: Uint8Array) => (await store.putNativeState(decodeNativeState(bytes))).id]] as const) {
+  const put = async (bytes: Uint8Array, file: string) => file.endsWith('.nzs')
+    ? (await store.putNativeState(decodeNativeState(bytes))).id : (await store.putNativeTensorArtifact(decodeNativeTensorArtifact(bytes))).id;
+  for (const folder of ['artifacts', 'states']) {
     const path = join(directory, folder);
     if (!existsSync(path)) continue;
-    for (const file of readdirSync(path).sort()) {
-      const id = await put(new Uint8Array(readFileSync(join(path, file))));
-      if (id !== file.replace(/\.[^.]+$/, '')) throw new Error(`release file ${folder}/${file} does not hold its named content (${id})`);
-      served.add(id);
+    // Derivation chains (tuned states, their updates and histories) need parents first; retry until no progress.
+    let pending = readdirSync(path).sort(), failures: string[] = [];
+    while (pending.length) {
+      const next: string[] = []; failures = [];
+      for (const file of pending) {
+        try {
+          const id = await put(new Uint8Array(readFileSync(join(path, file))), file);
+          if (id !== file.replace(/\.[^.]+$/, '')) throw new Error(`release file ${folder}/${file} does not hold its named content (${id})`);
+          served.add(id);
+        } catch (error) {
+          if (/does not hold its named content/.test(String(error))) throw error;
+          next.push(file); failures.push(`${file}: ${(error as Error).message}`);
+        }
+      }
+      if (next.length === pending.length) throw new Error(`release upload made no progress: ${failures.slice(0, 3).join('; ')}`);
+      pending = next;
     }
   }
   return served;
