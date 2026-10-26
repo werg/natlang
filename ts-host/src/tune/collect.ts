@@ -99,10 +99,12 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
  * recorded (its turns are not positive targets: `enclosingSuccess` and `rootOracle` say so).
  */
 export async function collect(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; examples: readonly SplitExample[];
-  teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void }): Promise<{
+  teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void;
+  /** Serve a tuned release while collecting (distillation): its strict binding labels and serves each call. */
+  weights?: WeightBinding }): Promise<{
   turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] }> {
   const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] = [];
-  const binding = new WeightBinding(options.scaffold);
+  const binding = options.weights ?? new WeightBinding(options.scaffold);
   for (const example of options.examples) {
     if (options.partitions && !options.partitions.includes(example.partition)) continue;
     const pending: Omit<CollectedTurn, 'evidence'>[] = [];

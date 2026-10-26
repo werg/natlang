@@ -188,3 +188,28 @@ test('rounds continue the best build on development roots and activate it throug
     assert.equal(JSON.parse(readFileSync(join(root, '.natlang/tune/active.json'), 'utf8')).release, journal.best.release);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('distillation exports deduplicated, oracle-verified training rows of the tuned stack, never other partitions', async () => {
+  const { exportDistillation } = await import('../dist/tune/distill.js');
+  const { prepareData } = await import('../dist/tune/pipeline.js');
+  const root = project();
+  try {
+    const seen = [];
+    const options = { root, program: program(root), settings, student: student(root), teacher: scriptedModel(respond).driver, teacherId: 'teacher:test', serve: serve(seen) };
+    const report = await tuneProgram(options);
+    assert.equal(report.activated, true, report.reason);
+    const release = host.currentManifest ? host.currentManifest(root) : (await import('../dist/adaptation/weights/release.js')).currentManifest(root);
+    const data = await prepareData(options);
+    const { directory, manifest } = await exportDistillation(options, data, release);
+    const rows = readFileSync(join(directory, 'turns.jsonl'), 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
+    assert.ok(rows.length > 0 && rows.every(row => row.partition === 'train'));
+    const trainRoots = data.examples.filter(example => example.partition === 'train').length;
+    assert.equal(manifest.roots.rerun, trainRoots);
+    assert.equal(manifest.roots.correct, trainRoots, 'the scripted stack answers every root correctly');
+    // The stand-in stack replies exactly as the teacher did, so every stack turn duplicates a teacher row.
+    assert.equal(manifest.turns.bySource.stack, 0);
+    assert.equal(manifest.turns.duplicates, data.trainRows.length);
+    assert.equal(manifest.admission, 'not-admitted');
+    assert.ok(seen.some(adapters => adapters.length > 0), 'the re-run served the tuned stack');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -82,3 +82,27 @@ def test_build_trains_from_collected_turns(tmp_path):
     result = json.loads((tmp_path / 'out' / 'result.json').read_text())
     assert {item['node'] for item in result['artifacts']} == {'tree:', 'lambda:outer'}
     assert result['receipt']['exposure']['rows_seen'] == 2
+
+
+@real_lfm
+def test_distillation_export_lowers_training_turns_and_binds_hashes(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.tune import distill
+    engine, checkpoint = real_engine(tmp_path)
+    export = tmp_path / 'export'
+    export.mkdir()
+    (export / 'turns.jsonl').write_text(json.dumps(turn()) + '\n')
+    (export / 'manifest.json').write_text(json.dumps({'turns': {'sha256': sha256_file_hex(export / 'turns.jsonl')}}))
+    assert distill.main(['--export', str(export), '--checkpoint', str(checkpoint)]) == 0
+    lowered = json.loads((export / 'lowered.json').read_text())
+    graphs = [json.loads(line) for line in (export / 'native-graphs.jsonl').read_text().splitlines()]
+    assert lowered['native_graphs']['rows'] == len(graphs) == 1
+    assert lowered['native_graphs']['sha256'] == sha256_file_hex(export / 'native-graphs.jsonl')
+    parse_graph(graphs[0], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
+    # Only training-split tune turns are accepted, and the manifest must bind the exact turns.
+    (export / 'turns.jsonl').write_text(json.dumps(turn(partition='development')) + '\n')
+    with pytest.raises(TuneMathError, match='does not match'):
+        distill.main(['--export', str(export), '--checkpoint', str(checkpoint)])
+    (export / 'manifest.json').write_text(json.dumps({'turns': {'sha256': sha256_file_hex(export / 'turns.jsonl')}}))
+    with pytest.raises(TuneMathError, match='training-split'):
+        distill.main(['--export', str(export), '--checkpoint', str(checkpoint)])
