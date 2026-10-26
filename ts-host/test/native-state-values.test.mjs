@@ -576,6 +576,23 @@ test('equal native IDs retain independent writer origins through typed values, c
   assert.equal(sourceWithLiteralCalls(`return ${neuraleseRefSentinel(first)};`),`return __neuralese(${JSON.stringify(artifact.id)}, undefined, "call:first#write-0");`);
 });
 
+test('inference resolves the declared occurrence among repeated equal-content producers', async()=>{
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const {graphNode}=await import('../dist/native/graph.js');
+  const firstWriter=open({type:'() => boolean',instructions:'Write the same native state.'},{neuralese:runtimeFor(store)}).session;
+  const secondWriter=open({type:'() => boolean',instructions:'Write the same native state again.'},{neuralese:runtimeFor(store)}).session;
+  const first='repeat-first#write-0',second='repeat-second#write-0';
+  graphNode(firstWriter.runtime.trace,'block_write',{call_id:'repeat-first',turn:'repeat-first#turn0',block:artifact.id},[],first);
+  graphNode(secondWriter.runtime.trace,'block_write',{call_id:'repeat-second',turn:'repeat-second#turn0',block:artifact.id},[],second);
+  const invocation=open({type:'() => boolean',instructions:'Use the exact supplied state.'},{neuralese:runtimeFor(store)}).session;
+  const agent=new NativeToolAgent(Object.assign(async()=>({calls:[['return_result',{status:'success',value:true}]]}),{neuralese:true}),
+    {neuralese:runtimeFor(store)});
+  await agent.modelTurnNode(invocation,[{role:'user',content:[{type:'native_state',id:artifact.id,source_occurrence:first}]}],{},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node,first,'an explicit older occurrence survives a later equal-content write');
+  assert.notEqual(read.inputs[0].node,second);
+});
+
 test('actual eval compiler preserves native constant and source metadata in a typed result', async()=>{
   const {neuraleseRefSentinel}=await import('../dist/native/neuralese.js');
   const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());

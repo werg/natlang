@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, invocationNodeId, recentBlockWriter } from './graph.js';
+import { blockInput, graphNode, hasBlockWriterOccurrence, invocationNodeId } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -681,8 +681,8 @@ export class NativeToolAgent {
         // writer for this content-addressed block. The resulting source node
         // remains explicit in the graph; replay still requires its full writer
         // node before any gradient can be accepted.
-        const recentWriter=activeRecorder()?undefined:recentBlockWriter(block);
-        if (!writers.includes(declared) && recentWriter!==declared)
+        const inferenceOccurrence=activeRecorder()?false:hasBlockWriterOccurrence(block,declared);
+        if (!writers.includes(declared) && !inferenceOccurrence)
           throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
         return declared;
       }

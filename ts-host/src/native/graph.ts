@@ -42,13 +42,29 @@ export const traceFor = (callId: string | undefined): NativeTraceRecorder | unde
 /** The node that produced each recent block (bounded: old entries fall out, and their producer reads as external). */
 const PRODUCERS = new Map<string, string>();
 const PRODUCER_LIMIT = 100_000;
+const PRODUCER_OCCURRENCES = new Map<string, Set<string>>();
+const PRODUCER_OCCURRENCE_ORDER = new Map<string, { block: string; node: string }>();
+const PRODUCER_OCCURRENCE_LIMIT = 100_000;
 function rememberProducer(block: string, node: string): void {
   PRODUCERS.delete(block);
   PRODUCERS.set(block, node);
   if (PRODUCERS.size > PRODUCER_LIMIT) PRODUCERS.delete(PRODUCERS.keys().next().value!);
+  let occurrences=PRODUCER_OCCURRENCES.get(block);
+  if(!occurrences){occurrences=new Set();PRODUCER_OCCURRENCES.set(block,occurrences);}
+  if(occurrences.has(node))return;
+  occurrences.add(node);PRODUCER_OCCURRENCE_ORDER.set(JSON.stringify([block,node]),{block,node});
+  while(PRODUCER_OCCURRENCE_ORDER.size>PRODUCER_OCCURRENCE_LIMIT){
+    const oldestKey=PRODUCER_OCCURRENCE_ORDER.keys().next().value!;
+    const oldest=PRODUCER_OCCURRENCE_ORDER.get(oldestKey)!;
+    PRODUCER_OCCURRENCE_ORDER.delete(oldestKey);
+    const rows=PRODUCER_OCCURRENCES.get(oldest.block);rows?.delete(oldest.node);
+    if(rows?.size===0)PRODUCER_OCCURRENCES.delete(oldest.block);
+  }
 }
 /** Last observed exact writer for inference contexts that intentionally have no episode recorder. */
 export function recentBlockWriter(block:string):string|undefined{return PRODUCERS.get(block);}
+/** Whether this exact block writer occurred in the bounded inference trace registry. */
+export function hasBlockWriterOccurrence(block:string,node:string):boolean{return PRODUCER_OCCURRENCES.get(block)?.has(node)??false;}
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
 export function blockInput(block: string, port?: string, sourceOccurrence?:string): GraphInput {
   return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : PRODUCERS.get(block) ?? 'external'), block, ...(port ? { port } : {}) };
