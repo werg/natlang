@@ -1879,3 +1879,33 @@ test('native structured returns bind metadata across model action, host capture,
     assert.equal(result.turns.length, 0);
   }
 });
+
+
+test('source planning readiness does not replace captured task and action outcomes', () => {
+  for (const reviewRequired of [false, true]) {
+    const row = nativeRow(`source-planning-${reviewRequired}`);
+    row.collection_guidance = { training_admission: false, actual_model_measurement: 'pending',
+      review_required: reviewRequired,
+      reward: reviewRequired ? 'independent-semantic-review-required' : 'exact-task-outcome' };
+    row.outcome.oracle = { accepted: true, level: reviewRequired ? 'judged' : 'exact' };
+    const result = materializeNativeRows([row], { directAnswers: true });
+    assert.equal(result.turns.length, 2);
+    assert.ok(result.turns.every(turn => turn.training_admission.approved));
+    assert.ok(result.turns.every(turn => turn.training_admission.collection_guidance_scope === 'source'));
+    assert.deepEqual(result.turns.map(turn => turn.target),
+      materializeNativeRows([nativeRow('baseline')], { directAnswers: true }).turns.map(turn => turn.target));
+    const rejected = structuredClone(row);
+    rejected.outcome.accepted = false;
+    rejected.outcome.oracle.accepted = false;
+    assert.ok(materializeNativeRows([rejected], { directAnswers: true }).turns.every(turn => !turn.training_admission.approved));
+    for (const review of [{ review_scope: 'sampled-actions-require-independent-semantic-review' },
+      { root_action: { kind: 'authored_reference_eval', sampled: false } }]) {
+      const held = structuredClone(row);
+      Object.assign(held.collection_guidance, review);
+      assert.ok(materializeNativeRows([held], { directAnswers: true }).turns.every(turn => !turn.training_admission.approved));
+    }
+    const unknown = structuredClone(row);
+    delete unknown.collection_guidance.review_required;
+    assert.ok(materializeNativeRows([unknown], { directAnswers: true }).turns.every(turn => !turn.training_admission.approved));
+  }
+});

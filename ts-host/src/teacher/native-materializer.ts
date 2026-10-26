@@ -2106,8 +2106,17 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const normalizedActionProvenance = source.action_provenance && typeof source.action_provenance === 'object' &&
         !Array.isArray(source.action_provenance) ? structuredClone(source.action_provenance) as Dict :
         capturedProviderSampledChildAction(row, source, invocation, parents);
-      const authoredGuidancePending = row.collection_guidance && typeof row.collection_guidance === 'object' &&
-        (row.collection_guidance as Dict).training_admission === false;
+      const guidance = row.collection_guidance && typeof row.collection_guidance === 'object' &&
+        !Array.isArray(row.collection_guidance) ? row.collection_guidance as Dict : undefined;
+      // Source planning records are copied into the captured execution. Their
+      // pending measurement flag describes the source before generation; the
+      // real outcome below determines action eligibility. Authored roots and
+      // explicit per-action review scopes retain their independent holds.
+      const sourcePlanningGuidance = guidance?.actual_model_measurement === 'pending' &&
+        typeof guidance.review_required === 'boolean' &&
+        guidance.reward === (guidance.review_required ? 'independent-semantic-review-required' : 'exact-task-outcome') &&
+        guidance.root_action === undefined && guidance.review_scope === undefined;
+      const authoredGuidancePending = guidance?.training_admission === false && !sourcePlanningGuidance;
       const authoredGuidanceBlocked = authoredGuidancePending && !semanticApproval;
       const sourceQualityActionBinding = invocation ? sourceQualityClearanceForProgram(sourceQualityReview, program, {
         trajectory_id: row.id, trajectory_sha256: rowDigest, decision_index: index,
@@ -2210,6 +2219,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           authoredGuidanceBlocked ? 'authored-root-guided-pending-review' :
           semanticApproval ? 'reviewed-native-decision' : 'exact-native-runtime-oracle',
           approved: options.candidateSelectionOnly ? false : decisionApproved,
+          ...(sourcePlanningGuidance ? { collection_guidance_scope: 'source' } :
+            authoredGuidancePending ? { collection_guidance_scope: 'actions' } : {}),
           ...(semanticApproval && !options.candidateSelectionOnly ? { semantic_review: semanticApproval } : {}),
           ...(semanticHold ? { semantic_review: semanticHold } : {}),
           ...(options.candidateSelectionOnly ? { reason: sourceQualityHeldReview ?
