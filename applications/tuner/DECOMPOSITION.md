@@ -94,7 +94,7 @@ Decisions: **fn** (its own natural-language function), **inline** (one instructi
 | Part | Decision | Unit | Why |
 | --- | --- | --- | --- |
 | Native reference per-call actor binding | crisp | existing `run_native` with ordered stack | Already exact. |
-| vLLM / llama.cpp fork / wllama loading, routing and batching | service + crisp | backend adapters under `ts-host/src/model/` and `vendor/` | Outside-world integration; parity is verified crisply. |
+| vLLM / llama.cpp fork / wllama loading, routing and batching | service + crisp | backend adapters under `ts-host/src/model/` (per-request LoRA scales shared in `lora-scales.ts`), `ts-host/src/browser/tuned-release.ts` and the patched wllama in `ts-host/vendor/wllama` | Outside-world integration; parity is verified crisply. |
 | Capability matrix | crisp | generated from parity tests | Facts, not claims. |
 
 ### Lifecycle

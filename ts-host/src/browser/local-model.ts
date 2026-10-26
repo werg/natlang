@@ -2,11 +2,13 @@ import * as wllamaRuntime from '@wllama/wllama/esm/index.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { chatCompletionModelTurn, modelTools, type ChatTransport, type ChatTurnStats } from '../model/chat-completion.js';
 import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
+import { perRequestLora } from '../model/lora-scales.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
 type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
   reasoning: boolean; chat_template?: string;
+  lora_adapters?: { blob: Blob; scale: number }[]; lora_init_without_apply?: boolean;
   progressCallback?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal };
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
@@ -22,6 +24,8 @@ export type BrowserInferenceEngine = {
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
   getModelMetadata?(): Record<string, unknown>;
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
+  /** Feature detection of the vendored wllama build (ts-host/vendor/wllama). */
+  readonly capabilities?: { readonly loraBlobs?: boolean };
   exit(): Promise<void>;
 };
 
@@ -35,6 +39,9 @@ export type BrowserModelLoadOptions = {
   /** Auto-selects all layers on a capable adapter, otherwise CPU. Set 0 for CPU. */
   gpuLayers?: number;
   threads?: number;
+  /** Tuned LoRA adapters (a release's GGUF exports, `loadBrowserRelease`), loaded at scale 0 with the model; each
+   * request applies only its own call's stack (ts-host/vendor/wllama). */
+  loraAdapters?: readonly { readonly id: string; readonly blob: Blob }[];
   onProgress?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal;
 };
@@ -53,6 +60,8 @@ function loadParams(options: BrowserModelLoadOptions) {
     throw new RangeError('gpuLayers must be a nonnegative integer');
   return { n_ctx: options.contextTokens ?? 4096, n_gpu_layers: options.gpuLayers ?? 99999,
     n_threads: options.threads, jinja: true, reasoning: false, chat_template: options.chatTemplate,
+    ...(options.loraAdapters?.length ? { lora_adapters: options.loraAdapters.map(adapter => ({ blob: adapter.blob, scale: 0 })),
+      lora_init_without_apply: true } : {}),
     progressCallback: options.onProgress, signal: options.signal };
 }
 
@@ -88,10 +97,10 @@ export const compileBrowserTools = modelTools;
  * The in-page transport: wllama applies the chat template itself, so earlier tool calls carry argument objects
  * (llama-server does this conversion on its side).
  */
-export function wllamaChatTransport(engine: BrowserInferenceEngine): ChatTransport {
+export function wllamaChatTransport(engine: BrowserInferenceEngine, tuned?: Record<string, unknown>): ChatTransport {
   return async (body, signal) => {
     try {
-      return await engine.createChatCompletion({ ...body, messages: chatMessages(body.messages as unknown[]),
+      return await engine.createChatCompletion({ ...body, ...tuned, messages: chatMessages(body.messages as unknown[]),
         cache_prompt: true, stream: true, abortSignal: signal });
     } catch (error) {
       if (String(error).includes('kv_cache_full'))
@@ -112,6 +121,8 @@ export class BrowserLocalModel {
   private gpuSelectionReason: string | null = null;
   private readonly gpuProbe: () => Promise<BrowserGpuCapability>;
   private turnQueue: Promise<void> = Promise.resolve();
+  /** Loaded tuned adapters: artifact ID -> adapter index (fixed for the loaded model). */
+  private readonly loraIndex = new Map<string, number>();
   lastLoadMs: number | null = null;
   lastTurn: { durationMs: number; promptTokens: number | null; cachedTokens: number | null;
     completionTokens: number | null; toolSchemaBytes: number; retries: number; tokensPerSecond: number | null } | null = null;
@@ -151,6 +162,8 @@ export class BrowserLocalModel {
     if (this.closed) throw new Error('local model is closed');
     const gpuLayers = options.gpuLayers;
     const params = loadParams(options);
+    if (options.loraAdapters?.length && !this.engine.capabilities?.loraBlobs)
+      throw new Error('weights-unavailable: this wllama build cannot load LoRA adapters; use the vendored build (ts-host/vendor/wllama)');
     this.gpuCapability = await this.gpuProbe();
     if (gpuLayers === undefined) {
       params.n_gpu_layers = this.gpuCapability.usable ? 99999 : 0;
@@ -165,7 +178,9 @@ export class BrowserLocalModel {
     this.requestedGpuLayers = params.n_gpu_layers ?? null;
     this.requestedContextTokens = params.n_ctx;
     const started = performance.now();
+    this.loraIndex.clear();
     await action(params);
+    for (const adapter of options.loraAdapters ?? []) this.loraIndex.set(adapter.id, this.loraIndex.size);
     this.lastLoadMs = Math.round(performance.now() - started);
   }
 
@@ -184,6 +199,8 @@ export class BrowserLocalModel {
 
   readonly turn = async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
     if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
+    // The calling invocation's own stack, read before queueing.
+    const tuned = perRequestLora(this.loraIndex, 'the in-page model');
     const previous = this.turnQueue;
     let release!: () => void;
     this.turnQueue = new Promise<void>(resolve => { release = resolve; });
@@ -191,7 +208,7 @@ export class BrowserLocalModel {
     try {
       const toolSchemaBytes = new TextEncoder().encode(JSON.stringify(modelTools(request.tools))).length;
       let stats: ChatTurnStats | undefined;
-      const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine),
+      const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine, tuned),
         { onTurn: value => { stats = value; } })(request, signal);
       if (stats) {
         this.lastTurn = { ...stats, toolSchemaBytes, tokensPerSecond: stats.completionTokens !== null && stats.durationMs > 0 ?

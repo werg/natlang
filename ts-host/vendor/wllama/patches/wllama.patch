@@ -1,0 +1,74 @@
+diff --git a/src/types/types.ts b/src/types/types.ts
+index de08636..7f8fc23 100644
+--- a/src/types/types.ts
++++ b/src/types/types.ts
+@@ -59,7 +59,12 @@ export interface LoadModelParams {
+   ctx_shift?: boolean;
+   cache_idle_slots?: boolean;
+   n_cache_reuse?: number;
+-  lora_adapters?: { path: string; scale?: number }[];
++  /**
++   * LoRA adapters loaded with the model. Give each either a `path` inside the wasm FS or a GGUF `blob`, which is
++   * mounted as its own file (never as a model shard). With `lora_init_without_apply`, every adapter starts at scale 0
++   * and a completion selects its own adapters and scales with `lora: [{ id, scale }]`, `id` being the index here.
++   */
++  lora_adapters?: { path?: string; blob?: Blob; scale?: number }[];
+   lora_init_without_apply?: boolean;
+   spec_draft_model?: string;
+   spec_draft_ngl?: number;
+diff --git a/src/wllama.ts b/src/wllama.ts
+index c04abf2..3fca1bc 100644
+--- a/src/wllama.ts
++++ b/src/wllama.ts
+@@ -12,6 +12,7 @@ import {
+   MMPROJ_FILE_NAME,
+   needCompat,
+   prepareBlobs,
++  padDigits,
+ } from './utils';
+ import CacheManager, { type DownloadOptions } from './cache-manager';
+ import { ModelManager, Model, type ModelSource } from './model-manager';
+@@ -168,6 +169,8 @@ export class Wllama {
+   // The CacheManager and ModelManager are singleton, can be accessed by user
+   public cacheManager: CacheManager;
+   public modelManager: ModelManager;
++  /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs. */
++  public readonly capabilities = { loraBlobs: true } as const;
+ 
+   private compat: WllamaCompat | null = null;
+ 
+@@ -504,7 +507,24 @@ export class Wllama {
+     }
+ 
+     const modelFiles = await prepareBlobs(blobs);
+-    await this.proxy.moduleInit(modelFiles.all);
++    // LoRA blobs are separate files next to the model, never model shards
++    const loraPaths: string[] = [];
++    const loraFiles: { name: string; blob: Blob }[] = [];
++    for (const [i, adapter] of (params.lora_adapters ?? []).entries()) {
++      if (adapter.blob) {
++        if (adapter.blob.size === 0) {
++          throw new WllamaError(`LoRA adapter ${i} is an empty Blob`, 'load_error');
++        }
++        const name = `lora-${padDigits(i + 1, 5)}.gguf`;
++        loraFiles.push({ name, blob: adapter.blob });
++        loraPaths.push(`models/${name}`);
++      } else if (adapter.path) {
++        loraPaths.push(adapter.path);
++      } else {
++        throw new WllamaError(`LoRA adapter ${i} needs a path or a blob`, 'load_error');
++      }
++    }
++    await this.proxy.moduleInit([...modelFiles.all, ...loraFiles]);
+ 
+     // run it
+     this.logger().debug('Calling wllamaStart...');
+@@ -564,7 +584,7 @@ export class Wllama {
+       ctx_shift: params.ctx_shift,
+       cache_idle_slots: params.cache_idle_slots,
+       n_cache_reuse: params.n_cache_reuse,
+-      lora_paths: params.lora_adapters?.map((a) => a.path),
++      lora_paths: params.lora_adapters ? loraPaths : undefined,
+       lora_scales: params.lora_adapters?.map((a) => a.scale ?? 1.0),
+       lora_init_without_apply: params.lora_init_without_apply,
+       spec_draft_model: params.spec_draft_model,

@@ -12,7 +12,7 @@ import type { ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } fr
 import { deriveSeed } from './trace.js';
 import { AUTOMATIC_NOTE, COMPACTION_NOTICE, directoryReducerPrompt, scopedFileToolNames, FUNCTION_TOOLS_PROMPT, HANDOVER_NOTE_CLOSE, HANDOVER_NOTE_OPEN,
   LAST_TURN_NOTICE, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
-import { canGenerateNl } from '../runtime/context.js';
+import { canGenerateNl, runInFrame } from '../runtime/context.js';
 import { adoptImportedNativeArtifacts } from './nz-file.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, SCOPE_VALUE_CHARS, shownCharsFor, note as cutNote } from './cutoff.js';
@@ -1155,7 +1155,8 @@ export class NativeToolAgent {
       const adapters = adapterCells(lam);
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
-      scores = await decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) }, session.runtime.signal);
+      scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) },
+        session.runtime.signal));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.startsWith('decision-unsupported')) throw error;
@@ -1454,7 +1455,9 @@ export class NativeToolAgent {
             deriveSeed(session.runtime.seedPolicy.root!, runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turns),
           max_tokens: statedWindow === null ? limit :
             Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
-        response = await (turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
+        // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
+        // across the awaits above, so the call starts inside its own frame on every platform.
+        response = await runInFrame(session.runtime.frame, () => turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
           this.driver(turnRequest, session.runtime.signal));
         streamed = false;
       } catch (error) {

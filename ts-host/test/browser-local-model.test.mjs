@@ -174,3 +174,64 @@ test('natlang model manifest and storage headroom are explicit', async () => {
   assert.equal(status.persisted, false);
   assert.ok(status.recommendedFree > spec.bytes);
 });
+
+test('a tuned release loads into the in-page model and each request applies only its own call\'s stack', async () => {
+  const api = await browserApi();
+  const host = await import('../dist/index.js');
+  const { hexDigest } = await import('../dist/native/hash.js');
+  const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
+  const project = api.compileVirtualProject({ files: { 'outer.nl': named('Pass value to inner.'), 'outer/inner.nl': named('Return value in uppercase.'),
+    'main.ts': "import outer from './outer.nl'; export default outer;" } }, api);
+  assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
+  const program = project.manifest.adaptation;
+  const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+  const baseGguf = 'b'.repeat(64);
+  const { tree, bindings } = host.compileScopeTree(program);
+  const files = new Map(tree.map((node, index) => [`adapters/${index}.gguf`, new TextEncoder().encode(`gguf ${node.id}`)]));
+  const manifest = host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
+    artifacts: tree.map((node, index) => ({ node: node.id, artifact: 'nnt1:' + node.id, rank: 2, parameterization: 'native-subspace', requires: [],
+      exports: { gguf: { file: `adapters/${index}.gguf`, sha256: hexDigest(files.get(`adapters/${index}.gguf`)), baseGgufSha256: baseGguf } } })),
+    families: [], memberships: [], softStates: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
+  files.set('natlang.adapters.json', new TextEncoder().encode(JSON.stringify(manifest)));
+  const fetch = async url => { const bytes = files.get(new URL(url).pathname.replace('/release/', ''));
+    return bytes ? new Response(bytes) : new Response('missing', { status: 404 }); };
+
+  const release = await api.loadBrowserRelease('https://example.test/release', { fetch, baseGgufSha256: baseGguf, executor: base });
+  assert.equal(release.adapters.length, tree.length);
+  let params; const requests = [];
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { loraBlobs: true },
+    async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
+    async createChatCompletion(request) {
+      requests.push(request);
+      if (request.messages.at(-1).role === 'tool') return { choices: [{ finish_reason: 'stop', message: { content: 'done' } }] };
+      const outer = JSON.stringify(request.messages).includes('Pass value');
+      return { choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: `c${requests.length}`, type: 'function',
+        function: { name: 'eval', arguments: JSON.stringify({ code: outer ? 'return await inner(value)' : 'return value.toUpperCase()' }) } }] } }] };
+    } };
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine: { engine: fake, gpuProbe: async () => ({ usable: false, reason: 'test' }) }, gpuLayers: 0, loraAdapters: release.adapters });
+  assert.equal(params.lora_init_without_apply, true, 'every adapter starts off');
+  assert.deepEqual(params.lora_adapters.map(item => item.scale), tree.map(() => 0));
+  const runtime = api.createNatlangRuntime({ model: request => model.turn(request), weights: release.weights, seed: { mode: 'derived', root: 0 } });
+  try {
+    assert.equal(await runtime.run(() => project.require('main.ts').default('hi')), 'HI');
+    const on = request => request.lora.filter(item => item.scale !== 0).map(item => tree[item.id].id);
+    const lambda = path => tree.find(node => node.level === 'lambda' && node.path === path).id;
+    const outer = requests.find(request => JSON.stringify(request.messages).includes('Pass value'));
+    const inner = requests.find(request => JSON.stringify(request.messages).includes('uppercase'));
+    assert.ok(requests.every(request => request.lora.length === tree.length), 'every loaded adapter is listed on every request');
+    assert.deepEqual(on(outer).sort(), ['tree:', lambda('outer.nl')].sort());
+    assert.deepEqual(on(inner).sort(), ['folder:outer', 'tree:', lambda('outer/inner.nl')].sort(), 'the callee runs its own stack, not the caller\'s');
+  } finally { runtime.close(); await model.close(); }
+
+  // A wllama build that cannot load LoRA blobs refuses the adapters instead of loading them as model shards.
+  const stock = { ...fake, capabilities: undefined, isModelLoaded: () => false };
+  await assert.rejects(api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine: { engine: stock, gpuProbe: async () => ({ usable: false, reason: 'test' }) }, gpuLayers: 0, loraAdapters: release.adapters }),
+  /weights-unavailable: this wllama build cannot load LoRA adapters/);
+
+  // A release exported for another base file runs untuned as a whole: no adapters, no per-request scales.
+  const other = await api.loadBrowserRelease('https://example.test/release/', { fetch, baseGgufSha256: 'd'.repeat(64), executor: base });
+  assert.equal(other.adapters.length, 0);
+  assert.equal(other.weights[0].status, 'degraded');
+});
