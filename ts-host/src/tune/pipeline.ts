@@ -77,18 +77,24 @@ type TrainerResult = { artifacts: WeightArtifact[]; families?: FamilyVersion[]; 
 export type TuneData = { readonly scaffold: WeightManifest; readonly examples: readonly SplitExample[]; readonly dataKey: string;
   readonly turns: readonly CollectedTurn[]; readonly trainRows: readonly CollectedTurn[]; readonly protectedCount: number; readonly total: number };
 
+/** The program's root examples split by component; the persisted receipt keeps every component on the side it was
+ * first assigned (plan §4.1). */
+export function currentSplit(root: string, examplesPath?: string): ReturnType<typeof splitExamples> {
+  const splitPath = join(tuneDirectory(root), 'splits.json');
+  const previous = existsSync(splitPath) ? JSON.parse(readFileSync(splitPath, 'utf8')) as SplitReceipt : undefined;
+  const examples = splitExamples(readRootExamples(root, examplesPath), previous);
+  mkdirSync(tuneDirectory(root), { recursive: true });
+  writeFileSync(splitPath, JSON.stringify(examples.receipt, null, 1) + '\n');
+  return examples;
+}
+
 /** Discover the scope tree, split root examples before expansion, collect or reuse teacher trajectories. */
 export async function prepareData(options: TuneOptions, timings: StageTiming[] = [], log: (line: string) => void = () => {},
   scopes: ScopeOptions = {}): Promise<TuneData> {
   const { root, program, student } = options;
   const scaffold = await timed(timings, 'discover', log, () => scaffoldManifest(program, student.base, scopes));
   const all = readRootExamples(root, options.examplesPath);
-  // The persisted split receipt keeps every component on the side it was first assigned (plan §4.1).
-  const splitPath = join(tuneDirectory(root), 'splits.json');
-  const previousSplit = existsSync(splitPath) ? JSON.parse(readFileSync(splitPath, 'utf8')) as SplitReceipt : undefined;
-  const examples = splitExamples(all, previousSplit);
-  mkdirSync(tuneDirectory(root), { recursive: true });
-  writeFileSync(splitPath, JSON.stringify(examples.receipt, null, 1) + '\n');
+  const examples = currentSplit(root, options.examplesPath);
   if (!examples.some(example => example.partition === 'train'))
     throw new Error('no training roots: add root invocations to tune.examples.jsonl (one JSON object per line: {"function", "input", "expected"?, "group"?})');
   // Per-root records: raw evidence survives edits; a root is recollected only when a binding it reached changed

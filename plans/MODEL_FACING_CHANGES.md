@@ -1508,3 +1508,13 @@ The original exact fixture roots and independent expected results remain intact.
 Scripted native regressions test wiring and result contracts, not the quality of
 the semantic classifier, scheduler or replay judgment. Qualification debt above
 still applies to these final source changes.
+
+## Tuner teacher routing policy (2026-10-26, unmeasured debt)
+
+`applications/tuner/routeTeacher.nl` is the natural-language side of the
+`routeTeacher` pluggable (`ts-host/src/tune/teachers.ts`). The crisp frontier
+rule is the default (`tune.teacherRouting.mode` absent), so nothing serves the
+prompt yet. Before selecting `nl`, sample it on the live executor (~48 samples
+over varied calibration tables) in `shadow` mode and compare with the crisp
+choice. Only measured teachers meeting the minimum are ever offered, and an
+answer naming anything else falls back to the crisp rule.

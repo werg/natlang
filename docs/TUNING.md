@@ -80,6 +80,12 @@ candidate whose development success stays within the configured envelope (`tune.
 weights in `tune.placement.costWeights`). `--sweep spec.json` runs a resumable rank/penalty/data-size sweep. The
 report (`--report`, `--partition`) shows every evaluated arm.
 
+With several authorized teachers in `tune.teachers`, `natlang tune ./my-program --calibrate` runs each on the
+development roots without weights and records success, failures, tokens and time per root under its exact executor
+identity. Teachers below `tune.teacherRouting.minSuccess` (default 0.5) are never chosen; among the rest the
+cheapest teacher within 0.05 of the best success rate collects the data. A changed teacher identity requires a new
+`--calibrate`; `--teacher <profile>` overrides the choice.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 

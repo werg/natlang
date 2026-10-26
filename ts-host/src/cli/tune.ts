@@ -11,6 +11,7 @@
  *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
  *                                          candidate within the declared success envelope
  *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
+ *   natlang tune <program> --calibrate     measure the configured teachers on development roots and route one (§4.2)
  *   natlang tune --families                cross-program family discovery and refits
  */
 import { existsSync, readdirSync, readFileSync, watch } from 'node:fs';
@@ -32,6 +33,13 @@ import { protectedExamples, readRootExamples } from '../tune/collect.js';
 import { runPlacement } from '../tune/placement.js';
 import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
+import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
+import { currentSplit } from '../tune/pipeline.js';
+import { createNatlangRuntime } from '../runtime/runtime.js';
+import { loadNatlang } from '../runtime/node-files.js';
+
+const ROUTE_TEACHER = fileURLToPath(new URL('../../../applications/tuner/routeTeacher.nl', import.meta.url));
+const identityOf = (profile: string) => executorIdentityForChoice(loadModelConfiguration(profile).choice).id;
 
 const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
   types: fileURLToPath(new URL('../index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
@@ -60,7 +68,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
   if (flags.has('--families'))
     throw new Error('natlang tune --families: cross-program family training is not implemented yet (plans/HIERARCHICAL_LORA_TUNING.md §5.5); program tunes run with no family level');
@@ -83,7 +91,10 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
     if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
     const program = inventory.manifest.adaptation!;
-    const teacherConfig = loadModelConfiguration(settings.teacher);
+    // Several configured teachers: collection uses the calibrated, routed one; an explicit --teacher overrides.
+    const teacherProfile = settings.teachers?.length && !value('--teacher')
+      ? routedTeacherProfile(root, settings.teachers.map(profile => ({ profile, id: identityOf(profile) }))) : settings.teacher;
+    const teacherConfig = loadModelConfiguration(teacherProfile);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
     try {
       return await fn({ root, program, settings, student, teacher: driverOf(teacherSession),
@@ -153,6 +164,32 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     });
     io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : formatOverview(loadOverview(root, 'development')));
     return 0;
+  }
+  if (flags.has('--calibrate')) {
+    const { settings } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
+    const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
+    if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+    const profiles = value('--teacher') ? [value('--teacher')!] : settings.teachers?.length ? settings.teachers : [settings.teacher];
+    const sessions = profiles.map(profile => ({ profile, session: createResolvedModelSession(loadModelConfiguration(profile).choice, process.env, process.stderr) }));
+    try {
+      const examples = currentSplit(root, value('--examples')).filter(example => example.partition === 'development' && !example.protected);
+      const calibrations = await calibrateTeachers({ root, program: inventory.manifest.adaptation!, examples, log: io.err,
+        candidates: sessions.map(({ profile, session }) => ({ profile, id: identityOf(profile), driver: driverOf(session) })) });
+      // The natural-language policy runs on the default teacher; it only chooses among measured eligible teachers.
+      const policySession = sessions.find(item => item.profile === settings.teacher)?.session ?? sessions[0]!.session;
+      const nl = async (candidates: string, minSuccess: number) => {
+        const runtime = createNatlangRuntime({ model: driverOf(policySession) });
+        try { return await runtime.run(() => (loadNatlang(ROUTE_TEACHER) as (...args: unknown[]) => Promise<unknown>)(candidates, minSuccess)); }
+        finally { runtime.close(); }
+      };
+      const choice = await routeTeacher(calibrations, settings.teacherRouting, nl);
+      saveTeacherChoice(root, choice);
+      io.out(flags.has('--json') ? JSON.stringify(choice, null, 2) : [
+        ...calibrations.map(item => `${item.profile}: ${item.success}/${item.roots} correct, ${item.failures} failed, ` +
+          `${Math.round(item.tokensPerRoot)} tokens and ${Math.round(item.msPerRoot)} ms per root`),
+        choice.teacher ? `teacher: ${choice.profile} (${choice.policy}: ${choice.reason})` : `no teacher chosen: ${choice.reason}`].join('\n'));
+      return choice.teacher ? 0 : 1;
+    } finally { for (const { session } of sessions) await session.close(); }
   }
   const sweepPath = value('--sweep');
   if (sweepPath !== undefined) {

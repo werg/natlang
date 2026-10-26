@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
+import type { PluggableSetting } from '../runtime/pluggable.js';
 
 export type StudentSettings = {
   /** The exact base the adapters are trained on. */
@@ -41,12 +42,18 @@ export type TuneSettings = {
   readonly students: Readonly<Record<string, StudentSettings>>;
   /** A model profile name: the authorized teacher that executes the program during collection. */
   readonly teacher: string;
+  /** Several authorized teacher profiles: `natlang tune --calibrate` measures them and `routeTeacher` picks one (§4.2). */
+  readonly teachers?: readonly string[];
+  readonly teacherRouting: TeacherRouting;
   readonly backend: 'managed-local' | 'native' | 'vllm';
   /** Default trainer recipe fields (natlang_neuralese.tune.trainer.Recipe), shared across programs. */
   readonly recipe?: Readonly<Record<string, unknown>>;
   /** Placement envelope (plan §5.2). */
   readonly placement?: PlacementSettings;
 };
+/** Teachers below `minSuccess` (development success rate) are never chosen; `mode` selects the routing policy. */
+export type TeacherRouting = { readonly minSuccess: number; readonly mode?: PluggableSetting };
+export const DEFAULT_TEACHER_ROUTING: TeacherRouting = { minSuccess: 0.5 };
 /** Accept the cheapest measured candidate whose development success is at most `maxSuccessLoss` below the unpruned
  * stack; cost = weighted active ranks, exported bytes, distinct stacks and measured latency. */
 export type PlacementSettings = { readonly maxSuccessLoss: number;
@@ -75,10 +82,12 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   if (typeof student.moduleMap !== 'string') throw new TuneSetupError(`tune.students.${name}.moduleMap is missing`);
   const teacher = overrides.teacher ?? tune.teacher;
   if (!teacher) throw new TuneSetupError('tune.teacher (a model profile name) is not set');
-  if (!config.profiles?.[teacher]) throw new TuneSetupError(`teacher profile ${teacher} does not exist`);
+  for (const profile of [teacher, ...(tune.teachers ?? [])])
+    if (!config.profiles?.[profile]) throw new TuneSetupError(`teacher profile ${profile} does not exist`);
   const backend = tune.backend ?? 'managed-local';
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
-  return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.recipe ? { recipe: tune.recipe } : {}),
+  return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.teachers?.length ? { teachers: tune.teachers } : {}),
+    teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.recipe ? { recipe: tune.recipe } : {}),
     placement: { ...DEFAULT_PLACEMENT, ...tune.placement, costWeights: { ...DEFAULT_PLACEMENT.costWeights, ...tune.placement?.costWeights } } },
     student: { ...student, name } };
 }
