@@ -1,0 +1,592 @@
+[
+  {
+    "id": "074-first-gate-pass",
+    "root": "runCase/interpretMission/audit/qualify.nl",
+    "split_group": "world-074-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+        "candidateIds": [
+          "074-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "074-first-e1",
+            "source": "primary case record VOL-74",
+            "version": "v1",
+            "text": "Primary domain record for case VOL-74 states: caseId=\"VOL-74\"; task=\"Elio assigned meal delivery to 12 addresses on North Route.\"; requiredSkill=\"Current first-aid certificate, valid through 2026-10-01.\"; accessCondition=\"Child-safeguarding clearance not present; mission includes a youth center.\"; completionEvidence=\"Recipient signature or a logged no-answer attempt at every address.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "074-case-record",
+          "caseId": "VOL-74",
+          "sourceRefs": [
+            "074-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MissionRequirement",
+          "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "task": "Elio assigned meal delivery to 12 addresses on North Route.",
+          "requiredSkill": "Current first-aid certificate, valid through 2026-10-01.",
+          "accessCondition": "Child-safeguarding clearance not present; mission includes a youth center.",
+          "completionEvidence": "Recipient signature or a logged no-answer attempt at every address."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "074-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "074-first-gate-fail",
+    "root": "runCase/interpretMission/audit/qualify.nl",
+    "split_group": "world-074-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+        "candidateIds": [
+          "074-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "074-first-e1",
+            "source": "primary case record VOL-74",
+            "version": "v1",
+            "text": "Primary domain record for case VOL-74 states: caseId=\"VOL-74\"; task=\"Elio assigned meal delivery to 12 addresses on North Route.\"; requiredSkill=\"Current first-aid certificate, valid through 2026-10-01.\"; accessCondition=\"Child-safeguarding clearance not present; mission includes a youth center.\"; completionEvidence=\"Recipient signature or a logged no-answer attempt at every address.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "074-case-record",
+          "caseId": "VOL-74",
+          "sourceRefs": [
+            "074-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MissionRequirement",
+          "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "task": "Elio assigned meal delivery to 12 addresses on North Route.",
+          "requiredSkill": "Current first-aid certificate, valid through 2026-10-01.",
+          "accessCondition": "Youth-center access cleared; no safeguarding restriction.",
+          "completionEvidence": "Recipient signature or a logged no-answer attempt at every address."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "074-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "074-first-gate-needs-review",
+    "root": "runCase/interpretMission/audit/qualify.nl",
+    "split_group": "world-074-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+        "candidateIds": [
+          "074-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "074-first-e1",
+            "source": "primary case record VOL-74",
+            "version": "v1",
+            "text": "Primary domain record for case VOL-74 states: caseId=\"VOL-74\"; task=\"Elio assigned meal delivery to 12 addresses on North Route.\"; requiredSkill=\"Current first-aid certificate, valid through 2026-10-01.\"; completionEvidence=\"Recipient signature or a logged no-answer attempt at every address.\". No current value is present for accessCondition.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "accessCondition"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "074-case-record",
+          "sourceRefs": [
+            "074-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MissionRequirement",
+          "subject": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "requiredSkill": "Current first-aid certificate, valid through 2026-10-01.",
+          "completionEvidence": "Recipient signature or a logged no-answer attempt at every address.",
+          "caseId": "VOL-74",
+          "task": "Elio assigned meal delivery to 12 addresses on North Route."
+        },
+        "missingFields": [
+          "accessCondition"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "074-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "074-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-074-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "074-workflow-1-record",
+          "caseId": "074-workflow-1",
+          "sourceRefs": [
+            "074-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "VolunteerMission",
+          "subject": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "074-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "missionId": "MIS-74",
+          "objective": "Deliver 12 meal boxes on North Route before noon.",
+          "volunteerIds": [
+            "ELIO-74",
+            "P12"
+          ],
+          "coordinatorId": "COORD-7",
+          "missionWindow": "2026-04-17 08:00–12:00"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "074-wf-1-source",
+          "source": "primary case artifact 074-E1",
+          "version": "v1",
+          "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "074-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "074-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "074-wf-1-source",
+          "source": "primary case artifact 074-E1",
+          "version": "v1",
+          "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Volunteer Deployment Coordinator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A qualification expires: remove only assignments requiring it and notify the coordinator. Use observation Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file. as the source of truth. The proposal should preserve source-linked record 074-workflow-1-record and make a recipient-facing distinction grounded in 074-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A qualification expires: remove only assignments requiring it and notify the coordinator.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 074-workflow-1-record must accurately preserve observation 074-wf-1-source (v1): Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file. Apply brief requirement A qualification expires: remove only assignments requiring it and notify the coordinator. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed VolunteerMission record 074-workflow-1-record and its source link to 074-wf-1-source version v1, with a disposition matching this observed state: Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file. Carry requirement A qualification expires: remove only assignments requiring it and notify the coordinator. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 074-workflow-1-record based on 074-wf-1-source (v1) and observation Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file. Apply requirement A qualification expires: remove only assignments requiring it and notify the coordinator. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "074-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-074-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "074-workflow-2-record",
+          "caseId": "074-workflow-2",
+          "sourceRefs": [
+            "074-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "VolunteerMission",
+          "subject": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "074-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "missionId": "MIS-74",
+          "objective": "Deliver 12 meal boxes on North Route before noon.",
+          "volunteerIds": [
+            "ELIO-74",
+            "P12"
+          ],
+          "coordinatorId": "COORD-7",
+          "missionWindow": "2026-04-17 08:00–12:00"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "074-wf-2-source",
+          "source": "primary case artifact 074-E2",
+          "version": "v1",
+          "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "074-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "074-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "074-wf-2-source",
+          "source": "primary case artifact 074-E2",
+          "version": "v1",
+          "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Volunteer Deployment Coordinator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A volunteer withdraws at short notice: recompute capability coverage, not merely headcount. Use observation Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only. as the source of truth. The proposal should preserve source-linked record 074-workflow-2-record and make a recipient-facing distinction grounded in 074-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 074-workflow-2-record must accurately preserve observation 074-wf-2-source (v1): Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only. Apply brief requirement A volunteer withdraws at short notice: recompute capability coverage, not merely headcount. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed VolunteerMission record 074-workflow-2-record and its source link to 074-wf-2-source version v1, with a disposition matching this observed state: Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only. Carry requirement A volunteer withdraws at short notice: recompute capability coverage, not merely headcount. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 074-workflow-2-record based on 074-wf-2-source (v1) and observation Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only. Apply requirement A volunteer withdraws at short notice: recompute capability coverage, not merely headcount. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "074-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-074-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "074-workflow-3-record",
+          "caseId": "074-workflow-3",
+          "sourceRefs": [
+            "074-event-3"
+          ],
+          "state": "draft",
+          "kind": "VolunteerMission",
+          "subject": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "074-event-3",
+            "sourceVersion": "v1"
+          },
+          "missionId": "MIS-74",
+          "objective": "Deliver 12 meal boxes on North Route before noon.",
+          "volunteerIds": [
+            "ELIO-74",
+            "P12"
+          ],
+          "coordinatorId": "COORD-7",
+          "missionWindow": "2026-04-17 08:00–12:00"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "074-event-3",
+          "source": "current domain record 074-E3",
+          "version": "v1",
+          "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "074-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "074-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "074-event-3",
+          "source": "current domain record 074-E3",
+          "version": "v1",
+          "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Volunteer Deployment Coordinator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A role changes from remote to on-site: obtain fresh consent and check practical constraints. Use observation Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance. as the source of truth. The proposal should preserve source-linked record 074-workflow-3-record and make a recipient-facing distinction grounded in 074-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A role changes from remote to on-site: obtain fresh consent and check practical constraints.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 074-workflow-3-record must accurately preserve observation 074-event-3 (v1): Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance. Apply brief requirement A role changes from remote to on-site: obtain fresh consent and check practical constraints. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed VolunteerMission record 074-workflow-3-record and its source link to 074-event-3 version v1, with a disposition matching this observed state: Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance. Carry requirement A role changes from remote to on-site: obtain fresh consent and check practical constraints. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 074-workflow-3-record based on 074-event-3 (v1) and observation Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance. Apply requirement A role changes from remote to on-site: obtain fresh consent and check practical constraints. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "074-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-074-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "074-workflow-4-record",
+          "caseId": "074-workflow-4",
+          "sourceRefs": [
+            "074-event-4"
+          ],
+          "state": "draft",
+          "kind": "VolunteerMission",
+          "subject": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "074-event-4",
+            "sourceVersion": "v1"
+          },
+          "missionId": "MIS-74",
+          "objective": "Deliver 12 meal boxes on North Route before noon.",
+          "volunteerIds": [
+            "ELIO-74",
+            "P12"
+          ],
+          "coordinatorId": "COORD-7",
+          "missionWindow": "2026-04-17 08:00–12:00"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "074-event-4",
+          "source": "current domain record 074-E4",
+          "version": "v1",
+          "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "074-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "074-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "074-event-4",
+          "source": "current domain record 074-E4",
+          "version": "v1",
+          "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Volunteer Deployment Coordinator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A team member needs private access information: disclose it only for the accepted assignment window. Use observation Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00. as the source of truth. The proposal should preserve source-linked record 074-workflow-4-record and make a recipient-facing distinction grounded in 074-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A team member needs private access information: disclose it only for the accepted assignment window.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 074-workflow-4-record must accurately preserve observation 074-event-4 (v1): Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00. Apply brief requirement A team member needs private access information: disclose it only for the accepted assignment window. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed VolunteerMission record 074-workflow-4-record and its source link to 074-event-4 version v1, with a disposition matching this observed state: Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00. Carry requirement A team member needs private access information: disclose it only for the accepted assignment window. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 074-workflow-4-record based on 074-event-4 (v1) and observation Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00. Apply requirement A team member needs private access information: disclose it only for the accepted assignment window. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "074-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-074-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "074-workflow-5-record",
+          "caseId": "074-workflow-5",
+          "sourceRefs": [
+            "074-event-5"
+          ],
+          "state": "draft",
+          "kind": "VolunteerMission",
+          "subject": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+          "status": "candidate",
+          "evidenceIds": [
+            "074-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "074-event-5",
+            "sourceVersion": "v1"
+          },
+          "missionId": "MIS-74",
+          "objective": "Deliver 12 meal boxes on North Route before noon.",
+          "volunteerIds": [
+            "ELIO-74",
+            "P12"
+          ],
+          "coordinatorId": "COORD-7",
+          "missionWindow": "2026-04-17 08:00–12:00"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "074-event-5",
+          "source": "current domain record 074-E5",
+          "version": "v1",
+          "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "074-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "074-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "074-event-5",
+          "source": "current domain record 074-E5",
+          "version": "v1",
+          "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Volunteer Deployment Coordinator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A trainee is assigned: preserve the required supervisor relationship. Use observation Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded. as the source of truth. The proposal should preserve source-linked record 074-workflow-5-record and make a recipient-facing distinction grounded in 074-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A trainee is assigned: preserve the required supervisor relationship.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 074-workflow-5-record must accurately preserve observation 074-event-5 (v1): Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded. Apply brief requirement A trainee is assigned: preserve the required supervisor relationship. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed VolunteerMission record 074-workflow-5-record and its source link to 074-event-5 version v1, with a disposition matching this observed state: Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded. Carry requirement A trainee is assigned: preserve the required supervisor relationship. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 074-workflow-5-record based on 074-event-5 (v1) and observation Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded. Apply requirement A trainee is assigned: preserve the required supervisor relationship. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "application_id": "097",
+  "title": "Live Event Disruption Director",
+  "source_relative_path": "applications/20-games-live-events-and-interactive-experiences/097-live-event-disruption-director.md",
+  "source_sha256": "ced01667f62e29611dde958bd0458105af100eba13e429be99fc4ddc85302db6",
+  "domain_id": "20",
+  "stages": [
+    {
+      "name": "recoverEventPromises",
+      "output_type": "EventCommitment",
+      "algorithm": "Reconcile agendas, contracts, accessibility needs, and participant communications to identify commitments that matter. Distinguish published promises from internal preferences and preserve dependencies such as travel, technical setup, and required access arrangements.",
+      "gate": "Commitment priority follows supplied authority and actual promises."
+    },
+    {
+      "name": "interpretFailure",
+      "output_type": "EventDisruption",
+      "algorithm": "Read staff reports and provider updates to determine what capability is lost and which parts of the program are affected. Separate confirmed facts from estimates and avoid assuming a missing person or resource will return by a convenient time.",
+      "gate": "Disruption scope and uncertainty are explicit."
+    },
+    {
+      "name": "generateFormats",
+      "output_type": "EventRecoveryOption",
+      "algorithm": "Invent alternative formats, sequences, or uses of available resources that preserve essential outcomes. Consider remote participation, moderated alternatives, or resequencing where approved, and disclose changes affecting access, consent, or contractual commitments.",
+      "gate": "Alternatives preserve hard safety and accessibility constraints."
+    },
+    {
+      "name": "rebuildRunOfShow",
+      "output_type": "EventRunPlan",
+      "algorithm": "Use exact scheduling and resource checks to construct a revised run of show with owners, dependencies, and decision deadlines. Reserve resources before announcing changes, preserve crew readiness, and identify points beyond which a contingency is no longer feasible.",
+      "gate": "No double booking, impossible setup sequence, or unsupported timing promise."
+    },
+    {
+      "name": "coordinateLiveChange",
+      "output_type": "EventChange",
+      "algorithm": "Obtain producer approval, issue role-specific updates, and confirm that critical staff received the same revision. Track actual execution and adapt only affected elements as new events arrive, preserving an authoritative current run plan.",
+      "gate": "Safety authority, staff acknowledgment, and public communications align with the current plan."
+    }
+  ],
+  "operational_details": [
+    "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+    "A technical fallback lacks accessibility support: reject it or add an approved equivalent.",
+    "Staff receive conflicting schedule versions: show revision IDs and require acknowledgment.",
+    "A sponsor commitment changes: route commercial approval separately from stage coordination.",
+    "An emergency occurs: suspend generated replanning and defer to the approved emergency command process."
+  ],
+  "scenario": {
+    "representative_episode": "A keynote speaker is delayed and a projector fails; the event must preserve access requirements and a fixed venue closing time.",
+    "independent_truth": "Hidden resource availability, exact agenda dependencies, stakeholder commitments, and simulated staff acknowledgment and execution events."
+  }
+}

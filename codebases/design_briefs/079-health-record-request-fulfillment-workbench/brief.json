@@ -1,0 +1,50 @@
+{
+  "application_id": "079",
+  "title": "Health Record Request Fulfillment Workbench",
+  "source_relative_path": "applications/16-healthcare-administration-and-care-logistics/079-health-record-request-fulfillment-workbench.md",
+  "source_sha256": "deff23886b70ac4000e2161a29b68d8a78e6e6f3471672884c18533523c77bb7",
+  "domain_id": "16",
+  "stages": [
+    {
+      "name": "interpretAuthorization",
+      "output_type": "RecordAuthorization",
+      "algorithm": "Read the request and authorization together to determine recipient, purpose, categories, dates, and any restrictions. Distinguish a requested scope from an authorized scope and route ambiguous authority to the records officer before retrieval.",
+      "gate": "Current authorization covers the exact recipient and proposed disclosure purpose."
+    },
+    {
+      "name": "locateRecords",
+      "output_type": "RecordSelection",
+      "algorithm": "Search authorized inventories using verified patient and episode identifiers, preserving date and category boundaries. Distinguish unavailable records from records outside scope and prevent similar identities or merged historical accounts from contaminating the packet.",
+      "gate": "Correct patient identity and explicit coverage manifest."
+    },
+    {
+      "name": "reviewContent",
+      "output_type": "RecordDisclosureFinding",
+      "algorithm": "Assess responsiveness and identify third-party or otherwise restricted material under supplied disclosure rules. Preserve clinically relevant context where authorized, and route nuanced disclosure judgments to qualified records reviewers rather than making autonomous legal decisions.",
+      "gate": "Every exclusion or redaction has a supplied policy basis and review status."
+    },
+    {
+      "name": "assembleFulfillment",
+      "output_type": "RecordFulfillment",
+      "algorithm": "Build a complete or explicitly partial packet with a manifest and explanation of outstanding items. Apply approved redactions through trusted rendering services, verify extracted content and metadata, and bind approval to exact artifact hashes.",
+      "gate": "No recoverable restricted content, missing unexplained item, or mismatched patient document."
+    },
+    {
+      "name": "verifyDelivery",
+      "output_type": "RecordDelivery",
+      "algorithm": "Recheck authorization immediately before recipient-bound delivery, record actual receipt where available, and track partial fulfillment or corrections. Preserve an audit trail without exposing sensitive record bodies in operational logs or notifications.",
+      "gate": "Correct recipient, current authority, and exact released artifact identity are verified."
+    }
+  ],
+  "operational_details": [
+    "Authorization expires while review is pending: revalidate before delivery.",
+    "A record contains information about another person: route targeted review rather than releasing the whole document automatically.",
+    "A request covers only one episode: prevent unrelated history from entering the packet.",
+    "An export contains hidden metadata: sanitize and verify it after rendering.",
+    "A corrected record arrives after disclosure: create a controlled amendment and notification obligation."
+  ],
+  "scenario": {
+    "representative_episode": "A requester is authorized for one episode, but the archive includes merged documents with third-party information and a later correction.",
+    "independent_truth": "Synthetic patient and episode identities, authorization scopes, responsive spans, restricted content, and exact delivery manifests."
+  }
+}

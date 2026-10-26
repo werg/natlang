@@ -1,0 +1,557 @@
+[
+  {
+    "id": "051-disruption-aware-shipment-replanner-gate-supported",
+    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "carrier C-2 has ambient capacity only"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window",
+          "caseId": "case-51"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "uncertainty",
+            "evidenceIds": [
+              "051-disruption-aware-shipment-replanner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "carrier disruption notice and shipment manifest",
+        "evidence": [
+          {
+            "id": "051-disruption-aware-shipment-replanner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bridge B51 closes for 36 hours; refrigerated medicine due at 16:00 cannot use carrier C2 ambient capacity. Case case-51; current first-stage record values: {\"affectedWindow\": \"bridge closed 36 hours; medicine due 16:00\", \"routeIds\": [\"bridge-B-51\", \"cold-chain-route-C3\"], \"unavailableCapabilities\": [\"carrier C-2 has ambient capacity only\"], \"uncertainty\": \"cold-chain slot with carrier C-3 is later than the delivery window\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Protect temperature and delivery constraints when comparing recovery options."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "uncertainty",
+          "value": "cold-chain slot with carrier C-3 is later than the delivery window",
+          "evidenceIds": [
+            "051-disruption-aware-shipment-replanner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "carrier disruption notice and shipment manifest: Bridge B-51 closes for 36 hours. Shipment S-51 contains refrigerated medicine due by 16:00; substitute carrier C-2 has ambient capacity only, while carrier C-3 has a later cold-chain slot. Apply the first-stage gate to the record and source versions; Protect temperature and delivery constraints when comparing recovery options.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-gate-contradictory",
+    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "routeIds": [
+            "bridge-B-51",
+            "cold-chain-route-C3"
+          ],
+          "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+          "unavailableCapabilities": [
+            "refrigerated carrier C2 is available"
+          ],
+          "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window",
+          "caseId": "case-51"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "uncertainty",
+            "evidenceIds": [
+              "051-disruption-aware-shipment-replanner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "carrier disruption notice and shipment manifest",
+        "evidence": [
+          {
+            "id": "051-disruption-aware-shipment-replanner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bridge B51 closes for 36 hours; refrigerated medicine due at 16:00 cannot use carrier C2 ambient capacity. Case case-51; current first-stage record values: {\"affectedWindow\": \"bridge closed 36 hours; medicine due 16:00\", \"routeIds\": [\"bridge-B-51\", \"cold-chain-route-C3\"], \"unavailableCapabilities\": [\"carrier C-2 has ambient capacity only\"], \"uncertainty\": \"cold-chain slot with carrier C-3 is later than the delivery window\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Protect temperature and delivery constraints when comparing recovery options."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "unavailableCapabilities",
+          "value": "[\"refrigerated carrier C2 is available\"]",
+          "evidenceIds": [
+            "051-disruption-aware-shipment-replanner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "carrier disruption notice and shipment manifest: Bridge B-51 closes for 36 hours. Shipment S-51 contains refrigerated medicine due by 16:00; substitute carrier C-2 has ambient capacity only, while carrier C-3 has a later cold-chain slot. Apply the first-stage gate to the record and source versions; Protect temperature and delivery constraints when comparing recovery options.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-gate-missing",
+    "root": "runCase/interpretDisruption/audit/qualify.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-51"
+        },
+        "missingFields": [
+          "uncertainty"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes uncertainty?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "carrier disruption notice and shipment manifest",
+        "evidence": [],
+        "missing": [
+          "uncertainty"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Protect temperature and delivery constraints when comparing recovery options."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "carrier disruption notice and shipment manifest: Bridge B-51 closes for 36 hours. Shipment S-51 contains refrigerated medicine due by 16:00; substitute carrier C-2 has ambient capacity only, while carrier C-3 has a later cold-chain slot. Apply the first-stage gate to the record and source versions; Protect temperature and delivery constraints when comparing recovery options.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-operational-1",
+    "root": "runCase.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "input": {
+        "caseId": "051-disruption-aware-shipment-replanner-operational-1",
+        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "051-operational-detail-1-source-v2",
+            "source": "Disruption-aware shipment replanner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R051 Disruption-aware steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R051 Disruption-aware steward records: Carrier C2 accepted booking B51-7 for 420 kg of refrigerated medicine at 08:30, then rejected the item class at 09:10 because its trailer is ambient-only. Customer appointment A51-2 was promised for 16:00 based on the first acceptance; the carrier notice remains attached. This current event is source 051-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 051-disruption-aware-shipment-replanner-operational-1. The supplied typed prior 051-prior-disruptionimpact-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Carrier C2 accepted booking B51-7 for 420 kg of refrigerated medicine at 08:30, then rejected the item class at 09:10 because its trailer is ambient-only. Customer appointment A51-2 was promised for 16:00 based on the first acceptance; the carrier notice remains attached."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "051-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "051-prior-disruptionimpact-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "051-disruption-aware-shipment-replanner-operational-1",
+            "routeIds": [
+              "bridge-B-51",
+              "cold-chain-route-C3"
+            ],
+            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+            "unavailableCapabilities": [
+              "carrier C-2 has ambient capacity only"
+            ],
+            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 051-disruption-aware-shipment-replanner-operational-1 against this factual event: Carrier C2 accepted booking B51-7 for 420 kg of refrigerated medicine at 08:30, then rejected the item class at 09:10 because its trailer is ambient-only. Customer appointment A51-2 was promised for 16:00 based on the first acceptance; the carrier notice remains attached. Original §9 detail: A carrier accepts a booking but later rejects the item class: retain a recovery task and retract unsupported promises. Correct handling applies “retain a recovery task and retract unsupported promises.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Carrier C2 accepted booking B51-7 for 420 kg of refrigerated medicine at 08:30, then rejected the item class at 09:10 because its trailer is ambient-only. Customer appointment A51-2 was promised for 16:00 based on the first acceptance; the carrier notice remains attached.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A carrier accepts a booking but later rejects the item class: retain a recovery task and retract unsupported promises.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Carrier C2 accepted booking B51-7 for 420 kg of refrigerated medicine at 08:30, then rejected the item class at 09:10 because its trailer is ambient-only. Customer appointment A51-2 was promised for 16:00 based on the first acceptance; the carrier notice remains attached. It links source 051-operational-detail-1-source-v2 v2 with prior typed DisruptionImpact record 051-prior-disruptionimpact-detail-1-v1 v1 and keeps unresolved scope visible for C2, B51-7, A51-2.",
+      "durable_state": "The proposal retains prior record 051-prior-disruptionimpact-detail-1-v1 v1 and versions only the affected state for C2, B51-7, A51-2 against source 051-operational-detail-1-source-v2 v2; it applies “retain a recovery task and retract unsupported promises.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C2, B51-7, A51-2 and the scope supported by source 051-operational-detail-1-source-v2 v2; it represents “retain a recovery task and retract unsupported promises.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-operational-2",
+    "root": "runCase.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "input": {
+        "caseId": "051-disruption-aware-shipment-replanner-operational-2",
+        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "051-operational-detail-2-source-v2",
+            "source": "Disruption-aware shipment replanner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R051 Disruption-aware steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R051 Disruption-aware steward records: Shipment S51-19 supports a clinic delivery at 16:00 and a second dependent appointment at 18:30 for temperature-controlled installation. The manifest records both appointment IDs and shows a single consolidated delivery window. This current event is source 051-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 051-disruption-aware-shipment-replanner-operational-2. The supplied typed prior 051-prior-disruptionimpact-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Shipment S51-19 supports a clinic delivery at 16:00 and a second dependent appointment at 18:30 for temperature-controlled installation. The manifest records both appointment IDs and shows a single consolidated delivery window."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "051-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "051-prior-disruptionimpact-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "051-disruption-aware-shipment-replanner-operational-2",
+            "routeIds": [
+              "bridge-B-51",
+              "cold-chain-route-C3"
+            ],
+            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+            "unavailableCapabilities": [
+              "carrier C-2 has ambient capacity only"
+            ],
+            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 051-disruption-aware-shipment-replanner-operational-2 against this factual event: Shipment S51-19 supports a clinic delivery at 16:00 and a second dependent appointment at 18:30 for temperature-controlled installation. The manifest records both appointment IDs and shows a single consolidated delivery window. Original §9 detail: A shipment has several delivery deadlines: preserve each dependent appointment. Correct handling applies “preserve each dependent appointment.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Shipment S51-19 supports a clinic delivery at 16:00 and a second dependent appointment at 18:30 for temperature-controlled installation. The manifest records both appointment IDs and shows a single consolidated delivery window.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A shipment has several delivery deadlines: preserve each dependent appointment.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Shipment S51-19 supports a clinic delivery at 16:00 and a second dependent appointment at 18:30 for temperature-controlled installation. The manifest records both appointment IDs and shows a single consolidated delivery window. It links source 051-operational-detail-2-source-v2 v2 with prior typed DisruptionImpact record 051-prior-disruptionimpact-detail-2-v1 v1 and keeps unresolved scope visible for S51-19.",
+      "durable_state": "The proposal retains prior record 051-prior-disruptionimpact-detail-2-v1 v1 and versions only the affected state for S51-19 against source 051-operational-detail-2-source-v2 v2; it applies “preserve each dependent appointment.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to S51-19 and the scope supported by source 051-operational-detail-2-source-v2 v2; it represents “preserve each dependent appointment.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-operational-3",
+    "root": "runCase.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "input": {
+        "caseId": "051-disruption-aware-shipment-replanner-operational-3",
+        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "051-operational-detail-3-source-v2",
+            "source": "Disruption-aware shipment replanner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R051 Disruption-aware steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R051 Disruption-aware steward records: Bridge B51 reopens one lane for vehicles under 3.5 tonnes from 12:00 to 14:00; heavy vehicles and refrigerated trucks remain prohibited. Shipment classes in queue include small parcel, chilled medicine and oversized equipment. This current event is source 051-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 051-disruption-aware-shipment-replanner-operational-3. The supplied typed prior 051-prior-disruptionimpact-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Bridge B51 reopens one lane for vehicles under 3.5 tonnes from 12:00 to 14:00; heavy vehicles and refrigerated trucks remain prohibited. Shipment classes in queue include small parcel, chilled medicine and oversized equipment."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "051-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "051-prior-disruptionimpact-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "051-disruption-aware-shipment-replanner-operational-3",
+            "routeIds": [
+              "bridge-B-51",
+              "cold-chain-route-C3"
+            ],
+            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+            "unavailableCapabilities": [
+              "carrier C-2 has ambient capacity only"
+            ],
+            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 051-disruption-aware-shipment-replanner-operational-3 against this factual event: Bridge B51 reopens one lane for vehicles under 3.5 tonnes from 12:00 to 14:00; heavy vehicles and refrigerated trucks remain prohibited. Shipment classes in queue include small parcel, chilled medicine and oversized equipment. Original §9 detail: A route reopens partially: re-evaluate only eligible shipment classes. Correct handling applies “re-evaluate only eligible shipment classes.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Bridge B51 reopens one lane for vehicles under 3.5 tonnes from 12:00 to 14:00; heavy vehicles and refrigerated trucks remain prohibited. Shipment classes in queue include small parcel, chilled medicine and oversized equipment.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A route reopens partially: re-evaluate only eligible shipment classes.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Bridge B51 reopens one lane for vehicles under 3.5 tonnes from 12:00 to 14:00; heavy vehicles and refrigerated trucks remain prohibited. Shipment classes in queue include small parcel, chilled medicine and oversized equipment. It links source 051-operational-detail-3-source-v2 v2 with prior typed DisruptionImpact record 051-prior-disruptionimpact-detail-3-v1 v1 and keeps unresolved scope visible for B51.",
+      "durable_state": "The proposal retains prior record 051-prior-disruptionimpact-detail-3-v1 v1 and versions only the affected state for B51 against source 051-operational-detail-3-source-v2 v2; it applies “re-evaluate only eligible shipment classes.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to B51 and the scope supported by source 051-operational-detail-3-source-v2 v2; it represents “re-evaluate only eligible shipment classes.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-operational-4",
+    "root": "runCase.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "input": {
+        "caseId": "051-disruption-aware-shipment-replanner-operational-4",
+        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "051-operational-detail-4-source-v2",
+            "source": "Disruption-aware shipment replanner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R051 Disruption-aware steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R051 Disruption-aware steward records: Planners Dana and Eli each hold capacity block CAP51-3 for the same 350 kg refrigerated slot at 15:00. Reservation ledger version 8 shows both holds as active; neither has a fencing token tied to the other. This current event is source 051-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 051-disruption-aware-shipment-replanner-operational-4. The supplied typed prior 051-prior-disruptionimpact-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Planners Dana and Eli each hold capacity block CAP51-3 for the same 350 kg refrigerated slot at 15:00. Reservation ledger version 8 shows both holds as active; neither has a fencing token tied to the other."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "051-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "051-prior-disruptionimpact-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "051-disruption-aware-shipment-replanner-operational-4",
+            "routeIds": [
+              "bridge-B-51",
+              "cold-chain-route-C3"
+            ],
+            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+            "unavailableCapabilities": [
+              "carrier C-2 has ambient capacity only"
+            ],
+            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 051-disruption-aware-shipment-replanner-operational-4 against this factual event: Planners Dana and Eli each hold capacity block CAP51-3 for the same 350 kg refrigerated slot at 15:00. Reservation ledger version 8 shows both holds as active; neither has a fencing token tied to the other. Original §9 detail: Two planners reserve the same capacity: use transactional reservation and fencing. Correct handling applies “use transactional reservation and fencing.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Planners Dana and Eli each hold capacity block CAP51-3 for the same 350 kg refrigerated slot at 15:00. Reservation ledger version 8 shows both holds as active; neither has a fencing token tied to the other.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "Two planners reserve the same capacity: use transactional reservation and fencing.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Planners Dana and Eli each hold capacity block CAP51-3 for the same 350 kg refrigerated slot at 15:00. Reservation ledger version 8 shows both holds as active; neither has a fencing token tied to the other. It links source 051-operational-detail-4-source-v2 v2 with prior typed DisruptionImpact record 051-prior-disruptionimpact-detail-4-v1 v1 and keeps unresolved scope visible for CAP51-3.",
+      "durable_state": "The proposal retains prior record 051-prior-disruptionimpact-detail-4-v1 v1 and versions only the affected state for CAP51-3 against source 051-operational-detail-4-source-v2 v2; it applies “use transactional reservation and fencing.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to CAP51-3 and the scope supported by source 051-operational-detail-4-source-v2 v2; it represents “use transactional reservation and fencing.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "051-disruption-aware-shipment-replanner-operational-5",
+    "root": "runCase.nl",
+    "split_group": "051-disruption-aware-shipment-replanner",
+    "inputs": {
+      "input": {
+        "caseId": "051-disruption-aware-shipment-replanner-operational-5",
+        "goal": "Review the Disruption-aware shipment replanner evidence for case 051-disruption-aware-shipment-replanner-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "051-operational-detail-5-source-v2",
+            "source": "Disruption-aware shipment replanner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R051 Disruption-aware steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R051 Disruption-aware steward records: Customer C51-6 has a confirmed preference “deliver all units together.” Shipment S51-22 contains two pallets with different arrival estimates; the customer acceptance record rejects split delivery. This current event is source 051-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 051-disruption-aware-shipment-replanner-operational-5. The supplied typed prior 051-prior-disruptionimpact-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C51-6 has a confirmed preference “deliver all units together.” Shipment S51-22 contains two pallets with different arrival estimates; the customer acceptance record rejects split delivery."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "051-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "051-prior-disruptionimpact-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "051-disruption-aware-shipment-replanner-operational-5",
+            "routeIds": [
+              "bridge-B-51",
+              "cold-chain-route-C3"
+            ],
+            "affectedWindow": "bridge closed 36 hours; medicine due 16:00",
+            "unavailableCapabilities": [
+              "carrier C-2 has ambient capacity only"
+            ],
+            "uncertainty": "cold-chain slot with carrier C-3 is later than the delivery window"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 051-disruption-aware-shipment-replanner-operational-5 against this factual event: Customer C51-6 has a confirmed preference “deliver all units together.” Shipment S51-22 contains two pallets with different arrival estimates; the customer acceptance record rejects split delivery. Original §9 detail: A customer cannot accept split delivery: keep that preference as a hard constraint once confirmed. Correct handling applies “keep that preference as a hard constraint once confirmed.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Customer C51-6 has a confirmed preference “deliver all units together.” Shipment S51-22 contains two pallets with different arrival estimates; the customer acceptance record rejects split delivery.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A customer cannot accept split delivery: keep that preference as a hard constraint once confirmed.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Customer C51-6 has a confirmed preference “deliver all units together.” Shipment S51-22 contains two pallets with different arrival estimates; the customer acceptance record rejects split delivery. It links source 051-operational-detail-5-source-v2 v2 with prior typed DisruptionImpact record 051-prior-disruptionimpact-detail-5-v1 v1 and keeps unresolved scope visible for C51-6, S51-22.",
+      "durable_state": "The proposal retains prior record 051-prior-disruptionimpact-detail-5-v1 v1 and versions only the affected state for C51-6, S51-22 against source 051-operational-detail-5-source-v2 v2; it applies “keep that preference as a hard constraint once confirmed.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C51-6, S51-22 and the scope supported by source 051-operational-detail-5-source-v2 v2; it represents “keep that preference as a hard constraint once confirmed.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

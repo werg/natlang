@@ -1,0 +1,543 @@
+[
+  {
+    "id": "045-technical-debt-campaign-planner-gate-supported",
+    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ],
+          "caseId": "case-45"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "frequencyBasis",
+            "evidenceIds": [
+              "045-technical-debt-campaign-planner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "engineering friction ledger",
+        "evidence": [
+          {
+            "id": "045-technical-debt-campaign-planner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Retry ledger records 18 manual retries; service A creates duplicate invoices without idempotency, service B deduplicates by operation key. Case case-45; current first-stage record values: {\"affectedWorkflow\": \"invoice retry after timeout\", \"evidenceRefs\": [\"retry-ledger-45\", \"invoice-duplicate-45\"], \"frequencyBasis\": \"18 retries in one week across three teams\", \"observation\": \"unsafe retry duplicates invoices when idempotency is absent\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "frequencyBasis",
+          "value": "18 retries in one week across three teams",
+          "evidenceIds": [
+            "045-technical-debt-campaign-planner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "engineering friction ledger: Teams report 18 manual retries in a week. Service A lacks idempotency and produces duplicate invoices on retry; service B has a transient timeout but a deduplicated operation key. Apply the first-stage gate to the record and source versions; The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-gate-contradictory",
+    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "all retries use an idempotency key and cannot duplicate invoices",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ],
+          "caseId": "case-45"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "frequencyBasis",
+            "evidenceIds": [
+              "045-technical-debt-campaign-planner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "engineering friction ledger",
+        "evidence": [
+          {
+            "id": "045-technical-debt-campaign-planner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Retry ledger records 18 manual retries; service A creates duplicate invoices without idempotency, service B deduplicates by operation key. Case case-45; current first-stage record values: {\"affectedWorkflow\": \"invoice retry after timeout\", \"evidenceRefs\": [\"retry-ledger-45\", \"invoice-duplicate-45\"], \"frequencyBasis\": \"18 retries in one week across three teams\", \"observation\": \"unsafe retry duplicates invoices when idempotency is absent\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observation",
+          "value": "all retries use an idempotency key and cannot duplicate invoices",
+          "evidenceIds": [
+            "045-technical-debt-campaign-planner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "engineering friction ledger: Teams report 18 manual retries in a week. Service A lacks idempotency and produces duplicate invoices on retry; service B has a transient timeout but a deduplicated operation key. Apply the first-stage gate to the record and source versions; The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-gate-missing",
+    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-45"
+        },
+        "missingFields": [
+          "frequencyBasis"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes frequencyBasis?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "engineering friction ledger",
+        "evidence": [],
+        "missing": [
+          "frequencyBasis"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "engineering friction ledger: Teams report 18 manual retries in a week. Service A lacks idempotency and produces duplicate invoices on retry; service B has a transient timeout but a deduplicated operation key. Apply the first-stage gate to the record and source versions; The improvement campaign must distinguish unsafe retries from harmless recovery and define a measurable outcome.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-operational-1",
+    "root": "runCase.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "input": {
+        "caseId": "045-technical-debt-campaign-planner-operational-1",
+        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "045-operational-detail-1-source-v2",
+            "source": "Technical debt campaign planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R045 Technical steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R045 Technical steward records: Cleanup proposal CL45 removes connector `legacy-orders`; repository search finds consumer service `returns-job` calling it, but the integration catalog has no owner or runbook entry. This current event is source 045-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 045-technical-debt-campaign-planner-operational-1. The supplied typed prior 045-prior-debtsymptom-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Cleanup proposal CL45 removes connector `legacy-orders`; repository search finds consumer service `returns-job` calling it, but the integration catalog has no owner or runbook entry."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "045-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "045-prior-debtsymptom-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "045-technical-debt-campaign-planner-operational-1",
+            "affectedWorkflow": "invoice retry after timeout",
+            "observation": "unsafe retry duplicates invoices when idempotency is absent",
+            "frequencyBasis": "18 retries in one week across three teams",
+            "evidenceRefs": [
+              "retry-ledger-45",
+              "invoice-duplicate-45"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 045-technical-debt-campaign-planner-operational-1 against this factual event: Cleanup proposal CL45 removes connector `legacy-orders`; repository search finds consumer service `returns-job` calling it, but the integration catalog has no owner or runbook entry. Original §9 detail: A cleanup removes an undocumented integration: require consumer discovery before deletion. Correct handling applies “require consumer discovery before deletion.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Cleanup proposal CL45 removes connector `legacy-orders`; repository search finds consumer service `returns-job` calling it, but the integration catalog has no owner or runbook entry.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A cleanup removes an undocumented integration: require consumer discovery before deletion.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Cleanup proposal CL45 removes connector `legacy-orders`; repository search finds consumer service `returns-job` calling it, but the integration catalog has no owner or runbook entry. It links source 045-operational-detail-1-source-v2 v2 with prior typed DebtSymptom record 045-prior-debtsymptom-detail-1-v1 v1 and keeps unresolved scope visible for CL45.",
+      "durable_state": "The proposal retains prior record 045-prior-debtsymptom-detail-1-v1 v1 and versions only the affected state for CL45 against source 045-operational-detail-1-source-v2 v2; it applies “require consumer discovery before deletion.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to CL45 and the scope supported by source 045-operational-detail-1-source-v2 v2; it represents “require consumer discovery before deletion.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-operational-2",
+    "root": "runCase.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "input": {
+        "caseId": "045-technical-debt-campaign-planner-operational-2",
+        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "045-operational-detail-2-source-v2",
+            "source": "Technical debt campaign planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R045 Technical steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R045 Technical steward records: Campaign C45 crosses payments and fulfillment teams. Interface I45 has no named owner; acceptance criteria for invoice idempotency are assigned to neither team, while each team lists the other as responsible. This current event is source 045-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 045-technical-debt-campaign-planner-operational-2. The supplied typed prior 045-prior-debtsymptom-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Campaign C45 crosses payments and fulfillment teams. Interface I45 has no named owner; acceptance criteria for invoice idempotency are assigned to neither team, while each team lists the other as responsible."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "045-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "045-prior-debtsymptom-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "045-technical-debt-campaign-planner-operational-2",
+            "affectedWorkflow": "invoice retry after timeout",
+            "observation": "unsafe retry duplicates invoices when idempotency is absent",
+            "frequencyBasis": "18 retries in one week across three teams",
+            "evidenceRefs": [
+              "retry-ledger-45",
+              "invoice-duplicate-45"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 045-technical-debt-campaign-planner-operational-2 against this factual event: Campaign C45 crosses payments and fulfillment teams. Interface I45 has no named owner; acceptance criteria for invoice idempotency are assigned to neither team, while each team lists the other as responsible. Original §9 detail: A campaign spans teams: assign interface ownership and acceptance explicitly. Correct handling applies “assign interface ownership and acceptance explicitly.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Campaign C45 crosses payments and fulfillment teams. Interface I45 has no named owner; acceptance criteria for invoice idempotency are assigned to neither team, while each team lists the other as responsible.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A campaign spans teams: assign interface ownership and acceptance explicitly.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Campaign C45 crosses payments and fulfillment teams. Interface I45 has no named owner; acceptance criteria for invoice idempotency are assigned to neither team, while each team lists the other as responsible. It links source 045-operational-detail-2-source-v2 v2 with prior typed DebtSymptom record 045-prior-debtsymptom-detail-2-v1 v1 and keeps unresolved scope visible for C45, I45.",
+      "durable_state": "The proposal retains prior record 045-prior-debtsymptom-detail-2-v1 v1 and versions only the affected state for C45, I45 against source 045-operational-detail-2-source-v2 v2; it applies “assign interface ownership and acceptance explicitly.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C45, I45 and the scope supported by source 045-operational-detail-2-source-v2 v2; it represents “assign interface ownership and acceptance explicitly.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-operational-3",
+    "root": "runCase.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "input": {
+        "caseId": "045-technical-debt-campaign-planner-operational-3",
+        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "045-operational-detail-3-source-v2",
+            "source": "Technical debt campaign planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R045 Technical steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R045 Technical steward records: Weekly error rate fell from 3.2% to 1.1% while active invoice volume fell from 10,000 to 2,000; the dashboard displays percentages but omits the exposure and workload denominators. This current event is source 045-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 045-technical-debt-campaign-planner-operational-3. The supplied typed prior 045-prior-debtsymptom-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Weekly error rate fell from 3.2% to 1.1% while active invoice volume fell from 10,000 to 2,000; the dashboard displays percentages but omits the exposure and workload denominators."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "045-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "045-prior-debtsymptom-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "045-technical-debt-campaign-planner-operational-3",
+            "affectedWorkflow": "invoice retry after timeout",
+            "observation": "unsafe retry duplicates invoices when idempotency is absent",
+            "frequencyBasis": "18 retries in one week across three teams",
+            "evidenceRefs": [
+              "retry-ledger-45",
+              "invoice-duplicate-45"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 045-technical-debt-campaign-planner-operational-3 against this factual event: Weekly error rate fell from 3.2% to 1.1% while active invoice volume fell from 10,000 to 2,000; the dashboard displays percentages but omits the exposure and workload denominators. Original §9 detail: A metric improves because usage fell: preserve exposure and workload denominators. Correct handling applies “preserve exposure and workload denominators.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Weekly error rate fell from 3.2% to 1.1% while active invoice volume fell from 10,000 to 2,000; the dashboard displays percentages but omits the exposure and workload denominators.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A metric improves because usage fell: preserve exposure and workload denominators.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Weekly error rate fell from 3.2% to 1.1% while active invoice volume fell from 10,000 to 2,000; the dashboard displays percentages but omits the exposure and workload denominators. It links source 045-operational-detail-3-source-v2 v2 with prior typed DebtSymptom record 045-prior-debtsymptom-detail-3-v1 v1 and keeps unresolved scope visible for 045-technical-debt-campaign-planner-operational-3.",
+      "durable_state": "The proposal retains prior record 045-prior-debtsymptom-detail-3-v1 v1 and versions only the affected state for 045-technical-debt-campaign-planner-operational-3 against source 045-operational-detail-3-source-v2 v2; it applies “preserve exposure and workload denominators.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to 045-technical-debt-campaign-planner-operational-3 and the scope supported by source 045-operational-detail-3-source-v2 v2; it represents “preserve exposure and workload denominators.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-operational-4",
+    "root": "runCase.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "input": {
+        "caseId": "045-technical-debt-campaign-planner-operational-4",
+        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "045-operational-detail-4-source-v2",
+            "source": "Technical debt campaign planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R045 Technical steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R045 Technical steward records: Discovery ticket D45 estimates 12 files and 3 services; current inventory shows 31 files and 8 service interfaces. The campaign budget and completion date still use the original scope. This current event is source 045-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 045-technical-debt-campaign-planner-operational-4. The supplied typed prior 045-prior-debtsymptom-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Discovery ticket D45 estimates 12 files and 3 services; current inventory shows 31 files and 8 service interfaces. The campaign budget and completion date still use the original scope."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "045-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "045-prior-debtsymptom-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "045-technical-debt-campaign-planner-operational-4",
+            "affectedWorkflow": "invoice retry after timeout",
+            "observation": "unsafe retry duplicates invoices when idempotency is absent",
+            "frequencyBasis": "18 retries in one week across three teams",
+            "evidenceRefs": [
+              "retry-ledger-45",
+              "invoice-duplicate-45"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 045-technical-debt-campaign-planner-operational-4 against this factual event: Discovery ticket D45 estimates 12 files and 3 services; current inventory shows 31 files and 8 service interfaces. The campaign budget and completion date still use the original scope. Original §9 detail: A package grows during discovery: rebaseline scope rather than hiding an expanding rewrite. Correct handling applies “rebaseline scope rather than hiding an expanding rewrite.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Discovery ticket D45 estimates 12 files and 3 services; current inventory shows 31 files and 8 service interfaces. The campaign budget and completion date still use the original scope.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A package grows during discovery: rebaseline scope rather than hiding an expanding rewrite.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Discovery ticket D45 estimates 12 files and 3 services; current inventory shows 31 files and 8 service interfaces. The campaign budget and completion date still use the original scope. It links source 045-operational-detail-4-source-v2 v2 with prior typed DebtSymptom record 045-prior-debtsymptom-detail-4-v1 v1 and keeps unresolved scope visible for D45.",
+      "durable_state": "The proposal retains prior record 045-prior-debtsymptom-detail-4-v1 v1 and versions only the affected state for D45 against source 045-operational-detail-4-source-v2 v2; it applies “rebaseline scope rather than hiding an expanding rewrite.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D45 and the scope supported by source 045-operational-detail-4-source-v2 v2; it represents “rebaseline scope rather than hiding an expanding rewrite.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "045-technical-debt-campaign-planner-operational-5",
+    "root": "runCase.nl",
+    "split_group": "045-technical-debt-campaign-planner",
+    "inputs": {
+      "input": {
+        "caseId": "045-technical-debt-campaign-planner-operational-5",
+        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "045-operational-detail-5-source-v2",
+            "source": "Technical debt campaign planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R045 Technical steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R045 Technical steward records: Workaround W45 is scheduled for retirement on 2026-11-01. Runbooks RB45-1/RB45-2 and alert A45 still invoke it; the dependency scan has not been signed off. This current event is source 045-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 045-technical-debt-campaign-planner-operational-5. The supplied typed prior 045-prior-debtsymptom-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Workaround W45 is scheduled for retirement on 2026-11-01. Runbooks RB45-1/RB45-2 and alert A45 still invoke it; the dependency scan has not been signed off."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "045-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "045-prior-debtsymptom-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "045-technical-debt-campaign-planner-operational-5",
+            "affectedWorkflow": "invoice retry after timeout",
+            "observation": "unsafe retry duplicates invoices when idempotency is absent",
+            "frequencyBasis": "18 retries in one week across three teams",
+            "evidenceRefs": [
+              "retry-ledger-45",
+              "invoice-duplicate-45"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 045-technical-debt-campaign-planner-operational-5 against this factual event: Workaround W45 is scheduled for retirement on 2026-11-01. Runbooks RB45-1/RB45-2 and alert A45 still invoke it; the dependency scan has not been signed off. Original §9 detail: A workaround is retired: verify all dependent runbooks and alerts are updated. Correct handling applies “verify all dependent runbooks and alerts are updated.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Workaround W45 is scheduled for retirement on 2026-11-01. Runbooks RB45-1/RB45-2 and alert A45 still invoke it; the dependency scan has not been signed off.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A workaround is retired: verify all dependent runbooks and alerts are updated.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Workaround W45 is scheduled for retirement on 2026-11-01. Runbooks RB45-1/RB45-2 and alert A45 still invoke it; the dependency scan has not been signed off. It links source 045-operational-detail-5-source-v2 v2 with prior typed DebtSymptom record 045-prior-debtsymptom-detail-5-v1 v1 and keeps unresolved scope visible for W45, RB45-1, RB45-2, A45.",
+      "durable_state": "The proposal retains prior record 045-prior-debtsymptom-detail-5-v1 v1 and versions only the affected state for W45, RB45-1, RB45-2, A45 against source 045-operational-detail-5-source-v2 v2; it applies “verify all dependent runbooks and alerts are updated.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to W45, RB45-1, RB45-2, A45 and the scope supported by source 045-operational-detail-5-source-v2 v2; it represents “verify all dependent runbooks and alerts are updated.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

@@ -1,0 +1,577 @@
+[
+  {
+    "id": "076-first-gate-pass",
+    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "split_group": "world-076-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+        "candidateIds": [
+          "076-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "076-first-e1",
+            "source": "primary case record REF-76",
+            "version": "v1",
+            "text": "Primary domain record for case REF-76 states: caseId=\"REF-76\"; serviceId=\"CARD-REPLACE\"; requiredDocument=\"Signed identity attestation with patient ID and clinician signature.\"; validityRule=\"Dated within 30 days of referral.\"; acceptingRole=\"Receiving clinic intake coordinator.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "076-case-record",
+          "caseId": "REF-76",
+          "sourceRefs": [
+            "076-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ReferralRequirement",
+          "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+          "evidenceIds": [
+            "076-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "serviceId": "CARD-REPLACE",
+          "requiredDocument": "Signed identity attestation with patient ID and clinician signature.",
+          "validityRule": "Dated within 30 days of referral.",
+          "acceptingRole": "Receiving clinic intake coordinator.",
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "076-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "Two patients share a name: require approved identity evidence before matching documents.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "076-first-gate-fail",
+    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "split_group": "world-076-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+        "candidateIds": [
+          "076-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "076-first-e1",
+            "source": "primary case record REF-76",
+            "version": "v1",
+            "text": "Primary domain record for case REF-76 states: caseId=\"REF-76\"; serviceId=\"CARD-REPLACE\"; requiredDocument=\"Signed identity attestation with patient ID and clinician signature.\"; validityRule=\"Dated within 30 days of referral.\"; acceptingRole=\"Receiving clinic intake coordinator.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "076-case-record",
+          "caseId": "REF-76",
+          "sourceRefs": [
+            "076-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ReferralRequirement",
+          "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+          "evidenceIds": [
+            "076-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "serviceId": "CARD-REPLACE",
+          "requiredDocument": "Unsigned referral note.",
+          "validityRule": "Dated within 30 days of referral.",
+          "acceptingRole": "Receiving clinic intake coordinator.",
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "076-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "Two patients share a name: require approved identity evidence before matching documents.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "076-first-gate-needs-review",
+    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "split_group": "world-076-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+        "candidateIds": [
+          "076-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "076-first-e1",
+            "source": "primary case record REF-76",
+            "version": "v1",
+            "text": "Primary domain record for case REF-76 states: caseId=\"REF-76\"; serviceId=\"CARD-REPLACE\"; validityRule=\"Dated within 30 days of referral.\"; acceptingRole=\"Receiving clinic intake coordinator.\". No current value is present for requiredDocument.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "requiredDocument"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "076-case-record",
+          "sourceRefs": [
+            "076-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ReferralRequirement",
+          "subject": "Two patients share a name: require approved identity evidence before matching documents.",
+          "evidenceIds": [
+            "076-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "validityRule": "Dated within 30 days of referral.",
+          "acceptingRole": "Receiving clinic intake coordinator.",
+          "workflowStatus": "candidate",
+          "caseId": "REF-76",
+          "serviceId": "CARD-REPLACE"
+        },
+        "missingFields": [
+          "requiredDocument"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "076-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "Two patients share a name: require approved identity evidence before matching documents.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "076-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-076-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "076-workflow-1-record",
+          "caseId": "076-workflow-1",
+          "sourceRefs": [
+            "076-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "ReferralCase",
+          "subject": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+          "evidenceIds": [
+            "076-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "076-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "patientId": "P17",
+          "referringOrganizationId": "NORTH-WARD",
+          "receivingServiceId": "CARD-REPLACE",
+          "coordinatorId": "NURSE-4",
+          "clinicianPriorityRef": "PRIORITY-9",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "076-wf-1-source",
+          "source": "primary case artifact 076-E1",
+          "version": "v1",
+          "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "076-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "076-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "076-wf-1-source",
+          "source": "primary case artifact 076-E1",
+          "version": "v1",
+          "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Referral Packet Completeness Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: Two patients share a name: require approved identity evidence before matching documents. Use observation Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart. as the source of truth. The proposal should preserve source-linked record 076-workflow-1-record and make a recipient-facing distinction grounded in 076-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "Two patients share a name: require approved identity evidence before matching documents.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 076-workflow-1-record must accurately preserve observation 076-wf-1-source (v1): Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart. Apply brief requirement Two patients share a name: require approved identity evidence before matching documents. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ReferralCase record 076-workflow-1-record and its source link to 076-wf-1-source version v1, with a disposition matching this observed state: Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart. Carry requirement Two patients share a name: require approved identity evidence before matching documents. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 076-workflow-1-record based on 076-wf-1-source (v1) and observation Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart. Apply requirement Two patients share a name: require approved identity evidence before matching documents. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "076-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-076-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "076-workflow-2-record",
+          "caseId": "076-workflow-2",
+          "sourceRefs": [
+            "076-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "ReferralCase",
+          "subject": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+          "evidenceIds": [
+            "076-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "076-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "patientId": "P17",
+          "referringOrganizationId": "NORTH-WARD",
+          "receivingServiceId": "CARD-REPLACE",
+          "coordinatorId": "NURSE-4",
+          "clinicianPriorityRef": "PRIORITY-9",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "076-wf-2-source",
+          "source": "primary case artifact 076-E2",
+          "version": "v1",
+          "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "076-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "076-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "076-wf-2-source",
+          "source": "primary case artifact 076-E2",
+          "version": "v1",
+          "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Referral Packet Completeness Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A receiving service changes its checklist: revalidate only affected pending packets. Use observation Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list. as the source of truth. The proposal should preserve source-linked record 076-workflow-2-record and make a recipient-facing distinction grounded in 076-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A receiving service changes its checklist: revalidate only affected pending packets.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 076-workflow-2-record must accurately preserve observation 076-wf-2-source (v1): Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list. Apply brief requirement A receiving service changes its checklist: revalidate only affected pending packets. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ReferralCase record 076-workflow-2-record and its source link to 076-wf-2-source version v1, with a disposition matching this observed state: Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list. Carry requirement A receiving service changes its checklist: revalidate only affected pending packets. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 076-workflow-2-record based on 076-wf-2-source (v1) and observation Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list. Apply requirement A receiving service changes its checklist: revalidate only affected pending packets. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "076-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-076-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "076-workflow-3-record",
+          "caseId": "076-workflow-3",
+          "sourceRefs": [
+            "076-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "ReferralCase",
+          "subject": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+          "evidenceIds": [
+            "076-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "076-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "patientId": "P17",
+          "referringOrganizationId": "NORTH-WARD",
+          "receivingServiceId": "CARD-REPLACE",
+          "coordinatorId": "NURSE-4",
+          "clinicianPriorityRef": "PRIORITY-9",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "076-wf-3-source",
+          "source": "primary case artifact 076-E3",
+          "version": "v1",
+          "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "076-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "076-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "076-wf-3-source",
+          "source": "primary case artifact 076-E3",
+          "version": "v1",
+          "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Referral Packet Completeness Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A document is present but unsigned: retain the gap rather than marking complete. Use observation Attestation A-76 is present and signed by the patient, but the clinician signature box is blank. as the source of truth. The proposal should preserve source-linked record 076-workflow-3-record and make a recipient-facing distinction grounded in 076-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A document is present but unsigned: retain the gap rather than marking complete.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 076-workflow-3-record must accurately preserve observation 076-wf-3-source (v1): Attestation A-76 is present and signed by the patient, but the clinician signature box is blank. Apply brief requirement A document is present but unsigned: retain the gap rather than marking complete. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ReferralCase record 076-workflow-3-record and its source link to 076-wf-3-source version v1, with a disposition matching this observed state: Attestation A-76 is present and signed by the patient, but the clinician signature box is blank. Carry requirement A document is present but unsigned: retain the gap rather than marking complete. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 076-workflow-3-record based on 076-wf-3-source (v1) and observation Attestation A-76 is present and signed by the patient, but the clinician signature box is blank. Apply requirement A document is present but unsigned: retain the gap rather than marking complete. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "076-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-076-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "076-workflow-4-record",
+          "caseId": "076-workflow-4",
+          "sourceRefs": [
+            "076-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "ReferralCase",
+          "subject": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+          "evidenceIds": [
+            "076-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "076-wf-4-source",
+            "sourceVersion": "v1"
+          },
+          "patientId": "P17",
+          "referringOrganizationId": "NORTH-WARD",
+          "receivingServiceId": "CARD-REPLACE",
+          "coordinatorId": "NURSE-4",
+          "clinicianPriorityRef": "PRIORITY-9",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "076-wf-4-source",
+          "source": "primary case artifact 076-E4",
+          "version": "v1",
+          "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "076-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "076-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "076-wf-4-source",
+          "source": "primary case artifact 076-E4",
+          "version": "v1",
+          "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Referral Packet Completeness Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A clinician changes priority: preserve the authoritative change without independently re-triaging. Use observation Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14. as the source of truth. The proposal should preserve source-linked record 076-workflow-4-record and make a recipient-facing distinction grounded in 076-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A clinician changes priority: preserve the authoritative change without independently re-triaging.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 076-workflow-4-record must accurately preserve observation 076-wf-4-source (v1): Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14. Apply brief requirement A clinician changes priority: preserve the authoritative change without independently re-triaging. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ReferralCase record 076-workflow-4-record and its source link to 076-wf-4-source version v1, with a disposition matching this observed state: Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14. Carry requirement A clinician changes priority: preserve the authoritative change without independently re-triaging. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 076-workflow-4-record based on 076-wf-4-source (v1) and observation Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14. Apply requirement A clinician changes priority: preserve the authoritative change without independently re-triaging. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "076-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-076-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "076-workflow-5-record",
+          "caseId": "076-workflow-5",
+          "sourceRefs": [
+            "076-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "ReferralCase",
+          "subject": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+          "evidenceIds": [
+            "076-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "076-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "patientId": "P17",
+          "referringOrganizationId": "NORTH-WARD",
+          "receivingServiceId": "CARD-REPLACE",
+          "coordinatorId": "NURSE-4",
+          "clinicianPriorityRef": "PRIORITY-9",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "076-wf-5-source",
+          "source": "primary case artifact 076-E5",
+          "version": "v1",
+          "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "076-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "076-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "076-wf-5-source",
+          "source": "primary case artifact 076-E5",
+          "version": "v1",
+          "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Referral Packet Completeness Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records. Use observation Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown. as the source of truth. The proposal should preserve source-linked record 076-workflow-5-record and make a recipient-facing distinction grounded in 076-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 076-workflow-5-record must accurately preserve observation 076-wf-5-source (v1): Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown. Apply brief requirement A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ReferralCase record 076-workflow-5-record and its source link to 076-wf-5-source version v1, with a disposition matching this observed state: Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown. Carry requirement A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 076-workflow-5-record based on 076-wf-5-source (v1) and observation Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown. Apply requirement A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,522 @@
+[
+  {
+    "id": "063-building-handover-dossier-compiler-gate-supported",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "draft": {
+        "values": {
+          "assetClass": "fire alarm system",
+          "requiredArtifact": "cause-and-effect test certificate",
+          "acceptanceRole": "authorized commissioning reviewer",
+          "completionCondition": "test complete and signed training acknowledgments received",
+          "caseId": "case-63"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "completionCondition",
+            "evidenceIds": [
+              "063-building-handover-dossier-compiler-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "building asset register and handover certificates",
+        "evidence": [
+          {
+            "id": "063-building-handover-dossier-compiler-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "A63 commissioning certificate is signed; alarm cause-and-effect test and two operator training acknowledgments remain outstanding. Case case-63; current first-stage record values: {\"acceptanceRole\": \"authorized commissioning reviewer\", \"assetClass\": \"fire alarm system\", \"completionCondition\": \"test complete and signed training acknowledgments received\", \"requiredArtifact\": \"cause-and-effect test certificate\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep readiness conditional even though the asset record is otherwise complete."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "completionCondition",
+          "value": "test complete and signed training acknowledgments received",
+          "evidenceIds": [
+            "063-building-handover-dossier-compiler-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "building asset register and handover certificates: Asset A-63 has a signed commissioning certificate. The fire alarm cause-and-effect test and two operator training acknowledgments remain outstanding in the turnover log. Apply the first-stage gate to the record and source versions; Keep readiness conditional even though the asset record is otherwise complete.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-gate-contradictory",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "draft": {
+        "values": {
+          "assetClass": "fire alarm system",
+          "requiredArtifact": "cause-and-effect test certificate",
+          "acceptanceRole": "authorized commissioning reviewer",
+          "completionCondition": "commissioned and ready; alarm test is not required",
+          "caseId": "case-63"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "completionCondition",
+            "evidenceIds": [
+              "063-building-handover-dossier-compiler-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "building asset register and handover certificates",
+        "evidence": [
+          {
+            "id": "063-building-handover-dossier-compiler-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "A63 commissioning certificate is signed; alarm cause-and-effect test and two operator training acknowledgments remain outstanding. Case case-63; current first-stage record values: {\"acceptanceRole\": \"authorized commissioning reviewer\", \"assetClass\": \"fire alarm system\", \"completionCondition\": \"test complete and signed training acknowledgments received\", \"requiredArtifact\": \"cause-and-effect test certificate\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep readiness conditional even though the asset record is otherwise complete."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "completionCondition",
+          "value": "commissioned and ready; alarm test is not required",
+          "evidenceIds": [
+            "063-building-handover-dossier-compiler-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "building asset register and handover certificates: Asset A-63 has a signed commissioning certificate. The fire alarm cause-and-effect test and two operator training acknowledgments remain outstanding in the turnover log. Apply the first-stage gate to the record and source versions; Keep readiness conditional even though the asset record is otherwise complete.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-gate-missing",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-63"
+        },
+        "missingFields": [
+          "completionCondition"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes completionCondition?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "building asset register and handover certificates",
+        "evidence": [],
+        "missing": [
+          "completionCondition"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Keep readiness conditional even though the asset record is otherwise complete."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "building asset register and handover certificates: Asset A-63 has a signed commissioning certificate. The fire alarm cause-and-effect test and two operator training acknowledgments remain outstanding in the turnover log. Apply the first-stage gate to the record and source versions; Keep readiness conditional even though the asset record is otherwise complete.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-operational-1",
+    "root": "runCase.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "input": {
+        "caseId": "063-building-handover-dossier-compiler-operational-1",
+        "goal": "Review the Building handover dossier compiler evidence for case 063-building-handover-dossier-compiler-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "063-operational-detail-1-source-v2",
+            "source": "Building handover dossier compiler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R063 Building steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R063 Building steward records: Manual M63 covers equipment variants V1, V2 and V3. Installed asset A63 is variant V2 per nameplate photo; handover index has no variant or applicable-section marker. This current event is source 063-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 063-building-handover-dossier-compiler-operational-1. The supplied typed prior 063-prior-handoverrequirement-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Manual M63 covers equipment variants V1, V2 and V3. Installed asset A63 is variant V2 per nameplate photo; handover index has no variant or applicable-section marker."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "063-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "063-prior-handoverrequirement-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "063-building-handover-dossier-compiler-operational-1",
+            "assetClass": "fire alarm system",
+            "requiredArtifact": "cause-and-effect test certificate",
+            "acceptanceRole": "authorized commissioning reviewer",
+            "completionCondition": "test complete and signed training acknowledgments received"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 063-building-handover-dossier-compiler-operational-1 against this factual event: Manual M63 covers equipment variants V1, V2 and V3. Installed asset A63 is variant V2 per nameplate photo; handover index has no variant or applicable-section marker. Original §9 detail: A manual covers several variants: mark the installed variant and relevant sections. Correct handling applies “mark the installed variant and relevant sections.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Manual M63 covers equipment variants V1, V2 and V3. Installed asset A63 is variant V2 per nameplate photo; handover index has no variant or applicable-section marker.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A manual covers several variants: mark the installed variant and relevant sections.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Manual M63 covers equipment variants V1, V2 and V3. Installed asset A63 is variant V2 per nameplate photo; handover index has no variant or applicable-section marker. It links source 063-operational-detail-1-source-v2 v2 with prior typed HandoverRequirement record 063-prior-handoverrequirement-detail-1-v1 v1 and keeps unresolved scope visible for M63, V1, V2, V3, A63.",
+      "durable_state": "The proposal retains prior record 063-prior-handoverrequirement-detail-1-v1 v1 and versions only the affected state for M63, V1, V2, V3, A63 against source 063-operational-detail-1-source-v2 v2; it applies “mark the installed variant and relevant sections.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M63, V1, V2, V3, A63 and the scope supported by source 063-operational-detail-1-source-v2 v2; it represents “mark the installed variant and relevant sections.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-operational-2",
+    "root": "runCase.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "input": {
+        "caseId": "063-building-handover-dossier-compiler-operational-2",
+        "goal": "Review the Building handover dossier compiler evidence for case 063-building-handover-dossier-compiler-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "063-operational-detail-2-source-v2",
+            "source": "Building handover dossier compiler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R063 Building steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R063 Building steward records: Commissioning certificate C63 lists asset A63-18, while handover register requires A63-81. Both units share model M63 and are in the same plant; certificate serial does not match the installed nameplate. This current event is source 063-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 063-building-handover-dossier-compiler-operational-2. The supplied typed prior 063-prior-handoverrequirement-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Commissioning certificate C63 lists asset A63-18, while handover register requires A63-81. Both units share model M63 and are in the same plant; certificate serial does not match the installed nameplate."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "063-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "063-prior-handoverrequirement-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "063-building-handover-dossier-compiler-operational-2",
+            "assetClass": "fire alarm system",
+            "requiredArtifact": "cause-and-effect test certificate",
+            "acceptanceRole": "authorized commissioning reviewer",
+            "completionCondition": "test complete and signed training acknowledgments received"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 063-building-handover-dossier-compiler-operational-2 against this factual event: Commissioning certificate C63 lists asset A63-18, while handover register requires A63-81. Both units share model M63 and are in the same plant; certificate serial does not match the installed nameplate. Original §9 detail: A certificate names the wrong asset: block matching despite a familiar model number. Correct handling applies “block matching despite a familiar model number.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Commissioning certificate C63 lists asset A63-18, while handover register requires A63-81. Both units share model M63 and are in the same plant; certificate serial does not match the installed nameplate.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A certificate names the wrong asset: block matching despite a familiar model number.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Commissioning certificate C63 lists asset A63-18, while handover register requires A63-81. Both units share model M63 and are in the same plant; certificate serial does not match the installed nameplate. It links source 063-operational-detail-2-source-v2 v2 with prior typed HandoverRequirement record 063-prior-handoverrequirement-detail-2-v1 v1 and keeps unresolved scope visible for C63, A63-18, A63-81, M63.",
+      "durable_state": "The proposal retains prior record 063-prior-handoverrequirement-detail-2-v1 v1 and versions only the affected state for C63, A63-18, A63-81, M63 against source 063-operational-detail-2-source-v2 v2; it applies “block matching despite a familiar model number.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C63, A63-18, A63-81, M63 and the scope supported by source 063-operational-detail-2-source-v2 v2; it represents “block matching despite a familiar model number.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-operational-3",
+    "root": "runCase.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "input": {
+        "caseId": "063-building-handover-dossier-compiler-operational-3",
+        "goal": "Review the Building handover dossier compiler evidence for case 063-building-handover-dossier-compiler-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "063-operational-detail-3-source-v2",
+            "source": "Building handover dossier compiler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R063 Building steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R063 Building steward records: Contractor portal link L63 expires in 48 hours. Deliverable file D63 is approved for retention and has SHA-256 recorded; handover archive has not copied the file or verified a durable receipt. This current event is source 063-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 063-building-handover-dossier-compiler-operational-3. The supplied typed prior 063-prior-handoverrequirement-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Contractor portal link L63 expires in 48 hours. Deliverable file D63 is approved for retention and has SHA-256 recorded; handover archive has not copied the file or verified a durable receipt."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "063-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "063-prior-handoverrequirement-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "063-building-handover-dossier-compiler-operational-3",
+            "assetClass": "fire alarm system",
+            "requiredArtifact": "cause-and-effect test certificate",
+            "acceptanceRole": "authorized commissioning reviewer",
+            "completionCondition": "test complete and signed training acknowledgments received"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 063-building-handover-dossier-compiler-operational-3 against this factual event: Contractor portal link L63 expires in 48 hours. Deliverable file D63 is approved for retention and has SHA-256 recorded; handover archive has not copied the file or verified a durable receipt. Original §9 detail: A contractor portal link will expire: archive permitted deliverables with durable hashes. Correct handling applies “archive permitted deliverables with durable hashes.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Contractor portal link L63 expires in 48 hours. Deliverable file D63 is approved for retention and has SHA-256 recorded; handover archive has not copied the file or verified a durable receipt.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A contractor portal link will expire: archive permitted deliverables with durable hashes.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Contractor portal link L63 expires in 48 hours. Deliverable file D63 is approved for retention and has SHA-256 recorded; handover archive has not copied the file or verified a durable receipt. It links source 063-operational-detail-3-source-v2 v2 with prior typed HandoverRequirement record 063-prior-handoverrequirement-detail-3-v1 v1 and keeps unresolved scope visible for L63, D63, SHA-256.",
+      "durable_state": "The proposal retains prior record 063-prior-handoverrequirement-detail-3-v1 v1 and versions only the affected state for L63, D63, SHA-256 against source 063-operational-detail-3-source-v2 v2; it applies “archive permitted deliverables with durable hashes.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L63, D63, SHA-256 and the scope supported by source 063-operational-detail-3-source-v2 v2; it represents “archive permitted deliverables with durable hashes.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-operational-4",
+    "root": "runCase.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "input": {
+        "caseId": "063-building-handover-dossier-compiler-operational-4",
+        "goal": "Review the Building handover dossier compiler evidence for case 063-building-handover-dossier-compiler-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "063-operational-detail-4-source-v2",
+            "source": "Building handover dossier compiler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R063 Building steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R063 Building steward records: Facilities staff member F63 cannot open proprietary file format X63 on the approved workstation. The document contains accessible PDF source material; no approved export or accessibility check is recorded. This current event is source 063-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 063-building-handover-dossier-compiler-operational-4. The supplied typed prior 063-prior-handoverrequirement-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Facilities staff member F63 cannot open proprietary file format X63 on the approved workstation. The document contains accessible PDF source material; no approved export or accessibility check is recorded."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "063-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "063-prior-handoverrequirement-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "063-building-handover-dossier-compiler-operational-4",
+            "assetClass": "fire alarm system",
+            "requiredArtifact": "cause-and-effect test certificate",
+            "acceptanceRole": "authorized commissioning reviewer",
+            "completionCondition": "test complete and signed training acknowledgments received"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 063-building-handover-dossier-compiler-operational-4 against this factual event: Facilities staff member F63 cannot open proprietary file format X63 on the approved workstation. The document contains accessible PDF source material; no approved export or accessibility check is recorded. Original §9 detail: Facilities staff cannot open a file format: provide an approved accessible export. Correct handling applies “provide an approved accessible export.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Facilities staff member F63 cannot open proprietary file format X63 on the approved workstation. The document contains accessible PDF source material; no approved export or accessibility check is recorded.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "Facilities staff cannot open a file format: provide an approved accessible export.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Facilities staff member F63 cannot open proprietary file format X63 on the approved workstation. The document contains accessible PDF source material; no approved export or accessibility check is recorded. It links source 063-operational-detail-4-source-v2 v2 with prior typed HandoverRequirement record 063-prior-handoverrequirement-detail-4-v1 v1 and keeps unresolved scope visible for F63, X63.",
+      "durable_state": "The proposal retains prior record 063-prior-handoverrequirement-detail-4-v1 v1 and versions only the affected state for F63, X63 against source 063-operational-detail-4-source-v2 v2; it applies “provide an approved accessible export.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to F63, X63 and the scope supported by source 063-operational-detail-4-source-v2 v2; it represents “provide an approved accessible export.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "063-building-handover-dossier-compiler-operational-5",
+    "root": "runCase.nl",
+    "split_group": "063-building-handover-dossier-compiler",
+    "inputs": {
+      "input": {
+        "caseId": "063-building-handover-dossier-compiler-operational-5",
+        "goal": "Review the Building handover dossier compiler evidence for case 063-building-handover-dossier-compiler-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "063-operational-detail-5-source-v2",
+            "source": "Building handover dossier compiler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R063 Building steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R063 Building steward records: Temporary access bridge TB63 expires on 2026-11-02 after handover. Follow-up inspection F63-9 is scheduled for 2026-11-10; the handover responsibility field is blank. This current event is source 063-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 063-building-handover-dossier-compiler-operational-5. The supplied typed prior 063-prior-handoverrequirement-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Temporary access bridge TB63 expires on 2026-11-02 after handover. Follow-up inspection F63-9 is scheduled for 2026-11-10; the handover responsibility field is blank."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "063-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "063-prior-handoverrequirement-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "063-building-handover-dossier-compiler-operational-5",
+            "assetClass": "fire alarm system",
+            "requiredArtifact": "cause-and-effect test certificate",
+            "acceptanceRole": "authorized commissioning reviewer",
+            "completionCondition": "test complete and signed training acknowledgments received"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 063-building-handover-dossier-compiler-operational-5 against this factual event: Temporary access bridge TB63 expires on 2026-11-02 after handover. Follow-up inspection F63-9 is scheduled for 2026-11-10; the handover responsibility field is blank. Original §9 detail: A temporary arrangement expires after handover: transfer the follow-up obligation explicitly. Correct handling applies “transfer the follow-up obligation explicitly.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Temporary access bridge TB63 expires on 2026-11-02 after handover. Follow-up inspection F63-9 is scheduled for 2026-11-10; the handover responsibility field is blank.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A temporary arrangement expires after handover: transfer the follow-up obligation explicitly.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Temporary access bridge TB63 expires on 2026-11-02 after handover. Follow-up inspection F63-9 is scheduled for 2026-11-10; the handover responsibility field is blank. It links source 063-operational-detail-5-source-v2 v2 with prior typed HandoverRequirement record 063-prior-handoverrequirement-detail-5-v1 v1 and keeps unresolved scope visible for TB63, F63-9.",
+      "durable_state": "The proposal retains prior record 063-prior-handoverrequirement-detail-5-v1 v1 and versions only the affected state for TB63, F63-9 against source 063-operational-detail-5-source-v2 v2; it applies “transfer the follow-up obligation explicitly.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to TB63, F63-9 and the scope supported by source 063-operational-detail-5-source-v2 v2; it represents “transfer the follow-up obligation explicitly.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

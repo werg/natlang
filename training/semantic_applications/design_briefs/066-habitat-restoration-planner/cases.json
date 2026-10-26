@@ -1,0 +1,522 @@
+[
+  {
+    "id": "066-habitat-restoration-planner-gate-supported",
+    "root": "runCase/interpretBaseline/audit/qualify.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "restoration-plot-P66",
+          "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+          "surveyMethod": "fixed-plot count after wet season",
+          "seasonalContext": "grazing pressure differs between restoration and control plots",
+          "caseId": "case-66"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "seasonalContext",
+            "evidenceIds": [
+              "066-habitat-restoration-planner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "restoration plots and seasonal monitoring",
+        "evidence": [
+          {
+            "id": "066-habitat-restoration-planner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Plot P66 seedlings rise 12 to 19; control C66 rises 11 to 18 after wet season, with different grazing pressure. Case case-66; current first-stage record values: {\"locationId\": \"restoration-plot-P66\", \"observedFeature\": \"native seedlings 12 to 19; control plot 11 to 18\", \"seasonalContext\": \"grazing pressure differs between restoration and control plots\", \"surveyMethod\": \"fixed-plot count after wet season\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Report observed activity and competing explanations; the count change alone is not causal impact."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "seasonalContext",
+          "value": "grazing pressure differs between restoration and control plots",
+          "evidenceIds": [
+            "066-habitat-restoration-planner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "restoration plots and seasonal monitoring: Native seedlings increased from 12 to 19 in restoration plot P-66; control plot C-66 increased from 11 to 18 after the same wet season. Grazing pressure differs between plots. Apply the first-stage gate to the record and source versions; Report observed activity and competing explanations; the count change alone is not causal impact.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "066-habitat-restoration-planner-gate-contradictory",
+    "root": "runCase/interpretBaseline/audit/qualify.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "restoration-plot-P66",
+          "observedFeature": "restoration plot increase proves the intervention caused the gain",
+          "surveyMethod": "fixed-plot count after wet season",
+          "seasonalContext": "grazing pressure differs between restoration and control plots",
+          "caseId": "case-66"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "seasonalContext",
+            "evidenceIds": [
+              "066-habitat-restoration-planner-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "restoration plots and seasonal monitoring",
+        "evidence": [
+          {
+            "id": "066-habitat-restoration-planner-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Plot P66 seedlings rise 12 to 19; control C66 rises 11 to 18 after wet season, with different grazing pressure. Case case-66; current first-stage record values: {\"locationId\": \"restoration-plot-P66\", \"observedFeature\": \"native seedlings 12 to 19; control plot 11 to 18\", \"seasonalContext\": \"grazing pressure differs between restoration and control plots\", \"surveyMethod\": \"fixed-plot count after wet season\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Report observed activity and competing explanations; the count change alone is not causal impact."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observedFeature",
+          "value": "restoration plot increase proves the intervention caused the gain",
+          "evidenceIds": [
+            "066-habitat-restoration-planner-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "restoration plots and seasonal monitoring: Native seedlings increased from 12 to 19 in restoration plot P-66; control plot C-66 increased from 11 to 18 after the same wet season. Grazing pressure differs between plots. Apply the first-stage gate to the record and source versions; Report observed activity and competing explanations; the count change alone is not causal impact.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "066-habitat-restoration-planner-gate-missing",
+    "root": "runCase/interpretBaseline/audit/qualify.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-66"
+        },
+        "missingFields": [
+          "seasonalContext"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes seasonalContext?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "restoration plots and seasonal monitoring",
+        "evidence": [],
+        "missing": [
+          "seasonalContext"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Report observed activity and competing explanations; the count change alone is not causal impact."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "restoration plots and seasonal monitoring: Native seedlings increased from 12 to 19 in restoration plot P-66; control plot C-66 increased from 11 to 18 after the same wet season. Grazing pressure differs between plots. Apply the first-stage gate to the record and source versions; Report observed activity and competing explanations; the count change alone is not causal impact.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "066-habitat-restoration-planner-operational-1",
+    "root": "runCase.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "input": {
+        "caseId": "066-habitat-restoration-planner-operational-1",
+        "goal": "Review the Habitat restoration planner evidence for case 066-habitat-restoration-planner-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "066-operational-detail-1-source-v2",
+            "source": "Habitat restoration planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R066 Habitat steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R066 Habitat steward records: Survey S66-4 records a sensitive orchid at exact coordinates 41.20483,-72.99127. Volunteer map V66 currently displays the same coordinate to all 28 volunteers; conservation protocol classifies it restricted. This current event is source 066-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 066-habitat-restoration-planner-operational-1. The supplied typed prior 066-prior-habitatobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Survey S66-4 records a sensitive orchid at exact coordinates 41.20483,-72.99127. Volunteer map V66 currently displays the same coordinate to all 28 volunteers; conservation protocol classifies it restricted."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "066-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "066-prior-habitatobservation-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "066-habitat-restoration-planner-operational-1",
+            "locationId": "restoration-plot-P66",
+            "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+            "surveyMethod": "fixed-plot count after wet season",
+            "seasonalContext": "grazing pressure differs between restoration and control plots"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 066-habitat-restoration-planner-operational-1 against this factual event: Survey S66-4 records a sensitive orchid at exact coordinates 41.20483,-72.99127. Volunteer map V66 currently displays the same coordinate to all 28 volunteers; conservation protocol classifies it restricted. Original §9 detail: A sensitive species location is recorded: restrict exact coordinates in public and volunteer views. Correct handling applies “restrict exact coordinates in public and volunteer views.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Survey S66-4 records a sensitive orchid at exact coordinates 41.20483,-72.99127. Volunteer map V66 currently displays the same coordinate to all 28 volunteers; conservation protocol classifies it restricted.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A sensitive species location is recorded: restrict exact coordinates in public and volunteer views.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Survey S66-4 records a sensitive orchid at exact coordinates 41.20483,-72.99127. Volunteer map V66 currently displays the same coordinate to all 28 volunteers; conservation protocol classifies it restricted. It links source 066-operational-detail-1-source-v2 v2 with prior typed HabitatObservation record 066-prior-habitatobservation-detail-1-v1 v1 and keeps unresolved scope visible for S66-4, V66.",
+      "durable_state": "The proposal retains prior record 066-prior-habitatobservation-detail-1-v1 v1 and versions only the affected state for S66-4, V66 against source 066-operational-detail-1-source-v2 v2; it applies “restrict exact coordinates in public and volunteer views.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to S66-4, V66 and the scope supported by source 066-operational-detail-1-source-v2 v2; it represents “restrict exact coordinates in public and volunteer views.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "066-habitat-restoration-planner-operational-2",
+    "root": "runCase.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "input": {
+        "caseId": "066-habitat-restoration-planner-operational-2",
+        "goal": "Review the Habitat restoration planner evidence for case 066-habitat-restoration-planner-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "066-operational-detail-2-source-v2",
+            "source": "Habitat restoration planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R066 Habitat steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R066 Habitat steward records: Plot P66 was surveyed in April; comparison plot C66 was counted in July after a different seasonal flowering window. Both records report 19 plants, but their observation protocols and season fields differ. This current event is source 066-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 066-habitat-restoration-planner-operational-2. The supplied typed prior 066-prior-habitatobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Plot P66 was surveyed in April; comparison plot C66 was counted in July after a different seasonal flowering window. Both records report 19 plants, but their observation protocols and season fields differ."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "066-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "066-prior-habitatobservation-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "066-habitat-restoration-planner-operational-2",
+            "locationId": "restoration-plot-P66",
+            "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+            "surveyMethod": "fixed-plot count after wet season",
+            "seasonalContext": "grazing pressure differs between restoration and control plots"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 066-habitat-restoration-planner-operational-2 against this factual event: Plot P66 was surveyed in April; comparison plot C66 was counted in July after a different seasonal flowering window. Both records report 19 plants, but their observation protocols and season fields differ. Original §9 detail: A survey is conducted in a different season: flag comparability before interpreting change. Correct handling applies “flag comparability before interpreting change.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Plot P66 was surveyed in April; comparison plot C66 was counted in July after a different seasonal flowering window. Both records report 19 plants, but their observation protocols and season fields differ.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A survey is conducted in a different season: flag comparability before interpreting change.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Plot P66 was surveyed in April; comparison plot C66 was counted in July after a different seasonal flowering window. Both records report 19 plants, but their observation protocols and season fields differ. It links source 066-operational-detail-2-source-v2 v2 with prior typed HabitatObservation record 066-prior-habitatobservation-detail-2-v1 v1 and keeps unresolved scope visible for P66, C66.",
+      "durable_state": "The proposal retains prior record 066-prior-habitatobservation-detail-2-v1 v1 and versions only the affected state for P66, C66 against source 066-operational-detail-2-source-v2 v2; it applies “flag comparability before interpreting change.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P66, C66 and the scope supported by source 066-operational-detail-2-source-v2 v2; it represents “flag comparability before interpreting change.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "066-habitat-restoration-planner-operational-3",
+    "root": "runCase.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "input": {
+        "caseId": "066-habitat-restoration-planner-operational-3",
+        "goal": "Review the Habitat restoration planner evidence for case 066-habitat-restoration-planner-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "066-operational-detail-3-source-v2",
+            "source": "Habitat restoration planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R066 Habitat steward; event version verified for this case",
+            "observedAt": "2026-10-10T10:15:00Z",
+            "text": "R066 Habitat steward records: Land access permission PA66 for plot P66 expired on 2026-10-10. Two field tasks remain scheduled for Oct 12; landowner has not renewed access and no entry receipt exists. This current event is source 066-operational-detail-3-source-v2 v2, observed 2026-10-10T10:15:00Z, for case 066-habitat-restoration-planner-operational-3. The supplied typed prior 066-prior-habitatobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Land access permission PA66 for plot P66 expired on 2026-10-10. Two field tasks remain scheduled for Oct 12; landowner has not renewed access and no entry receipt exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "066-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "066-prior-habitatobservation-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "066-habitat-restoration-planner-operational-3",
+            "locationId": "restoration-plot-P66",
+            "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+            "surveyMethod": "fixed-plot count after wet season",
+            "seasonalContext": "grazing pressure differs between restoration and control plots"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 066-habitat-restoration-planner-operational-3 against this factual event: Land access permission PA66 for plot P66 expired on 2026-10-10. Two field tasks remain scheduled for Oct 12; landowner has not renewed access and no entry receipt exists. Original §9 detail: Land access permission expires: stop affected field tasks immediately. Correct handling applies “stop affected field tasks immediately.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Land access permission PA66 for plot P66 expired on 2026-10-10. Two field tasks remain scheduled for Oct 12; landowner has not renewed access and no entry receipt exists.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Land access permission expires: stop affected field tasks immediately.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Land access permission PA66 for plot P66 expired on 2026-10-10. Two field tasks remain scheduled for Oct 12; landowner has not renewed access and no entry receipt exists. It links source 066-operational-detail-3-source-v2 v2 with prior typed HabitatObservation record 066-prior-habitatobservation-detail-3-v1 v1 and keeps unresolved scope visible for PA66, P66.",
+      "durable_state": "The proposal retains prior record 066-prior-habitatobservation-detail-3-v1 v1 and versions only the affected state for PA66, P66 against source 066-operational-detail-3-source-v2 v2; it applies “stop affected field tasks immediately.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to PA66, P66 and the scope supported by source 066-operational-detail-3-source-v2 v2; it represents “stop affected field tasks immediately.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "066-habitat-restoration-planner-operational-4",
+    "root": "runCase.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "input": {
+        "caseId": "066-habitat-restoration-planner-operational-4",
+        "goal": "Review the Habitat restoration planner evidence for case 066-habitat-restoration-planner-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "066-operational-detail-4-source-v2",
+            "source": "Habitat restoration planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R066 Habitat steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R066 Habitat steward records: Restoration treatment T66 was applied to plot P66 on Oct 1; observation O66 records unexpected decline in the adjacent control buffer on Oct 4. The cause and treatment attribution are unknown; expert ecologist review is unassigned. This current event is source 066-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 066-habitat-restoration-planner-operational-4. The supplied typed prior 066-prior-habitatobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Restoration treatment T66 was applied to plot P66 on Oct 1; observation O66 records unexpected decline in the adjacent control buffer on Oct 4. The cause and treatment attribution are unknown; expert ecologist review is unassigned."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "066-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "066-prior-habitatobservation-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "066-habitat-restoration-planner-operational-4",
+            "locationId": "restoration-plot-P66",
+            "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+            "surveyMethod": "fixed-plot count after wet season",
+            "seasonalContext": "grazing pressure differs between restoration and control plots"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 066-habitat-restoration-planner-operational-4 against this factual event: Restoration treatment T66 was applied to plot P66 on Oct 1; observation O66 records unexpected decline in the adjacent control buffer on Oct 4. The cause and treatment attribution are unknown; expert ecologist review is unassigned. Original §9 detail: An intervention has an unexpected effect: preserve the observation and trigger expert review. Correct handling applies “preserve the observation and trigger expert review.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Restoration treatment T66 was applied to plot P66 on Oct 1; observation O66 records unexpected decline in the adjacent control buffer on Oct 4. The cause and treatment attribution are unknown; expert ecologist review is unassigned.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "An intervention has an unexpected effect: preserve the observation and trigger expert review.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Restoration treatment T66 was applied to plot P66 on Oct 1; observation O66 records unexpected decline in the adjacent control buffer on Oct 4. The cause and treatment attribution are unknown; expert ecologist review is unassigned. It links source 066-operational-detail-4-source-v2 v2 with prior typed HabitatObservation record 066-prior-habitatobservation-detail-4-v1 v1 and keeps unresolved scope visible for T66, P66, O66.",
+      "durable_state": "The proposal retains prior record 066-prior-habitatobservation-detail-4-v1 v1 and versions only the affected state for T66, P66, O66 against source 066-operational-detail-4-source-v2 v2; it applies “preserve the observation and trigger expert review.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T66, P66, O66 and the scope supported by source 066-operational-detail-4-source-v2 v2; it represents “preserve the observation and trigger expert review.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "066-habitat-restoration-planner-operational-5",
+    "root": "runCase.nl",
+    "split_group": "066-habitat-restoration-planner",
+    "inputs": {
+      "input": {
+        "caseId": "066-habitat-restoration-planner-operational-5",
+        "goal": "Review the Habitat restoration planner evidence for case 066-habitat-restoration-planner-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "066-operational-detail-5-source-v2",
+            "source": "Habitat restoration planner operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R066 Habitat steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R066 Habitat steward records: Volunteer team V66 sampled 18 quadrats in the treatment plot and 6 in control C66. The dashboard compares plant counts without effort-adjusted sampling denominators; volunteer hours are recorded separately. This current event is source 066-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 066-habitat-restoration-planner-operational-5. The supplied typed prior 066-prior-habitatobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Volunteer team V66 sampled 18 quadrats in the treatment plot and 6 in control C66. The dashboard compares plant counts without effort-adjusted sampling denominators; volunteer hours are recorded separately."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "066-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "066-prior-habitatobservation-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "066-habitat-restoration-planner-operational-5",
+            "locationId": "restoration-plot-P66",
+            "observedFeature": "native seedlings 12 to 19; control plot 11 to 18",
+            "surveyMethod": "fixed-plot count after wet season",
+            "seasonalContext": "grazing pressure differs between restoration and control plots"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 066-habitat-restoration-planner-operational-5 against this factual event: Volunteer team V66 sampled 18 quadrats in the treatment plot and 6 in control C66. The dashboard compares plant counts without effort-adjusted sampling denominators; volunteer hours are recorded separately. Original §9 detail: Volunteer effort varies: record sampling effort alongside observations. Correct handling applies “record sampling effort alongside observations.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Volunteer team V66 sampled 18 quadrats in the treatment plot and 6 in control C66. The dashboard compares plant counts without effort-adjusted sampling denominators; volunteer hours are recorded separately.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Volunteer effort varies: record sampling effort alongside observations.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Volunteer team V66 sampled 18 quadrats in the treatment plot and 6 in control C66. The dashboard compares plant counts without effort-adjusted sampling denominators; volunteer hours are recorded separately. It links source 066-operational-detail-5-source-v2 v2 with prior typed HabitatObservation record 066-prior-habitatobservation-detail-5-v1 v1 and keeps unresolved scope visible for V66, C66.",
+      "durable_state": "The proposal retains prior record 066-prior-habitatobservation-detail-5-v1 v1 and versions only the affected state for V66, C66 against source 066-operational-detail-5-source-v2 v2; it applies “record sampling effort alongside observations.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to V66, C66 and the scope supported by source 066-operational-detail-5-source-v2 v2; it represents “record sampling effort alongside observations.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

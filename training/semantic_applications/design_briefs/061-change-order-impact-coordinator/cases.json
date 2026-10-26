@@ -1,0 +1,522 @@
+[
+  {
+    "id": "061-change-order-impact-coordinator-gate-supported",
+    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority",
+          "caseId": "case-61"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "authorityScope",
+            "evidenceIds": [
+              "061-change-order-impact-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "site instruction SI-61 and approved drawing set",
+        "evidence": [
+          {
+            "id": "061-change-order-impact-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SI61 moves an opening in a fire-rated partition; signed by field supervisor but approved drawing and commercial authority are unchanged. Case case-61; current first-stage record values: {\"authorityScope\": \"site coordination only; no commercial change authority\", \"issuedAt\": \"2026-10-01T10:00:00Z\", \"issuerId\": \"field-supervisor-SI61\", \"requestedChange\": \"move opening in fire-rated partition\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Separate a technical proposal from an authorized commercial change."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "authorityScope",
+          "value": "site coordination only; no commercial change authority",
+          "evidenceIds": [
+            "061-change-order-impact-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "site instruction SI-61 and approved drawing set: SI-61 moves an opening in a fire-rated partition. The approved drawing is unchanged and the site note is signed by a field supervisor without commercial change authority. Apply the first-stage gate to the record and source versions; Separate a technical proposal from an authorized commercial change.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "061-change-order-impact-coordinator-gate-contradictory",
+    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "commercial change authorization is included",
+          "caseId": "case-61"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "authorityScope",
+            "evidenceIds": [
+              "061-change-order-impact-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "site instruction SI-61 and approved drawing set",
+        "evidence": [
+          {
+            "id": "061-change-order-impact-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SI61 moves an opening in a fire-rated partition; signed by field supervisor but approved drawing and commercial authority are unchanged. Case case-61; current first-stage record values: {\"authorityScope\": \"site coordination only; no commercial change authority\", \"issuedAt\": \"2026-10-01T10:00:00Z\", \"issuerId\": \"field-supervisor-SI61\", \"requestedChange\": \"move opening in fire-rated partition\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Separate a technical proposal from an authorized commercial change."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "authorityScope",
+          "value": "commercial change authorization is included",
+          "evidenceIds": [
+            "061-change-order-impact-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "site instruction SI-61 and approved drawing set: SI-61 moves an opening in a fire-rated partition. The approved drawing is unchanged and the site note is signed by a field supervisor without commercial change authority. Apply the first-stage gate to the record and source versions; Separate a technical proposal from an authorized commercial change.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "061-change-order-impact-coordinator-gate-missing",
+    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-61"
+        },
+        "missingFields": [
+          "authorityScope"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes authorityScope?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "site instruction SI-61 and approved drawing set",
+        "evidence": [],
+        "missing": [
+          "authorityScope"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Separate a technical proposal from an authorized commercial change."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "site instruction SI-61 and approved drawing set: SI-61 moves an opening in a fire-rated partition. The approved drawing is unchanged and the site note is signed by a field supervisor without commercial change authority. Apply the first-stage gate to the record and source versions; Separate a technical proposal from an authorized commercial change.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "061-change-order-impact-coordinator-operational-1",
+    "root": "runCase.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "input": {
+        "caseId": "061-change-order-impact-coordinator-operational-1",
+        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "061-operational-detail-1-source-v2",
+            "source": "Change-order impact coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R061 Change-order steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R061 Change-order steward records: Site foreman N61 gave a verbal instruction at 08:40 on 2026-10-01 to move opening O61. Site diary records two witnesses; meeting minutes later state that the scope of the instruction is disputed and no signed confirmation exists. This current event is source 061-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 061-change-order-impact-coordinator-operational-1. The supplied typed prior 061-prior-siteinstruction-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Site foreman N61 gave a verbal instruction at 08:40 on 2026-10-01 to move opening O61. Site diary records two witnesses; meeting minutes later state that the scope of the instruction is disputed and no signed confirmation exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "061-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "061-prior-siteinstruction-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "061-change-order-impact-coordinator-operational-1",
+            "issuerId": "field-supervisor-SI61",
+            "requestedChange": "move opening in fire-rated partition",
+            "issuedAt": "2026-10-01T10:00:00Z",
+            "authorityScope": "site coordination only; no commercial change authority"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 061-change-order-impact-coordinator-operational-1 against this factual event: Site foreman N61 gave a verbal instruction at 08:40 on 2026-10-01 to move opening O61. Site diary records two witnesses; meeting minutes later state that the scope of the instruction is disputed and no signed confirmation exists. Original §9 detail: A verbal instruction is later disputed: preserve contemporaneous evidence and request formal confirmation. Correct handling applies “preserve contemporaneous evidence and request formal confirmation.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Site foreman N61 gave a verbal instruction at 08:40 on 2026-10-01 to move opening O61. Site diary records two witnesses; meeting minutes later state that the scope of the instruction is disputed and no signed confirmation exists.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A verbal instruction is later disputed: preserve contemporaneous evidence and request formal confirmation.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Site foreman N61 gave a verbal instruction at 08:40 on 2026-10-01 to move opening O61. Site diary records two witnesses; meeting minutes later state that the scope of the instruction is disputed and no signed confirmation exists. It links source 061-operational-detail-1-source-v2 v2 with prior typed SiteInstruction record 061-prior-siteinstruction-detail-1-v1 v1 and keeps unresolved scope visible for N61, O61.",
+      "durable_state": "The proposal retains prior record 061-prior-siteinstruction-detail-1-v1 v1 and versions only the affected state for N61, O61 against source 061-operational-detail-1-source-v2 v2; it applies “preserve contemporaneous evidence and request formal confirmation.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to N61, O61 and the scope supported by source 061-operational-detail-1-source-v2 v2; it represents “preserve contemporaneous evidence and request formal confirmation.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "061-change-order-impact-coordinator-operational-2",
+    "root": "runCase.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "input": {
+        "caseId": "061-change-order-impact-coordinator-operational-2",
+        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "061-operational-detail-2-source-v2",
+            "source": "Change-order impact coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R061 Change-order steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R061 Change-order steward records: Drawing revision D61-7 changes opening O61 on sheet A-17 only. The bulk drawing issue package also contains unchanged sheets A-18 to A-24; project request currently binds all seven sheets as revised. This current event is source 061-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 061-change-order-impact-coordinator-operational-2. The supplied typed prior 061-prior-siteinstruction-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Drawing revision D61-7 changes opening O61 on sheet A-17 only. The bulk drawing issue package also contains unchanged sheets A-18 to A-24; project request currently binds all seven sheets as revised."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "061-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "061-prior-siteinstruction-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "061-change-order-impact-coordinator-operational-2",
+            "issuerId": "field-supervisor-SI61",
+            "requestedChange": "move opening in fire-rated partition",
+            "issuedAt": "2026-10-01T10:00:00Z",
+            "authorityScope": "site coordination only; no commercial change authority"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 061-change-order-impact-coordinator-operational-2 against this factual event: Drawing revision D61-7 changes opening O61 on sheet A-17 only. The bulk drawing issue package also contains unchanged sheets A-18 to A-24; project request currently binds all seven sheets as revised. Original §9 detail: A drawing revision changes only one area: avoid applying it to the whole project. Correct handling applies “avoid applying it to the whole project.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Drawing revision D61-7 changes opening O61 on sheet A-17 only. The bulk drawing issue package also contains unchanged sheets A-18 to A-24; project request currently binds all seven sheets as revised.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A drawing revision changes only one area: avoid applying it to the whole project.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Drawing revision D61-7 changes opening O61 on sheet A-17 only. The bulk drawing issue package also contains unchanged sheets A-18 to A-24; project request currently binds all seven sheets as revised. It links source 061-operational-detail-2-source-v2 v2 with prior typed SiteInstruction record 061-prior-siteinstruction-detail-2-v1 v1 and keeps unresolved scope visible for D61-7, O61, A-17, A-18, A-24.",
+      "durable_state": "The proposal retains prior record 061-prior-siteinstruction-detail-2-v1 v1 and versions only the affected state for D61-7, O61, A-17, A-18, A-24 against source 061-operational-detail-2-source-v2 v2; it applies “avoid applying it to the whole project.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D61-7, O61, A-17, A-18, A-24 and the scope supported by source 061-operational-detail-2-source-v2 v2; it represents “avoid applying it to the whole project.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "061-change-order-impact-coordinator-operational-3",
+    "root": "runCase.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "input": {
+        "caseId": "061-change-order-impact-coordinator-operational-3",
+        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "061-operational-detail-3-source-v2",
+            "source": "Change-order impact coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R061 Change-order steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R061 Change-order steward records: Work crew began moving opening O61 at 09:10 before commercial approval AP61-2 at 11:30. Daily log records the actual work time; the cost submission date is earlier than the approval timestamp. This current event is source 061-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 061-change-order-impact-coordinator-operational-3. The supplied typed prior 061-prior-siteinstruction-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Work crew began moving opening O61 at 09:10 before commercial approval AP61-2 at 11:30. Daily log records the actual work time; the cost submission date is earlier than the approval timestamp."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "061-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "061-prior-siteinstruction-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "061-change-order-impact-coordinator-operational-3",
+            "issuerId": "field-supervisor-SI61",
+            "requestedChange": "move opening in fire-rated partition",
+            "issuedAt": "2026-10-01T10:00:00Z",
+            "authorityScope": "site coordination only; no commercial change authority"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 061-change-order-impact-coordinator-operational-3 against this factual event: Work crew began moving opening O61 at 09:10 before commercial approval AP61-2 at 11:30. Daily log records the actual work time; the cost submission date is earlier than the approval timestamp. Original §9 detail: Work began before commercial approval: record actual events without backdating authority. Correct handling applies “record actual events without backdating authority.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Work crew began moving opening O61 at 09:10 before commercial approval AP61-2 at 11:30. Daily log records the actual work time; the cost submission date is earlier than the approval timestamp.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Work began before commercial approval: record actual events without backdating authority.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Work crew began moving opening O61 at 09:10 before commercial approval AP61-2 at 11:30. Daily log records the actual work time; the cost submission date is earlier than the approval timestamp. It links source 061-operational-detail-3-source-v2 v2 with prior typed SiteInstruction record 061-prior-siteinstruction-detail-3-v1 v1 and keeps unresolved scope visible for O61, AP61-2.",
+      "durable_state": "The proposal retains prior record 061-prior-siteinstruction-detail-3-v1 v1 and versions only the affected state for O61, AP61-2 against source 061-operational-detail-3-source-v2 v2; it applies “record actual events without backdating authority.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O61, AP61-2 and the scope supported by source 061-operational-detail-3-source-v2 v2; it represents “record actual events without backdating authority.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "061-change-order-impact-coordinator-operational-4",
+    "root": "runCase.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "input": {
+        "caseId": "061-change-order-impact-coordinator-operational-4",
+        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "061-operational-detail-4-source-v2",
+            "source": "Change-order impact coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R061 Change-order steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R061 Change-order steward records: Delay claim DC61 says 5 days critical delay from activity A61. Approved schedule shows 3 days of float before the next critical milestone; the claim omits the schedule version and calendar assumptions. This current event is source 061-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 061-change-order-impact-coordinator-operational-4. The supplied typed prior 061-prior-siteinstruction-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Delay claim DC61 says 5 days critical delay from activity A61. Approved schedule shows 3 days of float before the next critical milestone; the claim omits the schedule version and calendar assumptions."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "061-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "061-prior-siteinstruction-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "061-change-order-impact-coordinator-operational-4",
+            "issuerId": "field-supervisor-SI61",
+            "requestedChange": "move opening in fire-rated partition",
+            "issuedAt": "2026-10-01T10:00:00Z",
+            "authorityScope": "site coordination only; no commercial change authority"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 061-change-order-impact-coordinator-operational-4 against this factual event: Delay claim DC61 says 5 days critical delay from activity A61. Approved schedule shows 3 days of float before the next critical milestone; the claim omits the schedule version and calendar assumptions. Original §9 detail: A delay claim ignores available float: use exact schedule analysis and explicit assumptions. Correct handling applies “use exact schedule analysis and explicit assumptions.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Delay claim DC61 says 5 days critical delay from activity A61. Approved schedule shows 3 days of float before the next critical milestone; the claim omits the schedule version and calendar assumptions.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A delay claim ignores available float: use exact schedule analysis and explicit assumptions.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Delay claim DC61 says 5 days critical delay from activity A61. Approved schedule shows 3 days of float before the next critical milestone; the claim omits the schedule version and calendar assumptions. It links source 061-operational-detail-4-source-v2 v2 with prior typed SiteInstruction record 061-prior-siteinstruction-detail-4-v1 v1 and keeps unresolved scope visible for DC61, A61.",
+      "durable_state": "The proposal retains prior record 061-prior-siteinstruction-detail-4-v1 v1 and versions only the affected state for DC61, A61 against source 061-operational-detail-4-source-v2 v2; it applies “use exact schedule analysis and explicit assumptions.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to DC61, A61 and the scope supported by source 061-operational-detail-4-source-v2 v2; it represents “use exact schedule analysis and explicit assumptions.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "061-change-order-impact-coordinator-operational-5",
+    "root": "runCase.nl",
+    "split_group": "061-change-order-impact-coordinator",
+    "inputs": {
+      "input": {
+        "caseId": "061-change-order-impact-coordinator-operational-5",
+        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "061-operational-detail-5-source-v2",
+            "source": "Change-order impact coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R061 Change-order steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R061 Change-order steward records: Change notices CN61-4 and CN61-5 both charge removal of opening O61 framing. Cost ledger lines reference the same work package WP61-12 and quantity 8 m; duplicate attribution review is open. This current event is source 061-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 061-change-order-impact-coordinator-operational-5. The supplied typed prior 061-prior-siteinstruction-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Change notices CN61-4 and CN61-5 both charge removal of opening O61 framing. Cost ledger lines reference the same work package WP61-12 and quantity 8 m; duplicate attribution review is open."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "061-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "061-prior-siteinstruction-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "061-change-order-impact-coordinator-operational-5",
+            "issuerId": "field-supervisor-SI61",
+            "requestedChange": "move opening in fire-rated partition",
+            "issuedAt": "2026-10-01T10:00:00Z",
+            "authorityScope": "site coordination only; no commercial change authority"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 061-change-order-impact-coordinator-operational-5 against this factual event: Change notices CN61-4 and CN61-5 both charge removal of opening O61 framing. Cost ledger lines reference the same work package WP61-12 and quantity 8 m; duplicate attribution review is open. Original §9 detail: Two changes affect the same work: prevent duplicate cost attribution. Correct handling applies “prevent duplicate cost attribution.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Change notices CN61-4 and CN61-5 both charge removal of opening O61 framing. Cost ledger lines reference the same work package WP61-12 and quantity 8 m; duplicate attribution review is open.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Two changes affect the same work: prevent duplicate cost attribution.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Change notices CN61-4 and CN61-5 both charge removal of opening O61 framing. Cost ledger lines reference the same work package WP61-12 and quantity 8 m; duplicate attribution review is open. It links source 061-operational-detail-5-source-v2 v2 with prior typed SiteInstruction record 061-prior-siteinstruction-detail-5-v1 v1 and keeps unresolved scope visible for CN61-4, CN61-5, O61, WP61-12.",
+      "durable_state": "The proposal retains prior record 061-prior-siteinstruction-detail-5-v1 v1 and versions only the affected state for CN61-4, CN61-5, O61, WP61-12 against source 061-operational-detail-5-source-v2 v2; it applies “prevent duplicate cost attribution.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to CN61-4, CN61-5, O61, WP61-12 and the scope supported by source 061-operational-detail-5-source-v2 v2; it represents “prevent duplicate cost attribution.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

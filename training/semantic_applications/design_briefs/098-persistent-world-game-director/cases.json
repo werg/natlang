@@ -1,0 +1,616 @@
+[
+  {
+    "id": "098-first-gate-pass",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "world-098-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+        "candidateIds": [
+          "098-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "098-first-e1",
+            "source": "primary case record WORLD-98",
+            "version": "v1",
+            "text": "Primary domain record for case WORLD-98 states: caseId=\"WORLD-98\"; playerId=\"PLY-98\"; intendedAction=\"Open west gate using key in player inventory.\"; targetIds=[\"GATE-WEST-NORTH\",\"GATE-WEST-SOUTH\"]; ambiguity=\"Two west gates exist; settlement is not specified.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "098-case-record",
+          "caseId": "WORLD-98",
+          "sourceRefs": [
+            "098-first-e1"
+          ],
+          "state": "draft",
+          "kind": "PlayerIntent",
+          "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "playerId": "PLY-98",
+          "intendedAction": "Open west gate using key in player inventory.",
+          "targetIds": [
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ],
+          "ambiguity": "Two west gates exist; settlement is not specified."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "098-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A player disconnects mid-action: commit or reject once using the action identity.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "098-first-gate-fail",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "world-098-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+        "candidateIds": [
+          "098-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "098-first-e1",
+            "source": "primary case record WORLD-98",
+            "version": "v1",
+            "text": "Primary domain record for case WORLD-98 states: caseId=\"WORLD-98\"; playerId=\"PLY-98\"; intendedAction=\"Open west gate using key in player inventory.\"; targetIds=[\"GATE-WEST-NORTH\",\"GATE-WEST-SOUTH\"]; ambiguity=\"Two west gates exist; settlement is not specified.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "098-case-record",
+          "caseId": "WORLD-98",
+          "sourceRefs": [
+            "098-first-e1"
+          ],
+          "state": "draft",
+          "kind": "PlayerIntent",
+          "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "playerId": "PLY-98",
+          "intendedAction": "Open west gate using key in player inventory.",
+          "targetIds": [
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ],
+          "ambiguity": "The request uniquely identifies the north gate."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "098-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A player disconnects mid-action: commit or reject once using the action identity.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "098-first-gate-needs-review",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "world-098-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+        "candidateIds": [
+          "098-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "098-first-e1",
+            "source": "primary case record WORLD-98",
+            "version": "v1",
+            "text": "Primary domain record for case WORLD-98 states: caseId=\"WORLD-98\"; playerId=\"PLY-98\"; intendedAction=\"Open west gate using key in player inventory.\"; targetIds=[\"GATE-WEST-NORTH\",\"GATE-WEST-SOUTH\"]. No current value is present for ambiguity.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "ambiguity"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "098-case-record",
+          "sourceRefs": [
+            "098-first-e1"
+          ],
+          "state": "draft",
+          "kind": "PlayerIntent",
+          "subject": "A player disconnects mid-action: commit or reject once using the action identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "intendedAction": "Open west gate using key in player inventory.",
+          "targetIds": [
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ],
+          "caseId": "WORLD-98",
+          "playerId": "PLY-98"
+        },
+        "missingFields": [
+          "ambiguity"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "098-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A player disconnects mid-action: commit or reject once using the action identity.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "098-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-098-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "098-workflow-1-record",
+          "caseId": "098-workflow-1",
+          "sourceRefs": [
+            "098-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "GameWorld",
+          "subject": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "098-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "worldId": "WORLD-98",
+          "ruleSetId": "RULES-98-V3",
+          "sessionIds": [
+            "SESSION-98-A"
+          ],
+          "directorId": "DIRECTOR-8",
+          "contentBoundaryIds": [
+            "LETTER-L4",
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "098-wf-1-source",
+          "source": "primary case artifact 098-E1",
+          "version": "v1",
+          "text": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "098-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "098-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "098-wf-1-source",
+          "source": "primary case artifact 098-E1",
+          "version": "v1",
+          "text": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Persistent World Game Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A player disconnects mid-action: commit or reject once using the action identity. Use observation Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt. as the source of truth. The proposal should preserve source-linked record 098-workflow-1-record and make a recipient-facing distinction grounded in 098-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A player disconnects mid-action: commit or reject once using the action identity.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 098-workflow-1-record must accurately preserve observation 098-wf-1-source (v1): Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt. Apply brief requirement A player disconnects mid-action: commit or reject once using the action identity. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed GameWorld record 098-workflow-1-record and its source link to 098-wf-1-source version v1, with a disposition matching this observed state: Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt. Carry requirement A player disconnects mid-action: commit or reject once using the action identity. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 098-workflow-1-record based on 098-wf-1-source (v1) and observation Player P-98 disconnects after requesting west gate unlock; server log has no completed action receipt. Apply requirement A player disconnects mid-action: commit or reject once using the action identity. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "098-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-098-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "098-workflow-2-record",
+          "caseId": "098-workflow-2",
+          "sourceRefs": [
+            "098-event-2"
+          ],
+          "state": "draft",
+          "kind": "GameWorld",
+          "subject": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "098-event-2",
+            "sourceVersion": "v1"
+          },
+          "worldId": "WORLD-98",
+          "ruleSetId": "RULES-98-V3",
+          "sessionIds": [
+            "SESSION-98-A"
+          ],
+          "directorId": "DIRECTOR-8",
+          "contentBoundaryIds": [
+            "LETTER-L4",
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "098-event-2",
+          "source": "current domain record 098-E2",
+          "version": "v1",
+          "text": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "098-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "098-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "098-event-2",
+          "source": "current domain record 098-E2",
+          "version": "v1",
+          "text": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Persistent World Game Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: Two characters spend the same resource: serialize the exact world transaction. Use observation Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt. as the source of truth. The proposal should preserve source-linked record 098-workflow-2-record and make a recipient-facing distinction grounded in 098-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Two characters spend the same resource: serialize the exact world transaction.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 098-workflow-2-record must accurately preserve observation 098-event-2 (v1): Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt. Apply brief requirement Two characters spend the same resource: serialize the exact world transaction. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed GameWorld record 098-workflow-2-record and its source link to 098-event-2 version v1, with a disposition matching this observed state: Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt. Carry requirement Two characters spend the same resource: serialize the exact world transaction. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 098-workflow-2-record based on 098-event-2 (v1) and observation Characters Ivo and Len each attempt to spend resource token R-98 at 18:03. World ledger shows one remaining token before both requests; transaction log contains no ordering or commit receipt. Apply requirement Two characters spend the same resource: serialize the exact world transaction. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "098-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-098-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "098-workflow-3-record",
+          "caseId": "098-workflow-3",
+          "sourceRefs": [
+            "098-event-3"
+          ],
+          "state": "draft",
+          "kind": "GameWorld",
+          "subject": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "098-event-3",
+            "sourceVersion": "v1"
+          },
+          "worldId": "WORLD-98",
+          "ruleSetId": "RULES-98-V3",
+          "sessionIds": [
+            "SESSION-98-A"
+          ],
+          "directorId": "DIRECTOR-8",
+          "contentBoundaryIds": [
+            "LETTER-L4",
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "098-event-3",
+          "source": "current domain record 098-E3",
+          "version": "v1",
+          "text": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "098-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "098-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "098-event-3",
+          "source": "current domain record 098-E3",
+          "version": "v1",
+          "text": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Persistent World Game Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A character hears a rumor: store it as a belief rather than world truth. Use observation Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor. as the source of truth. The proposal should preserve source-linked record 098-workflow-3-record and make a recipient-facing distinction grounded in 098-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A character hears a rumor: store it as a belief rather than world truth.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 098-workflow-3-record must accurately preserve observation 098-event-3 (v1): Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor. Apply brief requirement A character hears a rumor: store it as a belief rather than world truth. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed GameWorld record 098-workflow-3-record and its source link to 098-event-3 version v1, with a disposition matching this observed state: Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor. Carry requirement A character hears a rumor: store it as a belief rather than world truth. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 098-workflow-3-record based on 098-event-3 (v1) and observation Character Mira hears rumor RU-98 that the north bridge is closed. World map v6 still marks the bridge open; no verified event record supports the rumor. Apply requirement A character hears a rumor: store it as a belief rather than world truth. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "098-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-098-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "098-workflow-4-record",
+          "caseId": "098-workflow-4",
+          "sourceRefs": [
+            "098-event-4"
+          ],
+          "state": "draft",
+          "kind": "GameWorld",
+          "subject": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "098-event-4",
+            "sourceVersion": "v1"
+          },
+          "worldId": "WORLD-98",
+          "ruleSetId": "RULES-98-V3",
+          "sessionIds": [
+            "SESSION-98-A"
+          ],
+          "directorId": "DIRECTOR-8",
+          "contentBoundaryIds": [
+            "LETTER-L4",
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "098-event-4",
+          "source": "current domain record 098-E4",
+          "version": "v1",
+          "text": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "098-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "098-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "098-event-4",
+          "source": "current domain record 098-E4",
+          "version": "v1",
+          "text": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Persistent World Game Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A participant changes content boundaries: apply the restriction immediately to future generation. Use observation Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated. as the source of truth. The proposal should preserve source-linked record 098-workflow-4-record and make a recipient-facing distinction grounded in 098-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A participant changes content boundaries: apply the restriction immediately to future generation.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 098-workflow-4-record must accurately preserve observation 098-event-4 (v1): Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated. Apply brief requirement A participant changes content boundaries: apply the restriction immediately to future generation. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed GameWorld record 098-workflow-4-record and its source link to 098-event-4 version v1, with a disposition matching this observed state: Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated. Carry requirement A participant changes content boundaries: apply the restriction immediately to future generation. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 098-workflow-4-record based on 098-event-4 (v1) and observation Player P-98 changes content boundary CB-98 to exclude flashing-light scenes on 2026-10-26. Future scene generator still has the previous boundary profile v2 loaded; no later scenes have been generated. Apply requirement A participant changes content boundaries: apply the restriction immediately to future generation. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "098-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-098-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Persistent World Game Director proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "098-workflow-5-record",
+          "caseId": "098-workflow-5",
+          "sourceRefs": [
+            "098-event-5"
+          ],
+          "state": "draft",
+          "kind": "GameWorld",
+          "subject": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+          "status": "candidate",
+          "evidenceIds": [
+            "098-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "098-event-5",
+            "sourceVersion": "v1"
+          },
+          "worldId": "WORLD-98",
+          "ruleSetId": "RULES-98-V3",
+          "sessionIds": [
+            "SESSION-98-A"
+          ],
+          "directorId": "DIRECTOR-8",
+          "contentBoundaryIds": [
+            "LETTER-L4",
+            "GATE-WEST-NORTH",
+            "GATE-WEST-SOUTH"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "098-event-5",
+          "source": "current domain record 098-E5",
+          "version": "v1",
+          "text": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "098-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "098-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "098-event-5",
+          "source": "current domain record 098-E5",
+          "version": "v1",
+          "text": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Persistent World Game Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes. Use observation World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved. as the source of truth. The proposal should preserve source-linked record 098-workflow-5-record and make a recipient-facing distinction grounded in 098-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 098-workflow-5-record must accurately preserve observation 098-event-5 (v1): World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved. Apply brief requirement A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed GameWorld record 098-workflow-5-record and its source link to 098-event-5 version v1, with a disposition matching this observed state: World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved. Carry requirement A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 098-workflow-5-record based on 098-event-5 (v1) and observation World rule patch WR-98 v4 changes ferry access between sessions 18 and 19. Checkpoint CP-18 contains session 18 outcome under v3; session 19 has not started and historical outcome records are preserved. Apply requirement A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,522 @@
+[
+  {
+    "id": "060-custom-fabrication-quoting-desk-gate-supported",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "draft": {
+        "values": {
+          "function": "support the specified load on bracket F60",
+          "dimensions": "not supplied in the sketch",
+          "appearancePreference": "match existing bracket finish",
+          "essentialConstraint": "load-bearing weld requires a qualified process and material grade",
+          "caseId": "case-60"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "essentialConstraint",
+            "evidenceIds": [
+              "060-custom-fabrication-quoting-desk-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "fabrication sketch and shop process capability",
+        "evidence": [
+          {
+            "id": "060-custom-fabrication-quoting-desk-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bracket F60 is load-bearing but sketch omits material grade and inspection; available weld process is not qualified for the load class. Case case-60; current first-stage record values: {\"appearancePreference\": \"match existing bracket finish\", \"dimensions\": \"not supplied in the sketch\", \"essentialConstraint\": \"load-bearing weld requires a qualified process and material grade\", \"function\": \"support the specified load on bracket F60\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Provide conditional alternatives and hold points instead of a quote that implies manufacturability."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "essentialConstraint",
+          "value": "load-bearing weld requires a qualified process and material grade",
+          "evidenceIds": [
+            "060-custom-fabrication-quoting-desk-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "fabrication sketch and shop process capability: Request F-60 calls for a load-bearing bracket with a weld symbol but does not specify material grade or inspection. Available shop process P-60 is not qualified for the stated load class. Apply the first-stage gate to the record and source versions; Provide conditional alternatives and hold points instead of a quote that implies manufacturability.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-gate-contradictory",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "draft": {
+        "values": {
+          "function": "support the specified load on bracket F60",
+          "dimensions": "not supplied in the sketch",
+          "appearancePreference": "match existing bracket finish",
+          "essentialConstraint": "available process P60 is qualified for the specified load",
+          "caseId": "case-60"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "essentialConstraint",
+            "evidenceIds": [
+              "060-custom-fabrication-quoting-desk-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "fabrication sketch and shop process capability",
+        "evidence": [
+          {
+            "id": "060-custom-fabrication-quoting-desk-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bracket F60 is load-bearing but sketch omits material grade and inspection; available weld process is not qualified for the load class. Case case-60; current first-stage record values: {\"appearancePreference\": \"match existing bracket finish\", \"dimensions\": \"not supplied in the sketch\", \"essentialConstraint\": \"load-bearing weld requires a qualified process and material grade\", \"function\": \"support the specified load on bracket F60\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Provide conditional alternatives and hold points instead of a quote that implies manufacturability."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "essentialConstraint",
+          "value": "available process P60 is qualified for the specified load",
+          "evidenceIds": [
+            "060-custom-fabrication-quoting-desk-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "fabrication sketch and shop process capability: Request F-60 calls for a load-bearing bracket with a weld symbol but does not specify material grade or inspection. Available shop process P-60 is not qualified for the stated load class. Apply the first-stage gate to the record and source versions; Provide conditional alternatives and hold points instead of a quote that implies manufacturability.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-gate-missing",
+    "root": "runCase/recoverRequirements/audit/qualify.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-60"
+        },
+        "missingFields": [
+          "essentialConstraint"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes essentialConstraint?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "fabrication sketch and shop process capability",
+        "evidence": [],
+        "missing": [
+          "essentialConstraint"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Provide conditional alternatives and hold points instead of a quote that implies manufacturability."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "fabrication sketch and shop process capability: Request F-60 calls for a load-bearing bracket with a weld symbol but does not specify material grade or inspection. Available shop process P-60 is not qualified for the stated load class. Apply the first-stage gate to the record and source versions; Provide conditional alternatives and hold points instead of a quote that implies manufacturability.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-operational-1",
+    "root": "runCase.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "input": {
+        "caseId": "060-custom-fabrication-quoting-desk-operational-1",
+        "goal": "Review the Custom fabrication quoting desk evidence for case 060-custom-fabrication-quoting-desk-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "060-operational-detail-1-source-v2",
+            "source": "Custom fabrication quoting desk operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R060 Custom steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R060 Custom steward records: Customer C60 sends an approximate sketch for bracket F60 with two measured dimensions marked “about 120 mm” and “about 45 mm.” Shop drawing lacks a signed measurement, tolerance or load confirmation. This current event is source 060-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 060-custom-fabrication-quoting-desk-operational-1. The supplied typed prior 060-prior-fabricationrequirement-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C60 sends an approximate sketch for bracket F60 with two measured dimensions marked “about 120 mm” and “about 45 mm.” Shop drawing lacks a signed measurement, tolerance or load confirmation."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "060-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "060-prior-fabricationrequirement-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "060-custom-fabrication-quoting-desk-operational-1",
+            "function": "support the specified load on bracket F60",
+            "dimensions": "not supplied in the sketch",
+            "appearancePreference": "match existing bracket finish",
+            "essentialConstraint": "load-bearing weld requires a qualified process and material grade"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 060-custom-fabrication-quoting-desk-operational-1 against this factual event: Customer C60 sends an approximate sketch for bracket F60 with two measured dimensions marked “about 120 mm” and “about 45 mm.” Shop drawing lacks a signed measurement, tolerance or load confirmation. Original §9 detail: A customer supplies approximate dimensions: label the quote provisional until confirmed measurements arrive. Correct handling applies “label the quote provisional until confirmed measurements arrive.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Customer C60 sends an approximate sketch for bracket F60 with two measured dimensions marked “about 120 mm” and “about 45 mm.” Shop drawing lacks a signed measurement, tolerance or load confirmation.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A customer supplies approximate dimensions: label the quote provisional until confirmed measurements arrive.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Customer C60 sends an approximate sketch for bracket F60 with two measured dimensions marked “about 120 mm” and “about 45 mm.” Shop drawing lacks a signed measurement, tolerance or load confirmation. It links source 060-operational-detail-1-source-v2 v2 with prior typed FabricationRequirement record 060-prior-fabricationrequirement-detail-1-v1 v1 and keeps unresolved scope visible for C60, F60.",
+      "durable_state": "The proposal retains prior record 060-prior-fabricationrequirement-detail-1-v1 v1 and versions only the affected state for C60, F60 against source 060-operational-detail-1-source-v2 v2; it applies “label the quote provisional until confirmed measurements arrive.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C60, F60 and the scope supported by source 060-operational-detail-1-source-v2 v2; it represents “label the quote provisional until confirmed measurements arrive.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-operational-2",
+    "root": "runCase.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "input": {
+        "caseId": "060-custom-fabrication-quoting-desk-operational-2",
+        "goal": "Review the Custom fabrication quoting desk evidence for case 060-custom-fabrication-quoting-desk-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "060-operational-detail-2-source-v2",
+            "source": "Custom fabrication quoting desk operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R060 Custom steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R060 Custom steward records: Physical sample FIN60 is matte black with a measured gloss value of 12 GU; screen rendering R60 displays a glossy black finish. Customer acceptance field is blank and no signed reference is linked. This current event is source 060-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 060-custom-fabrication-quoting-desk-operational-2. The supplied typed prior 060-prior-fabricationrequirement-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Physical sample FIN60 is matte black with a measured gloss value of 12 GU; screen rendering R60 displays a glossy black finish. Customer acceptance field is blank and no signed reference is linked."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "060-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "060-prior-fabricationrequirement-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "060-custom-fabrication-quoting-desk-operational-2",
+            "function": "support the specified load on bracket F60",
+            "dimensions": "not supplied in the sketch",
+            "appearancePreference": "match existing bracket finish",
+            "essentialConstraint": "load-bearing weld requires a qualified process and material grade"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 060-custom-fabrication-quoting-desk-operational-2 against this factual event: Physical sample FIN60 is matte black with a measured gloss value of 12 GU; screen rendering R60 displays a glossy black finish. Customer acceptance field is blank and no signed reference is linked. Original §9 detail: A finish sample differs from a screen rendering: require acceptance of the physical or approved reference. Correct handling applies “require acceptance of the physical or approved reference.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Physical sample FIN60 is matte black with a measured gloss value of 12 GU; screen rendering R60 displays a glossy black finish. Customer acceptance field is blank and no signed reference is linked.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A finish sample differs from a screen rendering: require acceptance of the physical or approved reference.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Physical sample FIN60 is matte black with a measured gloss value of 12 GU; screen rendering R60 displays a glossy black finish. Customer acceptance field is blank and no signed reference is linked. It links source 060-operational-detail-2-source-v2 v2 with prior typed FabricationRequirement record 060-prior-fabricationrequirement-detail-2-v1 v1 and keeps unresolved scope visible for FIN60, R60.",
+      "durable_state": "The proposal retains prior record 060-prior-fabricationrequirement-detail-2-v1 v1 and versions only the affected state for FIN60, R60 against source 060-operational-detail-2-source-v2 v2; it applies “require acceptance of the physical or approved reference.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to FIN60, R60 and the scope supported by source 060-operational-detail-2-source-v2 v2; it represents “require acceptance of the physical or approved reference.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-operational-3",
+    "root": "runCase.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "input": {
+        "caseId": "060-custom-fabrication-quoting-desk-operational-3",
+        "goal": "Review the Custom fabrication quoting desk evidence for case 060-custom-fabrication-quoting-desk-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "060-operational-detail-3-source-v2",
+            "source": "Custom fabrication quoting desk operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R060 Custom steward; event version verified for this case",
+            "observedAt": "2026-10-15T10:15:00Z",
+            "text": "R060 Custom steward records: On 2026-10-15, quote Q60 still carries a steel price that expired 2026-10-14; customer acceptance is scheduled for 2026-10-18. Source 060-operational-detail-3-source-v2 v2 links the quote to the pending decision. This current event is source 060-operational-detail-3-source-v2 v2, observed 2026-10-15T10:15:00Z, for case 060-custom-fabrication-quoting-desk-operational-3. The supplied typed prior 060-prior-fabricationrequirement-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Material quote Q60 uses steel price valid through 2026-10-14. The customer acceptance date is 2026-10-18 and the quote still carries the expired unit price."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "060-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "060-prior-fabricationrequirement-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "060-custom-fabrication-quoting-desk-operational-3",
+            "function": "support the specified load on bracket F60",
+            "dimensions": "not supplied in the sketch",
+            "appearancePreference": "match existing bracket finish",
+            "essentialConstraint": "load-bearing weld requires a qualified process and material grade"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 060-custom-fabrication-quoting-desk-operational-3 against this factual event: Material quote Q60 uses steel price valid through 2026-10-14. The customer acceptance date is 2026-10-18 and the quote still carries the expired unit price. Original §9 detail: Material prices expire: revalidate the quote before commitment. Correct handling applies “revalidate the quote before commitment.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "On 2026-10-15, quote Q60 still carries a steel price that expired 2026-10-14; customer acceptance is scheduled for 2026-10-18. Source 060-operational-detail-3-source-v2 v2 links the quote to the pending decision.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Material prices expire: revalidate the quote before commitment.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Material quote Q60 uses steel price valid through 2026-10-14. The customer acceptance date is 2026-10-18 and the quote still carries the expired unit price. It links source 060-operational-detail-3-source-v2 v2 with prior typed FabricationRequirement record 060-prior-fabricationrequirement-detail-3-v1 v1 and keeps unresolved scope visible for Q60.",
+      "durable_state": "The proposal retains prior record 060-prior-fabricationrequirement-detail-3-v1 v1 and versions only the affected state for Q60 against source 060-operational-detail-3-source-v2 v2; it applies “revalidate the quote before commitment.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to Q60 and the scope supported by source 060-operational-detail-3-source-v2 v2; it represents “revalidate the quote before commitment.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-operational-4",
+    "root": "runCase.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "input": {
+        "caseId": "060-custom-fabrication-quoting-desk-operational-4",
+        "goal": "Review the Custom fabrication quoting desk evidence for case 060-custom-fabrication-quoting-desk-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "060-operational-detail-4-source-v2",
+            "source": "Custom fabrication quoting desk operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R060 Custom steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R060 Custom steward records: Design revision D60-2 moves a mounting hole from 20 mm to 28 mm from edge. Tooling route TR60-1 still uses the prior drill fixture; route cost is $180 and the new fixture estimate is $420. This current event is source 060-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 060-custom-fabrication-quoting-desk-operational-4. The supplied typed prior 060-prior-fabricationrequirement-detail-4-v1 v1 is preserved for comparison. Typed record fields for this workflow are {\"appearancePreference\": \"match accepted physical sample FIN60\", \"dimensions\": \"hole offset 28 mm on D60-2; prior route TR60-1 assumes 20 mm offset\", \"essentialConstraint\": \"new hole offset requires fixture TR60-2; old route cost $180, new fixture estimate $420\", \"function\": \"load-bearing bracket F60 with mounting hole moved from 20 mm to 28 mm from edge in design D60-2\"}.",
+            "supports": [
+              "Design revision D60-2 moves a mounting hole from 20 mm to 28 mm from edge. Tooling route TR60-1 still uses the prior drill fixture; route cost is $180 and the new fixture estimate is $420."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "060-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "060-prior-fabricationrequirement-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "060-custom-fabrication-quoting-desk-operational-4",
+            "function": "load-bearing bracket F60 with mounting hole moved from 20 mm to 28 mm from edge in design D60-2",
+            "dimensions": "hole offset 28 mm on D60-2; prior route TR60-1 assumes 20 mm offset",
+            "appearancePreference": "match accepted physical sample FIN60",
+            "essentialConstraint": "new hole offset requires fixture TR60-2; old route cost $180, new fixture estimate $420"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 060-custom-fabrication-quoting-desk-operational-4 against this factual event: Design revision D60-2 moves a mounting hole from 20 mm to 28 mm from edge. Tooling route TR60-1 still uses the prior drill fixture; route cost is $180 and the new fixture estimate is $420. Original §9 detail: A design change affects tooling: update route and cost together. Correct handling applies “update route and cost together.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Design revision D60-2 moves a mounting hole from 20 mm to 28 mm from edge. Tooling route TR60-1 still uses the prior drill fixture; route cost is $180 and the new fixture estimate is $420.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A design change affects tooling: update route and cost together.",
+    "boundary_assertions": {
+      "view": "Quoter view compares D60-1 hole offset 20 mm and D60-2 offset 28 mm, route TR60-1, fixture estimate $420 and former route cost $180.",
+      "durable_state": "Proposal updates both tooling route and quote cost against D60-2, retains the prior route/estimate, and links the fixture quote and design revision.",
+      "effects": "Any revised quotation is pending customer approval; no tooling order or financial commitment is dispatched."
+    }
+  },
+  {
+    "id": "060-custom-fabrication-quoting-desk-operational-5",
+    "root": "runCase.nl",
+    "split_group": "060-custom-fabrication-quoting-desk",
+    "inputs": {
+      "input": {
+        "caseId": "060-custom-fabrication-quoting-desk-operational-5",
+        "goal": "Review the Custom fabrication quoting desk evidence for case 060-custom-fabrication-quoting-desk-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "060-operational-detail-5-source-v2",
+            "source": "Custom fabrication quoting desk operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R060 Custom steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R060 Custom steward records: Shop capability roster lists no current certification for pressure-bound welds required by bracket F60 drawing. Subcontractor SP60 has the certification; no referral, scope notice or quote is attached. This current event is source 060-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 060-custom-fabrication-quoting-desk-operational-5. The supplied typed prior 060-prior-fabricationrequirement-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Shop capability roster lists no current certification for pressure-bound welds required by bracket F60 drawing. Subcontractor SP60 has the certification; no referral, scope notice or quote is attached."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "060-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "060-prior-fabricationrequirement-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "060-custom-fabrication-quoting-desk-operational-5",
+            "function": "support the specified load on bracket F60",
+            "dimensions": "not supplied in the sketch",
+            "appearancePreference": "match existing bracket finish",
+            "essentialConstraint": "load-bearing weld requires a qualified process and material grade"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 060-custom-fabrication-quoting-desk-operational-5 against this factual event: Shop capability roster lists no current certification for pressure-bound welds required by bracket F60 drawing. Subcontractor SP60 has the certification; no referral, scope notice or quote is attached. Original §9 detail: The shop lacks a required certification: disclose the limit and route specialist work appropriately. Correct handling applies “disclose the limit and route specialist work appropriately.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Shop capability roster lists no current certification for pressure-bound welds required by bracket F60 drawing. Subcontractor SP60 has the certification; no referral, scope notice or quote is attached.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "The shop lacks a required certification: disclose the limit and route specialist work appropriately.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Shop capability roster lists no current certification for pressure-bound welds required by bracket F60 drawing. Subcontractor SP60 has the certification; no referral, scope notice or quote is attached. It links source 060-operational-detail-5-source-v2 v2 with prior typed FabricationRequirement record 060-prior-fabricationrequirement-detail-5-v1 v1 and keeps unresolved scope visible for F60, SP60.",
+      "durable_state": "The proposal retains prior record 060-prior-fabricationrequirement-detail-5-v1 v1 and versions only the affected state for F60, SP60 against source 060-operational-detail-5-source-v2 v2; it applies “disclose the limit and route specialist work appropriately.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to F60, SP60 and the scope supported by source 060-operational-detail-5-source-v2 v2; it represents “disclose the limit and route specialist work appropriately.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

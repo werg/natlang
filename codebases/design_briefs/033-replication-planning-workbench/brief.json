@@ -1,0 +1,49 @@
+{
+  "application_id": "033",
+  "title": "Replication planning workbench",
+  "source_relative_path": "applications/07-scientific-evidence-and-research-operations/033-replication-planning-workbench.md",
+  "program_root": "codebases/design_briefs/033-replication-planning-workbench",
+  "source_sha256": "c843b753daab03d553a614e73a94b6854afb0e4ec63bd80aee0aad8b47f48833",
+  "domain_id": "07",
+  "stages": [
+    {
+      "name": "recoverProcedure",
+      "output_type": "MethodStep",
+      "algorithm": "Reconstruct the reported procedure from methods, supplements, code descriptions, and notes. Separate explicitly specified parameters from inferred defaults and distinguish the authors’ actual method from a convenient modern replacement.",
+      "gate": "Every decisive methodological choice has a source or remains an explicit unknown."
+    },
+    {
+      "name": "mapDependencies",
+      "output_type": "ReplicationDependency",
+      "algorithm": "Identify data, software, configuration, and computational dependencies for each step. Detect unavailable versions and incompatible assumptions, then formulate approved alternatives without representing them as exact replication of the original environment.",
+      "gate": "Dependency graph is acyclic and all required resources are available or blocked."
+    },
+    {
+      "name": "resolveAmbiguities",
+      "output_type": "MethodQuestion",
+      "algorithm": "Enumerate plausible interpretations of missing details and assess whether each changes the result. Seek author clarification or documented evidence for consequential choices; retain sensitivity branches where ambiguity cannot be resolved.",
+      "gate": "No unacknowledged methodological invention or selective choice after seeing favorable results."
+    },
+    {
+      "name": "compileExecution",
+      "output_type": "ReplicationTask",
+      "algorithm": "Translate the reviewed procedure into typed tasks using approved computational capabilities. Pin inputs and environments, define checkpoint and output contracts, and include resource limits and recovery behavior for failed jobs.",
+      "gate": "Commands execute only in the sandbox and consume the pinned dependency manifest."
+    },
+    {
+      "name": "compareOutcomes",
+      "output_type": "ReplicationFinding",
+      "algorithm": "Compare outputs with the original reported quantities and tolerances, distinguishing implementation failures from substantive differences. Investigate divergences through minimal controlled changes and publish uncertainty rather than claiming replication from superficial similarity.",
+      "gate": "Exact comparisons and methodological provenance support every reported match or discrepancy."
+    }
+  ],
+  "operational_details": [
+    "A dependency version is unavailable: label the substitute as an adaptation and preserve the original requirement.",
+    "A random seed is omitted: run a preregistered sensitivity set rather than choosing a favorable seed.",
+    "A dataset has changed: record the mismatch and do not claim exact replication.",
+    "A job crashes after producing partial outputs: verify completeness before reuse.",
+    "A paper’s prose and code disagree: retain both interpretations for review."
+  ],
+  "representative_episode": "A computational paper omits a preprocessing choice and references an unavailable package version; two plausible pipelines yield different results.",
+  "independent_truth_basis": "Synthetic method specifications, hidden omitted parameters, deterministic reference computations, and artifact lineage checks."
+}

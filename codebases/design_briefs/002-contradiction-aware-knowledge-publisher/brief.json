@@ -1,0 +1,49 @@
+{
+  "application_id": "002",
+  "title": "Contradiction-aware knowledge publisher",
+  "source_relative_path": "applications/01-organizational-knowledge-and-institutional-memory/002-contradiction-aware-knowledge-publisher.md",
+  "program_root": "codebases/design_briefs/002-contradiction-aware-knowledge-publisher",
+  "source_sha256": "a897b1a9ac04dd4ca7c4c28323514f45f9fb6c2721bece250b47c5522ed42a78",
+  "domain_id": "01",
+  "stages": [
+    {
+      "name": "indexClaims",
+      "output_type": "ScopedClaim",
+      "algorithm": "Extract independently checkable claims with qualifications and page context. Resolve entity references conservatively, attach author and effective period, and keep instructions separate from descriptions of historical behavior or quoted third-party views.",
+      "gate": "Claims retain every material negation, exception, and audience qualifier."
+    },
+    {
+      "name": "compareClaims",
+      "output_type": "ClaimConflict",
+      "algorithm": "Generate candidates through shared entities and facets, then compare meanings under aligned scope and time. Classify coexistence as legitimate when claims describe different editions or populations; record the minimum incompatible propositions when a real conflict exists.",
+      "gate": "Pair labels checked against scoped truth fixtures; duplicate pages add no authority."
+    },
+    {
+      "name": "resolveAuthority",
+      "output_type": "AuthorityDecision",
+      "algorithm": "Consult the configured publication hierarchy and explicit supersession records. Prefer authoritative material only inside its remit; if equally authoritative sources disagree, formulate a bounded clarification rather than selecting the newest or most fluent text.",
+      "gate": "Unresolved decisive authority blocks publication of the disputed claim."
+    },
+    {
+      "name": "composePatchSet",
+      "output_type": "PagePatch",
+      "algorithm": "Draft the smallest coordinated changes that resolve the selected conflicts. Preserve unrelated claims and local audience framing; update examples, cross-links, and summaries that would otherwise repeat the corrected mistake.",
+      "gate": "Patch applies to exact base hash; unchanged protected claims remain semantically equivalent."
+    },
+    {
+      "name": "verifyPublication",
+      "output_type": "PublicationCheck",
+      "algorithm": "Re-extract claims from the proposed page set and repeat comparison around changed topics. Inspect whether simplification removed exceptions; build a review packet with residual disagreements and publish only after required owners approve the same patch set.",
+      "gate": "Zero new contradiction in protected fixtures and no unresolved blocking conflict."
+    }
+  ],
+  "operational_details": [
+    "A page is edited during review: rebase only nonconflicting sections and require renewed approval for changed meaning.",
+    "A translated page lags its source: flag edition mismatch rather than calling the translation false.",
+    "A link points to an archived policy: preserve the archive but redirect current guidance explicitly.",
+    "A denied source vanishes from search: invalidate derived claims without leaking its title.",
+    "A release partially fails: retain a repair queue and do not mark the bundle fully published."
+  ],
+  "representative_episode": "Two onboarding pages disagree about trial eligibility because one describes a retired plan and one contains an actual typo.",
+  "independent_truth_basis": "Synthetic claim truth tables with date and audience partitions; exact patch application and link validation; independent semantic preservation judgments."
+}

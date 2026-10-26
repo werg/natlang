@@ -1,0 +1,50 @@
+{
+  "application_id": "096",
+  "title": "Escape Room Foundry",
+  "source_relative_path": "applications/20-games-live-events-and-interactive-experiences/096-escape-room-foundry.md",
+  "source_sha256": "79d484ef31392b994c96c227e5b435de229764287c69bae6f861033dddad3af1",
+  "domain_id": "20",
+  "stages": [
+    {
+      "name": "modelExperience",
+      "output_type": "EscapeConstraint",
+      "algorithm": "Interpret the creative brief, venue, prop capabilities, audience needs, and approved safety rules. Separate dramatic fiction from actual participant constraints, preserve unrestricted emergency exit and staff intervention, and identify unsupported physical mechanisms before puzzle design.",
+      "gate": "No real confinement, unsafe mechanism, or inaccessible mandatory path under supplied requirements."
+    },
+    {
+      "name": "constructPuzzleGraph",
+      "output_type": "PuzzleNode",
+      "algorithm": "Design a dependency graph of puzzles and information reveals, combining parallel and sequential paths deliberately. Give each node a meaningful narrative purpose, avoid circular prerequisites, and ensure every required clue is discoverable before it is needed.",
+      "gate": "Exact reachability and acyclic prerequisite checks; all mandatory goals have a feasible path."
+    },
+    {
+      "name": "writeArtifacts",
+      "output_type": "PuzzleArtifact",
+      "algorithm": "Create in-world documents, dialogue, labels, and clues that support the intended reasoning without relying on designer-only knowledge. Generate plausible player misreadings, preserve thematic coherence, and distinguish fair misdirection from ambiguity that makes the puzzle underdetermined.",
+      "gate": "Clues are sufficient, internally consistent, and do not require inaccessible external knowledge."
+    },
+    {
+      "name": "simulatePlayers",
+      "output_type": "PuzzlePlaytest",
+      "algorithm": "Run exact state-space checks and simulated player interpretations, including out-of-order discovery, lost props, repeated actions, and plausible wrong answers. Identify soft locks and confusing clues, then propose targeted repairs rather than adding arbitrary hints everywhere.",
+      "gate": "Every reachable operational state has a safe exit and a solvable or staff-recoverable route."
+    },
+    {
+      "name": "packageOperations",
+      "output_type": "EscapeOperations",
+      "algorithm": "Produce the full operating pack: setup, reset, hints, accessibility variants, prop checks, and staff recovery procedures. Verify reset completeness and session isolation, then obtain safety and creative review separately from the mathematical solvability check.",
+      "gate": "Independent solvability, safe operation, reliable reset, and human enjoyment review all required."
+    }
+  ],
+  "operational_details": [
+    "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+    "A prop is lost or broken: provide an approved staff recovery path without trapping participants.",
+    "A reset misses one item: detect it through a pre-session checklist and state verification.",
+    "A participant declines a sensory element: offer an equivalent accessible route.",
+    "A clue has two reasonable answers: repair the artifact or accept both when consistent with the design."
+  ],
+  "scenario": {
+    "representative_episode": "A themed room has parallel puzzles that converge on a final reveal, but one clue can be discovered out of order and a prop may fail during play.",
+    "independent_truth": "Exact puzzle state graph and prop capabilities, hidden intended interpretations, accessibility constraints, and independent player enjoyment review."
+  }
+}

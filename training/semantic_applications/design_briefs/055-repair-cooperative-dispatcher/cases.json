@@ -1,0 +1,522 @@
+[
+  {
+    "id": "055-repair-cooperative-dispatcher-gate-supported",
+    "root": "runCase/interpretSymptoms/audit/qualify.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "draft": {
+        "values": {
+          "itemId": "pump-P55",
+          "observedBehavior": "seal replacement followed by repeat pump failure",
+          "priorAttempt": "two seal replacements; no root-cause test recorded",
+          "riskFlag": "electrical isolation required before diagnosis",
+          "caseId": "case-55"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "riskFlag",
+            "evidenceIds": [
+              "055-repair-cooperative-dispatcher-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "repair tickets and technician qualification roster",
+        "evidence": [
+          {
+            "id": "055-repair-cooperative-dispatcher-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P55 fails after two seal replacements; T1 is free but lacks electrical isolation qualification, T2 is qualified after 14:00. Case case-55; current first-stage record values: {\"itemId\": \"pump-P55\", \"observedBehavior\": \"seal replacement followed by repeat pump failure\", \"priorAttempt\": \"two seal replacements; no root-cause test recorded\", \"riskFlag\": \"electrical isolation required before diagnosis\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Assignment depends on competence and safe diagnostics before calendar convenience."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "riskFlag",
+          "value": "electrical isolation required before diagnosis",
+          "evidenceIds": [
+            "055-repair-cooperative-dispatcher-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "repair tickets and technician qualification roster: Pump P-55 has failed twice after seal replacement. Technician T-1 is available but lacks electrical-isolation qualification; T-2 is qualified and available after 14:00. Apply the first-stage gate to the record and source versions; Assignment depends on competence and safe diagnostics before calendar convenience.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-gate-contradictory",
+    "root": "runCase/interpretSymptoms/audit/qualify.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "draft": {
+        "values": {
+          "itemId": "pump-P55",
+          "observedBehavior": "seal replacement followed by repeat pump failure",
+          "priorAttempt": "two seal replacements; no root-cause test recorded",
+          "riskFlag": "electrical isolation is not required before diagnosis",
+          "caseId": "case-55"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "riskFlag",
+            "evidenceIds": [
+              "055-repair-cooperative-dispatcher-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "repair tickets and technician qualification roster",
+        "evidence": [
+          {
+            "id": "055-repair-cooperative-dispatcher-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P55 fails after two seal replacements; T1 is free but lacks electrical isolation qualification, T2 is qualified after 14:00. Case case-55; current first-stage record values: {\"itemId\": \"pump-P55\", \"observedBehavior\": \"seal replacement followed by repeat pump failure\", \"priorAttempt\": \"two seal replacements; no root-cause test recorded\", \"riskFlag\": \"electrical isolation required before diagnosis\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Assignment depends on competence and safe diagnostics before calendar convenience."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "riskFlag",
+          "value": "electrical isolation is not required before diagnosis",
+          "evidenceIds": [
+            "055-repair-cooperative-dispatcher-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "repair tickets and technician qualification roster: Pump P-55 has failed twice after seal replacement. Technician T-1 is available but lacks electrical-isolation qualification; T-2 is qualified and available after 14:00. Apply the first-stage gate to the record and source versions; Assignment depends on competence and safe diagnostics before calendar convenience.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-gate-missing",
+    "root": "runCase/interpretSymptoms/audit/qualify.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-55"
+        },
+        "missingFields": [
+          "riskFlag"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes riskFlag?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "repair tickets and technician qualification roster",
+        "evidence": [],
+        "missing": [
+          "riskFlag"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Assignment depends on competence and safe diagnostics before calendar convenience."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "repair tickets and technician qualification roster: Pump P-55 has failed twice after seal replacement. Technician T-1 is available but lacks electrical-isolation qualification; T-2 is qualified and available after 14:00. Apply the first-stage gate to the record and source versions; Assignment depends on competence and safe diagnostics before calendar convenience.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-operational-1",
+    "root": "runCase.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "input": {
+        "caseId": "055-repair-cooperative-dispatcher-operational-1",
+        "goal": "Review the Repair cooperative dispatcher evidence for case 055-repair-cooperative-dispatcher-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "055-operational-detail-1-source-v2",
+            "source": "Repair cooperative dispatcher operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R055 Repair steward; event version verified for this case",
+            "observedAt": "2026-10-09T10:15:00Z",
+            "text": "R055 Repair steward records: Volunteer technician T55’s electrical-isolation qualification expired on 2026-10-09. The repair roster shows current hydraulic and pump-seal skills; job J55 for pump P55 requires electrical isolation before testing. This current event is source 055-operational-detail-1-source-v2 v2, observed 2026-10-09T10:15:00Z, for case 055-repair-cooperative-dispatcher-operational-1. The supplied typed prior 055-prior-repairsymptom-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Volunteer technician T55’s electrical-isolation qualification expired on 2026-10-09. The repair roster shows current hydraulic and pump-seal skills; job J55 for pump P55 requires electrical isolation before testing."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "055-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "055-prior-repairsymptom-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "055-repair-cooperative-dispatcher-operational-1",
+            "itemId": "pump-P55",
+            "observedBehavior": "seal replacement followed by repeat pump failure",
+            "priorAttempt": "two seal replacements; no root-cause test recorded",
+            "riskFlag": "electrical isolation required before diagnosis"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 055-repair-cooperative-dispatcher-operational-1 against this factual event: Volunteer technician T55’s electrical-isolation qualification expired on 2026-10-09. The repair roster shows current hydraulic and pump-seal skills; job J55 for pump P55 requires electrical isolation before testing. Original §9 detail: A volunteer’s qualification expires: block assignment requiring it while retaining unrelated skills. Correct handling applies “block assignment requiring it while retaining unrelated skills.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Volunteer technician T55’s electrical-isolation qualification expired on 2026-10-09. The repair roster shows current hydraulic and pump-seal skills; job J55 for pump P55 requires electrical isolation before testing.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A volunteer’s qualification expires: block assignment requiring it while retaining unrelated skills.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Volunteer technician T55’s electrical-isolation qualification expired on 2026-10-09. The repair roster shows current hydraulic and pump-seal skills; job J55 for pump P55 requires electrical isolation before testing. It links source 055-operational-detail-1-source-v2 v2 with prior typed RepairSymptom record 055-prior-repairsymptom-detail-1-v1 v1 and keeps unresolved scope visible for T55, J55, P55.",
+      "durable_state": "The proposal retains prior record 055-prior-repairsymptom-detail-1-v1 v1 and versions only the affected state for T55, J55, P55 against source 055-operational-detail-1-source-v2 v2; it applies “block assignment requiring it while retaining unrelated skills.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T55, J55, P55 and the scope supported by source 055-operational-detail-1-source-v2 v2; it represents “block assignment requiring it while retaining unrelated skills.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-operational-2",
+    "root": "runCase.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "input": {
+        "caseId": "055-repair-cooperative-dispatcher-operational-2",
+        "goal": "Review the Repair cooperative dispatcher evidence for case 055-repair-cooperative-dispatcher-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "055-operational-detail-2-source-v2",
+            "source": "Repair cooperative dispatcher operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R055 Repair steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R055 Repair steward records: Donated seal kit SP55 has packaging label revision C while pump P55 accepts revision D. Supplier compatibility table has no entry for C-to-D substitution; the repair crew has not opened the kit. This current event is source 055-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 055-repair-cooperative-dispatcher-operational-2. The supplied typed prior 055-prior-repairsymptom-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Donated seal kit SP55 has packaging label revision C while pump P55 accepts revision D. Supplier compatibility table has no entry for C-to-D substitution; the repair crew has not opened the kit."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "055-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "055-prior-repairsymptom-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "055-repair-cooperative-dispatcher-operational-2",
+            "itemId": "pump-P55",
+            "observedBehavior": "seal replacement followed by repeat pump failure",
+            "priorAttempt": "two seal replacements; no root-cause test recorded",
+            "riskFlag": "electrical isolation required before diagnosis"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 055-repair-cooperative-dispatcher-operational-2 against this factual event: Donated seal kit SP55 has packaging label revision C while pump P55 accepts revision D. Supplier compatibility table has no entry for C-to-D substitution; the repair crew has not opened the kit. Original §9 detail: A donated spare part has uncertain compatibility: request evidence before use. Correct handling applies “request evidence before use.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Donated seal kit SP55 has packaging label revision C while pump P55 accepts revision D. Supplier compatibility table has no entry for C-to-D substitution; the repair crew has not opened the kit.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A donated spare part has uncertain compatibility: request evidence before use.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Donated seal kit SP55 has packaging label revision C while pump P55 accepts revision D. Supplier compatibility table has no entry for C-to-D substitution; the repair crew has not opened the kit. It links source 055-operational-detail-2-source-v2 v2 with prior typed RepairSymptom record 055-prior-repairsymptom-detail-2-v1 v1 and keeps unresolved scope visible for SP55, P55.",
+      "durable_state": "The proposal retains prior record 055-prior-repairsymptom-detail-2-v1 v1 and versions only the affected state for SP55, P55 against source 055-operational-detail-2-source-v2 v2; it applies “request evidence before use.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to SP55, P55 and the scope supported by source 055-operational-detail-2-source-v2 v2; it represents “request evidence before use.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-operational-3",
+    "root": "runCase.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "input": {
+        "caseId": "055-repair-cooperative-dispatcher-operational-3",
+        "goal": "Review the Repair cooperative dispatcher evidence for case 055-repair-cooperative-dispatcher-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "055-operational-detail-3-source-v2",
+            "source": "Repair cooperative dispatcher operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R055 Repair steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R055 Repair steward records: Customer C55 reduces approved repair budget from $1,200 to $700 after scope S55-2 was authorized. Proposed work now includes a $280 motor test beyond the approved estimate; no revised approval is recorded. This current event is source 055-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 055-repair-cooperative-dispatcher-operational-3. The supplied typed prior 055-prior-repairsymptom-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C55 reduces approved repair budget from $1,200 to $700 after scope S55-2 was authorized. Proposed work now includes a $280 motor test beyond the approved estimate; no revised approval is recorded."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "055-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "055-prior-repairsymptom-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "055-repair-cooperative-dispatcher-operational-3",
+            "itemId": "pump-P55",
+            "observedBehavior": "seal replacement followed by repeat pump failure",
+            "priorAttempt": "two seal replacements; no root-cause test recorded",
+            "riskFlag": "electrical isolation required before diagnosis"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 055-repair-cooperative-dispatcher-operational-3 against this factual event: Customer C55 reduces approved repair budget from $1,200 to $700 after scope S55-2 was authorized. Proposed work now includes a $280 motor test beyond the approved estimate; no revised approval is recorded. Original §9 detail: The customer’s budget changes: reapprove scope before additional work. Correct handling applies “reapprove scope before additional work.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Customer C55 reduces approved repair budget from $1,200 to $700 after scope S55-2 was authorized. Proposed work now includes a $280 motor test beyond the approved estimate; no revised approval is recorded.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "The customer’s budget changes: reapprove scope before additional work.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Customer C55 reduces approved repair budget from $1,200 to $700 after scope S55-2 was authorized. Proposed work now includes a $280 motor test beyond the approved estimate; no revised approval is recorded. It links source 055-operational-detail-3-source-v2 v2 with prior typed RepairSymptom record 055-prior-repairsymptom-detail-3-v1 v1 and keeps unresolved scope visible for C55, S55-2.",
+      "durable_state": "The proposal retains prior record 055-prior-repairsymptom-detail-3-v1 v1 and versions only the affected state for C55, S55-2 against source 055-operational-detail-3-source-v2 v2; it applies “reapprove scope before additional work.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C55, S55-2 and the scope supported by source 055-operational-detail-3-source-v2 v2; it represents “reapprove scope before additional work.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-operational-4",
+    "root": "runCase.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "input": {
+        "caseId": "055-repair-cooperative-dispatcher-operational-4",
+        "goal": "Review the Repair cooperative dispatcher evidence for case 055-repair-cooperative-dispatcher-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "055-operational-detail-4-source-v2",
+            "source": "Repair cooperative dispatcher operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R055 Repair steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R055 Repair steward records: Pump P55 stops leaking for 30 minutes after a seal replacement, then leaks again under pressure. Work order W55-2 closes the replacement step but contains no recurrence-monitoring window or post-repair pressure test. This current event is source 055-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 055-repair-cooperative-dispatcher-operational-4. The supplied typed prior 055-prior-repairsymptom-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Pump P55 stops leaking for 30 minutes after a seal replacement, then leaks again under pressure. Work order W55-2 closes the replacement step but contains no recurrence-monitoring window or post-repair pressure test."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "055-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "055-prior-repairsymptom-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "055-repair-cooperative-dispatcher-operational-4",
+            "itemId": "pump-P55",
+            "observedBehavior": "seal replacement followed by repeat pump failure",
+            "priorAttempt": "two seal replacements; no root-cause test recorded",
+            "riskFlag": "electrical isolation required before diagnosis"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 055-repair-cooperative-dispatcher-operational-4 against this factual event: Pump P55 stops leaking for 30 minutes after a seal replacement, then leaks again under pressure. Work order W55-2 closes the replacement step but contains no recurrence-monitoring window or post-repair pressure test. Original §9 detail: A repair temporarily masks the symptom: keep a monitoring or recurrence record. Correct handling applies “keep a monitoring or recurrence record.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Pump P55 stops leaking for 30 minutes after a seal replacement, then leaks again under pressure. Work order W55-2 closes the replacement step but contains no recurrence-monitoring window or post-repair pressure test.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A repair temporarily masks the symptom: keep a monitoring or recurrence record.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Pump P55 stops leaking for 30 minutes after a seal replacement, then leaks again under pressure. Work order W55-2 closes the replacement step but contains no recurrence-monitoring window or post-repair pressure test. It links source 055-operational-detail-4-source-v2 v2 with prior typed RepairSymptom record 055-prior-repairsymptom-detail-4-v1 v1 and keeps unresolved scope visible for P55, W55-2.",
+      "durable_state": "The proposal retains prior record 055-prior-repairsymptom-detail-4-v1 v1 and versions only the affected state for P55, W55-2 against source 055-operational-detail-4-source-v2 v2; it applies “keep a monitoring or recurrence record.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P55, W55-2 and the scope supported by source 055-operational-detail-4-source-v2 v2; it represents “keep a monitoring or recurrence record.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "055-repair-cooperative-dispatcher-operational-5",
+    "root": "runCase.nl",
+    "split_group": "055-repair-cooperative-dispatcher",
+    "inputs": {
+      "input": {
+        "caseId": "055-repair-cooperative-dispatcher-operational-5",
+        "goal": "Review the Repair cooperative dispatcher evidence for case 055-repair-cooperative-dispatcher-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "055-operational-detail-5-source-v2",
+            "source": "Repair cooperative dispatcher operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R055 Repair steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R055 Repair steward records: Item I55-9 has a damaged pressurized cylinder and workshop safety log marks it unsafe for bench handling. The specialist hazardous-equipment route is listed in policy H55; no specialist intake has been opened. This current event is source 055-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 055-repair-cooperative-dispatcher-operational-5. The supplied typed prior 055-prior-repairsymptom-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Item I55-9 has a damaged pressurized cylinder and workshop safety log marks it unsafe for bench handling. The specialist hazardous-equipment route is listed in policy H55; no specialist intake has been opened."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "055-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "055-prior-repairsymptom-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "055-repair-cooperative-dispatcher-operational-5",
+            "itemId": "pump-P55",
+            "observedBehavior": "seal replacement followed by repeat pump failure",
+            "priorAttempt": "two seal replacements; no root-cause test recorded",
+            "riskFlag": "electrical isolation required before diagnosis"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 055-repair-cooperative-dispatcher-operational-5 against this factual event: Item I55-9 has a damaged pressurized cylinder and workshop safety log marks it unsafe for bench handling. The specialist hazardous-equipment route is listed in policy H55; no specialist intake has been opened. Original §9 detail: An item is unsafe to handle in the workshop: route it through the approved specialist process. Correct handling applies “route it through the approved specialist process.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Item I55-9 has a damaged pressurized cylinder and workshop safety log marks it unsafe for bench handling. The specialist hazardous-equipment route is listed in policy H55; no specialist intake has been opened.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "An item is unsafe to handle in the workshop: route it through the approved specialist process.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Item I55-9 has a damaged pressurized cylinder and workshop safety log marks it unsafe for bench handling. The specialist hazardous-equipment route is listed in policy H55; no specialist intake has been opened. It links source 055-operational-detail-5-source-v2 v2 with prior typed RepairSymptom record 055-prior-repairsymptom-detail-5-v1 v1 and keeps unresolved scope visible for I55-9, H55.",
+      "durable_state": "The proposal retains prior record 055-prior-repairsymptom-detail-5-v1 v1 and versions only the affected state for I55-9, H55 against source 055-operational-detail-5-source-v2 v2; it applies “route it through the approved specialist process.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to I55-9, H55 and the scope supported by source 055-operational-detail-5-source-v2 v2; it represents “route it through the approved specialist process.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

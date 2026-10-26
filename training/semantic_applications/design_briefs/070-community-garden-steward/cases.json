@@ -1,0 +1,522 @@
+[
+  {
+    "id": "070-community-garden-steward-gate-supported",
+    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "draft": {
+        "values": {
+          "memberId": "member-M70",
+          "desiredUse": "quiet accessible path across plot P70",
+          "availability": "weekly maintenance on Saturday morning",
+          "accessibilityNeed": "continuous step-free path; shared event use requires member agreement",
+          "caseId": "case-70"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "accessibilityNeed",
+            "evidenceIds": [
+              "070-community-garden-steward-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "community garden plot map and member requests",
+        "evidence": [
+          {
+            "id": "070-community-garden-steward-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "M70 requests an accessible quiet path across P70; N70 proposes a weekly event on the same strip; no agreement is signed. Case case-70; current first-stage record values: {\"accessibilityNeed\": \"continuous step-free path; shared event use requires member agreement\", \"availability\": \"weekly maintenance on Saturday morning\", \"desiredUse\": \"quiet accessible path across plot P70\", \"memberId\": \"member-M70\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Record both preferences and seek consent before assigning the shared space."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "accessibilityNeed",
+          "value": "continuous step-free path; shared event use requires member agreement",
+          "evidenceIds": [
+            "070-community-garden-steward-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "community garden plot map and member requests: Member M-70 requests an accessible quiet path across plot P-70. Member N-70 proposes a weekly shared event on that same strip; no allocation agreement has been signed. Apply the first-stage gate to the record and source versions; Record both preferences and seek consent before assigning the shared space.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "070-community-garden-steward-gate-contradictory",
+    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "draft": {
+        "values": {
+          "memberId": "member-M70",
+          "desiredUse": "quiet accessible path across plot P70",
+          "availability": "weekly maintenance on Saturday morning",
+          "accessibilityNeed": "no step-free access requirement; event may block the path",
+          "caseId": "case-70"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "accessibilityNeed",
+            "evidenceIds": [
+              "070-community-garden-steward-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "community garden plot map and member requests",
+        "evidence": [
+          {
+            "id": "070-community-garden-steward-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "M70 requests an accessible quiet path across P70; N70 proposes a weekly event on the same strip; no agreement is signed. Case case-70; current first-stage record values: {\"accessibilityNeed\": \"continuous step-free path; shared event use requires member agreement\", \"availability\": \"weekly maintenance on Saturday morning\", \"desiredUse\": \"quiet accessible path across plot P70\", \"memberId\": \"member-M70\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Record both preferences and seek consent before assigning the shared space."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "accessibilityNeed",
+          "value": "no step-free access requirement; event may block the path",
+          "evidenceIds": [
+            "070-community-garden-steward-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "community garden plot map and member requests: Member M-70 requests an accessible quiet path across plot P-70. Member N-70 proposes a weekly shared event on that same strip; no allocation agreement has been signed. Apply the first-stage gate to the record and source versions; Record both preferences and seek consent before assigning the shared space.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "070-community-garden-steward-gate-missing",
+    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-70"
+        },
+        "missingFields": [
+          "accessibilityNeed"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes accessibilityNeed?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "community garden plot map and member requests",
+        "evidence": [],
+        "missing": [
+          "accessibilityNeed"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Record both preferences and seek consent before assigning the shared space."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "community garden plot map and member requests: Member M-70 requests an accessible quiet path across plot P-70. Member N-70 proposes a weekly shared event on that same strip; no allocation agreement has been signed. Apply the first-stage gate to the record and source versions; Record both preferences and seek consent before assigning the shared space.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "070-community-garden-steward-operational-1",
+    "root": "runCase.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "input": {
+        "caseId": "070-community-garden-steward-operational-1",
+        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "070-operational-detail-1-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-14T09:00:00Z",
+            "text": "R070 Community steward records: Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task. This current event is source 070-operational-detail-1-source-v2 v2, observed 2026-10-14T09:00:00Z, for case 070-community-garden-steward-operational-1. The supplied typed prior 070-prior-gardenpreference-detail-1-v1 v1 is preserved for comparison. Typed record fields for this workflow are {\"accessibilityNeed\": \"member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)\", \"availability\": \"unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning\", \"desiredUse\": \"quiet accessible path across plot P70\", \"memberId\": \"member-M70 (Dana Lee)\"}.",
+            "supports": [
+              "Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "070-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "070-prior-gardenpreference-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-1",
+            "memberId": "member-M70 (Dana Lee)",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning",
+            "accessibilityNeed": "member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 070-community-garden-steward-operational-1 against this factual event: Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task. Original §9 detail: A member becomes unavailable: renegotiate duties instead of silently assigning them to someone else. Correct handling applies “renegotiate duties instead of silently assigning them to someone else.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A member becomes unavailable: renegotiate duties instead of silently assigning them to someone else.",
+    "boundary_assertions": {
+      "view": "Garden coordinator view shows Dana Lee unavailable Oct 14–28, duties Saturday irrigation and Tuesday compost-turning, and R70/K70 availability with their unaccepted status.",
+      "durable_state": "Proposal records Dana’s availability change and preserves both duties as uncovered until a replacement has explicitly accepted; it does not silently assign them.",
+      "effects": "Propose consent requests to suitable available members; no task transfer is marked accepted or sent without approval."
+    }
+  },
+  {
+    "id": "070-community-garden-steward-operational-2",
+    "root": "runCase.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "input": {
+        "caseId": "070-community-garden-steward-operational-2",
+        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "070-operational-detail-2-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R070 Community steward records: Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled. This current event is source 070-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 070-community-garden-steward-operational-2. The supplied typed prior 070-prior-gardenpreference-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "070-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "070-prior-gardenpreference-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-2",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 070-community-garden-steward-operational-2 against this factual event: Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled. Original §9 detail: A shared tool breaks: replan affected tasks and preserve reservations awaiting repair. Correct handling applies “replan affected tasks and preserve reservations awaiting repair.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A shared tool breaks: replan affected tasks and preserve reservations awaiting repair.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled. It links source 070-operational-detail-2-source-v2 v2 with prior typed GardenPreference record 070-prior-gardenpreference-detail-2-v1 v1 and keeps unresolved scope visible for T70-4, P70, M70, R70.",
+      "durable_state": "The proposal retains prior record 070-prior-gardenpreference-detail-2-v1 v1 and versions only the affected state for T70-4, P70, M70, R70 against source 070-operational-detail-2-source-v2 v2; it applies “replan affected tasks and preserve reservations awaiting repair.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T70-4, P70, M70, R70 and the scope supported by source 070-operational-detail-2-source-v2 v2; it represents “replan affected tasks and preserve reservations awaiting repair.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "070-community-garden-steward-operational-3",
+    "root": "runCase.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "input": {
+        "caseId": "070-community-garden-steward-operational-3",
+        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "070-operational-detail-3-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R070 Community steward records: Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached. This current event is source 070-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 070-community-garden-steward-operational-3. The supplied typed prior 070-prior-gardenpreference-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "070-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "070-prior-gardenpreference-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-3",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 070-community-garden-steward-operational-3 against this factual event: Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached. Original §9 detail: A plot’s condition is uncertain: request appropriate assessment before consequential changes. Correct handling applies “request appropriate assessment before consequential changes.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A plot’s condition is uncertain: request appropriate assessment before consequential changes.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached. It links source 070-operational-detail-3-source-v2 v2 with prior typed GardenPreference record 070-prior-gardenpreference-detail-3-v1 v1 and keeps unresolved scope visible for P70, P70-8.",
+      "durable_state": "The proposal retains prior record 070-prior-gardenpreference-detail-3-v1 v1 and versions only the affected state for P70, P70-8 against source 070-operational-detail-3-source-v2 v2; it applies “request appropriate assessment before consequential changes.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P70, P70-8 and the scope supported by source 070-operational-detail-3-source-v2 v2; it represents “request appropriate assessment before consequential changes.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "070-community-garden-steward-operational-4",
+    "root": "runCase.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "input": {
+        "caseId": "070-community-garden-steward-operational-4",
+        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "070-operational-detail-4-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R070 Community steward records: On 2026-10-05, member M70 reports a successful harvest from trial allocation TA70-3 for plot P70. The four-week agreement remains in force through Oct 31; no renewal consent is signed. This current event is source 070-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 070-community-garden-steward-operational-4. The supplied typed prior 070-prior-gardenpreference-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Trial allocation TA70-3 gives member M70 plot P70 for a four-week test. The member reports a successful harvest, but the written agreement labels the allocation “trial through Oct 31”; no renewal consent is signed."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "070-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "070-prior-gardenpreference-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-4",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 070-community-garden-steward-operational-4 against this factual event: Trial allocation TA70-3 gives member M70 plot P70 for a four-week test. The member reports a successful harvest, but the written agreement labels the allocation “trial through Oct 31”; no renewal consent is signed. Original §9 detail: A trial allocation succeeds: seek explicit agreement before making it permanent. Correct handling applies “seek explicit agreement before making it permanent.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "On 2026-10-05, member M70 reports a successful harvest from trial allocation TA70-3 for plot P70. The four-week agreement remains in force through Oct 31; no renewal consent is signed.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A trial allocation succeeds: seek explicit agreement before making it permanent.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Trial allocation TA70-3 gives member M70 plot P70 for a four-week test. The member reports a successful harvest, but the written agreement labels the allocation “trial through Oct 31”; no renewal consent is signed. It links source 070-operational-detail-4-source-v2 v2 with prior typed GardenPreference record 070-prior-gardenpreference-detail-4-v1 v1 and keeps unresolved scope visible for TA70-3, M70, P70.",
+      "durable_state": "The proposal retains prior record 070-prior-gardenpreference-detail-4-v1 v1 and versions only the affected state for TA70-3, M70, P70 against source 070-operational-detail-4-source-v2 v2; it applies “seek explicit agreement before making it permanent.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to TA70-3, M70, P70 and the scope supported by source 070-operational-detail-4-source-v2 v2; it represents “seek explicit agreement before making it permanent.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "070-community-garden-steward-operational-5",
+    "root": "runCase.nl",
+    "split_group": "070-community-garden-steward",
+    "inputs": {
+      "input": {
+        "caseId": "070-community-garden-steward-operational-5",
+        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "070-operational-detail-5-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R070 Community steward records: Member M70 gave notice on 2026-10-06 that they will leave the garden on 2026-10-20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and harvest rights for produce already planted; no successor has accepted handover. This current event is source 070-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 070-community-garden-steward-operational-5. The supplied typed prior 070-prior-gardenpreference-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Member M70 gives notice of leaving the garden on Oct 20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and grants harvest rights for produce already planted; no successor has accepted handover."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "070-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "070-prior-gardenpreference-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-5",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 070-community-garden-steward-operational-5 against this factual event: Member M70 gives notice of leaving the garden on Oct 20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and grants harvest rights for produce already planted; no successor has accepted handover. Original §9 detail: A member leaves mid-season: transfer care and harvest rights through a documented agreement. Correct handling applies “transfer care and harvest rights through a documented agreement.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Member M70 gave notice on 2026-10-06 that they will leave the garden on 2026-10-20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and harvest rights for produce already planted; no successor has accepted handover.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A member leaves mid-season: transfer care and harvest rights through a documented agreement.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Member M70 gives notice of leaving the garden on Oct 20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and grants harvest rights for produce already planted; no successor has accepted handover. It links source 070-operational-detail-5-source-v2 v2 with prior typed GardenPreference record 070-prior-gardenpreference-detail-5-v1 v1 and keeps unresolved scope visible for M70, P70-A, P70-B.",
+      "durable_state": "The proposal retains prior record 070-prior-gardenpreference-detail-5-v1 v1 and versions only the affected state for M70, P70-A, P70-B against source 070-operational-detail-5-source-v2 v2; it applies “transfer care and harvest rights through a documented agreement.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M70, P70-A, P70-B and the scope supported by source 070-operational-detail-5-source-v2 v2; it represents “transfer care and harvest rights through a documented agreement.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

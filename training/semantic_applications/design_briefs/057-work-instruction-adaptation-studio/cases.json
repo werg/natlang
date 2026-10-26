@@ -1,0 +1,522 @@
+[
+  {
+    "id": "057-work-instruction-adaptation-studio-gate-supported",
+    "root": "runCase/recoverProcedure/audit/qualify.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "action": "clear obstruction from machine M57",
+          "prerequisite": "isolate energy and verify zero-energy state",
+          "safetyConstraint": "guard must remain closed until isolation is verified",
+          "expectedEvidence": "signed zero-energy check before access",
+          "caseId": "case-57"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "expectedEvidence",
+            "evidenceIds": [
+              "057-work-instruction-adaptation-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "master work instruction and local equipment survey",
+        "evidence": [
+          {
+            "id": "057-work-instruction-adaptation-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Machine M57 master procedure requires guard closure and zero-energy verification before clearing an obstruction. Case case-57; current first-stage record values: {\"action\": \"clear obstruction from machine M57\", \"expectedEvidence\": \"signed zero-energy check before access\", \"prerequisite\": \"isolate energy and verify zero-energy state\", \"safetyConstraint\": \"guard must remain closed until isolation is verified\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Adapt access steps while retaining every safety prerequisite and explicit deviation authority."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "expectedEvidence",
+          "value": "signed zero-energy check before access",
+          "evidenceIds": [
+            "057-work-instruction-adaptation-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "master work instruction and local equipment survey: Master WI-57 requires guard closure and zero-energy verification. Machine M-57 has a narrow access panel; the local note proposes skipping the guard check but contains no approved engineering deviation. Apply the first-stage gate to the record and source versions; Adapt access steps while retaining every safety prerequisite and explicit deviation authority.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-gate-contradictory",
+    "root": "runCase/recoverProcedure/audit/qualify.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "action": "clear obstruction from machine M57",
+          "prerequisite": "open access panel before zero-energy verification",
+          "safetyConstraint": "guard must remain closed until isolation is verified",
+          "expectedEvidence": "signed zero-energy check before access",
+          "caseId": "case-57"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "expectedEvidence",
+            "evidenceIds": [
+              "057-work-instruction-adaptation-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "master work instruction and local equipment survey",
+        "evidence": [
+          {
+            "id": "057-work-instruction-adaptation-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Machine M57 master procedure requires guard closure and zero-energy verification before clearing an obstruction. Case case-57; current first-stage record values: {\"action\": \"clear obstruction from machine M57\", \"expectedEvidence\": \"signed zero-energy check before access\", \"prerequisite\": \"isolate energy and verify zero-energy state\", \"safetyConstraint\": \"guard must remain closed until isolation is verified\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Adapt access steps while retaining every safety prerequisite and explicit deviation authority."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "prerequisite",
+          "value": "open access panel before zero-energy verification",
+          "evidenceIds": [
+            "057-work-instruction-adaptation-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "master work instruction and local equipment survey: Master WI-57 requires guard closure and zero-energy verification. Machine M-57 has a narrow access panel; the local note proposes skipping the guard check but contains no approved engineering deviation. Apply the first-stage gate to the record and source versions; Adapt access steps while retaining every safety prerequisite and explicit deviation authority.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-gate-missing",
+    "root": "runCase/recoverProcedure/audit/qualify.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-57"
+        },
+        "missingFields": [
+          "expectedEvidence"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes expectedEvidence?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "master work instruction and local equipment survey",
+        "evidence": [],
+        "missing": [
+          "expectedEvidence"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Adapt access steps while retaining every safety prerequisite and explicit deviation authority."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "master work instruction and local equipment survey: Master WI-57 requires guard closure and zero-energy verification. Machine M-57 has a narrow access panel; the local note proposes skipping the guard check but contains no approved engineering deviation. Apply the first-stage gate to the record and source versions; Adapt access steps while retaining every safety prerequisite and explicit deviation authority.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-operational-1",
+    "root": "runCase.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "input": {
+        "caseId": "057-work-instruction-adaptation-studio-operational-1",
+        "goal": "Review the Work instruction adaptation studio evidence for case 057-work-instruction-adaptation-studio-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "057-operational-detail-1-source-v2",
+            "source": "Work instruction adaptation studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R057 Work steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R057 Work steward records: Printed work instruction WI57-4 revision 4 remains posted at machine M57 after electronic revision 5 took effect. Withdrawal log has no acknowledgment from night shift; one traveler cites revision 4. This current event is source 057-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 057-work-instruction-adaptation-studio-operational-1. The supplied typed prior 057-prior-procedurerequirement-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Printed work instruction WI57-4 revision 4 remains posted at machine M57 after electronic revision 5 took effect. Withdrawal log has no acknowledgment from night shift; one traveler cites revision 4."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "057-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "057-prior-procedurerequirement-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "057-work-instruction-adaptation-studio-operational-1",
+            "action": "clear obstruction from machine M57",
+            "prerequisite": "isolate energy and verify zero-energy state",
+            "safetyConstraint": "guard must remain closed until isolation is verified",
+            "expectedEvidence": "signed zero-energy check before access"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 057-work-instruction-adaptation-studio-operational-1 against this factual event: Printed work instruction WI57-4 revision 4 remains posted at machine M57 after electronic revision 5 took effect. Withdrawal log has no acknowledgment from night shift; one traveler cites revision 4. Original §9 detail: A printed instruction remains on the floor: include version identifiers and a withdrawal task. Correct handling applies “include version identifiers and a withdrawal task.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Printed work instruction WI57-4 revision 4 remains posted at machine M57 after electronic revision 5 took effect. Withdrawal log has no acknowledgment from night shift; one traveler cites revision 4.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A printed instruction remains on the floor: include version identifiers and a withdrawal task.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Printed work instruction WI57-4 revision 4 remains posted at machine M57 after electronic revision 5 took effect. Withdrawal log has no acknowledgment from night shift; one traveler cites revision 4. It links source 057-operational-detail-1-source-v2 v2 with prior typed ProcedureRequirement record 057-prior-procedurerequirement-detail-1-v1 v1 and keeps unresolved scope visible for WI57-4, M57.",
+      "durable_state": "The proposal retains prior record 057-prior-procedurerequirement-detail-1-v1 v1 and versions only the affected state for WI57-4, M57 against source 057-operational-detail-1-source-v2 v2; it applies “include version identifiers and a withdrawal task.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to WI57-4, M57 and the scope supported by source 057-operational-detail-1-source-v2 v2; it represents “include version identifiers and a withdrawal task.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-operational-2",
+    "root": "runCase.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "input": {
+        "caseId": "057-work-instruction-adaptation-studio-operational-2",
+        "goal": "Review the Work instruction adaptation studio evidence for case 057-work-instruction-adaptation-studio-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "057-operational-detail-2-source-v2",
+            "source": "Work instruction adaptation studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R057 Work steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R057 Work steward records: Local term “red lock” is used in a translation for both the energy-isolation lock L57 and the guard interlock reset R57. Operators report the phrase without a device number; equipment diagram assigns distinct IDs. This current event is source 057-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 057-work-instruction-adaptation-studio-operational-2. The supplied typed prior 057-prior-procedurerequirement-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Local term “red lock” is used in a translation for both the energy-isolation lock L57 and the guard interlock reset R57. Operators report the phrase without a device number; equipment diagram assigns distinct IDs."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "057-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "057-prior-procedurerequirement-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "057-work-instruction-adaptation-studio-operational-2",
+            "action": "clear obstruction from machine M57",
+            "prerequisite": "isolate energy and verify zero-energy state",
+            "safetyConstraint": "guard must remain closed until isolation is verified",
+            "expectedEvidence": "signed zero-energy check before access"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 057-work-instruction-adaptation-studio-operational-2 against this factual event: Local term “red lock” is used in a translation for both the energy-isolation lock L57 and the guard interlock reset R57. Operators report the phrase without a device number; equipment diagram assigns distinct IDs. Original §9 detail: A local term names two controls: require unambiguous equipment references. Correct handling applies “require unambiguous equipment references.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Local term “red lock” is used in a translation for both the energy-isolation lock L57 and the guard interlock reset R57. Operators report the phrase without a device number; equipment diagram assigns distinct IDs.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A local term names two controls: require unambiguous equipment references.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Local term “red lock” is used in a translation for both the energy-isolation lock L57 and the guard interlock reset R57. Operators report the phrase without a device number; equipment diagram assigns distinct IDs. It links source 057-operational-detail-2-source-v2 v2 with prior typed ProcedureRequirement record 057-prior-procedurerequirement-detail-2-v1 v1 and keeps unresolved scope visible for L57, R57.",
+      "durable_state": "The proposal retains prior record 057-prior-procedurerequirement-detail-2-v1 v1 and versions only the affected state for L57, R57 against source 057-operational-detail-2-source-v2 v2; it applies “require unambiguous equipment references.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L57, R57 and the scope supported by source 057-operational-detail-2-source-v2 v2; it represents “require unambiguous equipment references.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-operational-3",
+    "root": "runCase.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "input": {
+        "caseId": "057-work-instruction-adaptation-studio-operational-3",
+        "goal": "Review the Work instruction adaptation studio evidence for case 057-work-instruction-adaptation-studio-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "057-operational-detail-3-source-v2",
+            "source": "Work instruction adaptation studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R057 Work steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R057 Work steward records: English warning W57 says “verify zero energy before access”; translated warning says “check the energy before access.” Translation memory has no independent safety-language review for the shorter phrase. This current event is source 057-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 057-work-instruction-adaptation-studio-operational-3. The supplied typed prior 057-prior-procedurerequirement-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "English warning W57 says “verify zero energy before access”; translated warning says “check the energy before access.” Translation memory has no independent safety-language review for the shorter phrase."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "057-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "057-prior-procedurerequirement-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "057-work-instruction-adaptation-studio-operational-3",
+            "action": "clear obstruction from machine M57",
+            "prerequisite": "isolate energy and verify zero-energy state",
+            "safetyConstraint": "guard must remain closed until isolation is verified",
+            "expectedEvidence": "signed zero-energy check before access"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 057-work-instruction-adaptation-studio-operational-3 against this factual event: English warning W57 says “verify zero energy before access”; translated warning says “check the energy before access.” Translation memory has no independent safety-language review for the shorter phrase. Original §9 detail: A translation shortens a warning: verify semantic preservation before release. Correct handling applies “verify semantic preservation before release.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "English warning W57 says “verify zero energy before access”; translated warning says “check the energy before access.” Translation memory has no independent safety-language review for the shorter phrase.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A translation shortens a warning: verify semantic preservation before release.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: English warning W57 says “verify zero energy before access”; translated warning says “check the energy before access.” Translation memory has no independent safety-language review for the shorter phrase. It links source 057-operational-detail-3-source-v2 v2 with prior typed ProcedureRequirement record 057-prior-procedurerequirement-detail-3-v1 v1 and keeps unresolved scope visible for W57.",
+      "durable_state": "The proposal retains prior record 057-prior-procedurerequirement-detail-3-v1 v1 and versions only the affected state for W57 against source 057-operational-detail-3-source-v2 v2; it applies “verify semantic preservation before release.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to W57 and the scope supported by source 057-operational-detail-3-source-v2 v2; it represents “verify semantic preservation before release.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-operational-4",
+    "root": "runCase.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "input": {
+        "caseId": "057-work-instruction-adaptation-studio-operational-4",
+        "goal": "Review the Work instruction adaptation studio evidence for case 057-work-instruction-adaptation-studio-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "057-operational-detail-4-source-v2",
+            "source": "Work instruction adaptation studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R057 Work steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R057 Work steward records: Procedure WI57 step 6 was interrupted after valve V57 was closed but before pressure bleed-down verification. Operator log timestamps the stop at 14:02; no restart check or verifier signature is present. This current event is source 057-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 057-work-instruction-adaptation-studio-operational-4. The supplied typed prior 057-prior-procedurerequirement-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Procedure WI57 step 6 was interrupted after valve V57 was closed but before pressure bleed-down verification. Operator log timestamps the stop at 14:02; no restart check or verifier signature is present."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "057-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "057-prior-procedurerequirement-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "057-work-instruction-adaptation-studio-operational-4",
+            "action": "clear obstruction from machine M57",
+            "prerequisite": "isolate energy and verify zero-energy state",
+            "safetyConstraint": "guard must remain closed until isolation is verified",
+            "expectedEvidence": "signed zero-energy check before access"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 057-work-instruction-adaptation-studio-operational-4 against this factual event: Procedure WI57 step 6 was interrupted after valve V57 was closed but before pressure bleed-down verification. Operator log timestamps the stop at 14:02; no restart check or verifier signature is present. Original §9 detail: A procedure is interrupted mid-step: specify restart and re-verification conditions. Correct handling applies “specify restart and re-verification conditions.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Procedure WI57 step 6 was interrupted after valve V57 was closed but before pressure bleed-down verification. Operator log timestamps the stop at 14:02; no restart check or verifier signature is present.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A procedure is interrupted mid-step: specify restart and re-verification conditions.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Procedure WI57 step 6 was interrupted after valve V57 was closed but before pressure bleed-down verification. Operator log timestamps the stop at 14:02; no restart check or verifier signature is present. It links source 057-operational-detail-4-source-v2 v2 with prior typed ProcedureRequirement record 057-prior-procedurerequirement-detail-4-v1 v1 and keeps unresolved scope visible for WI57, V57.",
+      "durable_state": "The proposal retains prior record 057-prior-procedurerequirement-detail-4-v1 v1 and versions only the affected state for WI57, V57 against source 057-operational-detail-4-source-v2 v2; it applies “specify restart and re-verification conditions.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to WI57, V57 and the scope supported by source 057-operational-detail-4-source-v2 v2; it represents “specify restart and re-verification conditions.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "057-work-instruction-adaptation-studio-operational-5",
+    "root": "runCase.nl",
+    "split_group": "057-work-instruction-adaptation-studio",
+    "inputs": {
+      "input": {
+        "caseId": "057-work-instruction-adaptation-studio-operational-5",
+        "goal": "Review the Work instruction adaptation studio evidence for case 057-work-instruction-adaptation-studio-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "057-operational-detail-5-source-v2",
+            "source": "Work instruction adaptation studio operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R057 Work steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R057 Work steward records: Local exception EX57 waives the production queue when a station is delayed; inspection checklist IC57 remains required for every released part. The shift note says “skip the queue checks,” which does not identify which checks it means. This current event is source 057-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 057-work-instruction-adaptation-studio-operational-5. The supplied typed prior 057-prior-procedurerequirement-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Local exception EX57 waives the production queue when a station is delayed; inspection checklist IC57 remains required for every released part. The shift note says “skip the queue checks,” which does not identify which checks it means."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "057-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "057-prior-procedurerequirement-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "057-work-instruction-adaptation-studio-operational-5",
+            "action": "clear obstruction from machine M57",
+            "prerequisite": "isolate energy and verify zero-energy state",
+            "safetyConstraint": "guard must remain closed until isolation is verified",
+            "expectedEvidence": "signed zero-energy check before access"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 057-work-instruction-adaptation-studio-operational-5 against this factual event: Local exception EX57 waives the production queue when a station is delayed; inspection checklist IC57 remains required for every released part. The shift note says “skip the queue checks,” which does not identify which checks it means. Original §9 detail: A local exception waives a queue but not an inspection: preserve the inspection guard explicitly. Correct handling applies “preserve the inspection guard explicitly.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Local exception EX57 waives the production queue when a station is delayed; inspection checklist IC57 remains required for every released part. The shift note says “skip the queue checks,” which does not identify which checks it means.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A local exception waives a queue but not an inspection: preserve the inspection guard explicitly.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Local exception EX57 waives the production queue when a station is delayed; inspection checklist IC57 remains required for every released part. The shift note says “skip the queue checks,” which does not identify which checks it means. It links source 057-operational-detail-5-source-v2 v2 with prior typed ProcedureRequirement record 057-prior-procedurerequirement-detail-5-v1 v1 and keeps unresolved scope visible for EX57, IC57.",
+      "durable_state": "The proposal retains prior record 057-prior-procedurerequirement-detail-5-v1 v1 and versions only the affected state for EX57, IC57 against source 057-operational-detail-5-source-v2 v2; it applies “preserve the inspection guard explicitly.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to EX57, IC57 and the scope supported by source 057-operational-detail-5-source-v2 v2; it represents “preserve the inspection guard explicitly.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

@@ -1,0 +1,49 @@
+{
+  "application_id": "018",
+  "title": "Supplier incident coordinator",
+  "source_relative_path": "applications/04-procurement-and-supplier-management/018-supplier-incident-coordinator.md",
+  "program_root": "codebases/design_briefs/018-supplier-incident-coordinator",
+  "source_sha256": "42f0201e79352d15b8694065ce146a51d1ae5ab3586db1a6197c88072f653320",
+  "domain_id": "04",
+  "stages": [
+    {
+      "name": "linkReports",
+      "output_type": "IncidentCluster",
+      "algorithm": "Compare complaints, inspections, and shipment events by product, lot, timing, and failure mechanism. Group plausibly related events while retaining independent incidents and contradictory evidence; do not merge all problems from one supplier into a single cause.",
+      "gate": "Cluster membership has a specific shared factor and preserves uncertain links."
+    },
+    {
+      "name": "assessExposure",
+      "output_type": "ExposureFinding",
+      "algorithm": "Trace potentially affected lots and orders through authoritative supply records. Distinguish confirmed exposure from precautionary scope, identify downstream commitments, and ask for missing traceability evidence before narrowing a containment boundary.",
+      "gate": "Exact lineage traversal; no unsupported exclusion of potentially affected stock."
+    },
+    {
+      "name": "planContainment",
+      "output_type": "ContainmentPlan",
+      "algorithm": "Select approved containment actions proportionate to the established issue and uncertainty. Coordinate holds, inspections, alternative supply, and reviewed communications while preserving unaffected orders and avoiding promises before capacity is reserved.",
+      "gate": "Actions remain within delegated authority and have explicit release criteria."
+    },
+    {
+      "name": "interpretCorrection",
+      "output_type": "CorrectiveAction",
+      "algorithm": "Evaluate the supplier’s explanation against incident evidence and rival mechanisms. Separate immediate correction from prevention of recurrence, identify testable claims, and request evidence that the proposed change addresses the actual mechanism rather than just the symptoms.",
+      "gate": "A plausible narrative alone cannot close the causal investigation."
+    },
+    {
+      "name": "verifyClosure",
+      "output_type": "IncidentClosure",
+      "algorithm": "Check implemented actions, release criteria, and subsequent observations. Preserve residual risk and monitoring obligations; reopen the incident when a materially similar recurrence contradicts the closure rationale rather than treating it as a fresh unrelated ticket.",
+      "gate": "All containment and verification obligations resolved or explicitly transferred to an accepted owner."
+    }
+  ],
+  "operational_details": [
+    "A supplier renumbers a lot: retain alias mapping and original traceability evidence.",
+    "An order is split across affected and unaffected stock: release only the verified portion.",
+    "The supplier misses a response deadline: escalate without automatically accepting the proposed explanation.",
+    "A recurrence occurs after closure: link it to the prior causal claim and reopen the relevant verification.",
+    "A customer notification is corrected: preserve delivery history and issue a reviewed amendment."
+  ],
+  "representative_episode": "Several complaints share one coating batch, but a late shipment from the same supplier is unrelated; the supplier proposes a training-only fix.",
+  "independent_truth_basis": "Hidden lot lineage, failure mechanisms, approved containment actions, and simulated recurrence evidence."
+}

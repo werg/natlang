@@ -1,0 +1,89 @@
+{
+  "application_id": "062",
+  "title": "Tender scope gap resolver",
+  "source_relative_path": "applications/13-construction-property-and-facilities/062-tender-scope-gap-resolver.md",
+  "source_sha256": "877173fe784b717d984e9473809481f0afa16956c0f41e685ad1c3bae1901842",
+  "domain_id": "13",
+  "stages": [
+    {
+      "name": "normalizeBids",
+      "output_type": "BidScope",
+      "algorithm": "Read each bid, qualification, schedule, and addendum as a package. Extract functional scope rather than relying on trade headings, distinguish allowances from firm inclusions, and retain conditional exclusions that affect interfaces with other bidders.",
+      "gate": "Every scope statement retains its original qualification and bid version."
+    },
+    {
+      "name": "mapRequirements",
+      "output_type": "ScopeCoverage",
+      "algorithm": "Compare required functions with bid inclusions and exclusions, recognizing different descriptions of the same work. Separate supply, installation, commissioning, and certification responsibilities instead of assuming one broad line covers all phases.",
+      "gate": "Coverage is phase-specific and evidence-backed."
+    },
+    {
+      "name": "identifySeams",
+      "output_type": "ScopeInterface",
+      "algorithm": "Inspect interfaces where one bidder excludes work as by others or assumes another trade provides prerequisites. Identify unowned functions and duplicated commitments, and distinguish acceptable overlap from double-charged or conflicting responsibility.",
+      "gate": "Every required interface has an accepted owner or an explicit unresolved gap."
+    },
+    {
+      "name": "runClarifications",
+      "output_type": "ScopeClarification",
+      "algorithm": "Form precise clarification requests describing the disputed boundary and desired acceptance. Interpret replies at the commitment level, preserve qualifications, and avoid treating general cooperation language as acceptance of a specific responsibility.",
+      "gate": "A clarification closes a gap only with explicit scoped acceptance."
+    },
+    {
+      "name": "freezeMatrix",
+      "output_type": "ResponsibilityMatrix",
+      "algorithm": "Assemble a reconciled responsibility matrix and commercial comparison using accepted clarifications. Recheck all required functions and dependencies, expose residual gaps, and bind the selection packet to the exact bid editions reviewed.",
+      "gate": "No silent assignment of unaccepted obligations and no uncovered mandatory function."
+    }
+  ],
+  "operational_details": [
+    "A bidder’s price includes an allowance rather than a firm quantity: preserve uncertainty in comparison.",
+    "A clarification changes an exclusion: update all affected interface cells.",
+    "Two trades each assume the other supplies a connection: create a named acceptance task.",
+    "A late bid revision removes an inclusion: invalidate the previous coverage finding.",
+    "A lower total omits commissioning: show functional incompleteness rather than ranking by price alone."
+  ],
+  "domain_records": {
+    "ScopeReview": [
+      "projectId: ID",
+      "bidIds: ID[]",
+      "requiredScopeId: ID",
+      "reviewerId: ID",
+      "tenderRound: string"
+    ],
+    "BidScope": [
+      "caseId: ID",
+      "bidderId: ID",
+      "includedFunctions: string[]",
+      "excludedFunctions: string[]",
+      "allowances: string[]"
+    ],
+    "ScopeCoverage": [
+      "caseId: ID",
+      "requirementId: ID",
+      "candidateBidIds: ID[]",
+      "coverageKind: 'full'|'partial'|'none'|'uncertain'"
+    ],
+    "ScopeInterface": [
+      "caseId: ID",
+      "requirementIds: ID[]",
+      "parties: ID[]",
+      "gap: string",
+      "duplicateWork: string"
+    ],
+    "ScopeClarification": [
+      "caseId: ID",
+      "bidderId: ID",
+      "question: string",
+      "requiredCommitment: string",
+      "responseRef: Ref"
+    ],
+    "ResponsibilityMatrix": [
+      "caseId: ID",
+      "coverageIds: ID[]",
+      "interfaceIds: ID[]",
+      "acceptedBidRefs: Ref[]",
+      "residualGaps: string[]"
+    ]
+  }
+}

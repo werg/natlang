@@ -1,0 +1,91 @@
+{
+  "application_id": "053",
+  "title": "Industrial surplus exchange",
+  "source_relative_path": "applications/11-logistics-redistribution-and-circular-economy/053-industrial-surplus-exchange.md",
+  "source_sha256": "77980837c353219f532038e625470a74984fb767e18e4a2918e7764ec44bd39f",
+  "domain_id": "11",
+  "stages": [
+    {
+      "name": "interpretOffers",
+      "output_type": "SurplusOffer",
+      "algorithm": "Translate surplus descriptions into functional properties, quantities, condition, and known limitations. Distinguish verified specifications from seller assumptions, preserve ownership and handling restrictions, and identify information needed before proposing a consequential reuse.",
+      "gate": "No unsupported material property or transferable-title claim."
+    },
+    {
+      "name": "interpretNeeds",
+      "output_type": "ReuseNeed",
+      "algorithm": "Recover the actual purpose behind recipient requests, separating essential performance from preferred form. Identify acceptable adaptations and nonnegotiable constraints, including evidence or specialist approval needed for unfamiliar materials or equipment.",
+      "gate": "Recipient confirms constraints that determine suitability or safety."
+    },
+    {
+      "name": "generateReuse",
+      "output_type": "ReuseMatch",
+      "algorithm": "Propose conventional and inventive matches based on function rather than product names. Explain the adaptation mechanism and uncertainty, include multi-item bundles when useful, and reject creativity that depends on relaxing essential requirements or unapproved handling.",
+      "gate": "Essential fit is evidenced; speculative compatibility creates a qualification task, not an allocation."
+    },
+    {
+      "name": "assembleExchange",
+      "output_type": "ExchangePackage",
+      "algorithm": "Construct feasible multi-party exchanges using exact quantity, reservation, and transport services. Account for dependent legs, storage windows, and adaptation costs, and preserve unallocated surplus and unmet needs explicitly.",
+      "gate": "No double allocation, unsupported capacity, or negative quantity."
+    },
+    {
+      "name": "verifyTransfer",
+      "output_type": "ReuseReceipt",
+      "algorithm": "Coordinate approved transfers and verify quantity, condition, ownership, and recipient acceptance at handoff. Record rejected or partially accepted material and update future matching evidence without falsely reporting a completed reuse benefit.",
+      "gate": "Transfer and acceptance evidence support reported quantities and outcomes."
+    }
+  ],
+  "operational_details": [
+    "A material is offered by weight but needed by volume: require density evidence before exact conversion.",
+    "An offer is withdrawn after matching: invalidate dependent exchange legs before confirming them.",
+    "Equipment has unknown maintenance history: require qualification rather than assuming operability.",
+    "A recipient accepts only part of a lot: release remaining quantity back to availability.",
+    "A creative reuse requires specialist approval: keep the match provisional until that approval exists."
+  ],
+  "domain_records": {
+    "SurplusExchange": [
+      "offerIds: ID[]",
+      "needIds: ID[]",
+      "coordinatorId: ID",
+      "exchangeRegion: string",
+      "allocationPolicyId: ID"
+    ],
+    "SurplusOffer": [
+      "caseId: ID",
+      "ownerId: ID",
+      "materialFunction: string",
+      "quantity: Quantity",
+      "condition: string",
+      "transferRestrictions: string[]"
+    ],
+    "ReuseNeed": [
+      "caseId: ID",
+      "recipientId: ID",
+      "desiredFunction: string",
+      "essentialProperties: string[]",
+      "adaptationTolerance: string"
+    ],
+    "ReuseMatch": [
+      "caseId: ID",
+      "offerIds: ID[]",
+      "needId: ID",
+      "reuseConcept: string",
+      "requiredAdaptations: string[]"
+    ],
+    "ExchangePackage": [
+      "caseId: ID",
+      "matchIds: ID[]",
+      "transferLegIds: ID[]",
+      "reservedQuantities: Quantity[]",
+      "logisticsCost: Money"
+    ],
+    "ReuseReceipt": [
+      "caseId: ID",
+      "packageId: ID",
+      "custodyRefs: Ref[]",
+      "recipientAcceptance: Ref",
+      "residualIssue: string"
+    ]
+  }
+}

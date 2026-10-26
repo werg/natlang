@@ -1,0 +1,90 @@
+{
+  "application_id": "060",
+  "title": "Custom fabrication quoting desk",
+  "source_relative_path": "applications/12-manufacturing-maintenance-and-industrial-quality/060-custom-fabrication-quoting-desk.md",
+  "source_sha256": "9f18443ff3d1fa89a35b79c336d4430cf9a7f5f6cdecfbb8650786f6b49e4a17",
+  "domain_id": "12",
+  "stages": [
+    {
+      "name": "recoverRequirements",
+      "output_type": "FabricationRequirement",
+      "algorithm": "Interpret sketches, descriptions, and intended use to distinguish functional requirements from aesthetic preferences and unstated assumptions. Identify consequential missing dimensions or loads and request clarification rather than inventing specifications that determine manufacturability or safety.",
+      "gate": "Critical requirements are confirmed or explicitly block a firm quote."
+    },
+    {
+      "name": "generateConcepts",
+      "output_type": "FabricationConcept",
+      "algorithm": "Propose distinct concepts using the shop’s supplied capabilities and approved materials. Explain appearance, cost, durability, and lead-time tradeoffs without claiming unsupported performance; preserve essential customer constraints across creative alternatives.",
+      "gate": "Concept is feasible under documented shop capability and approved design constraints."
+    },
+    {
+      "name": "planProduction",
+      "output_type": "FabricationRoute",
+      "algorithm": "Translate each concept into a production route with material preparation, operations, finishing, assembly, and inspection. Identify outsourced steps and dependencies, reserve realistic capacity, and retain specialist approval requirements for consequential structural or safety questions.",
+      "gate": "Exact resource and process feasibility; no unsupported engineering certification."
+    },
+    {
+      "name": "calculateQuote",
+      "output_type": "FabricationEstimate",
+      "algorithm": "Use exact costing services with documented quantities, rates, waste assumptions, and supplier quotes. Distinguish fixed price from allowance or estimate, expose unknowns, and prevent a creative design change from silently invalidating the cost basis.",
+      "gate": "Quote arithmetic and scope match the proposed route and selected concept."
+    },
+    {
+      "name": "confirmScope",
+      "output_type": "FabricationAgreement",
+      "algorithm": "Present drawings or structured specifications, finish samples, assumptions, and acceptance criteria for customer confirmation. Bind the quote to the accepted revision, then create production work only after material scope and commercial terms are approved.",
+      "gate": "Quoted object, accepted specification, and production route are mutually consistent."
+    }
+  ],
+  "operational_details": [
+    "A customer supplies approximate dimensions: label the quote provisional until confirmed measurements arrive.",
+    "A finish sample differs from a screen rendering: require acceptance of the physical or approved reference.",
+    "Material prices expire: revalidate the quote before commitment.",
+    "A design change affects tooling: update route and cost together.",
+    "The shop lacks a required certification: disclose the limit and route specialist work appropriately."
+  ],
+  "domain_records": {
+    "FabricationQuote": [
+      "customerId: ID",
+      "requestedObject: string",
+      "intendedUse: string",
+      "dueDate: LocalDate",
+      "estimatorId: ID"
+    ],
+    "FabricationRequirement": [
+      "caseId: ID",
+      "function: string",
+      "dimensions: string",
+      "appearancePreference: string",
+      "essentialConstraint: string"
+    ],
+    "FabricationConcept": [
+      "caseId: ID",
+      "requirementIds: ID[]",
+      "materialChoice: string",
+      "constructionApproach: string",
+      "tradeoff: string"
+    ],
+    "FabricationRoute": [
+      "caseId: ID",
+      "conceptId: ID",
+      "operationIds: ID[]",
+      "resourceIds: ID[]",
+      "inspectionCriteria: string[]"
+    ],
+    "FabricationEstimate": [
+      "caseId: ID",
+      "routeId: ID",
+      "materialCost: Money",
+      "laborCost: Money",
+      "contingencyBasis: string"
+    ],
+    "FabricationAgreement": [
+      "caseId: ID",
+      "conceptId: ID",
+      "estimateId: ID",
+      "acceptedAssumptions: string[]",
+      "approvalRef: Ref"
+    ]
+  }
+}

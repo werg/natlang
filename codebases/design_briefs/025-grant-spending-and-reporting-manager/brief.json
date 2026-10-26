@@ -1,0 +1,49 @@
+{
+  "application_id": "025",
+  "title": "Grant spending and reporting manager",
+  "source_relative_path": "applications/05-finance-and-administrative-accounting/025-grant-spending-and-reporting-manager.md",
+  "program_root": "codebases/design_briefs/025-grant-spending-and-reporting-manager",
+  "source_sha256": "b5217140553752b33f8d91ffc9fe465c8e8f2a66ea5bf6ef80cb9f132e68d571",
+  "domain_id": "05",
+  "stages": [
+    {
+      "name": "extractGrantRules",
+      "output_type": "GrantCondition",
+      "algorithm": "Parse the agreement, budget schedules, and amendments into spending, milestone, and reporting conditions. Distinguish required outcomes from aspirational impact language, and preserve restrictions that apply only to specific funding tranches or time periods.",
+      "gate": "Every condition has effective scope and an attributable grant source."
+    },
+    {
+      "name": "allocateSpending",
+      "output_type": "GrantAllocation",
+      "algorithm": "Match expenditures to eligible activities using descriptions, service periods, and supporting records. Split shared costs only under documented allocation rules, detect duplicate funding attribution, and retain unsupported portions for review.",
+      "gate": "Exact amount conservation and no double attribution across grants."
+    },
+    {
+      "name": "verifyActivities",
+      "output_type": "ActivityEvidence",
+      "algorithm": "Compare project records with milestone definitions and acceptance evidence. Distinguish activity completion from demonstrated impact, preserve partial delivery, and request missing evidence rather than embellishing a narrative to fit the grant’s aspirations.",
+      "gate": "Claimed outputs and outcomes are separately supported."
+    },
+    {
+      "name": "composeReport",
+      "output_type": "GrantNarrative",
+      "algorithm": "Draft a coherent account aligned with actual spending, activities, and verified results. Explain deviations and unresolved conditions honestly, tailor the format to funder requirements, and cross-check narrative quantities against exact financial schedules.",
+      "gate": "No unsupported impact claim or mismatch between narrative and financial totals."
+    },
+    {
+      "name": "manageSubmission",
+      "output_type": "GrantSubmission",
+      "algorithm": "Assemble the required forms, schedules, and evidence, obtain accountable approval, and record actual submission receipt. Track follow-up questions as obligations and revise reports through explicit versions rather than silently replacing the submitted record.",
+      "gate": "Required deliverables and approvals complete; submission receipt and revision history retained."
+    }
+  ],
+  "operational_details": [
+    "A cost spans two reporting periods: allocate using the approved basis and preserve service dates.",
+    "A grant amendment arrives late: distinguish retroactive permission from future-only changes.",
+    "The same activity supports two grants: prevent duplicate attribution while allowing documented shared funding.",
+    "A funder requests personal participant data: route disclosure through the consent and authority check.",
+    "A report is corrected after submission: issue a traceable amended version."
+  ],
+  "representative_episode": "A project meets participation targets but lacks evidence for claimed long-term impact, and a shared contractor cost appears in two grants.",
+  "independent_truth_basis": "Generated grant restrictions, expenditure allocations, milestone evidence, and exact cross-grant conservation checks."
+}

@@ -1,0 +1,49 @@
+{
+  "application_id": "021",
+  "title": "Accounts-payable exception resolver",
+  "source_relative_path": "applications/05-finance-and-administrative-accounting/021-accounts-payable-exception-resolver.md",
+  "program_root": "codebases/design_briefs/021-accounts-payable-exception-resolver",
+  "source_sha256": "b51da6a727d4f3afa34e986549dc7d5b6d429cb7c99e58eee0432856f96f8c9e",
+  "domain_id": "05",
+  "stages": [
+    {
+      "name": "matchDocuments",
+      "output_type": "InvoiceMatch",
+      "algorithm": "Align descriptions, units, supplier references, and delivery context across invoice and order lines. Permit many-to-many matches for split shipments, but preserve ambiguous allocations and do not force every invoice line onto the nearest description.",
+      "gate": "Exact unit conversions and sum conservation; candidate links retain provenance."
+    },
+    {
+      "name": "classifyDiscrepancy",
+      "output_type": "PayableDiscrepancy",
+      "algorithm": "Interpret differences using contract terms and receiving evidence. Distinguish partial delivery, unauthorized substitution, freight charges, and genuine duplication; a repeated invoice number is a signal to investigate rather than a sufficient payment decision.",
+      "gate": "Every disputed amount derives from exact line calculations and a named discrepancy."
+    },
+    {
+      "name": "resolveAllocation",
+      "output_type": "AllocationProposal",
+      "algorithm": "Construct a partial resolution for portions supported by delivery and authorization evidence. Preserve disputed balances, prevent the same receipt from supporting multiple payments, and request targeted confirmation for unresolved acceptance or scope.",
+      "gate": "Accepted plus held amounts equal the invoice balance after verified credits."
+    },
+    {
+      "name": "prepareDisposition",
+      "output_type": "PayableDisposition",
+      "algorithm": "Prepare an auditable recommendation to pay, hold, request correction, or apply a verified credit. Route by entity and delegated thresholds, and explain why undisputed portions may proceed without treating the whole invoice as resolved.",
+      "gate": "Segregation of duties and current approvals enforced outside the semantic executor."
+    },
+    {
+      "name": "reconcilePosting",
+      "output_type": "PostingReceipt",
+      "algorithm": "Compare approved allocations with actual ledger and processor results. Reconcile lost acknowledgments by operation identity, detect subsequent credit notes, and maintain remaining obligations without retrying a payment whose outcome is unknown.",
+      "gate": "No duplicate posting; ledger balance and approved allocation agree exactly."
+    }
+  ],
+  "operational_details": [
+    "A supplier sends a corrected invoice with the same number: version documents without assuming a second liability.",
+    "A receipt is reused across invoices: reserve its allocatable quantity transactionally.",
+    "A credit arrives after approval: invalidate the affected payment amount before release.",
+    "Currencies differ: require an explicit authorized conversion basis.",
+    "The period closes during review: preserve original service dates and route posting-period changes for approval."
+  ],
+  "representative_episode": "One invoice covers two partial shipments, includes an unaccepted substituted item, and is followed by a credit note during approval.",
+  "independent_truth_basis": "Exact purchase, receipt, credit, and posting ledgers with hidden semantic line mappings and duplicate traps."
+}

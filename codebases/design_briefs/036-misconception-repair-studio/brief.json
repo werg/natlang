@@ -1,0 +1,90 @@
+{
+  "application_id": "036",
+  "title": "Misconception repair studio",
+  "source_relative_path": "applications/08-education-assessment-and-professional-learning/036-misconception-repair-studio.md",
+  "source_sha256": "b82152acac77cc5ca1f3a2eae8a8b468ae78ac721b4fd1c66f41ad3b3ed38613",
+  "domain_id": "08",
+  "stages": [
+    {
+      "name": "interpretResponses",
+      "output_type": "ResponseObservation",
+      "algorithm": "Inspect the learner’s response against the task and accepted solution space. Distinguish conceptual errors, arithmetic slips, misunderstood wording, and incomplete work; preserve alternative correct strategies rather than forcing one canonical explanation.",
+      "gate": "Observed behavior is separated from inferred learner state."
+    },
+    {
+      "name": "formHypotheses",
+      "output_type": "MisconceptionHypothesis",
+      "algorithm": "Generate a small set of plausible explanations for the observed pattern, including task ambiguity and accidental error. Identify a question whose answers would distinguish these explanations instead of treating one wrong response as a stable misconception.",
+      "gate": "No diagnosis based on identity or a single uninformative response."
+    },
+    {
+      "name": "generateDiagnostics",
+      "output_type": "DiagnosticTask",
+      "algorithm": "Construct a short diagnostic task varying the relevant conceptual feature while controlling unrelated difficulty. Include an independently checked answer space and accessible wording; avoid hints that reveal which hypothesis the system expects to confirm.",
+      "gate": "Diagnostic outcomes discriminate hypotheses and do not introduce unlearned prerequisites."
+    },
+    {
+      "name": "planRepair",
+      "output_type": "LearningIntervention",
+      "algorithm": "Select a suitable explanation and contrastive examples, then create practice with gradually reduced scaffolding. Adapt to observed responses without simply repeating the original answer, and escalate persistent ambiguity to the instructor.",
+      "gate": "Explanations and examples are correct under an independent subject-matter check."
+    },
+    {
+      "name": "verifyTransfer",
+      "output_type": "TransferFinding",
+      "algorithm": "Assess performance on new tasks that change surface details and require the intended concept. Distinguish independent transfer from success under hints, update the learner model conservatively, and retain evidence for instructor review.",
+      "gate": "Mastery requires novel unassisted evidence under the supplied competency standard."
+    }
+  ],
+  "operational_details": [
+    "A learner gives a correct unconventional solution: assess its meaning rather than matching wording.",
+    "A task contains ambiguous language: repair the task before diagnosing the learner.",
+    "A session is interrupted: resume from the last completed task without revealing hidden diagnostic labels.",
+    "An accommodation changes presentation: preserve the competency being assessed.",
+    "Repeated failure causes frustration: offer a bounded instructor handoff rather than an endless loop."
+  ],
+  "domain_records": {
+    "LearningCase": [
+      "learnerId: ID",
+      "competencyIds: ID[]",
+      "learningGoal: string",
+      "instructorId: ID",
+      "accommodationIds: ID[]"
+    ],
+    "ResponseObservation": [
+      "caseId: ID",
+      "taskId: ID",
+      "responseRef: Ref",
+      "observedStrategy: string",
+      "errorLocation: string"
+    ],
+    "MisconceptionHypothesis": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "hypothesis: string",
+      "rivalHypotheses: string[]",
+      "discriminatingFeature: string"
+    ],
+    "DiagnosticTask": [
+      "caseId: ID",
+      "hypothesisIds: ID[]",
+      "prompt: string",
+      "expectedResponseClasses: string[]",
+      "prerequisiteIds: ID[]"
+    ],
+    "LearningIntervention": [
+      "caseId: ID",
+      "hypothesisId: ID",
+      "explanation: string",
+      "workedExample: string",
+      "practiceTaskIds: ID[]"
+    ],
+    "TransferFinding": [
+      "caseId: ID",
+      "competencyId: ID",
+      "novelTaskIds: ID[]",
+      "demonstratedSkill: string",
+      "remainingUncertainty: string"
+    ]
+  }
+}

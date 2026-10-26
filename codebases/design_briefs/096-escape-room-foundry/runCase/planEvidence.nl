@@ -1,0 +1,6 @@
+---
+description: planEvidence for Escape Room Foundry.
+args: { graph: WorkGraph; catalog: EvidenceItem[] }
+returns: EvidencePlan
+---
+Plan exact evidence retrieval from the authorized source set. Track what was searched and which partitions remain unsearched; retrieval absence is not proof of nonexistence.

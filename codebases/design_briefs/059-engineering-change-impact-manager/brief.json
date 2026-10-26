@@ -1,0 +1,90 @@
+{
+  "application_id": "059",
+  "title": "Engineering change impact manager",
+  "source_relative_path": "applications/12-manufacturing-maintenance-and-industrial-quality/059-engineering-change-impact-manager.md",
+  "source_sha256": "a16b927aec9fed5cc3df5222499143ad0c975e8a8224a356df3d5985c80fdc36",
+  "domain_id": "12",
+  "stages": [
+    {
+      "name": "interpretChange",
+      "output_type": "DesignDelta",
+      "algorithm": "Compare approved design revisions and change rationale to identify functional, interface, and process effects. Separate editorial drawing updates from meaningful changes and preserve requirements that remain binding despite a local modification.",
+      "gate": "Every effect has a design-source basis and explicit scope."
+    },
+    {
+      "name": "resolveApplicability",
+      "output_type": "ChangeApplicability",
+      "algorithm": "Interpret effective serials, lots, dates, configurations, and authorized exceptions. Distinguish new production from retrofit obligations and preserve fielded units outside scope rather than applying the latest revision universally.",
+      "gate": "Exact applicability rules are established before downstream propagation."
+    },
+    {
+      "name": "traceDependencies",
+      "output_type": "EngineeringImpact",
+      "algorithm": "Traverse bills of material, interfaces, process instructions, and supplier commitments through exact dependency graphs. Judge whether each indirect dependency is materially affected and retain uncertain impacts for engineering review instead of broad automatic replacement.",
+      "gate": "No missed critical dependency or unsupported global invalidation."
+    },
+    {
+      "name": "planImplementation",
+      "output_type": "ChangeWorkPackage",
+      "algorithm": "Build coordinated implementation packages covering procurement, stock, production, documentation, and field actions as applicable. Sequence changes to avoid incompatible mixed configurations and identify irreversible dispositions requiring separate authorization.",
+      "gate": "Feasible version transition and explicit handling of existing stock and in-flight work."
+    },
+    {
+      "name": "verifyConfiguration",
+      "output_type": "ChangeVerification",
+      "algorithm": "Compare actual implemented configurations with approved applicability and acceptance criteria. Preserve authorized exceptions and unresolved field cases, then close the change only when required consumers and records reflect the correct revision state.",
+      "gate": "No configuration claims based solely on document publication or task closure."
+    }
+  ],
+  "operational_details": [
+    "Old and new parts coexist in inventory: enforce configuration-specific selection rather than blanket replacement.",
+    "A supplier has already shipped the old revision: decide disposition explicitly.",
+    "A fielded unit is grandfathered: preserve its approved configuration and maintenance guidance.",
+    "A drawing reference changes numbering only: avoid unnecessary operational churn.",
+    "A retrofit is partially completed: track mixed-state constraints until verification."
+  ],
+  "domain_records": {
+    "EngineeringChange": [
+      "changeId: ID",
+      "affectedDesignIds: ID[]",
+      "effectiveRule: string",
+      "engineeringOwnerId: ID",
+      "baselineRevision: string"
+    ],
+    "DesignDelta": [
+      "caseId: ID",
+      "designId: ID",
+      "changedFunction: string",
+      "changedInterface: string",
+      "preservedRequirements: string[]"
+    ],
+    "ChangeApplicability": [
+      "caseId: ID",
+      "deltaId: ID",
+      "serialRanges: string[]",
+      "lotIds: ID[]",
+      "grandfatheredCases: string[]"
+    ],
+    "EngineeringImpact": [
+      "caseId: ID",
+      "deltaId: ID",
+      "affectedItemIds: ID[]",
+      "affectedDocumentIds: ID[]",
+      "indirectReason: string"
+    ],
+    "ChangeWorkPackage": [
+      "caseId: ID",
+      "impactIds: ID[]",
+      "taskIds: ID[]",
+      "stockDisposition: string",
+      "prerequisiteIds: ID[]"
+    ],
+    "ChangeVerification": [
+      "caseId: ID",
+      "packageId: ID",
+      "configurationIds: ID[]",
+      "verificationRefs: Ref[]",
+      "residualExceptions: string[]"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "design-briefs-100-native-20261025-v1",
+  "owner": "pop",
+  "path": "training/semantic_applications/design_briefs",
+  "include": [
+    "[0-9][0-9][0-9]-*/cases.json",
+    "source-manifest.json",
+    "domain-contracts.json",
+    "operational-contracts.json",
+    "release-v1/inventory.json",
+    "release-v1/packet-manifest.json",
+    "release-v1/compiler-check.json",
+    "release-v1/readiness.json",
+    "release-v1/registry-entry.json",
+    "release-v1/validation.txt"
+  ],
+  "source_class": "authored-native-program-source-and-independent-evaluation-fixtures",
+  "training_admission": false,
+  "training_admission_reason": "Source preparation only. Actual self-hosted teacher execution, semantic review, live qualification and normal trajectory admission remain pending. No teacher or student trajectories, optimizer updates, or learner exposure are represented.",
+  "admission": "Eligible for source review and collection preparation; not admitted to production training.",
+  "split": "Whole application families: 60 train, 20 development, 20 test; every variant remains with its application. Prepared RL uses only exact TRAIN gates.",
+  "applications": 100,
+  "domain_stages": 500,
+  "native_functions": 4100,
+  "source_tasks": 800,
+  "source_root": "codebases/design_briefs",
+  "source_inventory": "training/semantic_applications/design_briefs/release-v1/inventory.json",
+  "task_source_manifest": "training/semantic_applications/design_briefs/release-v1/packet-manifest.json",
+  "snapshot_manifest": "training/corpus-manifests/design-briefs-100-native-20261025-v1.json",
+  "license_provenance": "User-supplied design briefs and expansion plan; repository-authored native programs and synthetic evaluation inputs. Original source paths and SHA-256 bindings are retained; no separate supplied brief license was asserted.",
+  "notes": "Git-tracked source candidates covering all five original operational details per brief prepared in an isolated authoring workspace. Pop is the designated source owner; no remote availability or readback is claimed. Rebuild the six native IR packets and student-root queue with ts-host/scripts/design-briefs. Qwen self-hosted teacher jobs are descriptors only; paused services remain unchanged. Complete actual execution graphs remain required for later learning.",
+  "operational_details": 500
+}

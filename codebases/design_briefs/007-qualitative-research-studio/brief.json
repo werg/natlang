@@ -1,0 +1,49 @@
+{
+  "application_id": "007",
+  "title": "Qualitative research studio",
+  "source_relative_path": "applications/02-customer-research-and-product-intelligence/007-qualitative-research-studio.md",
+  "program_root": "codebases/design_briefs/007-qualitative-research-studio",
+  "source_sha256": "7093631f8b130a0857c0473b4acbf0a391f804a3be4f73351cbe07a7ede499ee",
+  "domain_id": "02",
+  "stages": [
+    {
+      "name": "frameInquiry",
+      "output_type": "InquiryFrame",
+      "algorithm": "Interpret the decision that research should inform and decompose it into answerable questions. Identify plausible rival explanations and what the available corpus cannot establish; avoid converting an exploratory question into a predetermined conclusion.",
+      "gate": "Every subquestion has observable evidence and an explicit inferential limit."
+    },
+    {
+      "name": "selectSample",
+      "output_type": "SamplingPlan",
+      "algorithm": "Define strata from the inquiry, not from convenient examples, then request exact selection within each stratum. Include negative and atypical cases, record nonresponse, and freeze a sampling manifest before coding the main set.",
+      "gate": "Manifest preserves inclusion probabilities where applicable and explains purposive selection elsewhere."
+    },
+    {
+      "name": "buildCodebook",
+      "output_type": "CodeDefinition",
+      "algorithm": "Draft codes from pilot material and research concepts, specifying boundaries through positive and negative examples. Separate descriptive labels from inferred explanations; reconcile overlapping codes without forcing genuinely multidimensional evidence into one category.",
+      "gate": "Each code is usable on unseen examples and has a discriminating exclusion rule."
+    },
+    {
+      "name": "codeAndReconcile",
+      "output_type": "CodingDecision",
+      "algorithm": "Code bounded passages with their necessary context, then compare independent assessments on a sampled overlap. Investigate disagreements as possible codebook defects; when a definition changes, mark all affected earlier decisions stale before recoding.",
+      "gate": "Code-version consistency and no silent replacement of disagreement with majority confidence."
+    },
+    {
+      "name": "synthesizeFindings",
+      "output_type": "ResearchFinding",
+      "algorithm": "Build findings around supported mechanisms and recurring patterns, actively search for counterexamples, and distinguish an absent observation from evidence of absence. Return unresolved questions and a traceable path from each conclusion to the coded passages.",
+      "gate": "No causal or population-level claim beyond the study design; counterevidence cannot be omitted."
+    }
+  ],
+  "operational_details": [
+    "A participant switches language mid-interview: retain original passages alongside reviewed translations.",
+    "A code changes after half the corpus is processed: recompute affected records, not only future ones.",
+    "A quotation may identify its speaker indirectly: preview re-identification risk before export.",
+    "Two researchers disagree productively: preserve minority interpretation in the synthesis packet.",
+    "The study stops early: publish achieved coverage and unmet stopping conditions."
+  ],
+  "representative_episode": "An onboarding abandonment study includes satisfied non-completers, dissatisfied completers, and a biased follow-up sample.",
+  "independent_truth_basis": "Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment."
+}

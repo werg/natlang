@@ -1,0 +1,808 @@
+[
+  {
+    "id": "019-interpretRequest-supported",
+    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "PUR-19",
+          "requestedFunction": "Filter process water",
+          "quantity": {
+            "value": "80",
+            "unit": "cartridges"
+          },
+          "useLocation": "Delta line, Bay 4",
+          "essentialConstraints": [
+            "Fit cartridge housing F-4"
+          ],
+          "tenantId": "tenant-019",
+          "id": "PurchaseIntent-019",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-019",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-019"
+          ],
+          "retentionPolicyId": "retention-019"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
+        "tenantId": "tenant-019",
+        "id": "PURCHASE-DELTA19",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-019",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-019"
+        ],
+        "retentionPolicyId": "retention-019"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "019-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for interpretRequest: A team requests a service sold by an approved supplier but outside the negotiated category and for an uncovered affiliate.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "019-interpretRequest-contradictory",
+    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "PUR-19",
+          "requestedFunction": "Filter process water",
+          "quantity": {
+            "value": "800",
+            "unit": "cartridges"
+          },
+          "useLocation": "Delta line, Bay 4",
+          "essentialConstraints": [
+            "Fit cartridge housing F-4"
+          ],
+          "tenantId": "tenant-019",
+          "id": "PurchaseIntent-019",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-019",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-019"
+          ],
+          "retentionPolicyId": "retention-019"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
+        "tenantId": "tenant-019",
+        "id": "PURCHASE-DELTA19",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-019",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-019"
+        ],
+        "retentionPolicyId": "retention-019"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "019-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The draft assumes 800 cartridges by reading a misformatted quantity field; the signed request and approved budget say 80."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for interpretRequest: A team requests a service sold by an approved supplier but outside the negotiated category and for an uncovered affiliate.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "019-interpretRequest-missing",
+    "root": "runCase/interpretRequest/audit/qualify.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "PUR-19",
+          "requestedFunction": "Filter process water",
+          "quantity": {
+            "value": "80",
+            "unit": "cartridges"
+          },
+          "useLocation": "Delta line, Bay 4",
+          "essentialConstraints": [
+            "Fit cartridge housing F-4"
+          ],
+          "tenantId": "tenant-019",
+          "id": "PurchaseIntent-019",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-019",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-019"
+          ],
+          "retentionPolicyId": "retention-019"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "requesterId": "Operator Gomez",
+        "supplierId": "SUP-19",
+        "requestedItems": [
+          "80 filter cartridges F-4"
+        ],
+        "intendedUse": "Delta line, Bay 4, November service cycle",
+        "agreementId": "AGR-19",
+        "tenantId": "tenant-019",
+        "id": "PURCHASE-DELTA19",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-019",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-019"
+        ],
+        "retentionPolicyId": "retention-019"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "019-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A note asks to replenish filters but has no quantity, purpose, or destination."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for interpretRequest: A team requests a service sold by an approved supplier but outside the negotiated category and for an uncovered affiliate.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "019-workflow-01",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-019-01",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "requesterId": "Operator Gomez",
+            "supplierId": "SUP-19",
+            "requestedItems": [
+              "80 filter cartridges F-4"
+            ],
+            "intendedUse": "Delta line, Bay 4, November service cycle",
+            "agreementId": "AGR-19",
+            "tenantId": "tenant-019",
+            "id": "PURCHASE-DELTA19",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-019",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-019"
+            ],
+            "retentionPolicyId": "retention-019"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requests R-19A, R-19B, and R-19C name the same requester and equipment bundle; combined value is $18,400 above review threshold $10,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-019",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated contract scope predicates, request functions, exact price schedules, and approval thresholds.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A requester splits one purchase into several small requests: aggregate related commitments for threshold checks. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A requester splits one purchase into several small requests: aggregate related commitments for threshold checks. Use only the facts in caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—aggregate related commitments for threshold checks.—as a versioned proposal against caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (aggregate related commitments for threshold checks.) against caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A requester splits one purchase into several small requests: aggregate related commitments for threshold checks.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A requester splits one purchase into several small requests: aggregate related commitments for threshold checks.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A requester splits one purchase into several small requests: aggregate related commitments for threshold checks. Use only the facts in caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—aggregate related commitments for threshold checks.—as a versioned proposal against caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (aggregate related commitments for threshold checks.) against caseId=SYN-019-01, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "019-workflow-02",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-019-02",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "requesterId": "Operator Gomez",
+            "supplierId": "SUP-19",
+            "requestedItems": [
+              "80 filter cartridges F-4"
+            ],
+            "intendedUse": "Delta line, Bay 4, November service cycle",
+            "agreementId": "AGR-19",
+            "tenantId": "tenant-019",
+            "id": "PURCHASE-DELTA19",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-019",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-019"
+            ],
+            "retentionPolicyId": "retention-019"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Bundle discount D-19 assumes three items at $900 each; removal of item 2 changes the signed quote to $2,100 total."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-019",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated contract scope predicates, request functions, exact price schedules, and approval thresholds.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A discount depends on a bundle: recalculate when one item is removed. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A discount depends on a bundle: recalculate when one item is removed. Use only the facts in caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—recalculate when one item is removed.—as a versioned proposal against caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (recalculate when one item is removed.) against caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A discount depends on a bundle: recalculate when one item is removed.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A discount depends on a bundle: recalculate when one item is removed.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A discount depends on a bundle: recalculate when one item is removed. Use only the facts in caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—recalculate when one item is removed.—as a versioned proposal against caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (recalculate when one item is removed.) against caseId=SYN-019-02, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "019-workflow-03",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-019-03",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "requesterId": "Operator Gomez",
+            "supplierId": "SUP-19",
+            "requestedItems": [
+              "80 filter cartridges F-4"
+            ],
+            "intendedUse": "Delta line, Bay 4, November service cycle",
+            "agreementId": "AGR-19",
+            "tenantId": "tenant-019",
+            "id": "PURCHASE-DELTA19",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-019",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-019"
+            ],
+            "retentionPolicyId": "retention-019"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Affiliate AE-19 places the order using parent agreement C-19; coverage schedule lists the parent but not AE-19."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-019",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated contract scope predicates, request functions, exact price schedules, and approval thresholds.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An affiliate uses the parent’s contract: require explicit entity coverage. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An affiliate uses the parent’s contract: require explicit entity coverage. Use only the facts in caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—require explicit entity coverage.—as a versioned proposal against caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (require explicit entity coverage.) against caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An affiliate uses the parent’s contract: require explicit entity coverage.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "An affiliate uses the parent’s contract: require explicit entity coverage.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An affiliate uses the parent’s contract: require explicit entity coverage. Use only the facts in caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—require explicit entity coverage.—as a versioned proposal against caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (require explicit entity coverage.) against caseId=SYN-019-03, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "019-workflow-04",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-019-04",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "requesterId": "Operator Gomez",
+            "supplierId": "SUP-19",
+            "requestedItems": [
+              "80 filter cartridges F-4"
+            ],
+            "intendedUse": "Delta line, Bay 4, November service cycle",
+            "agreementId": "AGR-19",
+            "tenantId": "tenant-019",
+            "id": "PURCHASE-DELTA19",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-019",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-019"
+            ],
+            "retentionPolicyId": "retention-019"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Catalog item 19-4 changed description from brass to plated alloy between v2 and v3; approval cites v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-019",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated contract scope predicates, request functions, exact price schedules, and approval thresholds.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A catalog description changes: retain the version used for approval. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A catalog description changes: retain the version used for approval. Use only the facts in caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain the version used for approval.—as a versioned proposal against caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain the version used for approval.) against caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A catalog description changes: retain the version used for approval.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A catalog description changes: retain the version used for approval.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A catalog description changes: retain the version used for approval. Use only the facts in caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—retain the version used for approval.—as a versioned proposal against caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain the version used for approval.) against caseId=SYN-019-04, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "019-workflow-05",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-019",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-019-05",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "requesterId": "Operator Gomez",
+            "supplierId": "SUP-19",
+            "requestedItems": [
+              "80 filter cartridges F-4"
+            ],
+            "intendedUse": "Delta line, Bay 4, November service cycle",
+            "agreementId": "AGR-19",
+            "tenantId": "tenant-019",
+            "id": "PURCHASE-DELTA19",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-019",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-019"
+            ],
+            "retentionPolicyId": "retention-019"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "019-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Operations requests 80 filter cartridges for the Delta line in Bay 4 for the November service cycle; the purchase request names quantity, function, and use location."
+              },
+              {
+                "id": "E2",
+                "source": "019-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-11",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Agreement C-19 expired Oct 9 while approval waited; requested order release is Oct 11."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-019",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated contract scope predicates, request functions, exact price schedules, and approval thresholds.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A contract expires while approval waits: revalidate before releasing the order. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A contract expires while approval waits: revalidate before releasing the order. Use only the facts in caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—revalidate before releasing the order.—as a versioned proposal against caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (revalidate before releasing the order.) against caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A contract expires while approval waits: revalidate before releasing the order.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A contract expires while approval waits: revalidate before releasing the order.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A contract expires while approval waits: revalidate before releasing the order. Use only the facts in caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—revalidate before releasing the order.—as a versioned proposal against caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (revalidate before releasing the order.) against caseId=SYN-019-05, expectedVersion=v1, version=v1, id=PURCHASE-DELTA19, version=1, id=E1, source=019-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

@@ -1,0 +1,595 @@
+[
+  {
+    "id": "089-first-gate-pass",
+    "root": "runCase/extractPermissions/audit/qualify.nl",
+    "split_group": "world-089-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+        "candidateIds": [
+          "089-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "089-first-e1",
+            "source": "primary case record RIGHTS-89",
+            "version": "v1",
+            "text": "Primary domain record for case RIGHTS-89 states: caseId=\"RIGHTS-89\"; itemId=\"IMG-89\"; permittedUse=\"Print exhibition catalogue with attribution.\"; prohibitedUse=\"Online publication and commercial merchandise.\"; attributionRule=\"Credit donor collection and photographer on item card.\"; expiry=\"Permission expires 2026-12-31.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "089-case-record",
+          "caseId": "RIGHTS-89",
+          "sourceRefs": [
+            "089-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CollectionPermission",
+          "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+          "evidenceIds": [
+            "089-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "itemId": "IMG-89",
+          "permittedUse": "Print exhibition catalogue with attribution.",
+          "prohibitedUse": "Online publication and commercial merchandise.",
+          "attributionRule": "Credit donor collection and photographer on item card.",
+          "expiry": "Permission expires 2026-12-31.",
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "089-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "089-first-gate-fail",
+    "root": "runCase/extractPermissions/audit/qualify.nl",
+    "split_group": "world-089-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+        "candidateIds": [
+          "089-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "089-first-e1",
+            "source": "primary case record RIGHTS-89",
+            "version": "v1",
+            "text": "Primary domain record for case RIGHTS-89 states: caseId=\"RIGHTS-89\"; itemId=\"IMG-89\"; permittedUse=\"Print exhibition catalogue with attribution.\"; prohibitedUse=\"Online publication and commercial merchandise.\"; attributionRule=\"Credit donor collection and photographer on item card.\"; expiry=\"Permission expires 2026-12-31.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "089-case-record",
+          "caseId": "RIGHTS-89",
+          "sourceRefs": [
+            "089-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CollectionPermission",
+          "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+          "evidenceIds": [
+            "089-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "itemId": "IMG-89",
+          "permittedUse": "Online publication without attribution.",
+          "prohibitedUse": "Online publication and commercial merchandise.",
+          "attributionRule": "Credit donor collection and photographer on item card.",
+          "expiry": "Permission expires 2026-12-31.",
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "089-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "089-first-gate-needs-review",
+    "root": "runCase/extractPermissions/audit/qualify.nl",
+    "split_group": "world-089-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+        "candidateIds": [
+          "089-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "089-first-e1",
+            "source": "primary case record RIGHTS-89",
+            "version": "v1",
+            "text": "Primary domain record for case RIGHTS-89 states: caseId=\"RIGHTS-89\"; itemId=\"IMG-89\"; prohibitedUse=\"Online publication and commercial merchandise.\"; attributionRule=\"Credit donor collection and photographer on item card.\"; expiry=\"Permission expires 2026-12-31.\". No current value is present for permittedUse.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "permittedUse"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "089-case-record",
+          "sourceRefs": [
+            "089-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CollectionPermission",
+          "subject": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+          "evidenceIds": [
+            "089-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "prohibitedUse": "Online publication and commercial merchandise.",
+          "attributionRule": "Credit donor collection and photographer on item card.",
+          "expiry": "Permission expires 2026-12-31.",
+          "workflowStatus": "candidate",
+          "caseId": "RIGHTS-89",
+          "itemId": "IMG-89"
+        },
+        "missingFields": [
+          "permittedUse"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "089-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "089-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-089-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Collection Rights And Consent Steward proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "089-workflow-1-record",
+          "caseId": "089-workflow-1",
+          "sourceRefs": [
+            "089-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "CollectionUse",
+          "subject": "Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not.",
+          "evidenceIds": [
+            "089-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "089-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "collectionItemIds": [
+            "IMG-89",
+            "IMG-90"
+          ],
+          "proposedUse": "Print exhibition catalogue; proposed web derivative requires separate review.",
+          "audience": "Museum visitors and catalogue readers.",
+          "requesterId": "CUR-9",
+          "rightsOfficerId": "RIGHTS-2",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "089-wf-1-source",
+          "source": "primary case artifact 089-E1",
+          "version": "v1",
+          "text": "Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "089-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "089-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "089-wf-1-source",
+          "source": "primary case artifact 089-E1",
+          "version": "v1",
+          "text": "Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Collection Rights And Consent Steward",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A donor owns the object but not reproduction rights: require the appropriate separate clearance. Use observation Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not. as the source of truth. The proposal should preserve source-linked record 089-workflow-1-record and make a recipient-facing distinction grounded in 089-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 089-workflow-1-record must accurately preserve observation 089-wf-1-source (v1): Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not. Apply brief requirement A donor owns the object but not reproduction rights: require the appropriate separate clearance. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed CollectionUse record 089-workflow-1-record and its source link to 089-wf-1-source version v1, with a disposition matching this observed state: Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not. Carry requirement A donor owns the object but not reproduction rights: require the appropriate separate clearance. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 089-workflow-1-record based on 089-wf-1-source (v1) and observation Donor D-89 owns object IMG-89 but deed lists copyright with photographer P-2. Print catalogue use is allowed; web publication is not. Apply requirement A donor owns the object but not reproduction rights: require the appropriate separate clearance. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "089-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-089-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Collection Rights And Consent Steward proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "089-workflow-2-record",
+          "caseId": "089-workflow-2",
+          "sourceRefs": [
+            "089-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "CollectionUse",
+          "subject": "License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise.",
+          "evidenceIds": [
+            "089-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "089-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "collectionItemIds": [
+            "IMG-89",
+            "IMG-90"
+          ],
+          "proposedUse": "Print exhibition catalogue; proposed web derivative requires separate review.",
+          "audience": "Museum visitors and catalogue readers.",
+          "requesterId": "CUR-9",
+          "rightsOfficerId": "RIGHTS-2",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "089-wf-2-source",
+          "source": "primary case artifact 089-E2",
+          "version": "v1",
+          "text": "License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "089-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "089-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "089-wf-2-source",
+          "source": "primary case artifact 089-E2",
+          "version": "v1",
+          "text": "License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Collection Rights And Consent Steward",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A license allows print but not online use: prevent automatic web publication. Use observation License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise. as the source of truth. The proposal should preserve source-linked record 089-workflow-2-record and make a recipient-facing distinction grounded in 089-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A license allows print but not online use: prevent automatic web publication.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 089-workflow-2-record must accurately preserve observation 089-wf-2-source (v1): License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise. Apply brief requirement A license allows print but not online use: prevent automatic web publication. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed CollectionUse record 089-workflow-2-record and its source link to 089-wf-2-source version v1, with a disposition matching this observed state: License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise. Carry requirement A license allows print but not online use: prevent automatic web publication. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 089-workflow-2-record based on 089-wf-2-source (v1) and observation License L-89 permits print catalogue through 2026-12-31 and prohibits online publication and merchandise. Apply requirement A license allows print but not online use: prevent automatic web publication. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "089-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-089-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Collection Rights And Consent Steward proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "089-workflow-3-record",
+          "caseId": "089-workflow-3",
+          "sourceRefs": [
+            "089-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "CollectionUse",
+          "subject": "Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent.",
+          "evidenceIds": [
+            "089-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "089-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "collectionItemIds": [
+            "IMG-89",
+            "IMG-90"
+          ],
+          "proposedUse": "Print exhibition catalogue; proposed web derivative requires separate review.",
+          "audience": "Museum visitors and catalogue readers.",
+          "requesterId": "CUR-9",
+          "rightsOfficerId": "RIGHTS-2",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "089-wf-3-source",
+          "source": "primary case artifact 089-E3",
+          "version": "v1",
+          "text": "Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "089-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "089-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "089-wf-3-source",
+          "source": "primary case artifact 089-E3",
+          "version": "v1",
+          "text": "Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Collection Rights And Consent Steward",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A derivative combines several items: check every relevant permission. Use observation Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent. as the source of truth. The proposal should preserve source-linked record 089-workflow-3-record and make a recipient-facing distinction grounded in 089-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A derivative combines several items: check every relevant permission.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 089-workflow-3-record must accurately preserve observation 089-wf-3-source (v1): Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent. Apply brief requirement A derivative combines several items: check every relevant permission. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed CollectionUse record 089-workflow-3-record and its source link to 089-wf-3-source version v1, with a disposition matching this observed state: Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent. Carry requirement A derivative combines several items: check every relevant permission. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 089-workflow-3-record based on 089-wf-3-source (v1) and observation Permission P-3 allows a derivative collage using items IMG-89 and IMG-90; IMG-90 permission is absent. Apply requirement A derivative combines several items: check every relevant permission. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "089-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-089-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Collection Rights And Consent Steward proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "089-workflow-4-record",
+          "caseId": "089-workflow-4",
+          "sourceRefs": [
+            "089-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "CollectionUse",
+          "subject": "Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name.",
+          "evidenceIds": [
+            "089-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "089-wf-4-source",
+            "sourceVersion": "v1"
+          },
+          "collectionItemIds": [
+            "IMG-89",
+            "IMG-90"
+          ],
+          "proposedUse": "Print exhibition catalogue; proposed web derivative requires separate review.",
+          "audience": "Museum visitors and catalogue readers.",
+          "requesterId": "CUR-9",
+          "rightsOfficerId": "RIGHTS-2",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "089-wf-4-source",
+          "source": "primary case artifact 089-E4",
+          "version": "v1",
+          "text": "Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "089-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "089-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "089-wf-4-source",
+          "source": "primary case artifact 089-E4",
+          "version": "v1",
+          "text": "Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Collection Rights And Consent Steward",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: Attribution changes after a name correction: update affected publications through a traceable process. Use observation Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name. as the source of truth. The proposal should preserve source-linked record 089-workflow-4-record and make a recipient-facing distinction grounded in 089-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "Attribution changes after a name correction: update affected publications through a traceable process.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 089-workflow-4-record must accurately preserve observation 089-wf-4-source (v1): Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name. Apply brief requirement Attribution changes after a name correction: update affected publications through a traceable process. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed CollectionUse record 089-workflow-4-record and its source link to 089-wf-4-source version v1, with a disposition matching this observed state: Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name. Carry requirement Attribution changes after a name correction: update affected publications through a traceable process. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 089-workflow-4-record based on 089-wf-4-source (v1) and observation Name correction changes photographer credit from “M. Lee” to “Mina Lee” on item card; three catalogue proofs contain the old name. Apply requirement Attribution changes after a name correction: update affected publications through a traceable process. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "089-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-089-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Collection Rights And Consent Steward proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "089-workflow-5-record",
+          "caseId": "089-workflow-5",
+          "sourceRefs": [
+            "089-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "CollectionUse",
+          "subject": "Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar.",
+          "evidenceIds": [
+            "089-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "089-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "collectionItemIds": [
+            "IMG-89",
+            "IMG-90"
+          ],
+          "proposedUse": "Print exhibition catalogue; proposed web derivative requires separate review.",
+          "audience": "Museum visitors and catalogue readers.",
+          "requesterId": "CUR-9",
+          "rightsOfficerId": "RIGHTS-2",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "089-wf-5-source",
+          "source": "primary case artifact 089-E5",
+          "version": "v1",
+          "text": "Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "089-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "089-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "089-wf-5-source",
+          "source": "primary case artifact 089-E5",
+          "version": "v1",
+          "text": "Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Collection Rights And Consent Steward",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Consent is time-limited: schedule expiry review and removal obligations. Use observation Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar. as the source of truth. The proposal should preserve source-linked record 089-workflow-5-record and make a recipient-facing distinction grounded in 089-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Consent is time-limited: schedule expiry review and removal obligations.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 089-workflow-5-record must accurately preserve observation 089-wf-5-source (v1): Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar. Apply brief requirement Consent is time-limited: schedule expiry review and removal obligations. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed CollectionUse record 089-workflow-5-record and its source link to 089-wf-5-source version v1, with a disposition matching this observed state: Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar. Carry requirement Consent is time-limited: schedule expiry review and removal obligations. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 089-workflow-5-record based on 089-wf-5-source (v1) and observation Consent to display interview image expires 2026-07-01; exhibition removal task is not in the calendar. Apply requirement Consent is time-limited: schedule expiry review and removal obligations. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

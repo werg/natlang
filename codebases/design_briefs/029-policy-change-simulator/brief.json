@@ -1,0 +1,49 @@
+{
+  "application_id": "029",
+  "title": "Policy change simulator",
+  "source_relative_path": "applications/06-contracts-policies-and-information-governance/029-policy-change-simulator.md",
+  "program_root": "codebases/design_briefs/029-policy-change-simulator",
+  "source_sha256": "bee260b16b2f822b4ef705926852f8584cc2eba3e7565c55b807694c8c778903",
+  "domain_id": "06",
+  "stages": [
+    {
+      "name": "compilePolicyDifference",
+      "output_type": "PolicyDelta",
+      "algorithm": "Compare baseline and proposed policies at the level of conditions, exceptions, authority, and consequences. Separate editorial changes from changed behavior and identify ambiguous provisions that prevent a determinate comparison.",
+      "gate": "Every behavioral delta has source support and preserved safeguards are explicit."
+    },
+    {
+      "name": "prepareCases",
+      "output_type": "PolicyCaseFacts",
+      "algorithm": "Normalize historical or synthetic cases into evidence-backed facts without adding missing information. Preserve uncertainty, policy-relevant context, and data-access restrictions; do not infer sensitive attributes merely to complete a simulation.",
+      "gate": "Case facts remain identical across baseline and candidate runs."
+    },
+    {
+      "name": "compareOutcomes",
+      "output_type": "OutcomeDifference",
+      "algorithm": "Execute both policy versions with isolated state and compare duties, permissions, timing, and escalation. Trace differences to specific changed conditions and separate genuine policy effects from nondeterministic or unsupported semantic judgments.",
+      "gate": "Paired runs share facts and executor settings; unexplained differences remain diagnostic failures."
+    },
+    {
+      "name": "generateBoundaries",
+      "output_type": "BoundaryScenario",
+      "algorithm": "Construct near-neighbor cases around changed thresholds, exceptions, and overlapping categories. Vary one consequential fact at a time, include adverse interactions, and identify scenarios whose outcome exposes an ambiguity requiring a policy decision.",
+      "gate": "Perturbation is controlled and does not smuggle in multiple explanatory changes."
+    },
+    {
+      "name": "preparePolicyOptions",
+      "output_type": "PolicyOption",
+      "algorithm": "Summarize who and what changes under each candidate, then propose clarifications or alternatives for the policy owner. Preserve minority and exceptional cases, report coverage limits, and avoid choosing normative priorities not supplied by the organization.",
+      "gate": "Policy owner sees exact changed-case sets and unresolved judgments before adoption."
+    }
+  ],
+  "operational_details": [
+    "Historical cases lack a new required field: report indeterminate outcomes rather than imputing it.",
+    "A policy owner edits the candidate mid-run: fork the simulation snapshot.",
+    "A rare exception disappears: preserve its regression case even if aggregate scores improve.",
+    "Outcome counts change due to deduplication: separate data changes from policy effects.",
+    "A policy is adopted: retain the tested version and explicitly revalidate subsequent edits."
+  ],
+  "representative_episode": "A revised approval policy lowers one threshold but accidentally removes an emergency exception and introduces an ambiguous affiliate rule.",
+  "independent_truth_basis": "Generated policy programs and fixed case worlds; exact paired outcomes, boundary coverage, and ambiguity labels."
+}

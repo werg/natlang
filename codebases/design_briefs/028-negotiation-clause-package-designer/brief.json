@@ -1,0 +1,49 @@
+{
+  "application_id": "028",
+  "title": "Negotiation clause package designer",
+  "source_relative_path": "applications/06-contracts-policies-and-information-governance/028-negotiation-clause-package-designer.md",
+  "program_root": "codebases/design_briefs/028-negotiation-clause-package-designer",
+  "source_sha256": "168937c330620d96b8600a11e0b14b4aa1a47b53d43a2e024bd82a2a4b0ccdae",
+  "domain_id": "06",
+  "stages": [
+    {
+      "name": "recoverPositions",
+      "output_type": "NegotiationPosition",
+      "algorithm": "Translate stakeholder goals and the approved playbook into issue-level positions. Distinguish mandatory limits from preferences, identify dependencies between issues, and preserve disagreements that require a mandate decision before drafting a proposal.",
+      "gate": "Every allowed concession has a supplied authority basis."
+    },
+    {
+      "name": "mapClauseInteractions",
+      "output_type": "ClauseDependency",
+      "algorithm": "Inspect definitions, remedies, caps, exceptions, and cross-references together. Identify where a concession changes another clause’s effect, including apparently local edits that broaden an exception or undermine a negotiated protection.",
+      "gate": "Interaction claims have source references and a concrete example of changed behavior."
+    },
+    {
+      "name": "generatePackages",
+      "output_type": "ClausePackage",
+      "algorithm": "Draft materially distinct packages that exchange permitted concessions while preserving required protections. Explain package-level tradeoffs and include fallback options; avoid optimizing individual clauses independently when their effects depend on the surrounding agreement.",
+      "gate": "All hard playbook limits pass and no protection is claimed when another clause negates it."
+    },
+    {
+      "name": "reconcileRedlines",
+      "output_type": "RedlineFinding",
+      "algorithm": "Interpret counterparty edits in context, separating stylistic changes from altered obligations or risk allocation. Recompute package interactions, identify conditional acceptance, and route edits beyond the mandate to qualified reviewers.",
+      "gate": "No unreviewed material change hidden as editorial cleanup."
+    },
+    {
+      "name": "prepareOffer",
+      "output_type": "ClauseOffer",
+      "algorithm": "Assemble a coherent draft, issue list, and internal rationale with confidential fallback positions excluded from the external copy. Bind approval to the exact package and record which issues remain open rather than presenting a partial agreement as final.",
+      "gate": "External artifact contains no internal negotiation limits; current scoped approval required."
+    }
+  ],
+  "operational_details": [
+    "A defined term changes globally: re-evaluate every consumer, not only the edited clause.",
+    "Internal fallback notes are in comments: strip and verify them before external export.",
+    "A counterparty accepts one clause conditionally: preserve the condition in the package state.",
+    "An approver signs an earlier draft: reject release of the newer hash.",
+    "A compromise introduces an undefined term: block the draft before circulation."
+  ],
+  "representative_episode": "A proposed liability concession interacts with an indemnity exception and a changed definition of confidential information.",
+  "independent_truth_basis": "Fictional playbooks, clause-effect simulators, authority limits, and independent package-consistency review."
+}

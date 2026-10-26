@@ -1,0 +1,543 @@
+[
+  {
+    "id": "047-domain-data-migration-workshop-gate-supported",
+    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "draft": {
+        "values": {
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code",
+          "caseId": "case-47"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "conditionalUse",
+            "evidenceIds": [
+              "047-domain-data-migration-workshop-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "regional codebook extracts and target mapping",
+        "evidence": [
+          {
+            "id": "047-domain-data-migration-workshop-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Status code 7 maps to suspended in North and legacy-closed in South, with region and effective date in both exports. Case case-47; current first-stage record values: {\"conditionalUse\": \"interpret using region and effective date; retain original code\", \"field\": \"status_code_7\", \"meaning\": \"suspended in North; legacy-closed in South\", \"missingStates\": [\"not supplied\"], \"systemId\": \"regional-customer-master\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep a reversible mapping and leave the region-dependent ambiguity unresolved."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "conditionalUse",
+          "value": "interpret using region and effective date; retain original code",
+          "evidenceIds": [
+            "047-domain-data-migration-workshop-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "regional codebook extracts and target mapping: Source code 7 means suspended in region North and legacy-closed in region South. The target schema has active/inactive; both regions include a verified source-system and effective-date column. Apply the first-stage gate to the record and source versions; Keep a reversible mapping and leave the region-dependent ambiguity unresolved.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "047-domain-data-migration-workshop-gate-contradictory",
+    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "draft": {
+        "values": {
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "status code 7 means active in every region",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code",
+          "caseId": "case-47"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "conditionalUse",
+            "evidenceIds": [
+              "047-domain-data-migration-workshop-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "regional codebook extracts and target mapping",
+        "evidence": [
+          {
+            "id": "047-domain-data-migration-workshop-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Status code 7 maps to suspended in North and legacy-closed in South, with region and effective date in both exports. Case case-47; current first-stage record values: {\"conditionalUse\": \"interpret using region and effective date; retain original code\", \"field\": \"status_code_7\", \"meaning\": \"suspended in North; legacy-closed in South\", \"missingStates\": [\"not supplied\"], \"systemId\": \"regional-customer-master\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep a reversible mapping and leave the region-dependent ambiguity unresolved."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "meaning",
+          "value": "status code 7 means active in every region",
+          "evidenceIds": [
+            "047-domain-data-migration-workshop-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "regional codebook extracts and target mapping: Source code 7 means suspended in region North and legacy-closed in region South. The target schema has active/inactive; both regions include a verified source-system and effective-date column. Apply the first-stage gate to the record and source versions; Keep a reversible mapping and leave the region-dependent ambiguity unresolved.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "047-domain-data-migration-workshop-gate-missing",
+    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-47"
+        },
+        "missingFields": [
+          "conditionalUse"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes conditionalUse?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "regional codebook extracts and target mapping",
+        "evidence": [],
+        "missing": [
+          "conditionalUse"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Keep a reversible mapping and leave the region-dependent ambiguity unresolved."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "regional codebook extracts and target mapping: Source code 7 means suspended in region North and legacy-closed in region South. The target schema has active/inactive; both regions include a verified source-system and effective-date column. Apply the first-stage gate to the record and source versions; Keep a reversible mapping and leave the region-dependent ambiguity unresolved.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "047-domain-data-migration-workshop-operational-1",
+    "root": "runCase.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "input": {
+        "caseId": "047-domain-data-migration-workshop-operational-1",
+        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "047-operational-detail-1-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R047 Domain steward records: System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward. This current event is source 047-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 047-domain-data-migration-workshop-operational-1. The supplied typed prior 047-prior-sourcefieldmeaning-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "047-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "047-prior-sourcefieldmeaning-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "047-domain-data-migration-workshop-operational-1",
+            "systemId": "regional-customer-master",
+            "field": "status_code_7",
+            "meaning": "suspended in North; legacy-closed in South",
+            "missingStates": [
+              "not supplied"
+            ],
+            "conditionalUse": "interpret using region and effective date; retain original code"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 047-domain-data-migration-workshop-operational-1 against this factual event: System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward. Original §9 detail: A source system reuses identifiers: include system and historical validity in identity keys. Correct handling applies “include system and historical validity in identity keys.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A source system reuses identifiers: include system and historical validity in identity keys.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward. It links source 047-operational-detail-1-source-v2 v2 with prior typed SourceFieldMeaning record 047-prior-sourcefieldmeaning-detail-1-v1 v1 and keeps unresolved scope visible for North-47, South-47.",
+      "durable_state": "The proposal retains prior record 047-prior-sourcefieldmeaning-detail-1-v1 v1 and versions only the affected state for North-47, South-47 against source 047-operational-detail-1-source-v2 v2; it applies “include system and historical validity in identity keys.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to North-47, South-47 and the scope supported by source 047-operational-detail-1-source-v2 v2; it represents “include system and historical validity in identity keys.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "047-domain-data-migration-workshop-operational-2",
+    "root": "runCase.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "input": {
+        "caseId": "047-domain-data-migration-workshop-operational-2",
+        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "047-operational-detail-2-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R047 Domain steward records: Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value. This current event is source 047-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 047-domain-data-migration-workshop-operational-2. The supplied typed prior 047-prior-sourcefieldmeaning-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "047-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "047-prior-sourcefieldmeaning-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "047-domain-data-migration-workshop-operational-2",
+            "systemId": "regional-customer-master",
+            "field": "status_code_7",
+            "meaning": "suspended in North; legacy-closed in South",
+            "missingStates": [
+              "not supplied"
+            ],
+            "conditionalUse": "interpret using region and effective date; retain original code"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 047-domain-data-migration-workshop-operational-2 against this factual event: Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value. Original §9 detail: A null has several meanings: preserve explicit missing-state categories in the target. Correct handling applies “preserve explicit missing-state categories in the target.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A null has several meanings: preserve explicit missing-state categories in the target.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value. It links source 047-operational-detail-2-source-v2 v2 with prior typed SourceFieldMeaning record 047-prior-sourcefieldmeaning-detail-2-v1 v1 and keeps unresolved scope visible for 047-domain-data-migration-workshop-operational-2.",
+      "durable_state": "The proposal retains prior record 047-prior-sourcefieldmeaning-detail-2-v1 v1 and versions only the affected state for 047-domain-data-migration-workshop-operational-2 against source 047-operational-detail-2-source-v2 v2; it applies “preserve explicit missing-state categories in the target.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to 047-domain-data-migration-workshop-operational-2 and the scope supported by source 047-operational-detail-2-source-v2 v2; it represents “preserve explicit missing-state categories in the target.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "047-domain-data-migration-workshop-operational-3",
+    "root": "runCase.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "input": {
+        "caseId": "047-domain-data-migration-workshop-operational-3",
+        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "047-operational-detail-3-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-12T09:30:00Z",
+            "text": "R047 Domain steward records: Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta. This current event is source 047-operational-detail-3-source-v2 v2, observed 2026-10-12T09:30:00Z, for case 047-domain-data-migration-workshop-operational-3. The supplied typed prior 047-prior-sourcefieldmeaning-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "047-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "047-prior-sourcefieldmeaning-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "047-domain-data-migration-workshop-operational-3",
+            "systemId": "regional-customer-master",
+            "field": "status_code_7",
+            "meaning": "suspended in North; legacy-closed in South",
+            "missingStates": [
+              "not supplied"
+            ],
+            "conditionalUse": "interpret using region and effective date; retain original code"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 047-domain-data-migration-workshop-operational-3 against this factual event: Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta. Original §9 detail: Source data changes during migration: capture and replay deltas against the approved mapping version. Correct handling applies “capture and replay deltas against the approved mapping version.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Source data changes during migration: capture and replay deltas against the approved mapping version.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta. It links source 047-operational-detail-3-source-v2 v2 with prior typed SourceFieldMeaning record 047-prior-sourcefieldmeaning-detail-3-v1 v1 and keeps unresolved scope visible for M47-v5, D47-88.",
+      "durable_state": "The proposal retains prior record 047-prior-sourcefieldmeaning-detail-3-v1 v1 and versions only the affected state for M47-v5, D47-88 against source 047-operational-detail-3-source-v2 v2; it applies “capture and replay deltas against the approved mapping version.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M47-v5, D47-88 and the scope supported by source 047-operational-detail-3-source-v2 v2; it represents “capture and replay deltas against the approved mapping version.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "047-domain-data-migration-workshop-operational-4",
+    "root": "runCase.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "input": {
+        "caseId": "047-domain-data-migration-workshop-operational-4",
+        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "047-operational-detail-4-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R047 Domain steward records: Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists. This current event is source 047-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 047-domain-data-migration-workshop-operational-4. The supplied typed prior 047-prior-sourcefieldmeaning-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "047-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "047-prior-sourcefieldmeaning-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "047-domain-data-migration-workshop-operational-4",
+            "systemId": "regional-customer-master",
+            "field": "status_code_7",
+            "meaning": "suspended in North; legacy-closed in South",
+            "missingStates": [
+              "not supplied"
+            ],
+            "conditionalUse": "interpret using region and effective date; retain original code"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 047-domain-data-migration-workshop-operational-4 against this factual event: Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists. Original §9 detail: A target constraint cannot represent a valid source case: propose a schema extension or quarantine, not fabricated data. Correct handling applies “propose a schema extension or quarantine, not fabricated data.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A target constraint cannot represent a valid source case: propose a schema extension or quarantine, not fabricated data.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists. It links source 047-operational-detail-4-source-v2 v2 with prior typed SourceFieldMeaning record 047-prior-sourcefieldmeaning-detail-4-v1 v1 and keeps unresolved scope visible for S47-404.",
+      "durable_state": "The proposal retains prior record 047-prior-sourcefieldmeaning-detail-4-v1 v1 and versions only the affected state for S47-404 against source 047-operational-detail-4-source-v2 v2; it applies “propose a schema extension or quarantine, not fabricated data.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to S47-404 and the scope supported by source 047-operational-detail-4-source-v2 v2; it represents “propose a schema extension or quarantine, not fabricated data.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "047-domain-data-migration-workshop-operational-5",
+    "root": "runCase.nl",
+    "split_group": "047-domain-data-migration-workshop",
+    "inputs": {
+      "input": {
+        "caseId": "047-domain-data-migration-workshop-operational-5",
+        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "047-operational-detail-5-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R047 Domain steward records: Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits. This current event is source 047-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 047-domain-data-migration-workshop-operational-5. The supplied typed prior 047-prior-sourcefieldmeaning-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "047-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "047-prior-sourcefieldmeaning-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "047-domain-data-migration-workshop-operational-5",
+            "systemId": "regional-customer-master",
+            "field": "status_code_7",
+            "meaning": "suspended in North; legacy-closed in South",
+            "missingStates": [
+              "not supplied"
+            ],
+            "conditionalUse": "interpret using region and effective date; retain original code"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 047-domain-data-migration-workshop-operational-5 against this factual event: Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits. Original §9 detail: Rollback would overwrite new target work: use an explicit reconciliation plan. Correct handling applies “use an explicit reconciliation plan.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Rollback would overwrite new target work: use an explicit reconciliation plan.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits. It links source 047-operational-detail-5-source-v2 v2 with prior typed SourceFieldMeaning record 047-prior-sourcefieldmeaning-detail-5-v1 v1 and keeps unresolved scope visible for R47.",
+      "durable_state": "The proposal retains prior record 047-prior-sourcefieldmeaning-detail-5-v1 v1 and versions only the affected state for R47 against source 047-operational-detail-5-source-v2 v2; it applies “use an explicit reconciliation plan.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R47 and the scope supported by source 047-operational-detail-5-source-v2 v2; it represents “use an explicit reconciliation plan.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

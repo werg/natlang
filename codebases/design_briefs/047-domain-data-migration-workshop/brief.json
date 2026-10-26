@@ -1,0 +1,91 @@
+{
+  "application_id": "047",
+  "title": "Domain data migration workshop",
+  "source_relative_path": "applications/10-data-stewardship-and-semantic-analysis/047-domain-data-migration-workshop.md",
+  "source_sha256": "3df48b6e162061b5b8ef307604e3e4ae266d9e75abb78f271c48c0864a10c703",
+  "domain_id": "10",
+  "stages": [
+    {
+      "name": "recoverSourceMeaning",
+      "output_type": "SourceFieldMeaning",
+      "algorithm": "Reconcile dictionaries, sample records, application notes, and domain-owner explanations. Identify fields whose meaning depends on record type or history, and distinguish null, not applicable, unknown, and deliberately withheld values before proposing transformations.",
+      "gate": "No target mapping based solely on field names or observed value formats."
+    },
+    {
+      "name": "designMappings",
+      "output_type": "MigrationMapping",
+      "algorithm": "Construct conditional field and entity mappings that preserve domain meaning. Identify lossy transformations, required target extensions, and records needing manual resolution; do not invent missing facts to satisfy a stricter target schema.",
+      "gate": "Every mapping declares its domain, missing-value behavior, and information loss."
+    },
+    {
+      "name": "resolveRecords",
+      "output_type": "MigrationDecision",
+      "algorithm": "Apply mappings to bounded record groups, resolving semantic exceptions through evidence-backed decisions. Preserve identity and relationship provenance, isolate incompatible records, and avoid forcing all source variants into one target category for completion metrics.",
+      "gate": "Accepted target records satisfy schema and source-meaning checks."
+    },
+    {
+      "name": "rehearseMigration",
+      "output_type": "MigrationRehearsal",
+      "algorithm": "Materialize a staged target snapshot, validate referential integrity and business invariants, and compare representative source-target round trips. Rehearse rollback and delta capture so cutover does not lose changes made after the initial extraction.",
+      "gate": "Exact counts, relationships, conservation constraints, and reversible mappings verified."
+    },
+    {
+      "name": "coordinateCutover",
+      "output_type": "MigrationCutover",
+      "algorithm": "Freeze the approved mapping and cutover scope, apply final source deltas, and reconcile target results before switching consumers. Track quarantined records and post-cutover corrections explicitly, retaining a safe rollback or forward-repair plan for irreversible changes.",
+      "gate": "No unaccounted source record or unapproved mapping change during cutover."
+    }
+  ],
+  "operational_details": [
+    "A source system reuses identifiers: include system and historical validity in identity keys.",
+    "A null has several meanings: preserve explicit missing-state categories in the target.",
+    "Source data changes during migration: capture and replay deltas against the approved mapping version.",
+    "A target constraint cannot represent a valid source case: propose a schema extension or quarantine, not fabricated data.",
+    "Rollback would overwrite new target work: use an explicit reconciliation plan."
+  ],
+  "domain_records": {
+    "MigrationProject": [
+      "sourceSystemIds: ID[]",
+      "targetSchemaId: ID",
+      "migrationOwnerId: ID",
+      "cutoverWindow: string",
+      "rollbackPolicyId: ID"
+    ],
+    "SourceFieldMeaning": [
+      "caseId: ID",
+      "systemId: ID",
+      "field: string",
+      "meaning: string",
+      "missingStates: string[]",
+      "conditionalUse: string"
+    ],
+    "MigrationMapping": [
+      "caseId: ID",
+      "sourceFields: string[]",
+      "targetField: string",
+      "condition: string",
+      "transformation: string"
+    ],
+    "MigrationDecision": [
+      "caseId: ID",
+      "sourceRecordId: ID",
+      "mappingIds: ID[]",
+      "targetDraft: string",
+      "unresolvedFields: string[]"
+    ],
+    "MigrationRehearsal": [
+      "caseId: ID",
+      "manifestId: ID",
+      "targetRecordIds: ID[]",
+      "invariantFailures: string[]",
+      "rollbackArtifactId: ID"
+    ],
+    "MigrationCutover": [
+      "caseId: ID",
+      "rehearsalId: ID",
+      "approvedHash: string",
+      "finalDeltaIds: ID[]",
+      "reconciliationStatus: string"
+    ]
+  }
+}

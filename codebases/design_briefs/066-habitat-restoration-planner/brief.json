@@ -1,0 +1,90 @@
+{
+  "application_id": "066",
+  "title": "Habitat restoration planner",
+  "source_relative_path": "applications/14-agriculture-ecology-and-environmental-stewardship/066-habitat-restoration-planner.md",
+  "source_sha256": "0834b9c77e772de5be96a714cc0789c6c04ffc091b28c1882c831d05823e4f0f",
+  "domain_id": "14",
+  "stages": [
+    {
+      "name": "interpretBaseline",
+      "output_type": "HabitatObservation",
+      "algorithm": "Reconcile surveys, field notes, and historical records into a baseline with explicit spatial, temporal, and methodological limits. Distinguish observed absence from unsurveyed areas and preserve rare or uncertain observations for specialist review.",
+      "gate": "Baseline claims are limited to actual survey coverage and methods."
+    },
+    {
+      "name": "translateObjectives",
+      "output_type": "RestorationObjective",
+      "algorithm": "Convert landholder and ecological goals into observable objectives under supplied guidance. Separate desired long-term outcomes from near-term actions, identify conflicting uses, and preserve uncertainty about causal pathways rather than promising guaranteed ecological results.",
+      "gate": "Objectives have measurable indicators and accountable expert interpretation."
+    },
+    {
+      "name": "constructInterventions",
+      "output_type": "RestorationOption",
+      "algorithm": "Propose staged interventions from approved guidance and known site conditions. Explain the hypothesized mechanism, dependencies, resource needs, and stop conditions; route unfamiliar or potentially harmful interventions to qualified specialists instead of improvising.",
+      "gate": "Known ecological and access constraints respected; no unsupported intervention prescription."
+    },
+    {
+      "name": "planMonitoring",
+      "output_type": "MonitoringTask",
+      "algorithm": "Design monitoring that can distinguish progress, nonresponse, and unintended effects using supplied methods. Specify comparable locations, timing, and effort, and define what evidence would justify continuing, revising, or stopping an intervention.",
+      "gate": "Monitoring can inform a real decision and does not confuse changing effort with changing conditions."
+    },
+    {
+      "name": "adaptManagement",
+      "output_type": "RestorationRevision",
+      "algorithm": "Interpret new observations against baseline and monitoring rules, including alternative explanations such as seasonality or survey changes. Propose bounded plan revisions, preserve unaffected work, and obtain expert approval before changing interventions.",
+      "gate": "Adaptive changes retain evidence, uncertainty, and current access or intervention authority."
+    }
+  ],
+  "operational_details": [
+    "A sensitive species location is recorded: restrict exact coordinates in public and volunteer views.",
+    "A survey is conducted in a different season: flag comparability before interpreting change.",
+    "Land access permission expires: stop affected field tasks immediately.",
+    "An intervention has an unexpected effect: preserve the observation and trigger expert review.",
+    "Volunteer effort varies: record sampling effort alongside observations."
+  ],
+  "domain_records": {
+    "RestorationProject": [
+      "siteId: ID",
+      "landholderIds: ID[]",
+      "restorationGoals: string[]",
+      "expertOwnerId: ID",
+      "planningHorizon: string"
+    ],
+    "HabitatObservation": [
+      "caseId: ID",
+      "locationId: ID",
+      "observedFeature: string",
+      "surveyMethod: string",
+      "seasonalContext: string"
+    ],
+    "RestorationObjective": [
+      "caseId: ID",
+      "desiredCondition: string",
+      "indicator: string",
+      "landholderConstraint: string",
+      "uncertainty: string"
+    ],
+    "RestorationOption": [
+      "caseId: ID",
+      "objectiveIds: ID[]",
+      "approvedAction: string",
+      "prerequisites: string[]",
+      "expectedMechanism: string"
+    ],
+    "MonitoringTask": [
+      "caseId: ID",
+      "objectiveId: ID",
+      "observationMethod: string",
+      "samplingWindow: string",
+      "decisionRule: string"
+    ],
+    "RestorationRevision": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "affectedOptionIds: ID[]",
+      "proposedChange: string",
+      "expertApprovalRef: Ref"
+    ]
+  }
+}

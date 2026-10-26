@@ -1,0 +1,8 @@
+---
+args: { prepared: PreparedExperimentDesign, goal: GoalContract, policy: PolicySelection }
+returns: DecisionsExperimentDesign
+---
+1. Apply this domain algorithm to each relevant evidence unit: Read the original plan and subsequent amendments in temporal order. Distinguish preregistered criteria from retrospective choices, identify the assignment and observation units, and preserve deviations that could change interpretation even when the experiment ran successfully.
+2. Return field-level atoms for the actual ExperimentDesign record. Each atom gives a value, evidence references, a status of established, disputed, unknown, or inapplicable, and a plausible alternative.
+3. Distinguish an attributed fact from a suggestion, inference, repeated copy, or silence. Respect effective date, source authority, and the exact scope.
+4. Preserve unresolved conflicts and ask the smallest question that could change the disposition.

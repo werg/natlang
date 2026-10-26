@@ -1,0 +1,536 @@
+[
+  {
+    "id": "038-project-based-learning-director-gate-supported",
+    "root": "runCase/translateGoals/audit/qualify.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "draft": {
+        "values": {
+          "competencyId": "water-quality-measurement",
+          "observableEvidence": "working filter with a recorded flow-rate table",
+          "prerequisiteIds": [
+            "fraction-calculation"
+          ],
+          "assessmentBoundary": "peer planning evidence does not establish individual measurement skill",
+          "caseId": "case-38"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "assessmentBoundary",
+            "evidenceIds": [
+              "038-project-based-learning-director-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "project milestone evidence bundle",
+        "evidence": [
+          {
+            "id": "038-project-based-learning-director-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Team Cedar’s M2 filter prototype includes a measured flow-rate table; peer notes document shared planning. Case case-38; current first-stage record values: {\"assessmentBoundary\": \"peer planning evidence does not establish individual measurement skill\", \"competencyId\": \"water-quality-measurement\", \"observableEvidence\": \"working filter with a recorded flow-rate table\", \"prerequisiteIds\": [\"fraction-calculation\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The project has collaboration evidence but cannot yet establish the targeted measurement competency."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "assessmentBoundary",
+          "value": "peer planning evidence does not establish individual measurement skill",
+          "evidenceIds": [
+            "038-project-based-learning-director-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "project milestone evidence bundle: Team Cedar submitted milestone M-2 with a working water filter and a measurement table. Peer notes support shared planning, while the teacher log says flow-rate evidence is not yet collected. Apply the first-stage gate to the record and source versions; The project has collaboration evidence but cannot yet establish the targeted measurement competency.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "038-project-based-learning-director-gate-contradictory",
+    "root": "runCase/translateGoals/audit/qualify.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "draft": {
+        "values": {
+          "competencyId": "water-quality-measurement",
+          "observableEvidence": "peer planning notes only; no flow-rate table",
+          "prerequisiteIds": [
+            "fraction-calculation"
+          ],
+          "assessmentBoundary": "peer planning evidence does not establish individual measurement skill",
+          "caseId": "case-38"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "assessmentBoundary",
+            "evidenceIds": [
+              "038-project-based-learning-director-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "project milestone evidence bundle",
+        "evidence": [
+          {
+            "id": "038-project-based-learning-director-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Team Cedar’s M2 filter prototype includes a measured flow-rate table; peer notes document shared planning. Case case-38; current first-stage record values: {\"assessmentBoundary\": \"peer planning evidence does not establish individual measurement skill\", \"competencyId\": \"water-quality-measurement\", \"observableEvidence\": \"working filter with a recorded flow-rate table\", \"prerequisiteIds\": [\"fraction-calculation\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The project has collaboration evidence but cannot yet establish the targeted measurement competency."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observableEvidence",
+          "value": "peer planning notes only; no flow-rate table",
+          "evidenceIds": [
+            "038-project-based-learning-director-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "project milestone evidence bundle: Team Cedar submitted milestone M-2 with a working water filter and a measurement table. Peer notes support shared planning, while the teacher log says flow-rate evidence is not yet collected. Apply the first-stage gate to the record and source versions; The project has collaboration evidence but cannot yet establish the targeted measurement competency.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "038-project-based-learning-director-gate-missing",
+    "root": "runCase/translateGoals/audit/qualify.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-38"
+        },
+        "missingFields": [
+          "assessmentBoundary"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes assessmentBoundary?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "project milestone evidence bundle",
+        "evidence": [],
+        "missing": [
+          "assessmentBoundary"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "The project has collaboration evidence but cannot yet establish the targeted measurement competency."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "project milestone evidence bundle: Team Cedar submitted milestone M-2 with a working water filter and a measurement table. Peer notes support shared planning, while the teacher log says flow-rate evidence is not yet collected. Apply the first-stage gate to the record and source versions; The project has collaboration evidence but cannot yet establish the targeted measurement competency.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "038-project-based-learning-director-operational-1",
+    "root": "runCase.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "input": {
+        "caseId": "038-project-based-learning-director-operational-1",
+        "goal": "Review the Project-based learning director evidence for case 038-project-based-learning-director-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "038-operational-detail-1-source-v2",
+            "source": "Project-based learning director operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R038 Project-based steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R038 Project-based steward records: Team Cedar’s M2 water-filter milestone is due Friday. Learner Ana Ruiz has no individual measurement record although the team schedule lists her as the flow-test operator; the remaining team members have logistics tasks assigned. This current event is source 038-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 038-project-based-learning-director-operational-1. The supplied typed prior 038-prior-projectlearninggoal-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Team Cedar’s M2 water-filter milestone is due Friday. Learner Ana Ruiz has no individual measurement record although the team schedule lists her as the flow-test operator; the remaining team members have logistics tasks assigned."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "038-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "038-prior-projectlearninggoal-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "038-project-based-learning-director-operational-1",
+            "competencyId": "water-quality-measurement",
+            "observableEvidence": "working filter with a recorded flow-rate table",
+            "prerequisiteIds": [
+              "fraction-calculation"
+            ],
+            "assessmentBoundary": "peer planning evidence does not establish individual measurement skill"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 038-project-based-learning-director-operational-1 against this factual event: Team Cedar’s M2 water-filter milestone is due Friday. Learner Ana Ruiz has no individual measurement record although the team schedule lists her as the flow-test operator; the remaining team members have logistics tasks assigned. Original §9 detail: One learner misses a milestone: redistribute logistics without erasing individual evidence requirements. Correct handling applies “redistribute logistics without erasing individual evidence requirements.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Team Cedar’s M2 water-filter milestone is due Friday. Learner Ana Ruiz has no individual measurement record although the team schedule lists her as the flow-test operator; the remaining team members have logistics tasks assigned.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "One learner misses a milestone: redistribute logistics without erasing individual evidence requirements.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Team Cedar’s M2 water-filter milestone is due Friday. Learner Ana Ruiz has no individual measurement record although the team schedule lists her as the flow-test operator; the remaining team members have logistics tasks assigned. It links source 038-operational-detail-1-source-v2 v2 with prior typed ProjectLearningGoal record 038-prior-projectlearninggoal-detail-1-v1 v1 and keeps unresolved scope visible for M2.",
+      "durable_state": "The proposal retains prior record 038-prior-projectlearninggoal-detail-1-v1 v1 and versions only the affected state for M2 against source 038-operational-detail-1-source-v2 v2; it applies “redistribute logistics without erasing individual evidence requirements.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M2 and the scope supported by source 038-operational-detail-1-source-v2 v2; it represents “redistribute logistics without erasing individual evidence requirements.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "038-project-based-learning-director-operational-2",
+    "root": "runCase.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "input": {
+        "caseId": "038-project-based-learning-director-operational-2",
+        "goal": "Review the Project-based learning director evidence for case 038-project-based-learning-director-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "038-operational-detail-2-source-v2",
+            "source": "Project-based learning director operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R038 Project-based steward; event version verified for this case",
+            "observedAt": "2026-10-10T10:15:00Z",
+            "text": "R038 Project-based steward records: The approved M3 project plan names filter media M-8 as required, and the supplier notice reports M-8 discontinued on 2026-10-10. The learning goal remains measuring contaminant reduction; the project ledger shows no substitute material approval. This current event is source 038-operational-detail-2-source-v2 v2, observed 2026-10-10T10:15:00Z, for case 038-project-based-learning-director-operational-2. The supplied typed prior 038-prior-projectlearninggoal-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "The approved M3 project plan names filter media M-8 as required, and the supplier notice reports M-8 discontinued on 2026-10-10. The learning goal remains measuring contaminant reduction; the project ledger shows no substitute material approval."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "038-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "038-prior-projectlearninggoal-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "038-project-based-learning-director-operational-2",
+            "competencyId": "water-quality-measurement",
+            "observableEvidence": "working filter with a recorded flow-rate table",
+            "prerequisiteIds": [
+              "fraction-calculation"
+            ],
+            "assessmentBoundary": "peer planning evidence does not establish individual measurement skill"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 038-project-based-learning-director-operational-2 against this factual event: The approved M3 project plan names filter media M-8 as required, and the supplier notice reports M-8 discontinued on 2026-10-10. The learning goal remains measuring contaminant reduction; the project ledger shows no substitute material approval. Original §9 detail: A required material becomes unavailable: propose an equivalent route preserving the learning goal. Correct handling applies “propose an equivalent route preserving the learning goal.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "The approved M3 project plan names filter media M-8 as required, and the supplier notice reports M-8 discontinued on 2026-10-10. The learning goal remains measuring contaminant reduction; the project ledger shows no substitute material approval.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A required material becomes unavailable: propose an equivalent route preserving the learning goal.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: The approved M3 project plan names filter media M-8 as required, and the supplier notice reports M-8 discontinued on 2026-10-10. The learning goal remains measuring contaminant reduction; the project ledger shows no substitute material approval. It links source 038-operational-detail-2-source-v2 v2 with prior typed ProjectLearningGoal record 038-prior-projectlearninggoal-detail-2-v1 v1 and keeps unresolved scope visible for M3, M-8.",
+      "durable_state": "The proposal retains prior record 038-prior-projectlearninggoal-detail-2-v1 v1 and versions only the affected state for M3, M-8 against source 038-operational-detail-2-source-v2 v2; it applies “propose an equivalent route preserving the learning goal.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M3, M-8 and the scope supported by source 038-operational-detail-2-source-v2 v2; it represents “propose an equivalent route preserving the learning goal.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "038-project-based-learning-director-operational-3",
+    "root": "runCase.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "input": {
+        "caseId": "038-project-based-learning-director-operational-3",
+        "goal": "Review the Project-based learning director evidence for case 038-project-based-learning-director-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "038-operational-detail-3-source-v2",
+            "source": "Project-based learning director operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R038 Project-based steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R038 Project-based steward records: Team Cedar’s final filter prototype and flow table are signed by “Team Cedar”; peer notes list Ana Ruiz, Ben Hall and Jo Kim as contributors but contain no member-to-measurement attribution. This current event is source 038-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 038-project-based-learning-director-operational-3. The supplied typed prior 038-prior-projectlearninggoal-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Team Cedar’s final filter prototype and flow table are signed by “Team Cedar”; peer notes list Ana Ruiz, Ben Hall and Jo Kim as contributors but contain no member-to-measurement attribution."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "038-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "038-prior-projectlearninggoal-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "038-project-based-learning-director-operational-3",
+            "competencyId": "water-quality-measurement",
+            "observableEvidence": "working filter with a recorded flow-rate table",
+            "prerequisiteIds": [
+              "fraction-calculation"
+            ],
+            "assessmentBoundary": "peer planning evidence does not establish individual measurement skill"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 038-project-based-learning-director-operational-3 against this factual event: Team Cedar’s final filter prototype and flow table are signed by “Team Cedar”; peer notes list Ana Ruiz, Ben Hall and Jo Kim as contributors but contain no member-to-measurement attribution. Original §9 detail: A group produces polished work with unclear authorship: request individual demonstrations. Correct handling applies “request individual demonstrations.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Team Cedar’s final filter prototype and flow table are signed by “Team Cedar”; peer notes list Ana Ruiz, Ben Hall and Jo Kim as contributors but contain no member-to-measurement attribution.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A group produces polished work with unclear authorship: request individual demonstrations.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Team Cedar’s final filter prototype and flow table are signed by “Team Cedar”; peer notes list Ana Ruiz, Ben Hall and Jo Kim as contributors but contain no member-to-measurement attribution. It links source 038-operational-detail-3-source-v2 v2 with prior typed ProjectLearningGoal record 038-prior-projectlearninggoal-detail-3-v1 v1 and keeps unresolved scope visible for 038-project-based-learning-director-operational-3.",
+      "durable_state": "The proposal retains prior record 038-prior-projectlearninggoal-detail-3-v1 v1 and versions only the affected state for 038-project-based-learning-director-operational-3 against source 038-operational-detail-3-source-v2 v2; it applies “request individual demonstrations.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to 038-project-based-learning-director-operational-3 and the scope supported by source 038-operational-detail-3-source-v2 v2; it represents “request individual demonstrations.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "038-project-based-learning-director-operational-4",
+    "root": "runCase.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "input": {
+        "caseId": "038-project-based-learning-director-operational-4",
+        "goal": "Review the Project-based learning director evidence for case 038-project-based-learning-director-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "038-operational-detail-4-source-v2",
+            "source": "Project-based learning director operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R038 Project-based steward; event version verified for this case",
+            "observedAt": "2026-10-17T09:00:00Z",
+            "text": "R038 Project-based steward records: On 2026-10-17, schedule revision M4-R2 moved the upcoming site-access window from Oct 20 to Oct 18. The remaining tasks are sample collection (2 days), analysis (1 day), and review (1 day); no verified parallel path is recorded. This current event is source 038-operational-detail-4-source-v2 v2, observed 2026-10-17T10:15:00Z, for case 038-project-based-learning-director-operational-4. The supplied typed prior 038-prior-projectlearninggoal-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "The site access window for milestone M4 moves from Oct 20 to Oct 18. The remaining tasks are sample collection (2 days), analysis (1 day), and review (1 day); the schedule has no verified parallel path."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "038-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "038-prior-projectlearninggoal-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "038-project-based-learning-director-operational-4",
+            "competencyId": "water-quality-measurement",
+            "observableEvidence": "working filter with a recorded flow-rate table",
+            "prerequisiteIds": [
+              "fraction-calculation"
+            ],
+            "assessmentBoundary": "peer planning evidence does not establish individual measurement skill"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 038-project-based-learning-director-operational-4 against this factual event: The site access window for milestone M4 moves from Oct 20 to Oct 18. The remaining tasks are sample collection (2 days), analysis (1 day), and review (1 day); the schedule has no verified parallel path. Original §9 detail: A complication arrives near the deadline: validate remaining feasibility before release. Correct handling applies “validate remaining feasibility before release.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "On 2026-10-17, schedule revision M4-R2 moved the upcoming site-access window from Oct 20 to Oct 18. The remaining tasks are sample collection (2 days), analysis (1 day), and review (1 day); no verified parallel path is recorded.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A complication arrives near the deadline: validate remaining feasibility before release.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: The site access window for milestone M4 moves from Oct 20 to Oct 18. The remaining tasks are sample collection (2 days), analysis (1 day), and review (1 day); the schedule has no verified parallel path. It links source 038-operational-detail-4-source-v2 v2 with prior typed ProjectLearningGoal record 038-prior-projectlearninggoal-detail-4-v1 v1 and keeps unresolved scope visible for M4.",
+      "durable_state": "The proposal retains prior record 038-prior-projectlearninggoal-detail-4-v1 v1 and versions only the affected state for M4 against source 038-operational-detail-4-source-v2 v2; it applies “validate remaining feasibility before release.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M4 and the scope supported by source 038-operational-detail-4-source-v2 v2; it represents “validate remaining feasibility before release.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "038-project-based-learning-director-operational-5",
+    "root": "runCase.nl",
+    "split_group": "038-project-based-learning-director",
+    "inputs": {
+      "input": {
+        "caseId": "038-project-based-learning-director-operational-5",
+        "goal": "Review the Project-based learning director evidence for case 038-project-based-learning-director-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "038-operational-detail-5-source-v2",
+            "source": "Project-based learning director operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R038 Project-based steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R038 Project-based steward records: Learner Jo Kim submits a transparent-bottle turbidity comparison instead of the sample colorimeter worksheet. The artifact includes before/after readings and calibration marks; the sample solution uses a colorimeter, and no assessor has yet mapped the alternative evidence to the water-quality competency. This current event is source 038-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 038-project-based-learning-director-operational-5. The supplied typed prior 038-prior-projectlearninggoal-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Learner Jo Kim submits a transparent-bottle turbidity comparison instead of the sample colorimeter worksheet. The artifact includes before/after readings and calibration marks; the sample solution uses a colorimeter, and no assessor has yet mapped the alternative evidence to the water-quality competency."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "038-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "038-prior-projectlearninggoal-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "038-project-based-learning-director-operational-5",
+            "competencyId": "water-quality-measurement",
+            "observableEvidence": "working filter with a recorded flow-rate table",
+            "prerequisiteIds": [
+              "fraction-calculation"
+            ],
+            "assessmentBoundary": "peer planning evidence does not establish individual measurement skill"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 038-project-based-learning-director-operational-5 against this factual event: Learner Jo Kim submits a transparent-bottle turbidity comparison instead of the sample colorimeter worksheet. The artifact includes before/after readings and calibration marks; the sample solution uses a colorimeter, and no assessor has yet mapped the alternative evidence to the water-quality competency. Original §9 detail: A learner uses a creative alternative: assess the competency rather than adherence to the sample solution. Correct handling applies “assess the competency rather than adherence to the sample solution.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Learner Jo Kim submits a transparent-bottle turbidity comparison instead of the sample colorimeter worksheet. The artifact includes before/after readings and calibration marks; the sample solution uses a colorimeter, and no assessor has yet mapped the alternative evidence to the water-quality competency.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A learner uses a creative alternative: assess the competency rather than adherence to the sample solution.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Learner Jo Kim submits a transparent-bottle turbidity comparison instead of the sample colorimeter worksheet. The artifact includes before/after readings and calibration marks; the sample solution uses a colorimeter, and no assessor has yet mapped the alternative evidence to the water-quality competency. It links source 038-operational-detail-5-source-v2 v2 with prior typed ProjectLearningGoal record 038-prior-projectlearninggoal-detail-5-v1 v1 and keeps unresolved scope visible for 038-project-based-learning-director-operational-5.",
+      "durable_state": "The proposal retains prior record 038-prior-projectlearninggoal-detail-5-v1 v1 and versions only the affected state for 038-project-based-learning-director-operational-5 against source 038-operational-detail-5-source-v2 v2; it applies “assess the competency rather than adherence to the sample solution.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to 038-project-based-learning-director-operational-5 and the scope supported by source 038-operational-detail-5-source-v2 v2; it represents “assess the competency rather than adherence to the sample solution.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

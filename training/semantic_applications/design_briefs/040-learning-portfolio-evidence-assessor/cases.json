@@ -1,0 +1,522 @@
+[
+  {
+    "id": "040-learning-portfolio-evidence-assessor-gate-supported",
+    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "draft": {
+        "values": {
+          "artifactId": "portfolio-audio-040",
+          "contribution": "learner rehearsed the opening only",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed",
+          "caseId": "case-40"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "authorshipStatus",
+            "evidenceIds": [
+              "040-learning-portfolio-evidence-assessor-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "portfolio artifacts and competency rubric",
+        "evidence": [
+          {
+            "id": "040-learning-portfolio-evidence-assessor-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Portfolio audio P40 contains a rehearsed introduction; no unprompted response to a novel question is present. Case case-40; current first-stage record values: {\"artifactId\": \"portfolio-audio-040\", \"authorshipStatus\": \"learner-authored; independent response not observed\", \"context\": \"rubric requires an unprompted answer to a novel question\", \"contribution\": \"learner rehearsed the opening only\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Self-description and rehearsed delivery do not satisfy the independent-evidence criterion."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "authorshipStatus",
+          "value": "learner-authored; independent response not observed",
+          "evidenceIds": [
+            "040-learning-portfolio-evidence-assessor-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "portfolio artifacts and competency rubric: Portfolio P-040 contains a reflection claiming independent presentation skill. Its only recording is a rehearsed introduction; the rubric requires an unprompted response to a novel question. Apply the first-stage gate to the record and source versions; Self-description and rehearsed delivery do not satisfy the independent-evidence criterion.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-gate-contradictory",
+    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "draft": {
+        "values": {
+          "artifactId": "portfolio-audio-040",
+          "contribution": "independently answers a novel question without a prompt",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed",
+          "caseId": "case-40"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "authorshipStatus",
+            "evidenceIds": [
+              "040-learning-portfolio-evidence-assessor-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "portfolio artifacts and competency rubric",
+        "evidence": [
+          {
+            "id": "040-learning-portfolio-evidence-assessor-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Portfolio audio P40 contains a rehearsed introduction; no unprompted response to a novel question is present. Case case-40; current first-stage record values: {\"artifactId\": \"portfolio-audio-040\", \"authorshipStatus\": \"learner-authored; independent response not observed\", \"context\": \"rubric requires an unprompted answer to a novel question\", \"contribution\": \"learner rehearsed the opening only\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Self-description and rehearsed delivery do not satisfy the independent-evidence criterion."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "contribution",
+          "value": "independently answers a novel question without a prompt",
+          "evidenceIds": [
+            "040-learning-portfolio-evidence-assessor-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "portfolio artifacts and competency rubric: Portfolio P-040 contains a reflection claiming independent presentation skill. Its only recording is a rehearsed introduction; the rubric requires an unprompted response to a novel question. Apply the first-stage gate to the record and source versions; Self-description and rehearsed delivery do not satisfy the independent-evidence criterion.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-gate-missing",
+    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-40"
+        },
+        "missingFields": [
+          "authorshipStatus"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes authorshipStatus?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "portfolio artifacts and competency rubric",
+        "evidence": [],
+        "missing": [
+          "authorshipStatus"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Self-description and rehearsed delivery do not satisfy the independent-evidence criterion."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "portfolio artifacts and competency rubric: Portfolio P-040 contains a reflection claiming independent presentation skill. Its only recording is a rehearsed introduction; the rubric requires an unprompted response to a novel question. Apply the first-stage gate to the record and source versions; Self-description and rehearsed delivery do not satisfy the independent-evidence criterion.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-operational-1",
+    "root": "runCase.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "input": {
+        "caseId": "040-learning-portfolio-evidence-assessor-operational-1",
+        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "040-operational-detail-1-source-v2",
+            "source": "Learning portfolio evidence assessor operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R040 Learning steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R040 Learning steward records: Portfolio group P40 has a polished team report signed by four learners, but the artifact archive contains no contribution log or individual response for learner L40. The competency rubric requires an individual explanation of evidence selection. This current event is source 040-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 040-learning-portfolio-evidence-assessor-operational-1. The supplied typed prior 040-prior-portfolioevidence-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Portfolio group P40 has a polished team report signed by four learners, but the artifact archive contains no contribution log or individual response for learner L40. The competency rubric requires an individual explanation of evidence selection."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "040-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "040-prior-portfolioevidence-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "040-learning-portfolio-evidence-assessor-operational-1",
+            "artifactId": "portfolio-audio-040",
+            "contribution": "learner rehearsed the opening only",
+            "context": "rubric requires an unprompted answer to a novel question",
+            "authorshipStatus": "learner-authored; independent response not observed"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 040-learning-portfolio-evidence-assessor-operational-1 against this factual event: Portfolio group P40 has a polished team report signed by four learners, but the artifact archive contains no contribution log or individual response for learner L40. The competency rubric requires an individual explanation of evidence selection. Original §9 detail: A group project lacks contribution records: request an individual demonstration rather than assuming equal authorship. Correct handling applies “request an individual demonstration rather than assuming equal authorship.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Portfolio group P40 has a polished team report signed by four learners, but the artifact archive contains no contribution log or individual response for learner L40. The competency rubric requires an individual explanation of evidence selection.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A group project lacks contribution records: request an individual demonstration rather than assuming equal authorship.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Portfolio group P40 has a polished team report signed by four learners, but the artifact archive contains no contribution log or individual response for learner L40. The competency rubric requires an individual explanation of evidence selection. It links source 040-operational-detail-1-source-v2 v2 with prior typed PortfolioEvidence record 040-prior-portfolioevidence-detail-1-v1 v1 and keeps unresolved scope visible for P40, L40.",
+      "durable_state": "The proposal retains prior record 040-prior-portfolioevidence-detail-1-v1 v1 and versions only the affected state for P40, L40 against source 040-operational-detail-1-source-v2 v2; it applies “request an individual demonstration rather than assuming equal authorship.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P40, L40 and the scope supported by source 040-operational-detail-1-source-v2 v2; it represents “request an individual demonstration rather than assuming equal authorship.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-operational-2",
+    "root": "runCase.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "input": {
+        "caseId": "040-learning-portfolio-evidence-assessor-operational-2",
+        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "040-operational-detail-2-source-v2",
+            "source": "Learning portfolio evidence assessor operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R040 Learning steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R040 Learning steward records: Artifact A40 is dated 2024-05-10 and documents competency C40 with a signed field protocol and supervisor verification. The supplied recency rule says relevant evidence remains valid unless the competency standard or evidence source has materially changed; the standard version is unchanged since 2024. This current event is source 040-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 040-learning-portfolio-evidence-assessor-operational-2. The supplied typed prior 040-prior-portfolioevidence-detail-2-v1 v1 is preserved for comparison. Typed record fields for this workflow are {\"artifactId\": \"artifact-A40\", \"authorshipStatus\": \"dated 2024-05-10; verified by learner L40; no material standard/source change recorded\", \"context\": \"competency C40; supplied recency rule remains valid unless competency standard or source materially changes; standard version unchanged since 2024\", \"contribution\": \"learner-authored individual field protocol with calibration log CAL-40\"}.",
+            "supports": [
+              "Artifact A40 is dated 2024-05-10 and documents competency C40 with a signed field protocol and supervisor verification. The supplied recency rule says relevant evidence remains valid unless the competency standard or evidence source has materially changed; the standard version is unchanged since 2024."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "040-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "040-prior-portfolioevidence-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "040-learning-portfolio-evidence-assessor-operational-2",
+            "artifactId": "artifact-A40",
+            "contribution": "learner-authored individual field protocol with calibration log CAL-40",
+            "context": "competency C40; supplied recency rule remains valid unless competency standard or source materially changes; standard version unchanged since 2024",
+            "authorshipStatus": "dated 2024-05-10; verified by learner L40; no material standard/source change recorded"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 040-learning-portfolio-evidence-assessor-operational-2 against this factual event: Artifact A40 is dated 2024-05-10 and documents competency C40 with a signed field protocol and supervisor verification. The supplied recency rule says relevant evidence remains valid unless the competency standard or evidence source has materially changed; the standard version is unchanged since 2024. Original §9 detail: Evidence is old but relevant: apply the supplied recency rule rather than an invented cutoff. Correct handling applies “apply the supplied recency rule rather than an invented cutoff.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Artifact A40 is dated 2024-05-10 and documents competency C40 with a signed field protocol and supervisor verification. The supplied recency rule says relevant evidence remains valid unless the competency standard or evidence source has materially changed; the standard version is unchanged since 2024.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Evidence is old but relevant: apply the supplied recency rule rather than an invented cutoff.",
+    "boundary_assertions": {
+      "view": "The authorized assessor view shows artifact A40 dated 2024-05-10, competency C40, the supplied recency rule, and that standard version is unchanged since 2024.",
+      "durable_state": "Proposal preserves A40 and its 2024 date and versions the competency finding with the supplied recency rule and current standard/source fingerprint; no evidence is silently expired.",
+      "effects": "No external effect is required; any competency finding change remains an approval-bound proposal and no grade/profile write is claimed."
+    }
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-operational-3",
+    "root": "runCase.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "input": {
+        "caseId": "040-learning-portfolio-evidence-assessor-operational-3",
+        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "040-operational-detail-3-source-v2",
+            "source": "Learning portfolio evidence assessor operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R040 Learning steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R040 Learning steward records: Supervisor Mara Lee’s comment says learner L40 did not calibrate the instrument. Artifact A40 includes a timestamped calibration log signed by L40 and instrument serial CAL-40; the supervisor comment has no cited observation time. This current event is source 040-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 040-learning-portfolio-evidence-assessor-operational-3. The supplied typed prior 040-prior-portfolioevidence-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Supervisor Mara Lee’s comment says learner L40 did not calibrate the instrument. Artifact A40 includes a timestamped calibration log signed by L40 and instrument serial CAL-40; the supervisor comment has no cited observation time."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "040-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "040-prior-portfolioevidence-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "040-learning-portfolio-evidence-assessor-operational-3",
+            "artifactId": "portfolio-audio-040",
+            "contribution": "learner rehearsed the opening only",
+            "context": "rubric requires an unprompted answer to a novel question",
+            "authorshipStatus": "learner-authored; independent response not observed"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 040-learning-portfolio-evidence-assessor-operational-3 against this factual event: Supervisor Mara Lee’s comment says learner L40 did not calibrate the instrument. Artifact A40 includes a timestamped calibration log signed by L40 and instrument serial CAL-40; the supervisor comment has no cited observation time. Original §9 detail: A supervisor comment conflicts with the artifact: preserve both and request clarification. Correct handling applies “preserve both and request clarification.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Supervisor Mara Lee’s comment says learner L40 did not calibrate the instrument. Artifact A40 includes a timestamped calibration log signed by L40 and instrument serial CAL-40; the supervisor comment has no cited observation time.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A supervisor comment conflicts with the artifact: preserve both and request clarification.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Supervisor Mara Lee’s comment says learner L40 did not calibrate the instrument. Artifact A40 includes a timestamped calibration log signed by L40 and instrument serial CAL-40; the supervisor comment has no cited observation time. It links source 040-operational-detail-3-source-v2 v2 with prior typed PortfolioEvidence record 040-prior-portfolioevidence-detail-3-v1 v1 and keeps unresolved scope visible for L40, A40, CAL-40.",
+      "durable_state": "The proposal retains prior record 040-prior-portfolioevidence-detail-3-v1 v1 and versions only the affected state for L40, A40, CAL-40 against source 040-operational-detail-3-source-v2 v2; it applies “preserve both and request clarification.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L40, A40, CAL-40 and the scope supported by source 040-operational-detail-3-source-v2 v2; it represents “preserve both and request clarification.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-operational-4",
+    "root": "runCase.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "input": {
+        "caseId": "040-learning-portfolio-evidence-assessor-operational-4",
+        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "040-operational-detail-4-source-v2",
+            "source": "Learning portfolio evidence assessor operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R040 Learning steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R040 Learning steward records: Learner L40’s approved plan changes the portfolio evidence form from written response to recorded oral explanation for competency C40. The prompt, scoring criteria and required evidence elements are identical; oral artifact O40 is linked to plan version 2. This current event is source 040-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 040-learning-portfolio-evidence-assessor-operational-4. The supplied typed prior 040-prior-portfolioevidence-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Learner L40’s approved plan changes the portfolio evidence form from written response to recorded oral explanation for competency C40. The prompt, scoring criteria and required evidence elements are identical; oral artifact O40 is linked to plan version 2."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "040-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "040-prior-portfolioevidence-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "040-learning-portfolio-evidence-assessor-operational-4",
+            "artifactId": "portfolio-audio-040",
+            "contribution": "learner rehearsed the opening only",
+            "context": "rubric requires an unprompted answer to a novel question",
+            "authorshipStatus": "learner-authored; independent response not observed"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 040-learning-portfolio-evidence-assessor-operational-4 against this factual event: Learner L40’s approved plan changes the portfolio evidence form from written response to recorded oral explanation for competency C40. The prompt, scoring criteria and required evidence elements are identical; oral artifact O40 is linked to plan version 2. Original §9 detail: An accommodation changes the form of evidence: assess the same competency through an approved alternative. Correct handling applies “assess the same competency through an approved alternative.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Learner L40’s approved plan changes the portfolio evidence form from written response to recorded oral explanation for competency C40. The prompt, scoring criteria and required evidence elements are identical; oral artifact O40 is linked to plan version 2.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "An accommodation changes the form of evidence: assess the same competency through an approved alternative.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Learner L40’s approved plan changes the portfolio evidence form from written response to recorded oral explanation for competency C40. The prompt, scoring criteria and required evidence elements are identical; oral artifact O40 is linked to plan version 2. It links source 040-operational-detail-4-source-v2 v2 with prior typed PortfolioEvidence record 040-prior-portfolioevidence-detail-4-v1 v1 and keeps unresolved scope visible for L40, C40, O40.",
+      "durable_state": "The proposal retains prior record 040-prior-portfolioevidence-detail-4-v1 v1 and versions only the affected state for L40, C40, O40 against source 040-operational-detail-4-source-v2 v2; it applies “assess the same competency through an approved alternative.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L40, C40, O40 and the scope supported by source 040-operational-detail-4-source-v2 v2; it represents “assess the same competency through an approved alternative.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "040-learning-portfolio-evidence-assessor-operational-5",
+    "root": "runCase.nl",
+    "split_group": "040-learning-portfolio-evidence-assessor",
+    "inputs": {
+      "input": {
+        "caseId": "040-learning-portfolio-evidence-assessor-operational-5",
+        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "040-operational-detail-5-source-v2",
+            "source": "Learning portfolio evidence assessor operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R040 Learning steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R040 Learning steward records: Learner L40 appeals finding F40, which attributed group artifact A40 to L40. The appeal cites a versioned contribution log showing only sections 2 and 4; the original finding remains attached to competency C40 and has not been revised. This current event is source 040-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 040-learning-portfolio-evidence-assessor-operational-5. The supplied typed prior 040-prior-portfolioevidence-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Learner L40 appeals finding F40, which attributed group artifact A40 to L40. The appeal cites a versioned contribution log showing only sections 2 and 4; the original finding remains attached to competency C40 and has not been revised."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "040-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "040-prior-portfolioevidence-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "040-learning-portfolio-evidence-assessor-operational-5",
+            "artifactId": "portfolio-audio-040",
+            "contribution": "learner rehearsed the opening only",
+            "context": "rubric requires an unprompted answer to a novel question",
+            "authorshipStatus": "learner-authored; independent response not observed"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 040-learning-portfolio-evidence-assessor-operational-5 against this factual event: Learner L40 appeals finding F40, which attributed group artifact A40 to L40. The appeal cites a versioned contribution log showing only sections 2 and 4; the original finding remains attached to competency C40 and has not been revised. Original §9 detail: A learner appeals an attribution error: version the finding and reassess affected competencies. Correct handling applies “version the finding and reassess affected competencies.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Learner L40 appeals finding F40, which attributed group artifact A40 to L40. The appeal cites a versioned contribution log showing only sections 2 and 4; the original finding remains attached to competency C40 and has not been revised.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A learner appeals an attribution error: version the finding and reassess affected competencies.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Learner L40 appeals finding F40, which attributed group artifact A40 to L40. The appeal cites a versioned contribution log showing only sections 2 and 4; the original finding remains attached to competency C40 and has not been revised. It links source 040-operational-detail-5-source-v2 v2 with prior typed PortfolioEvidence record 040-prior-portfolioevidence-detail-5-v1 v1 and keeps unresolved scope visible for L40, F40, A40, C40.",
+      "durable_state": "The proposal retains prior record 040-prior-portfolioevidence-detail-5-v1 v1 and versions only the affected state for L40, F40, A40, C40 against source 040-operational-detail-5-source-v2 v2; it applies “version the finding and reassess affected competencies.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L40, F40, A40, C40 and the scope supported by source 040-operational-detail-5-source-v2 v2; it represents “version the finding and reassess affected competencies.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

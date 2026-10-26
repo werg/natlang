@@ -1,0 +1,597 @@
+[
+  {
+    "id": "094-first-gate-pass",
+    "root": "runCase/recoverBrandConstraints/audit/qualify.nl",
+    "split_group": "world-094-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+        "candidateIds": [
+          "094-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "094-first-e1",
+            "source": "primary case record BRAND-94",
+            "version": "v1",
+            "text": "Primary domain record for case BRAND-94 states: caseId=\"BRAND-94\"; desiredAssociation=\"Dependable repair service for small workshops.\"; factualClaim=\"Repairs available in three named service districts.\"; prohibitedClaim=\"No same-day repair or guaranteed uptime claims.\"; channelConstraint=\"Poster legible at five metres.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "094-case-record",
+          "caseId": "BRAND-94",
+          "sourceRefs": [
+            "094-first-e1"
+          ],
+          "state": "draft",
+          "kind": "BrandConstraint",
+          "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "desiredAssociation": "Dependable repair service for small workshops.",
+          "factualClaim": "Repairs available in three named service districts.",
+          "prohibitedClaim": "No same-day repair or guaranteed uptime claims.",
+          "channelConstraint": "Poster legible at five metres."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "094-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "094-first-gate-fail",
+    "root": "runCase/recoverBrandConstraints/audit/qualify.nl",
+    "split_group": "world-094-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+        "candidateIds": [
+          "094-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "094-first-e1",
+            "source": "primary case record BRAND-94",
+            "version": "v1",
+            "text": "Primary domain record for case BRAND-94 states: caseId=\"BRAND-94\"; desiredAssociation=\"Dependable repair service for small workshops.\"; factualClaim=\"Repairs available in three named service districts.\"; prohibitedClaim=\"No same-day repair or guaranteed uptime claims.\"; channelConstraint=\"Poster legible at five metres.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "094-case-record",
+          "caseId": "BRAND-94",
+          "sourceRefs": [
+            "094-first-e1"
+          ],
+          "state": "draft",
+          "kind": "BrandConstraint",
+          "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "desiredAssociation": "Dependable repair service for small workshops.",
+          "factualClaim": "Guaranteed same-day repair and uninterrupted uptime.",
+          "prohibitedClaim": "No same-day repair or guaranteed uptime claims.",
+          "channelConstraint": "Poster legible at five metres."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "094-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "094-first-gate-needs-review",
+    "root": "runCase/recoverBrandConstraints/audit/qualify.nl",
+    "split_group": "world-094-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+        "candidateIds": [
+          "094-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "094-first-e1",
+            "source": "primary case record BRAND-94",
+            "version": "v1",
+            "text": "Primary domain record for case BRAND-94 states: caseId=\"BRAND-94\"; desiredAssociation=\"Dependable repair service for small workshops.\"; prohibitedClaim=\"No same-day repair or guaranteed uptime claims.\"; channelConstraint=\"Poster legible at five metres.\". No current value is present for factualClaim.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "factualClaim"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "094-case-record",
+          "sourceRefs": [
+            "094-first-e1"
+          ],
+          "state": "draft",
+          "kind": "BrandConstraint",
+          "subject": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "prohibitedClaim": "No same-day repair or guaranteed uptime claims.",
+          "channelConstraint": "Poster legible at five metres.",
+          "caseId": "BRAND-94",
+          "desiredAssociation": "Dependable repair service for small workshops."
+        },
+        "missingFields": [
+          "factualClaim"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "094-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "094-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-094-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "094-workflow-1-record",
+          "caseId": "094-workflow-1",
+          "sourceRefs": [
+            "094-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "BrandProject",
+          "subject": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "094-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "clientId": "CLIENT-94",
+          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+          "productFactIds": [
+            "SERVICE-NORTH",
+            "SERVICE-EAST",
+            "SERVICE-CENTRAL"
+          ],
+          "audienceGuidanceId": "AUD-94",
+          "creativeDirectorId": "CD-4"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "094-wf-1-source",
+          "source": "primary case artifact 094-E1",
+          "version": "v1",
+          "text": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "094-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "094-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "094-wf-1-source",
+          "source": "primary case artifact 094-E1",
+          "version": "v1",
+          "text": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Brand And Design Language Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A slogan implies a capability the product lacks: reject or qualify it despite creative appeal. Use observation Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee. as the source of truth. The proposal should preserve source-linked record 094-workflow-1-record and make a recipient-facing distinction grounded in 094-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 094-workflow-1-record must accurately preserve observation 094-wf-1-source (v1): Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee. Apply brief requirement A slogan implies a capability the product lacks: reject or qualify it despite creative appeal. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed BrandProject record 094-workflow-1-record and its source link to 094-wf-1-source version v1, with a disposition matching this observed state: Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee. Carry requirement A slogan implies a capability the product lacks: reject or qualify it despite creative appeal. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 094-workflow-1-record based on 094-wf-1-source (v1) and observation Slogan draft says “same-day repairs guaranteed”; service record lists a three-day median and no guarantee. Apply requirement A slogan implies a capability the product lacks: reject or qualify it despite creative appeal. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "094-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-094-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "094-workflow-2-record",
+          "caseId": "094-workflow-2",
+          "sourceRefs": [
+            "094-event-2"
+          ],
+          "state": "draft",
+          "kind": "BrandProject",
+          "subject": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "094-event-2",
+            "sourceVersion": "v1"
+          },
+          "clientId": "CLIENT-94",
+          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+          "productFactIds": [
+            "SERVICE-NORTH",
+            "SERVICE-EAST",
+            "SERVICE-CENTRAL"
+          ],
+          "audienceGuidanceId": "AUD-94",
+          "creativeDirectorId": "CD-4"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "094-event-2",
+          "source": "current domain record 094-E2",
+          "version": "v1",
+          "text": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "094-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "094-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "094-event-2",
+          "source": "current domain record 094-E2",
+          "version": "v1",
+          "text": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Brand And Design Language Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A name may conflict with existing rights: route clearance rather than claiming availability. Use observation Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded. as the source of truth. The proposal should preserve source-linked record 094-workflow-2-record and make a recipient-facing distinction grounded in 094-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A name may conflict with existing rights: route clearance rather than claiming availability.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 094-workflow-2-record must accurately preserve observation 094-event-2 (v1): Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded. Apply brief requirement A name may conflict with existing rights: route clearance rather than claiming availability. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed BrandProject record 094-workflow-2-record and its source link to 094-event-2 version v1, with a disposition matching this observed state: Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded. Carry requirement A name may conflict with existing rights: route clearance rather than claiming availability. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 094-workflow-2-record based on 094-event-2 (v1) and observation Brand candidate name “Mendly” appears in client name search N-94 with an existing repair-service mark in the same category. Search covers only the domestic register; no clearance opinion for the new product name is recorded. Apply requirement A name may conflict with existing rights: route clearance rather than claiming availability. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "094-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-094-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "094-workflow-3-record",
+          "caseId": "094-workflow-3",
+          "sourceRefs": [
+            "094-event-3"
+          ],
+          "state": "draft",
+          "kind": "BrandProject",
+          "subject": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "094-event-3",
+            "sourceVersion": "v1"
+          },
+          "clientId": "CLIENT-94",
+          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+          "productFactIds": [
+            "SERVICE-NORTH",
+            "SERVICE-EAST",
+            "SERVICE-CENTRAL"
+          ],
+          "audienceGuidanceId": "AUD-94",
+          "creativeDirectorId": "CD-4"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "094-event-3",
+          "source": "current domain record 094-E3",
+          "version": "v1",
+          "text": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "094-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "094-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "094-event-3",
+          "source": "current domain record 094-E3",
+          "version": "v1",
+          "text": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Brand And Design Language Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Error messages inherit promotional tone inappropriately: define context-specific voice rules. Use observation Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone. as the source of truth. The proposal should preserve source-linked record 094-workflow-3-record and make a recipient-facing distinction grounded in 094-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Error messages inherit promotional tone inappropriately: define context-specific voice rules.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 094-workflow-3-record must accurately preserve observation 094-event-3 (v1): Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone. Apply brief requirement Error messages inherit promotional tone inappropriately: define context-specific voice rules. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed BrandProject record 094-workflow-3-record and its source link to 094-event-3 version v1, with a disposition matching this observed state: Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone. Carry requirement Error messages inherit promotional tone inappropriately: define context-specific voice rules. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 094-workflow-3-record based on 094-event-3 (v1) and observation Error message E-94 says “Your fabulous journey hit a snag—our amazing team is thrilled to help!” Product voice guide V-94 assigns error recovery calm, direct language, distinct from promotional campaign tone. Apply requirement Error messages inherit promotional tone inappropriately: define context-specific voice rules. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "094-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-094-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "094-workflow-4-record",
+          "caseId": "094-workflow-4",
+          "sourceRefs": [
+            "094-event-4"
+          ],
+          "state": "draft",
+          "kind": "BrandProject",
+          "subject": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "094-event-4",
+            "sourceVersion": "v1"
+          },
+          "clientId": "CLIENT-94",
+          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+          "productFactIds": [
+            "SERVICE-NORTH",
+            "SERVICE-EAST",
+            "SERVICE-CENTRAL"
+          ],
+          "audienceGuidanceId": "AUD-94",
+          "creativeDirectorId": "CD-4"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "094-event-4",
+          "source": "current domain record 094-E4",
+          "version": "v1",
+          "text": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "094-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "094-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "094-event-4",
+          "source": "current domain record 094-E4",
+          "version": "v1",
+          "text": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Brand And Design Language Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: The product changes: invalidate affected claims and assets, not the entire visual direction. Use observation Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged. as the source of truth. The proposal should preserve source-linked record 094-workflow-4-record and make a recipient-facing distinction grounded in 094-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "The product changes: invalidate affected claims and assets, not the entire visual direction.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 094-workflow-4-record must accurately preserve observation 094-event-4 (v1): Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged. Apply brief requirement The product changes: invalidate affected claims and assets, not the entire visual direction. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed BrandProject record 094-workflow-4-record and its source link to 094-event-4 version v1, with a disposition matching this observed state: Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged. Carry requirement The product changes: invalidate affected claims and assets, not the entire visual direction. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 094-workflow-4-record based on 094-event-4 (v1) and observation Product spec P-94 v6 removes the battery-replacement service from the South line. Claim C-94 and three campaign assets still say service is available in North, East, Central, and South; visual direction and other product claims are unchanged. Apply requirement The product changes: invalidate affected claims and assets, not the entire visual direction. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "094-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-094-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Brand And Design Language Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "094-workflow-5-record",
+          "caseId": "094-workflow-5",
+          "sourceRefs": [
+            "094-event-5"
+          ],
+          "state": "draft",
+          "kind": "BrandProject",
+          "subject": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
+          "status": "candidate",
+          "evidenceIds": [
+            "094-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "094-event-5",
+            "sourceVersion": "v1"
+          },
+          "clientId": "CLIENT-94",
+          "creativeBrief": "Dependable repair service for small workshops; no same-day guarantee.",
+          "productFactIds": [
+            "SERVICE-NORTH",
+            "SERVICE-EAST",
+            "SERVICE-CENTRAL"
+          ],
+          "audienceGuidanceId": "AUD-94",
+          "creativeDirectorId": "CD-4"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "094-event-5",
+          "source": "current domain record 094-E5",
+          "version": "v1",
+          "text": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "094-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "094-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "094-event-5",
+          "source": "current domain record 094-E5",
+          "version": "v1",
+          "text": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Brand And Design Language Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A client approves one asset but not the system: preserve the narrower approval scope. Use observation Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off. as the source of truth. The proposal should preserve source-linked record 094-workflow-5-record and make a recipient-facing distinction grounded in 094-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A client approves one asset but not the system: preserve the narrower approval scope.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 094-workflow-5-record must accurately preserve observation 094-event-5 (v1): Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off. Apply brief requirement A client approves one asset but not the system: preserve the narrower approval scope. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed BrandProject record 094-workflow-5-record and its source link to 094-event-5 version v1, with a disposition matching this observed state: Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off. Carry requirement A client approves one asset but not the system: preserve the narrower approval scope. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 094-workflow-5-record based on 094-event-5 (v1) and observation Client approval A-94 covers poster asset P-2 only. Brand system B-94, social templates, and voice guide remain marked “review requested”; approval log contains no system-wide sign-off. Apply requirement A client approves one asset but not the system: preserve the narrower approval scope. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

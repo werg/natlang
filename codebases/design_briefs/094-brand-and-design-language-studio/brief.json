@@ -1,0 +1,50 @@
+{
+  "application_id": "094",
+  "title": "Brand And Design Language Studio",
+  "source_relative_path": "applications/19-publishing-and-creative-production/094-brand-and-design-language-studio.md",
+  "source_sha256": "191c13875725ff3bb7da8cfa865ad63da1e4addd6b2c316e9d701a01f03ea470",
+  "domain_id": "19",
+  "stages": [
+    {
+      "name": "recoverBrandConstraints",
+      "output_type": "BrandConstraint",
+      "algorithm": "Translate the client brief, product facts, and existing assets into desired associations and hard constraints. Separate aspirational positioning from demonstrable capability, identify legal or rights review needs, and preserve audience guidance without inferring personal traits.",
+      "gate": "Product claims and prohibitions have authoritative sources."
+    },
+    {
+      "name": "generateDirections",
+      "output_type": "CreativeDirection",
+      "algorithm": "Develop materially different creative directions with coherent naming, tone, and message logic. Explain what each direction emphasizes and excludes, avoid cosmetic variants of one idea, and keep unsupported product promises outside the creative system.",
+      "gate": "Directions satisfy factual constraints and are meaningfully distinct."
+    },
+    {
+      "name": "constructSystem",
+      "output_type": "BrandSystem",
+      "algorithm": "Turn the selected direction into reusable principles and examples across likely contexts. Define how the system behaves in error messages, sensitive situations, and ordinary promotion, preserving consistency without requiring every asset to sound identical.",
+      "gate": "Rules are operationally usable and examples do not contradict them."
+    },
+    {
+      "name": "applyChannels",
+      "output_type": "BrandAsset",
+      "algorithm": "Generate channel-specific assets that serve actual user tasks while respecting length, format, and factual constraints. Adapt emphasis and tone to context, preserve required disclosures, and avoid treating a slogan as a substitute for useful product information.",
+      "gate": "Each asset is useful in its channel and consistent with the approved system."
+    },
+    {
+      "name": "reviewCoherence",
+      "output_type": "BrandReview",
+      "algorithm": "Compare the asset collection for conceptual, terminological, and factual coherence. Separate hard defects from subjective creative preference, obtain client review of meaningful alternatives, and version the system and dependent assets together.",
+      "gate": "No unsupported claim or unresolved hard inconsistency; originality receives separate human evaluation."
+    }
+  ],
+  "operational_details": [
+    "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+    "A name may conflict with existing rights: route clearance rather than claiming availability.",
+    "Error messages inherit promotional tone inappropriately: define context-specific voice rules.",
+    "The product changes: invalidate affected claims and assets, not the entire visual direction.",
+    "A client approves one asset but not the system: preserve the narrower approval scope."
+  ],
+  "scenario": {
+    "representative_episode": "A client wants an ambitious identity for a modest product; several attractive slogans overpromise, and support messages need a different tone from advertising.",
+    "independent_truth": "Fictional product facts, approved brand constraints, channel schemas, and blinded creative-system coherence review."
+  }
+}

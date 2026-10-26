@@ -1,0 +1,812 @@
+[
+  {
+    "id": "010-extractPositions-supported",
+    "root": "runCase/extractPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "REQ-10",
+          "stakeholderId": "Omar Reed",
+          "requestedOutcome": "Encryption at rest",
+          "rationale": "Security policy S-2 requires it",
+          "strength": "mandatory",
+          "condition": "Customer data stored at rest",
+          "tenantId": "tenant-010",
+          "id": "StakeholderPosition-010",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-010",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-010"
+          ],
+          "retentionPolicyId": "retention-010"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "productScope": "Customer data API availability",
+        "sponsorId": "Leah Ford",
+        "stakeholderIds": [
+          "Omar Reed",
+          "Priya Shah",
+          "Platform Team"
+        ],
+        "releaseTarget": "Release 2, 2026",
+        "baselineId": "BASELINE-10",
+        "tenantId": "tenant-010",
+        "id": "REQ-PRODUCT-10",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-010",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-010"
+        ],
+        "retentionPolicyId": "retention-010"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "010-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for extractPositions: Sales requests immediate export, security requires review, and operations cannot support manual review for every low-risk export.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "010-extractPositions-contradictory",
+    "root": "runCase/extractPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "REQ-10",
+          "stakeholderId": "Omar Reed",
+          "requestedOutcome": "Blue interface",
+          "rationale": "Security policy S-2 requires it",
+          "strength": "mandatory",
+          "condition": "Dashboard interface color",
+          "tenantId": "tenant-010",
+          "id": "StakeholderPosition-010",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-010",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-010"
+          ],
+          "retentionPolicyId": "retention-010"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "productScope": "Customer data API availability",
+        "sponsorId": "Leah Ford",
+        "stakeholderIds": [
+          "Omar Reed",
+          "Priya Shah",
+          "Platform Team"
+        ],
+        "releaseTarget": "Release 2, 2026",
+        "baselineId": "BASELINE-10",
+        "tenantId": "tenant-010",
+        "id": "REQ-PRODUCT-10",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-010",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-010"
+        ],
+        "retentionPolicyId": "retention-010"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "010-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The draft labels a preferred blue interface as mandatory, while the stakeholder record calls it a preference."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for extractPositions: Sales requests immediate export, security requires review, and operations cannot support manual review for every low-risk export.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "010-extractPositions-missing",
+    "root": "runCase/extractPositions/audit/qualify.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "REQ-10",
+          "stakeholderId": "Omar Reed",
+          "requestedOutcome": "Encryption at rest",
+          "rationale": "Security policy S-2 requires it",
+          "strength": "mandatory",
+          "condition": "Customer data stored at rest",
+          "tenantId": "tenant-010",
+          "id": "StakeholderPosition-010",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-010",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-010"
+          ],
+          "retentionPolicyId": "retention-010"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "productScope": "Customer data API availability",
+        "sponsorId": "Leah Ford",
+        "stakeholderIds": [
+          "Omar Reed",
+          "Priya Shah",
+          "Platform Team"
+        ],
+        "releaseTarget": "Release 2, 2026",
+        "baselineId": "BASELINE-10",
+        "tenantId": "tenant-010",
+        "id": "REQ-PRODUCT-10",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-010",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-010"
+        ],
+        "retentionPolicyId": "retention-010"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "010-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A requirements row says 'secure' without source, strength, or an observable condition."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for extractPositions: Sales requests immediate export, security requires review, and operations cannot support manual review for every low-risk export.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "010-workflow-01",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-010-01",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "productScope": "Customer data API availability",
+            "sponsorId": "Leah Ford",
+            "stakeholderIds": [
+              "Omar Reed",
+              "Priya Shah",
+              "Platform Team"
+            ],
+            "releaseTarget": "Release 2, 2026",
+            "baselineId": "BASELINE-10",
+            "tenantId": "tenant-010",
+            "id": "REQ-PRODUCT-10",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-010",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-010"
+            ],
+            "retentionPolicyId": "retention-010"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-03",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Stakeholder Omar Reed left security role Oct 2; historical assent A-10 is signed, and directory assigns successor Priya Shah from Oct 3."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-010",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A stakeholder changes role: retain historical assent and require successor authority for future changes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A stakeholder changes role: retain historical assent and require successor authority for future changes. Use only the facts in caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain historical assent and require successor authority for future changes.—as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain historical assent and require successor authority for future changes.) against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A stakeholder changes role: retain historical assent and require successor authority for future changes. Use only the facts in caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—retain historical assent and require successor authority for future changes.—as a versioned proposal against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain historical assent and require successor authority for future changes.) against caseId=SYN-010-01, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "010-workflow-02",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-010-02",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "productScope": "Customer data API availability",
+            "sponsorId": "Leah Ford",
+            "stakeholderIds": [
+              "Omar Reed",
+              "Priya Shah",
+              "Platform Team"
+            ],
+            "releaseTarget": "Release 2, 2026",
+            "baselineId": "BASELINE-10",
+            "tenantId": "tenant-010",
+            "id": "REQ-PRODUCT-10",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-010",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-010"
+            ],
+            "retentionPolicyId": "retention-010"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Meeting audio records verbal agreement to requirement R-10 but no signed minutes or follow-up confirmation exists."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-010",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Use only the facts in caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—keep it pending and issue a focused confirmation request.—as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (keep it pending and issue a focused confirmation request.) against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request. Use only the facts in caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—keep it pending and issue a focused confirmation request.—as a versioned proposal against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (keep it pending and issue a focused confirmation request.) against caseId=SYN-010-02, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "010-workflow-03",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-010-03",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "productScope": "Customer data API availability",
+            "sponsorId": "Leah Ford",
+            "stakeholderIds": [
+              "Omar Reed",
+              "Priya Shah",
+              "Platform Team"
+            ],
+            "releaseTarget": "Release 2, 2026",
+            "baselineId": "BASELINE-10",
+            "tenantId": "tenant-010",
+            "id": "REQ-PRODUCT-10",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-010",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-010"
+            ],
+            "retentionPolicyId": "retention-010"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Interface proposal I-10 changes the customer API field; platform owner has not reviewed the compatibility note."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-010",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—require affected-party review before baseline acceptance.—as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (require affected-party review before baseline acceptance.) against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: One compromise changes another team’s interface: require affected-party review before baseline acceptance. Use only the facts in caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—require affected-party review before baseline acceptance.—as a versioned proposal against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (require affected-party review before baseline acceptance.) against caseId=SYN-010-03, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "010-workflow-04",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-010-04",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "productScope": "Customer data API availability",
+            "sponsorId": "Leah Ford",
+            "stakeholderIds": [
+              "Omar Reed",
+              "Priya Shah",
+              "Platform Team"
+            ],
+            "releaseTarget": "Release 2, 2026",
+            "baselineId": "BASELINE-10",
+            "tenantId": "tenant-010",
+            "id": "REQ-PRODUCT-10",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-010",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-010"
+            ],
+            "retentionPolicyId": "retention-010"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Acceptance test AT-10 asserts use of vendor X although the stated outcome is 99.9% availability."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-010",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Use only the facts in caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—separate the outcome from the proposed method.—as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (separate the outcome from the proposed method.) against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: An acceptance test encodes an implementation preference: separate the outcome from the proposed method. Use only the facts in caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—separate the outcome from the proposed method.—as a versioned proposal against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (separate the outcome from the proposed method.) against caseId=SYN-010-04, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "010-workflow-05",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-010",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-010-05",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "productScope": "Customer data API availability",
+            "sponsorId": "Leah Ford",
+            "stakeholderIds": [
+              "Omar Reed",
+              "Priya Shah",
+              "Platform Team"
+            ],
+            "releaseTarget": "Release 2, 2026",
+            "baselineId": "BASELINE-10",
+            "tenantId": "tenant-010",
+            "id": "REQ-PRODUCT-10",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-010",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-010"
+            ],
+            "retentionPolicyId": "retention-010"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "010-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Procurement lead Omar says encryption at rest is mandatory under security policy S-2; the signed requirement quotes the clause and scope."
+              },
+              {
+                "id": "E2",
+                "source": "010-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Release plan RP-10 assigns requirement R-10 to phase 2; phase 1 baseline has no binding date for it."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-010",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Delivery is phased: tag each requirement with the release in which it becomes binding. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Delivery is phased: tag each requirement with the release in which it becomes binding. Use only the facts in caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—tag each requirement with the release in which it becomes binding.—as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (tag each requirement with the release in which it becomes binding.) against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "Delivery is phased: tag each requirement with the release in which it becomes binding.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "Delivery is phased: tag each requirement with the release in which it becomes binding.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Delivery is phased: tag each requirement with the release in which it becomes binding. Use only the facts in caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—tag each requirement with the release in which it becomes binding.—as a versioned proposal against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (tag each requirement with the release in which it becomes binding.) against caseId=SYN-010-05, expectedVersion=v1, version=v1, id=REQ-PRODUCT-10, version=1, id=E1, source=010-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

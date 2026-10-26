@@ -1,0 +1,90 @@
+{
+  "application_id": "052",
+  "title": "Warehouse exception controller",
+  "source_relative_path": "applications/11-logistics-redistribution-and-circular-economy/052-warehouse-exception-controller.md",
+  "source_sha256": "664671115ac9da8cf6824d21656b050cc04877aa9238ce78fa9867a853fa5702",
+  "domain_id": "11",
+  "stages": [
+    {
+      "name": "reconstructStock",
+      "output_type": "StockObservation",
+      "algorithm": "Reconcile manifests, scans, picking notes, and receiving observations while preserving who observed what and when. Separate an item’s physical presence from its expected location and retain uncertainty when labels or serials are missing.",
+      "gate": "Observations do not directly overwrite authoritative stock identity or quantity."
+    },
+    {
+      "name": "matchIdentity",
+      "output_type": "StockIdentityFinding",
+      "algorithm": "Compare descriptions, packaging, serials, lot information, and movement history to identify candidate stock. Distinguish a mislabeled item from a misplaced one, and request a discriminating scan or inspection rather than choosing the closest description.",
+      "gate": "Identity requires compatible evidence; near-matches remain unresolved."
+    },
+    {
+      "name": "classifyException",
+      "output_type": "WarehouseFinding",
+      "algorithm": "Interpret the discrepancy against confirmed identity and movement evidence. Separate damage from quantity shortage and pending receipt from true absence; identify which inventory and fulfillment commitments may be affected without broad unsupported holds.",
+      "gate": "Exact affected quantities and evidence-backed exception categories."
+    },
+    {
+      "name": "planResolution",
+      "output_type": "WarehouseWorkOrder",
+      "algorithm": "Create bounded search, recount, relabel, inspection, or transfer tasks using approved warehouse procedures. Sequence dependencies and require independent confirmation for consequential inventory adjustments or uncertain identity changes.",
+      "gate": "No inventory adjustment merely to make a reconciliation balance."
+    },
+    {
+      "name": "reconcileInventory",
+      "output_type": "InventoryResolution",
+      "algorithm": "Compare completed tasks with actual scans and custody events, apply approved exact adjustments, and verify conservation across locations. Preserve unresolved differences and distinguish a found item from a fulfilled customer order.",
+      "gate": "Physical movement and ledger changes reconcile without duplicate stock creation."
+    }
+  ],
+  "operational_details": [
+    "A scanner is offline: queue signed observations with device sequence numbers and reconcile on sync.",
+    "Two identical cartons have different lots: preserve lot-level identity through relabeling.",
+    "A recount is performed by the original picker: require the configured independent verification for adjustments.",
+    "A damaged item is still physically present: change availability without deleting quantity.",
+    "A late receipt arrives after a shortage adjustment: detect the potential double count."
+  ],
+  "domain_records": {
+    "WarehouseException": [
+      "warehouseId: ID",
+      "itemRefs: ID[]",
+      "reportedDiscrepancy: string",
+      "operatorId: ID",
+      "inventorySnapshotId: ID"
+    ],
+    "StockObservation": [
+      "caseId: ID",
+      "locationId: ID",
+      "observedDescription: string",
+      "serial: string",
+      "quantity: Quantity",
+      "condition: string"
+    ],
+    "StockIdentityFinding": [
+      "caseId: ID",
+      "observationId: ID",
+      "candidateItemIds: ID[]",
+      "verdict: string",
+      "missingEvidence: string"
+    ],
+    "WarehouseFinding": [
+      "caseId: ID",
+      "itemId: ID",
+      "kind: 'misplaced'|'mislabeled'|'damaged'|'missing'|'pending'",
+      "affectedQuantity: Quantity"
+    ],
+    "WarehouseWorkOrder": [
+      "caseId: ID",
+      "findingId: ID",
+      "task: string",
+      "targetLocationId: ID",
+      "verificationRequired: string"
+    ],
+    "InventoryResolution": [
+      "caseId: ID",
+      "workOrderIds: ID[]",
+      "movementIds: ID[]",
+      "adjustmentIds: ID[]",
+      "residualDiscrepancy: string"
+    ]
+  }
+}

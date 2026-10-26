@@ -1,0 +1,49 @@
+{
+  "application_id": "008",
+  "title": "Product opportunity portfolio manager",
+  "source_relative_path": "applications/02-customer-research-and-product-intelligence/008-product-opportunity-portfolio-manager.md",
+  "program_root": "codebases/design_briefs/008-product-opportunity-portfolio-manager",
+  "source_sha256": "39fa127844d267a31b0df9b5cd819c61500e54e9ab2af78462458b331b4329d6",
+  "domain_id": "02",
+  "stages": [
+    {
+      "name": "reconstructNeeds",
+      "output_type": "CustomerNeed",
+      "algorithm": "Reconcile customer requests into underlying outcomes and constraints. Separate a suggested implementation from the need it serves; preserve segments whose superficially similar requests arise from different workflows and require different interventions.",
+      "gate": "Every need has attributable evidence; invented segments and unsupported market sizes are forbidden."
+    },
+    {
+      "name": "generateInterventions",
+      "output_type": "Intervention",
+      "algorithm": "Propose materially different ways to improve each outcome, including process, service, and product changes. Explain the mechanism, affected users, and expected tradeoffs; avoid generating cosmetic variants that all depend on the same untested assumption.",
+      "gate": "Candidate set includes a credible low-change baseline and distinct mechanisms."
+    },
+    {
+      "name": "estimateDependencies",
+      "output_type": "OpportunityEstimate",
+      "algorithm": "Translate each intervention into bounded work packages, request estimates from authorized sources, and identify shared enabling work. Preserve cost ranges and unknowns rather than inventing precision; inspect whether dependencies make apparently independent projects coupled.",
+      "gate": "Shared work is costed once; missing estimates remain explicit and block firm commitments."
+    },
+    {
+      "name": "constructPortfolios",
+      "output_type": "PortfolioOption",
+      "algorithm": "Submit eligible options and exact constraints to a portfolio solver, then interpret feasible alternatives against the supplied strategy. Explain who benefits and what is deferred; generate contingency portfolios for major assumption changes rather than a single opaque ranking.",
+      "gate": "Exact budget and capacity feasibility; ranking rationale uses supplied priorities only."
+    },
+    {
+      "name": "planLearning",
+      "output_type": "OpportunityExperiment",
+      "algorithm": "Choose the cheapest credible experiment capable of changing a portfolio decision. State how positive, negative, and inconclusive results would alter the selected work, and schedule learning before irreversible dependent commitments wherever feasible.",
+      "gate": "An experiment has an actionable decision rule and does not merely collect agreeable feedback."
+    }
+  ],
+  "operational_details": [
+    "A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline.",
+    "Two projects claim the same benefit: identify overlap instead of summing both estimates.",
+    "A dependency estimate is missing: show a contingent portfolio, not false feasibility.",
+    "A customer quote supports several needs: preserve one source and avoid multiplying evidence strength.",
+    "An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea."
+  ],
+  "representative_episode": "Three opportunities share an identity-system dependency, and a cheaper service change may solve the same need as a major feature.",
+  "independent_truth_basis": "Hidden benefit overlap and costs with exact feasible portfolios; human comparison of intervention diversity and usefulness."
+}

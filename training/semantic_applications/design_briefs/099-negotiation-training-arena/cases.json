@@ -1,0 +1,638 @@
+[
+  {
+    "id": "099-first-gate-pass",
+    "root": "runCase/authorNegotiation/audit/qualify.nl",
+    "split_group": "world-099-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+        "candidateIds": [
+          "099-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "099-first-e1",
+            "source": "primary case record NEG-99",
+            "version": "v1",
+            "text": "Primary domain record for case NEG-99 states: caseId=\"NEG-99\"; issues=[\"Is repair deadline 30 or 45 days?\"]; roleIds=[\"BUYER-9\",\"SUPPLIER-4\"]; hiddenPreferences=[\"Buyer needs restoration before May 15.\",\"Supplier can accept staged repairs, not penalty clause.\"]; feasibleAgreementRules=[\"Both parties accept same deadline.\",\"No offer binds before explicit acceptance.\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "099-case-record",
+          "caseId": "NEG-99",
+          "sourceRefs": [
+            "099-first-e1"
+          ],
+          "state": "draft",
+          "kind": "NegotiationScenario",
+          "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+          "evidenceIds": [
+            "099-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "issues": [
+            "Is repair deadline 30 or 45 days?"
+          ],
+          "roleIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "hiddenPreferences": [
+            "Buyer needs restoration before May 15.",
+            "Supplier can accept staged repairs, not penalty clause."
+          ],
+          "feasibleAgreementRules": [
+            "Both parties accept same deadline.",
+            "No offer binds before explicit acceptance."
+          ],
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "099-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "099-first-gate-fail",
+    "root": "runCase/authorNegotiation/audit/qualify.nl",
+    "split_group": "world-099-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+        "candidateIds": [
+          "099-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "099-first-e1",
+            "source": "primary case record NEG-99",
+            "version": "v1",
+            "text": "Primary domain record for case NEG-99 states: caseId=\"NEG-99\"; issues=[\"Is repair deadline 30 or 45 days?\"]; roleIds=[\"BUYER-9\",\"SUPPLIER-4\"]; hiddenPreferences=[\"Buyer needs restoration before May 15.\",\"Supplier can accept staged repairs, not penalty clause.\"]; feasibleAgreementRules=[\"Both parties accept same deadline.\",\"No offer binds before explicit acceptance.\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "099-case-record",
+          "caseId": "NEG-99",
+          "sourceRefs": [
+            "099-first-e1"
+          ],
+          "state": "draft",
+          "kind": "NegotiationScenario",
+          "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+          "evidenceIds": [
+            "099-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "issues": [
+            "The parties agreed to a 30-day deadline."
+          ],
+          "roleIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "hiddenPreferences": [
+            "Buyer needs restoration before May 15.",
+            "Supplier can accept staged repairs, not penalty clause."
+          ],
+          "feasibleAgreementRules": [
+            "Both parties accept same deadline.",
+            "No offer binds before explicit acceptance."
+          ],
+          "workflowStatus": "candidate"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "099-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "099-first-gate-needs-review",
+    "root": "runCase/authorNegotiation/audit/qualify.nl",
+    "split_group": "world-099-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+        "candidateIds": [
+          "099-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "099-first-e1",
+            "source": "primary case record NEG-99",
+            "version": "v1",
+            "text": "Primary domain record for case NEG-99 states: caseId=\"NEG-99\"; roleIds=[\"BUYER-9\",\"SUPPLIER-4\"]; hiddenPreferences=[\"Buyer needs restoration before May 15.\",\"Supplier can accept staged repairs, not penalty clause.\"]; feasibleAgreementRules=[\"Both parties accept same deadline.\",\"No offer binds before explicit acceptance.\"]. No current value is present for issues.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "issues"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "099-case-record",
+          "sourceRefs": [
+            "099-first-e1"
+          ],
+          "state": "draft",
+          "kind": "NegotiationScenario",
+          "subject": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+          "evidenceIds": [
+            "099-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "roleIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "hiddenPreferences": [
+            "Buyer needs restoration before May 15.",
+            "Supplier can accept staged repairs, not penalty clause."
+          ],
+          "feasibleAgreementRules": [
+            "Both parties accept same deadline.",
+            "No offer binds before explicit acceptance."
+          ],
+          "workflowStatus": "candidate",
+          "caseId": "NEG-99"
+        },
+        "missingFields": [
+          "issues"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "099-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "099-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-099-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "099-workflow-1-record",
+          "caseId": "099-workflow-1",
+          "sourceRefs": [
+            "099-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "NegotiationExercise",
+          "subject": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+          "evidenceIds": [
+            "099-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "099-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "learningObjectives": [
+            "Clarify conditional offers.",
+            "Respect authority and explicit acceptance."
+          ],
+          "participantIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "scenarioFamily": "repair-deadline negotiation",
+          "instructorId": "INSTR-99",
+          "conductPolicyId": "CONDUCT-4",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "099-wf-1-source",
+          "source": "primary case artifact 099-E1",
+          "version": "v1",
+          "text": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "099-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "099-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "099-wf-1-source",
+          "source": "primary case artifact 099-E1",
+          "version": "v1",
+          "text": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Negotiation Training Arena",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A participant makes an ambiguous conditional offer: clarify before updating commitments. Use observation Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition. as the source of truth. The proposal should preserve source-linked record 099-workflow-1-record and make a recipient-facing distinction grounded in 099-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 099-workflow-1-record must accurately preserve observation 099-wf-1-source (v1): Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition. Apply brief requirement A participant makes an ambiguous conditional offer: clarify before updating commitments. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed NegotiationExercise record 099-workflow-1-record and its source link to 099-wf-1-source version v1, with a disposition matching this observed state: Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition. Carry requirement A participant makes an ambiguous conditional offer: clarify before updating commitments. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 099-workflow-1-record based on 099-wf-1-source (v1) and observation Buyer offers a 30-day repair deadline only if parts arrive by May 1; supplier has not accepted either condition. Apply requirement A participant makes an ambiguous conditional offer: clarify before updating commitments. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "099-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-099-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "099-workflow-2-record",
+          "caseId": "099-workflow-2",
+          "sourceRefs": [
+            "099-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "NegotiationExercise",
+          "subject": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+          "evidenceIds": [
+            "099-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "099-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "learningObjectives": [
+            "Clarify conditional offers.",
+            "Respect authority and explicit acceptance."
+          ],
+          "participantIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "scenarioFamily": "repair-deadline negotiation",
+          "instructorId": "INSTR-99",
+          "conductPolicyId": "CONDUCT-4",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "099-wf-2-source",
+          "source": "primary case artifact 099-E2",
+          "version": "v1",
+          "text": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "099-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "099-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "099-wf-2-source",
+          "source": "primary case artifact 099-E2",
+          "version": "v1",
+          "text": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Negotiation Training Arena",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A role exceeds its authority: reject the simulated commitment and retain the learning event. Use observation Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000. as the source of truth. The proposal should preserve source-linked record 099-workflow-2-record and make a recipient-facing distinction grounded in 099-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A role exceeds its authority: reject the simulated commitment and retain the learning event.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 099-workflow-2-record must accurately preserve observation 099-wf-2-source (v1): Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000. Apply brief requirement A role exceeds its authority: reject the simulated commitment and retain the learning event. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed NegotiationExercise record 099-workflow-2-record and its source link to 099-wf-2-source version v1, with a disposition matching this observed state: Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000. Carry requirement A role exceeds its authority: reject the simulated commitment and retain the learning event. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 099-workflow-2-record based on 099-wf-2-source (v1) and observation Role R-4 has authority for repairs up to EUR 20,000; proposed package is EUR 28,000. Apply requirement A role exceeds its authority: reject the simulated commitment and retain the learning event. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "099-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-099-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "099-workflow-3-record",
+          "caseId": "099-workflow-3",
+          "sourceRefs": [
+            "099-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "NegotiationExercise",
+          "subject": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+          "evidenceIds": [
+            "099-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "099-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "learningObjectives": [
+            "Clarify conditional offers.",
+            "Respect authority and explicit acceptance."
+          ],
+          "participantIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "scenarioFamily": "repair-deadline negotiation",
+          "instructorId": "INSTR-99",
+          "conductPolicyId": "CONDUCT-4",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "099-wf-3-source",
+          "source": "primary case artifact 099-E3",
+          "version": "v1",
+          "text": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "099-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "099-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "099-wf-3-source",
+          "source": "primary case artifact 099-E3",
+          "version": "v1",
+          "text": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Negotiation Training Arena",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode. Use observation Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged. as the source of truth. The proposal should preserve source-linked record 099-workflow-3-record and make a recipient-facing distinction grounded in 099-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 099-workflow-3-record must accurately preserve observation 099-wf-3-source (v1): Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged. Apply brief requirement An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed NegotiationExercise record 099-workflow-3-record and its source link to 099-wf-3-source version v1, with a disposition matching this observed state: Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged. Carry requirement An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 099-workflow-3-record based on 099-wf-3-source (v1) and observation Instructor changes exercise difficulty after turn 2; original scenario key and hidden preferences are unchanged. Apply requirement An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "099-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-099-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "099-workflow-4-record",
+          "caseId": "099-workflow-4",
+          "sourceRefs": [
+            "099-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "NegotiationExercise",
+          "subject": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+          "evidenceIds": [
+            "099-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "099-wf-4-source",
+            "sourceVersion": "v1"
+          },
+          "learningObjectives": [
+            "Clarify conditional offers.",
+            "Respect authority and explicit acceptance."
+          ],
+          "participantIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "scenarioFamily": "repair-deadline negotiation",
+          "instructorId": "INSTR-99",
+          "conductPolicyId": "CONDUCT-4",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "099-wf-4-source",
+          "source": "primary case artifact 099-E4",
+          "version": "v1",
+          "text": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "099-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "099-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "099-wf-4-source",
+          "source": "primary case artifact 099-E4",
+          "version": "v1",
+          "text": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Negotiation Training Arena",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A participant withdraws an offer: apply the scenario’s exact acceptance timing rules. Use observation Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05. as the source of truth. The proposal should preserve source-linked record 099-workflow-4-record and make a recipient-facing distinction grounded in 099-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A participant withdraws an offer: apply the scenario’s exact acceptance timing rules.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 099-workflow-4-record must accurately preserve observation 099-wf-4-source (v1): Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05. Apply brief requirement A participant withdraws an offer: apply the scenario’s exact acceptance timing rules. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed NegotiationExercise record 099-workflow-4-record and its source link to 099-wf-4-source version v1, with a disposition matching this observed state: Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05. Carry requirement A participant withdraws an offer: apply the scenario’s exact acceptance timing rules. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 099-workflow-4-record based on 099-wf-4-source (v1) and observation Buyer withdraws offer O-9 at 10:03; supplier acceptance timestamp is 10:05. Apply requirement A participant withdraws an offer: apply the scenario’s exact acceptance timing rules. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "099-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-099-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Negotiation Training Arena proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "099-workflow-5-record",
+          "caseId": "099-workflow-5",
+          "sourceRefs": [
+            "099-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "NegotiationExercise",
+          "subject": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+          "evidenceIds": [
+            "099-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "099-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "learningObjectives": [
+            "Clarify conditional offers.",
+            "Respect authority and explicit acceptance."
+          ],
+          "participantIds": [
+            "BUYER-9",
+            "SUPPLIER-4"
+          ],
+          "scenarioFamily": "repair-deadline negotiation",
+          "instructorId": "INSTR-99",
+          "conductPolicyId": "CONDUCT-4",
+          "workflowStatus": "candidate"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "099-wf-5-source",
+          "source": "primary case artifact 099-E5",
+          "version": "v1",
+          "text": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "099-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "099-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "099-wf-5-source",
+          "source": "primary case artifact 099-E5",
+          "version": "v1",
+          "text": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Negotiation Training Arena",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy. Use observation Debrief export contains private score for role R-2; approved participant handout excludes individual scores. as the source of truth. The proposal should preserve source-linked record 099-workflow-5-record and make a recipient-facing distinction grounded in 099-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Debrief export contains private score for role R-2; approved participant handout excludes individual scores.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 099-workflow-5-record must accurately preserve observation 099-wf-5-source (v1): Debrief export contains private score for role R-2; approved participant handout excludes individual scores. Apply brief requirement Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed NegotiationExercise record 099-workflow-5-record and its source link to 099-wf-5-source version v1, with a disposition matching this observed state: Debrief export contains private score for role R-2; approved participant handout excludes individual scores. Carry requirement Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 099-workflow-5-record based on 099-wf-5-source (v1) and observation Debrief export contains private score for role R-2; approved participant handout excludes individual scores. Apply requirement Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "application_id": "099",
+  "title": "Negotiation Training Arena",
+  "source_relative_path": "applications/20-games-live-events-and-interactive-experiences/099-negotiation-training-arena.md",
+  "source_sha256": "87d23fece83eb93503a8e04fab48bcebecb15e97e1179e1a6d5d0421f4c239f6",
+  "domain_id": "20",
+  "stages": [
+    {
+      "name": "authorNegotiation",
+      "output_type": "NegotiationScenario",
+      "algorithm": "Construct a fictional negotiation with multiple issues, private priorities, constraints, and opportunities for mutually beneficial trades. Ensure the scenario has meaningful information gathering and feasible outcomes without requiring prohibited tactics or real-world manipulation.",
+      "gate": "Exact feasibility and learning-objective coverage verified before use."
+    },
+    {
+      "name": "prepareRoles",
+      "output_type": "NegotiationRole",
+      "algorithm": "Generate role materials that provide enough information to negotiate coherently while preserving intended asymmetry. Distinguish private preferences from facts that may be disclosed, and bind each participant’s authority and conduct limits explicitly.",
+      "gate": "No cross-role leakage of private preferences or hidden scoring data."
+    },
+    {
+      "name": "interpretOffers",
+      "output_type": "TrainingOffer",
+      "algorithm": "Parse natural-language offers into issue-level terms, conditions, and commitment status. Distinguish exploration from a firm offer and qualified acceptance from final agreement; ask clarifying questions when ambiguity would change the negotiated outcome.",
+      "gate": "Exact terms and authority limits are preserved before any simulated commitment."
+    },
+    {
+      "name": "runCounterparts",
+      "output_type": "CounterpartAction",
+      "algorithm": "Choose simulated counterpart responses from permitted actions using only that role’s information and preferences. Adapt strategy to the interaction without violating conduct rules, inventing authority, or exposing hidden utility values to the learner.",
+      "gate": "Role knowledge, mandate, and conduct constraints hold throughout the episode."
+    },
+    {
+      "name": "debriefNegotiation",
+      "output_type": "NegotiationDebrief",
+      "algorithm": "Evaluate the observable trajectory and final agreement against learning goals, exact feasibility, and role constraints. Distinguish a good outcome from luck or prohibited conduct, explain missed trades using authorized debrief information, and propose targeted practice.",
+      "gate": "Feedback cites actual behavior and does not reward coercion or unsupported inference about motives."
+    }
+  ],
+  "operational_details": [
+    "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+    "A role exceeds its authority: reject the simulated commitment and retain the learning event.",
+    "An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode.",
+    "A participant withdraws an offer: apply the scenario’s exact acceptance timing rules.",
+    "Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy."
+  ],
+  "scenario": {
+    "representative_episode": "Two fictional organizations negotiate price, timing, service scope, and flexibility, with private priorities that permit a mutually beneficial trade.",
+    "independent_truth": "Exact multi-issue preference and feasibility model, private role information, permitted conduct, and observable negotiation trajectories."
+  }
+}

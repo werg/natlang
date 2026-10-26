@@ -1,0 +1,49 @@
+{
+  "application_id": "004",
+  "title": "Organizational knowledge integration workbench",
+  "source_relative_path": "applications/01-organizational-knowledge-and-institutional-memory/004-organizational-knowledge-integration-workbench.md",
+  "program_root": "codebases/design_briefs/004-organizational-knowledge-integration-workbench",
+  "source_sha256": "20a5029c1e329691a53ab9fdb2f654db36ac1ceeddff534d67ff20746fffda3b",
+  "domain_id": "01",
+  "stages": [
+    {
+      "name": "mapVocabularies",
+      "output_type": "TermSense",
+      "algorithm": "Extract terms from actual usage rather than glossary headings alone. Separate multiple senses within one organization and identify distinctions that affect who acts, which records exist, or what counts as completion.",
+      "gate": "Every sense has contextual examples; identical spelling does not establish equivalence."
+    },
+    {
+      "name": "alignConcepts",
+      "output_type": "ConceptAlignment",
+      "algorithm": "Compare operational meanings and counterexamples for candidate terms. Establish equivalence only when obligations and consequences align; represent partial overlap explicitly and retain organization-specific variants where unification would lose behavior.",
+      "gate": "Bidirectional substitution tests pass before a same relation is accepted."
+    },
+    {
+      "name": "reconcileRoles",
+      "output_type": "RoleInterface",
+      "algorithm": "Compare actual decision rights, escalation paths, and handoff expectations. Identify duplicated ownership and gaps between roles; propose responsibility agreements without assuming that similar job titles imply interchangeable authority.",
+      "gate": "Every required responsibility has either an accepted owner or an explicit unresolved gap."
+    },
+    {
+      "name": "planMigration",
+      "output_type": "IntegrationWave",
+      "algorithm": "Group compatible vocabulary and procedure changes into reversible waves. Preserve source identities, specify conditional transformations, and defer records whose meaning cannot be preserved under the target model without an explicit extension.",
+      "gate": "Exact referential-integrity checks and semantic round-trip tests on representative records."
+    },
+    {
+      "name": "validateInterfaces",
+      "output_type": "InterfaceScenario",
+      "algorithm": "Replay cross-team cases using proposed terminology and responsibilities. Look for steps both teams assume the other performs; turn failures into interface decisions and rerun only affected scenarios before approving a migration wave.",
+      "gate": "No unowned critical handoff and no source distinction silently discarded."
+    }
+  ],
+  "operational_details": [
+    "The same acronym names different systems: require context-bound expansion in merged search results.",
+    "A former organization must remain searchable: retain aliases and provenance rather than rewriting history.",
+    "A merger team lacks personnel access: use role-level representations with restricted identity resolution.",
+    "Cutover is postponed: shift execution dates without rewriting already effective decisions.",
+    "A team rejects a shared definition: preserve the disagreement and its operational boundary."
+  ],
+  "representative_episode": "Both teams use account owner, but only one role may approve discounts; their shared acronym also names two unrelated databases.",
+  "independent_truth_basis": "Hidden concept relations, role authorities, record transformations, and end-to-end interface scenarios."
+}

@@ -1,0 +1,853 @@
+[
+  {
+    "id": "015-interpretIntent-supported",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "SUB-15",
+          "affectedIds": [
+            "A-3"
+          ],
+          "requestedAction": "Cancel after current term",
+          "preservedServices": [
+            "Core plan"
+          ],
+          "ambiguity": "None stated",
+          "tenantId": "tenant-015",
+          "id": "ChangeIntent-015",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-015",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-015"
+          ],
+          "retentionPolicyId": "retention-015"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
+        "consentRef": {
+          "tenantId": "tenant-015",
+          "objectId": "CONSENT-K15",
+          "version": "v1",
+          "hash": "sha256:015"
+        },
+        "tenantId": "tenant-015",
+        "id": "SUBSCRIPTION-K15",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-015",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-015"
+        ],
+        "retentionPolicyId": "retention-015"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "015-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for interpretIntent: A customer asks to cancel one add-on after renewal while retaining the base plan and transferring a second subscription.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "015-interpretIntent-contradictory",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "SUB-15",
+          "affectedIds": [
+            "A-3"
+          ],
+          "requestedAction": "Change billing address",
+          "preservedServices": [
+            "Core plan"
+          ],
+          "ambiguity": "Customer consent to billing-address change inferred from retention offer",
+          "tenantId": "tenant-015",
+          "id": "ChangeIntent-015",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-015",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-015"
+          ],
+          "retentionPolicyId": "retention-015"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
+        "consentRef": {
+          "tenantId": "tenant-015",
+          "objectId": "CONSENT-K15",
+          "version": "v1",
+          "hash": "sha256:015"
+        },
+        "tenantId": "tenant-015",
+        "id": "SUBSCRIPTION-K15",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-015",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-015"
+        ],
+        "retentionPolicyId": "retention-015"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "015-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The draft treats a retention offer as consent to change the billing address, but the customer requested cancellation only."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for interpretIntent: A customer asks to cancel one add-on after renewal while retaining the base plan and transferring a second subscription.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "015-interpretIntent-missing",
+    "root": "runCase/interpretIntent/audit/qualify.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "SUB-15",
+          "affectedIds": [
+            "A-3"
+          ],
+          "requestedAction": "Cancel after current term",
+          "preservedServices": [
+            "Core plan"
+          ],
+          "ambiguity": "None stated",
+          "tenantId": "tenant-015",
+          "id": "ChangeIntent-015",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-015",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-015"
+          ],
+          "retentionPolicyId": "retention-015"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "customerId": "C-15",
+        "subscriptionIds": [
+          "CORE-K15",
+          "ADDON-A3"
+        ],
+        "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+        "requestedEffectiveDate": "2026-10-31",
+        "consentRef": {
+          "tenantId": "tenant-015",
+          "objectId": "CONSENT-K15",
+          "version": "v1",
+          "hash": "sha256:015"
+        },
+        "tenantId": "tenant-015",
+        "id": "SUBSCRIPTION-K15",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-015",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-015"
+        ],
+        "retentionPolicyId": "retention-015"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "015-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "A support note says 'wants to change plan' without naming the affected service or intended action."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for interpretIntent: A customer asks to cancel one add-on after renewal while retaining the base plan and transferring a second subscription.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "015-workflow-01",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-015-01",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "customerId": "C-15",
+            "subscriptionIds": [
+              "CORE-K15",
+              "ADDON-A3"
+            ],
+            "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+            "requestedEffectiveDate": "2026-10-31",
+            "consentRef": {
+              "tenantId": "tenant-015",
+              "objectId": "CONSENT-K15",
+              "version": "v1",
+              "hash": "sha256:015"
+            },
+            "tenantId": "tenant-015",
+            "id": "SUBSCRIPTION-K15",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-015",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-015"
+            ],
+            "retentionPolicyId": "retention-015"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-21",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Authenticated cancellation request C-15 arrived at 23:58 on Oct 20; the renewal cutoff is midnight Oct 21 in the billing system’s declared timezone."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-015",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule. Use only the facts in caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—use authoritative timestamps and the applicable cutoff rule.—as a versioned proposal against caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (use authoritative timestamps and the applicable cutoff rule.) against caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule. Use only the facts in caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—use authoritative timestamps and the applicable cutoff rule.—as a versioned proposal against caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (use authoritative timestamps and the applicable cutoff rule.) against caseId=SYN-015-01, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "015-workflow-02",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-015-02",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "customerId": "C-15",
+            "subscriptionIds": [
+              "CORE-K15",
+              "ADDON-A3"
+            ],
+            "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+            "requestedEffectiveDate": "2026-10-31",
+            "consentRef": {
+              "tenantId": "tenant-015",
+              "objectId": "CONSENT-K15",
+              "version": "v1",
+              "hash": "sha256:015"
+            },
+            "tenantId": "tenant-015",
+            "id": "SUBSCRIPTION-K15",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-015",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-015"
+            ],
+            "retentionPolicyId": "retention-015"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Reseller R-15 administers product P-15; provider dashboard shows the required separate cancellation endpoint has not been used."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-015",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: One product is managed by a reseller: expose the separate required action rather than claiming full cancellation. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: One product is managed by a reseller: expose the separate required action rather than claiming full cancellation. Use only the facts in caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—expose the separate required action rather than claiming full cancellation.—as a versioned proposal against caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (expose the separate required action rather than claiming full cancellation.) against caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "One product is managed by a reseller: expose the separate required action rather than claiming full cancellation.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "One product is managed by a reseller: expose the separate required action rather than claiming full cancellation.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: One product is managed by a reseller: expose the separate required action rather than claiming full cancellation. Use only the facts in caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—expose the separate required action rather than claiming full cancellation.—as a versioned proposal against caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (expose the separate required action rather than claiming full cancellation.) against caseId=SYN-015-02, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "015-workflow-03",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-015-03",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "customerId": "C-15",
+            "subscriptionIds": [
+              "CORE-K15",
+              "ADDON-A3"
+            ],
+            "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+            "requestedEffectiveDate": "2026-10-31",
+            "consentRef": {
+              "tenantId": "tenant-015",
+              "objectId": "CONSENT-K15",
+              "version": "v1",
+              "hash": "sha256:015"
+            },
+            "tenantId": "tenant-015",
+            "id": "SUBSCRIPTION-K15",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-015",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-015"
+            ],
+            "retentionPolicyId": "retention-015"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent token T-15 was issued at 09:00 and customer withdrawal arrived at 09:18 before scheduled execution at 10:00."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-015",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A customer changes their mind before execution: invalidate the old consent token. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A customer changes their mind before execution: invalidate the old consent token. Use only the facts in caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—invalidate the old consent token.—as a versioned proposal against caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (invalidate the old consent token.) against caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A customer changes their mind before execution: invalidate the old consent token.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A customer changes their mind before execution: invalidate the old consent token.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A customer changes their mind before execution: invalidate the old consent token. Use only the facts in caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—invalidate the old consent token.—as a versioned proposal against caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (invalidate the old consent token.) against caseId=SYN-015-03, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "015-workflow-04",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-015-04",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "customerId": "C-15",
+            "subscriptionIds": [
+              "CORE-K15",
+              "ADDON-A3"
+            ],
+            "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+            "requestedEffectiveDate": "2026-10-31",
+            "consentRef": {
+              "tenantId": "tenant-015",
+              "objectId": "CONSENT-K15",
+              "version": "v1",
+              "hash": "sha256:015"
+            },
+            "tenantId": "tenant-015",
+            "id": "SUBSCRIPTION-K15",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-015",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-015"
+            ],
+            "retentionPolicyId": "retention-015"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Refund R-15 remains pending in payment ledger after subscription S-15 changed to closed."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-015",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A refund is pending: do not hide it behind a closed subscription status. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A refund is pending: do not hide it behind a closed subscription status. Use only the facts in caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—do not hide it behind a closed subscription status.—as a versioned proposal against caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (do not hide it behind a closed subscription status.) against caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A refund is pending: do not hide it behind a closed subscription status.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A refund is pending: do not hide it behind a closed subscription status.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A refund is pending: do not hide it behind a closed subscription status. Use only the facts in caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—do not hide it behind a closed subscription status.—as a versioned proposal against caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (do not hide it behind a closed subscription status.) against caseId=SYN-015-04, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "015-workflow-05",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-015",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-015-05",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "customerId": "C-15",
+            "subscriptionIds": [
+              "CORE-K15",
+              "ADDON-A3"
+            ],
+            "requestedOutcome": "Cancel add-on A-3 after current term and retain core plan",
+            "requestedEffectiveDate": "2026-10-31",
+            "consentRef": {
+              "tenantId": "tenant-015",
+              "objectId": "CONSENT-K15",
+              "version": "v1",
+              "hash": "sha256:015"
+            },
+            "tenantId": "tenant-015",
+            "id": "SUBSCRIPTION-K15",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-015",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-015"
+            ],
+            "retentionPolicyId": "retention-015"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "015-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Account holder K-15 asks to cancel add-on A-3 after the current term and explicitly keep the core plan; the authenticated request names both services."
+              },
+              {
+                "id": "E2",
+                "source": "015-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Workspace W-15 lists owners A-15 and B-15; requester A-15 lacks admin authority to remove B-15's access."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-015",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A shared workspace has other owners: require the appropriate authority before changing their access. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A shared workspace has other owners: require the appropriate authority before changing their access. Use only the facts in caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—require the appropriate authority before changing their access.—as a versioned proposal against caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (require the appropriate authority before changing their access.) against caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A shared workspace has other owners: require the appropriate authority before changing their access.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A shared workspace has other owners: require the appropriate authority before changing their access.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A shared workspace has other owners: require the appropriate authority before changing their access. Use only the facts in caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—require the appropriate authority before changing their access.—as a versioned proposal against caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (require the appropriate authority before changing their access.) against caseId=SYN-015-05, expectedVersion=v1, version=v1, id=SUBSCRIPTION-K15, version=1, id=E1, source=015-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

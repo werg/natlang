@@ -1,0 +1,50 @@
+{
+  "application_id": "071",
+  "title": "Public Consultation Synthesis Studio",
+  "source_relative_path": "applications/15-civic-participation-and-community-operations/071-public-consultation-synthesis-studio.md",
+  "source_sha256": "e724b9479b576637be6f93dc03df0f28372b4522665cd753190d5c6f79ed5312",
+  "domain_id": "15",
+  "stages": [
+    {
+      "name": "extractArguments",
+      "output_type": "ConsultationArgument",
+      "algorithm": "Read submissions in context to separate positions, supporting reasons, factual claims, and proposed actions. Preserve conditional support and mixed views within one submission, and avoid reducing nuanced responses to a single positive or negative label.",
+      "gate": "Each argument is attributable to its submission without invented motives."
+    },
+    {
+      "name": "linkCampaigns",
+      "output_type": "SubmissionRelation",
+      "algorithm": "Detect copied or campaign-template language while preserving independently added reasons and legitimate participation counts. Distinguish duplicate ingestion from multiple people submitting the same position, and report volume and argument diversity separately.",
+      "gate": "Template use does not invalidate a participant’s submission or erase unique content."
+    },
+    {
+      "name": "mapPositions",
+      "output_type": "ConsultationTheme",
+      "algorithm": "Group arguments by the actual concern and reasoning, not only topic words. Preserve minority and cross-cutting positions, identify disagreements about facts versus values, and represent tradeoffs without averaging incompatible views into false consensus.",
+      "gate": "Every substantive argument has a theme or explicit out-of-scope disposition."
+    },
+    {
+      "name": "formResponses",
+      "output_type": "ConsultationResponseOption",
+      "algorithm": "Draft evidence-linked response options for the accountable public body, including clarification, further investigation, or policy alternatives. Distinguish what the consultation establishes from questions requiring external evidence and avoid choosing political priorities not supplied by decision-makers.",
+      "gate": "Response accurately represents the concern and does not claim unsupported public consensus."
+    },
+    {
+      "name": "verifySynthesis",
+      "output_type": "ConsultationReport",
+      "algorithm": "Audit the synthesis against sampled submissions and all identified minority themes, reconcile exact counts, and prepare an accessible report. Preserve methodological limitations and provide traceable examples without exposing unnecessary personal information.",
+      "gate": "No material theme omission, misleading denominator, or privacy leak in published evidence."
+    }
+  ],
+  "operational_details": [
+    "A campaign produces many identical submissions: report participation volume and shared argument structure separately.",
+    "A submission supports one part and opposes another: preserve both scoped positions.",
+    "A quoted example reveals a private circumstance: anonymize with consent-aware review.",
+    "A late submission is accepted under an exception: record its inclusion basis.",
+    "A report is challenged for omission: trace the concern back to coverage and revise transparently."
+  ],
+  "scenario": {
+    "representative_episode": "A consultation contains a large template campaign, a smaller set of detailed accessibility concerns, and mixed support for different parts of the proposal.",
+    "independent_truth": "Hidden argument structures, participation identities, template relationships, exact counts, and minority-theme coverage."
+  }
+}

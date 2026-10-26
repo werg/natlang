@@ -1,0 +1,623 @@
+[
+  {
+    "id": "095-first-gate-pass",
+    "root": "runCase/interpretBrief/audit/qualify.nl",
+    "split_group": "world-095-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+        "candidateIds": [
+          "095-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "095-first-e1",
+            "source": "primary case record MENU-95",
+            "version": "v1",
+            "text": "Primary domain record for case MENU-95 states: caseId=\"MENU-95\"; desiredExperience=\"Warm, filling lunch within 12 minutes.\"; dietaryConstraints=[\"One guest has a sesame allergy.\",\"Two guests requested dairy-free meals.\"]; equipmentLimits=[\"One combi oven\",\"No fryer\"]; costTarget={\"minorUnits\":\"1850\",\"currency\":\"EUR\",\"scale\":2}.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "095-case-record",
+          "caseId": "MENU-95",
+          "sourceRefs": [
+            "095-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MenuRequirement",
+          "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "desiredExperience": "Warm, filling lunch within 12 minutes.",
+          "dietaryConstraints": [
+            "One guest has a sesame allergy.",
+            "Two guests requested dairy-free meals."
+          ],
+          "equipmentLimits": [
+            "One combi oven",
+            "No fryer"
+          ],
+          "costTarget": {
+            "minorUnits": "1850",
+            "currency": "EUR",
+            "scale": 2
+          }
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "095-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "095-first-gate-fail",
+    "root": "runCase/interpretBrief/audit/qualify.nl",
+    "split_group": "world-095-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+        "candidateIds": [
+          "095-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "095-first-e1",
+            "source": "primary case record MENU-95",
+            "version": "v1",
+            "text": "Primary domain record for case MENU-95 states: caseId=\"MENU-95\"; desiredExperience=\"Warm, filling lunch within 12 minutes.\"; dietaryConstraints=[\"One guest has a sesame allergy.\",\"Two guests requested dairy-free meals.\"]; equipmentLimits=[\"One combi oven\",\"No fryer\"]; costTarget={\"minorUnits\":\"1850\",\"currency\":\"EUR\",\"scale\":2}.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "095-case-record",
+          "caseId": "MENU-95",
+          "sourceRefs": [
+            "095-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MenuRequirement",
+          "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "desiredExperience": "Warm, filling lunch within 12 minutes.",
+          "dietaryConstraints": [
+            "No allergens or dietary restrictions reported."
+          ],
+          "equipmentLimits": [
+            "One combi oven",
+            "No fryer"
+          ],
+          "costTarget": {
+            "minorUnits": "1850",
+            "currency": "EUR",
+            "scale": 2
+          }
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "095-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "095-first-gate-needs-review",
+    "root": "runCase/interpretBrief/audit/qualify.nl",
+    "split_group": "world-095-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+        "candidateIds": [
+          "095-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "095-first-e1",
+            "source": "primary case record MENU-95",
+            "version": "v1",
+            "text": "Primary domain record for case MENU-95 states: caseId=\"MENU-95\"; desiredExperience=\"Warm, filling lunch within 12 minutes.\"; equipmentLimits=[\"One combi oven\",\"No fryer\"]; costTarget={\"minorUnits\":\"1850\",\"currency\":\"EUR\",\"scale\":2}. No current value is present for dietaryConstraints.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "dietaryConstraints"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "095-case-record",
+          "sourceRefs": [
+            "095-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MenuRequirement",
+          "subject": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "equipmentLimits": [
+            "One combi oven",
+            "No fryer"
+          ],
+          "costTarget": {
+            "minorUnits": "1850",
+            "currency": "EUR",
+            "scale": 2
+          },
+          "caseId": "MENU-95",
+          "desiredExperience": "Warm, filling lunch within 12 minutes."
+        },
+        "missingFields": [
+          "dietaryConstraints"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "095-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "095-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-095-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "095-workflow-1-record",
+          "caseId": "095-workflow-1",
+          "sourceRefs": [
+            "095-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "MenuProject",
+          "subject": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "095-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "venueId": "KITCHEN-95",
+          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+          "ingredientInventoryIds": [
+            "SAUCE-D3",
+            "ING-I7",
+            "ING-I9"
+          ],
+          "serviceWindow": "12:00–13:00",
+          "chefOwnerId": "CHEF-5"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "095-wf-1-source",
+          "source": "primary case artifact 095-E1",
+          "version": "v1",
+          "text": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "095-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "095-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "095-wf-1-source",
+          "source": "primary case artifact 095-E1",
+          "version": "v1",
+          "text": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Culinary Concept Development Kitchen",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A supplier substitutes an ingredient: recheck verified allergen and dietary data before use. Use observation Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame. as the source of truth. The proposal should preserve source-linked record 095-workflow-1-record and make a recipient-facing distinction grounded in 095-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 095-workflow-1-record must accurately preserve observation 095-wf-1-source (v1): Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame. Apply brief requirement A supplier substitutes an ingredient: recheck verified allergen and dietary data before use. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed MenuProject record 095-workflow-1-record and its source link to 095-wf-1-source version v1, with a disposition matching this observed state: Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame. Carry requirement A supplier substitutes an ingredient: recheck verified allergen and dietary data before use. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 095-workflow-1-record based on 095-wf-1-source (v1) and observation Supplier notice substitutes ingredient I-9 for sesame paste I-7 in sauce D-3; one guest’s allergy record names sesame. Apply requirement A supplier substitutes an ingredient: recheck verified allergen and dietary data before use. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "095-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-095-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "095-workflow-2-record",
+          "caseId": "095-workflow-2",
+          "sourceRefs": [
+            "095-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "MenuProject",
+          "subject": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "095-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "venueId": "KITCHEN-95",
+          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+          "ingredientInventoryIds": [
+            "SAUCE-D3",
+            "ING-I7",
+            "ING-I9"
+          ],
+          "serviceWindow": "12:00–13:00",
+          "chefOwnerId": "CHEF-5"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "095-wf-2-source",
+          "source": "primary case artifact 095-E2",
+          "version": "v1",
+          "text": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "095-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "095-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "095-wf-2-source",
+          "source": "primary case artifact 095-E2",
+          "version": "v1",
+          "text": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Culinary Concept Development Kitchen",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: Yield differs from the estimate: update exact batch quantities and cost. Use observation Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10. as the source of truth. The proposal should preserve source-linked record 095-workflow-2-record and make a recipient-facing distinction grounded in 095-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Yield differs from the estimate: update exact batch quantities and cost.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 095-workflow-2-record must accurately preserve observation 095-wf-2-source (v1): Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10. Apply brief requirement Yield differs from the estimate: update exact batch quantities and cost. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed MenuProject record 095-workflow-2-record and its source link to 095-wf-2-source version v1, with a disposition matching this observed state: Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10. Carry requirement Yield differs from the estimate: update exact batch quantities and cost. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 095-workflow-2-record based on 095-wf-2-source (v1) and observation Batch yield is 18 portions rather than estimated 24; planned cost per portion is now EUR 2.10. Apply requirement Yield differs from the estimate: update exact batch quantities and cost. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "095-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-095-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "095-workflow-3-record",
+          "caseId": "095-workflow-3",
+          "sourceRefs": [
+            "095-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "MenuProject",
+          "subject": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "095-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "venueId": "KITCHEN-95",
+          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+          "ingredientInventoryIds": [
+            "SAUCE-D3",
+            "ING-I7",
+            "ING-I9"
+          ],
+          "serviceWindow": "12:00–13:00",
+          "chefOwnerId": "CHEF-5"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "095-wf-3-source",
+          "source": "primary case artifact 095-E3",
+          "version": "v1",
+          "text": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "095-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "095-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "095-wf-3-source",
+          "source": "primary case artifact 095-E3",
+          "version": "v1",
+          "text": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Culinary Concept Development Kitchen",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity. Use observation Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously. as the source of truth. The proposal should preserve source-linked record 095-workflow-3-record and make a recipient-facing distinction grounded in 095-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 095-workflow-3-record must accurately preserve observation 095-wf-3-source (v1): Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously. Apply brief requirement Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed MenuProject record 095-workflow-3-record and its source link to 095-wf-3-source version v1, with a disposition matching this observed state: Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously. Carry requirement Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 095-workflow-3-record based on 095-wf-3-source (v1) and observation Oven O-1 is reserved for dishes D-1 and D-2 at 12:05; both production plans require it simultaneously. Apply requirement Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "095-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-095-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "095-workflow-4-record",
+          "caseId": "095-workflow-4",
+          "sourceRefs": [
+            "095-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "MenuProject",
+          "subject": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "095-wf-4-source",
+            "sourceVersion": "v1"
+          },
+          "venueId": "KITCHEN-95",
+          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+          "ingredientInventoryIds": [
+            "SAUCE-D3",
+            "ING-I7",
+            "ING-I9"
+          ],
+          "serviceWindow": "12:00–13:00",
+          "chefOwnerId": "CHEF-5"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "095-wf-4-source",
+          "source": "primary case artifact 095-E4",
+          "version": "v1",
+          "text": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "095-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "095-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "095-wf-4-source",
+          "source": "primary case artifact 095-E4",
+          "version": "v1",
+          "text": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Culinary Concept Development Kitchen",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A tasting change affects a shared sauce: propagate it to every dish and disclosure. Use observation Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy. as the source of truth. The proposal should preserve source-linked record 095-workflow-4-record and make a recipient-facing distinction grounded in 095-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A tasting change affects a shared sauce: propagate it to every dish and disclosure.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 095-workflow-4-record must accurately preserve observation 095-wf-4-source (v1): Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy. Apply brief requirement A tasting change affects a shared sauce: propagate it to every dish and disclosure. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed MenuProject record 095-workflow-4-record and its source link to 095-wf-4-source version v1, with a disposition matching this observed state: Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy. Carry requirement A tasting change affects a shared sauce: propagate it to every dish and disclosure. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 095-workflow-4-record based on 095-wf-4-source (v1) and observation Shared sauce S-4 changes from dairy cream to oat cream; three menu cards still disclose dairy. Apply requirement A tasting change affects a shared sauce: propagate it to every dish and disclosure. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "095-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-095-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Culinary Concept Development Kitchen proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "095-workflow-5-record",
+          "caseId": "095-workflow-5",
+          "sourceRefs": [
+            "095-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "MenuProject",
+          "subject": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
+          "status": "candidate",
+          "evidenceIds": [
+            "095-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "095-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "venueId": "KITCHEN-95",
+          "creativeBrief": "Warm lunch under 12 minutes with sesame-allergy and dairy-free requirements.",
+          "ingredientInventoryIds": [
+            "SAUCE-D3",
+            "ING-I7",
+            "ING-I9"
+          ],
+          "serviceWindow": "12:00–13:00",
+          "chefOwnerId": "CHEF-5"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "095-wf-5-source",
+          "source": "primary case artifact 095-E5",
+          "version": "v1",
+          "text": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "095-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "095-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "095-wf-5-source",
+          "source": "primary case artifact 095-E5",
+          "version": "v1",
+          "text": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Culinary Concept Development Kitchen",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval. Use observation Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2. as the source of truth. The proposal should preserve source-linked record 095-workflow-5-record and make a recipient-facing distinction grounded in 095-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 095-workflow-5-record must accurately preserve observation 095-wf-5-source (v1): Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2. Apply brief requirement A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed MenuProject record 095-workflow-5-record and its source link to 095-wf-5-source version v1, with a disposition matching this observed state: Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2. Carry requirement A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 095-workflow-5-record based on 095-wf-5-source (v1) and observation Label draft says “allergen-free”; venue controls cannot prevent cross-contact in prep area 2. Apply requirement A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

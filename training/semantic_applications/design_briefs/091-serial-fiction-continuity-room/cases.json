@@ -1,0 +1,592 @@
+[
+  {
+    "id": "091-first-gate-pass",
+    "root": "runCase/recoverCanon/audit/qualify.nl",
+    "split_group": "world-091-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+        "candidateIds": [
+          "091-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "091-first-e1",
+            "source": "primary case record STORY-91",
+            "version": "v1",
+            "text": "Primary domain record for case STORY-91 states: caseId=\"STORY-91\"; entityId=\"NARA-4\"; fact=\"Nara keeps the brass key after winter-market scene.\"; validStoryTime=\"Book 2, Chapter 6 through end of Book 2.\"; narratorReliability=\"Reliable about own actions; uncertain about missing witness.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "091-case-record",
+          "caseId": "STORY-91",
+          "sourceRefs": [
+            "091-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CanonFact",
+          "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "entityId": "NARA-4",
+          "fact": "Nara keeps the brass key after winter-market scene.",
+          "validStoryTime": "Book 2, Chapter 6 through end of Book 2.",
+          "narratorReliability": "Reliable about own actions; uncertain about missing witness."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "091-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "091-first-gate-fail",
+    "root": "runCase/recoverCanon/audit/qualify.nl",
+    "split_group": "world-091-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+        "candidateIds": [
+          "091-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "091-first-e1",
+            "source": "primary case record STORY-91",
+            "version": "v1",
+            "text": "Primary domain record for case STORY-91 states: caseId=\"STORY-91\"; entityId=\"NARA-4\"; fact=\"Nara keeps the brass key after winter-market scene.\"; validStoryTime=\"Book 2, Chapter 6 through end of Book 2.\"; narratorReliability=\"Reliable about own actions; uncertain about missing witness.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "091-case-record",
+          "caseId": "STORY-91",
+          "sourceRefs": [
+            "091-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CanonFact",
+          "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "entityId": "NARA-4",
+          "fact": "Mira keeps the key after the winter market.",
+          "validStoryTime": "Book 2, Chapter 6 through end of Book 2.",
+          "narratorReliability": "Reliable about own actions; uncertain about missing witness."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "091-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "091-first-gate-needs-review",
+    "root": "runCase/recoverCanon/audit/qualify.nl",
+    "split_group": "world-091-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+        "candidateIds": [
+          "091-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "091-first-e1",
+            "source": "primary case record STORY-91",
+            "version": "v1",
+            "text": "Primary domain record for case STORY-91 states: caseId=\"STORY-91\"; entityId=\"NARA-4\"; validStoryTime=\"Book 2, Chapter 6 through end of Book 2.\"; narratorReliability=\"Reliable about own actions; uncertain about missing witness.\". No current value is present for fact.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "fact"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "091-case-record",
+          "sourceRefs": [
+            "091-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CanonFact",
+          "subject": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "validStoryTime": "Book 2, Chapter 6 through end of Book 2.",
+          "narratorReliability": "Reliable about own actions; uncertain about missing witness.",
+          "caseId": "STORY-91",
+          "entityId": "NARA-4"
+        },
+        "missingFields": [
+          "fact"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "091-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "091-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-091-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "091-workflow-1-record",
+          "caseId": "091-workflow-1",
+          "sourceRefs": [
+            "091-event-1"
+          ],
+          "state": "draft",
+          "kind": "StorySeries",
+          "subject": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "091-event-1",
+            "sourceVersion": "v1"
+          },
+          "seriesId": "SERIES-91",
+          "manuscriptIds": [
+            "BOOK-2-DRAFT-A",
+            "BOOK-2-DRAFT-B"
+          ],
+          "canonVersion": "canon-v6",
+          "editorId": "ED-9",
+          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "091-event-1",
+          "source": "current domain record 091-E1",
+          "version": "v1",
+          "text": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "091-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "091-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "091-event-1",
+          "source": "current domain record 091-E1",
+          "version": "v1",
+          "text": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Serial Fiction Continuity Room",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A late twist changes earlier scenes: show the full seeding and revision footprint. Use observation Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7. as the source of truth. The proposal should preserve source-linked record 091-workflow-1-record and make a recipient-facing distinction grounded in 091-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A late twist changes earlier scenes: show the full seeding and revision footprint.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 091-workflow-1-record must accurately preserve observation 091-event-1 (v1): Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7. Apply brief requirement A late twist changes earlier scenes: show the full seeding and revision footprint. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed StorySeries record 091-workflow-1-record and its source link to 091-event-1 version v1, with a disposition matching this observed state: Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7. Carry requirement A late twist changes earlier scenes: show the full seeding and revision footprint. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 091-workflow-1-record based on 091-event-1 (v1) and observation Late twist T-91 reveals that the bridge witness was Nara’s sister. Revision V4 adds the revelation in Chapter 9; the current drafts have no earlier witness clue, while outline notes identify possible seed points in Chapters 1, 4, and 7. Apply requirement A late twist changes earlier scenes: show the full seeding and revision footprint. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "091-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-091-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "091-workflow-2-record",
+          "caseId": "091-workflow-2",
+          "sourceRefs": [
+            "091-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "StorySeries",
+          "subject": "Character Juno learns the secret in draft A, but the prior chapter contains no disclosure scene for Juno.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "091-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "seriesId": "SERIES-91",
+          "manuscriptIds": [
+            "BOOK-2-DRAFT-A",
+            "BOOK-2-DRAFT-B"
+          ],
+          "canonVersion": "canon-v6",
+          "editorId": "ED-9",
+          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "091-wf-2-source",
+          "source": "primary case artifact 091-E2",
+          "version": "v1",
+          "text": "Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "091-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "091-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "091-wf-2-source",
+          "source": "primary case artifact 091-E2",
+          "version": "v1",
+          "text": "Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Serial Fiction Continuity Room",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A character learns a secret in one draft but not another: bind knowledge to the approved edition. Use observation Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91. as source of truth. Preserve source-linked record 091-workflow-2-record and make the distinct exception/continuity condition explicit in the recipient view and proposed durable state; keep any effect pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 091-workflow-2-record must distinguish the relevant condition in 091-wf-2-source (v1): Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91. Apply detail A character learns a secret in one draft but not another: bind knowledge to the approved edition. without turning its example or conflicting draft into a new rule.",
+      "durable_state": "Durable-state proposal must retain typed StorySeries record 091-workflow-2-record, source 091-wf-2-source version v1, and the evidenced condition: Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91. Carry A character learns a secret in one draft but not another: bind knowledge to the approved edition. as a source-linked proposed disposition; do not claim persistence.",
+      "effects": "Effect ledger may propose only a follow-up grounded in 091-wf-2-source (v1) for 091-workflow-2-record: Approved edition E-91 withholds the secret until Book 2 Chapter 9. Draft A shows character Juno acting on the secret in Chapter 7, while the prior approved chapter has no disclosure scene for Juno; continuity ledger remains bound to E-91. Apply A character learns a secret in one draft but not another: bind knowledge to the approved edition. while keeping external action pending host authorization and receipt; report no completed effect."
+    }
+  },
+  {
+    "id": "091-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-091-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "091-workflow-3-record",
+          "caseId": "091-workflow-3",
+          "sourceRefs": [
+            "091-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "StorySeries",
+          "subject": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "091-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "seriesId": "SERIES-91",
+          "manuscriptIds": [
+            "BOOK-2-DRAFT-A",
+            "BOOK-2-DRAFT-B"
+          ],
+          "canonVersion": "canon-v6",
+          "editorId": "ED-9",
+          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "091-wf-3-source",
+          "source": "primary case artifact 091-E3",
+          "version": "v1",
+          "text": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "091-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "091-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "091-wf-3-source",
+          "source": "primary case artifact 091-E3",
+          "version": "v1",
+          "text": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Serial Fiction Continuity Room",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: An unreliable narrator states a falsehood: preserve it as narration, not canon. Use observation Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact. as the source of truth. The proposal should preserve source-linked record 091-workflow-3-record and make a recipient-facing distinction grounded in 091-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "An unreliable narrator states a falsehood: preserve it as narration, not canon.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 091-workflow-3-record must accurately preserve observation 091-wf-3-source (v1): Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact. Apply brief requirement An unreliable narrator states a falsehood: preserve it as narration, not canon. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed StorySeries record 091-workflow-3-record and its source link to 091-wf-3-source version v1, with a disposition matching this observed state: Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact. Carry requirement An unreliable narrator states a falsehood: preserve it as narration, not canon. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 091-workflow-3-record based on 091-wf-3-source (v1) and observation Narrator is reliable about Nara’s actions but unreliable about the missing witness; draft states witness identity as fact. Apply requirement An unreliable narrator states a falsehood: preserve it as narration, not canon. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "091-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-091-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "091-workflow-4-record",
+          "caseId": "091-workflow-4",
+          "sourceRefs": [
+            "091-event-4"
+          ],
+          "state": "draft",
+          "kind": "StorySeries",
+          "subject": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "091-event-4",
+            "sourceVersion": "v1"
+          },
+          "seriesId": "SERIES-91",
+          "manuscriptIds": [
+            "BOOK-2-DRAFT-A",
+            "BOOK-2-DRAFT-B"
+          ],
+          "canonVersion": "canon-v6",
+          "editorId": "ED-9",
+          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "091-event-4",
+          "source": "current domain record 091-E4",
+          "version": "v1",
+          "text": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "091-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "091-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "091-event-4",
+          "source": "current domain record 091-E4",
+          "version": "v1",
+          "text": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Serial Fiction Continuity Room",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A minor character returns after many installments: retrieve their established voice and history. Use observation Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue. as the source of truth. The proposal should preserve source-linked record 091-workflow-4-record and make a recipient-facing distinction grounded in 091-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A minor character returns after many installments: retrieve their established voice and history.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 091-workflow-4-record must accurately preserve observation 091-event-4 (v1): Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue. Apply brief requirement A minor character returns after many installments: retrieve their established voice and history. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed StorySeries record 091-workflow-4-record and its source link to 091-event-4 version v1, with a disposition matching this observed state: Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue. Carry requirement A minor character returns after many installments: retrieve their established voice and history. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 091-workflow-4-record based on 091-event-4 (v1) and observation Minor character Edda Vale returns in Book 4 after last appearing in Book 1. Voice sheet VS-91 and prior scenes establish her clipped questions and habit of naming weather; current draft gives her a long explanatory monologue. Apply requirement A minor character returns after many installments: retrieve their established voice and history. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "091-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-091-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Serial Fiction Continuity Room proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "091-workflow-5-record",
+          "caseId": "091-workflow-5",
+          "sourceRefs": [
+            "091-event-5"
+          ],
+          "state": "draft",
+          "kind": "StorySeries",
+          "subject": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
+          "status": "candidate",
+          "evidenceIds": [
+            "091-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "091-event-5",
+            "sourceVersion": "v1"
+          },
+          "seriesId": "SERIES-91",
+          "manuscriptIds": [
+            "BOOK-2-DRAFT-A",
+            "BOOK-2-DRAFT-B"
+          ],
+          "canonVersion": "canon-v6",
+          "editorId": "ED-9",
+          "creativeBrief": "Track brass key custody and character knowledge through Book 2."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "091-event-5",
+          "source": "current domain record 091-E5",
+          "version": "v1",
+          "text": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "091-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "091-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "091-event-5",
+          "source": "current domain record 091-E5",
+          "version": "v1",
+          "text": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Serial Fiction Continuity Room",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan. Use observation Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing. as the source of truth. The proposal should preserve source-linked record 091-workflow-5-record and make a recipient-facing distinction grounded in 091-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 091-workflow-5-record must accurately preserve observation 091-event-5 (v1): Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing. Apply brief requirement A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed StorySeries record 091-workflow-5-record and its source link to 091-event-5 version v1, with a disposition matching this observed state: Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing. Carry requirement A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 091-workflow-5-record based on 091-event-5 (v1) and observation Author note AN-91 approves a deliberate contradiction between the bridge map in Chapter 3 and the character’s later route. The approved reveal plan explains the map was altered by an unreliable courier; draft margin lacks the rationale and reveal timing. Apply requirement A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

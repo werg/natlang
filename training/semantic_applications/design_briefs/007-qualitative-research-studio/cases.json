@@ -1,0 +1,811 @@
+[
+  {
+    "id": "007-frameInquiry-supported",
+    "root": "runCase/frameInquiry/audit/qualify.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "RS-7",
+          "subquestions": [
+            "Does reminder timing change completion rate?"
+          ],
+          "rivalExplanations": [
+            "Prior participant engagement"
+          ],
+          "excludedClaims": [
+            "Motivation changed"
+          ],
+          "stoppingRule": "Compare timestamped completion across assigned timing groups",
+          "tenantId": "tenant-007",
+          "id": "InquiryFrame-007",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-007",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-007"
+          ],
+          "retentionPolicyId": "retention-007"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "researchQuestion": "How do participants describe reminder timing and task completion?",
+        "decisionContext": "Improve reminder schedule without inferring motivation",
+        "corpusIds": [
+          "INTERVIEW-P7"
+        ],
+        "consentPolicyId": "CONSENT-STUDY-7",
+        "principalInvestigatorId": "Dr Ana Reyes",
+        "tenantId": "tenant-007",
+        "id": "RESEARCH-LANGUAGE-7",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-007",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-007"
+        ],
+        "retentionPolicyId": "retention-007"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "007-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for frameInquiry: An onboarding abandonment study includes satisfied non-completers, dissatisfied completers, and a biased follow-up sample.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "007-frameInquiry-contradictory",
+    "root": "runCase/frameInquiry/audit/qualify.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "RS-7",
+          "subquestions": [
+            "Does reminder timing change completion rate?"
+          ],
+          "rivalExplanations": [
+            "Reminders caused the measured motivation change"
+          ],
+          "excludedClaims": [
+            "No motivation change occurred"
+          ],
+          "stoppingRule": "Compare timestamped completion across assigned timing groups",
+          "tenantId": "tenant-007",
+          "id": "InquiryFrame-007",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-007",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-007"
+          ],
+          "retentionPolicyId": "retention-007"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "researchQuestion": "How do participants describe reminder timing and task completion?",
+        "decisionContext": "Improve reminder schedule without inferring motivation",
+        "corpusIds": [
+          "INTERVIEW-P7"
+        ],
+        "consentPolicyId": "CONSENT-STUDY-7",
+        "principalInvestigatorId": "Dr Ana Reyes",
+        "tenantId": "tenant-007",
+        "id": "RESEARCH-LANGUAGE-7",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-007",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-007"
+        ],
+        "retentionPolicyId": "retention-007"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "007-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Randomized study M-7 measured motivation and found no change between reminder and no-reminder groups; the draft states that reminders caused the measured motivation change."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for frameInquiry: An onboarding abandonment study includes satisfied non-completers, dissatisfied completers, and a biased follow-up sample.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "007-frameInquiry-missing",
+    "root": "runCase/frameInquiry/audit/qualify.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "RS-7",
+          "subquestions": [
+            "Does reminder timing change completion rate?"
+          ],
+          "rivalExplanations": [
+            "Prior participant engagement"
+          ],
+          "excludedClaims": [
+            "Motivation changed"
+          ],
+          "stoppingRule": "Compare timestamped completion across assigned timing groups",
+          "tenantId": "tenant-007",
+          "id": "InquiryFrame-007",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-007",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-007"
+          ],
+          "retentionPolicyId": "retention-007"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "researchQuestion": "How do participants describe reminder timing and task completion?",
+        "decisionContext": "Improve reminder schedule without inferring motivation",
+        "corpusIds": [
+          "INTERVIEW-P7"
+        ],
+        "consentPolicyId": "CONSENT-STUDY-7",
+        "principalInvestigatorId": "Dr Ana Reyes",
+        "tenantId": "tenant-007",
+        "id": "RESEARCH-LANGUAGE-7",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-007",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-007"
+        ],
+        "retentionPolicyId": "retention-007"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "007-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The project asks whether reminders work but specifies no observable outcome, comparison, or stopping rule."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for frameInquiry: An onboarding abandonment study includes satisfied non-completers, dissatisfied completers, and a biased follow-up sample.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "007-workflow-01",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-007-01",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "researchQuestion": "How do participants describe reminder timing and task completion?",
+            "decisionContext": "Improve reminder schedule without inferring motivation",
+            "corpusIds": [
+              "INTERVIEW-P7"
+            ],
+            "consentPolicyId": "CONSENT-STUDY-7",
+            "principalInvestigatorId": "Dr Ana Reyes",
+            "tenantId": "tenant-007",
+            "id": "RESEARCH-LANGUAGE-7",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-007",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-007"
+            ],
+            "retentionPolicyId": "retention-007"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "007-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+              },
+              {
+                "id": "E2",
+                "source": "007-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Participant P-7 switches from English to Spanish at minute 14; recording spans R-7 preserve original words and reviewer translation TR-7."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-007",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A participant switches language mid-interview: retain original passages alongside reviewed translations. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A participant switches language mid-interview: retain original passages alongside reviewed translations. Use only the facts in caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—retain original passages alongside reviewed translations.—as a versioned proposal against caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (retain original passages alongside reviewed translations.) against caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A participant switches language mid-interview: retain original passages alongside reviewed translations.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A participant switches language mid-interview: retain original passages alongside reviewed translations.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A participant switches language mid-interview: retain original passages alongside reviewed translations. Use only the facts in caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—retain original passages alongside reviewed translations.—as a versioned proposal against caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (retain original passages alongside reviewed translations.) against caseId=SYN-007-01, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "007-workflow-02",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-007-02",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "researchQuestion": "How do participants describe reminder timing and task completion?",
+            "decisionContext": "Improve reminder schedule without inferring motivation",
+            "corpusIds": [
+              "INTERVIEW-P7"
+            ],
+            "consentPolicyId": "CONSENT-STUDY-7",
+            "principalInvestigatorId": "Dr Ana Reyes",
+            "tenantId": "tenant-007",
+            "id": "RESEARCH-LANGUAGE-7",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-007",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-007"
+            ],
+            "retentionPolicyId": "retention-007"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "007-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+              },
+              {
+                "id": "E2",
+                "source": "007-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Codebook v3 changed code C-7 after 18 of 36 interviews; records I-19 through I-36 still use v2."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-007",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A code changes after half the corpus is processed: recompute affected records, not only future ones. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A code changes after half the corpus is processed: recompute affected records, not only future ones. Use only the facts in caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—recompute affected records, not only future ones.—as a versioned proposal against caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (recompute affected records, not only future ones.) against caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A code changes after half the corpus is processed: recompute affected records, not only future ones.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A code changes after half the corpus is processed: recompute affected records, not only future ones.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A code changes after half the corpus is processed: recompute affected records, not only future ones. Use only the facts in caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—recompute affected records, not only future ones.—as a versioned proposal against caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (recompute affected records, not only future ones.) against caseId=SYN-007-02, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "007-workflow-03",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-007-03",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "researchQuestion": "How do participants describe reminder timing and task completion?",
+            "decisionContext": "Improve reminder schedule without inferring motivation",
+            "corpusIds": [
+              "INTERVIEW-P7"
+            ],
+            "consentPolicyId": "CONSENT-STUDY-7",
+            "principalInvestigatorId": "Dr Ana Reyes",
+            "tenantId": "tenant-007",
+            "id": "RESEARCH-LANGUAGE-7",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-007",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-007"
+            ],
+            "retentionPolicyId": "retention-007"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "007-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+              },
+              {
+                "id": "E2",
+                "source": "007-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Quote Q-7 names a rare village and job title matching participant P-7; release preview has no re-identification review receipt."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-007",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A quotation may identify its speaker indirectly: preview re-identification risk before export. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A quotation may identify its speaker indirectly: preview re-identification risk before export. Use only the facts in caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preview re-identification risk before export.—as a versioned proposal against caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preview re-identification risk before export.) against caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A quotation may identify its speaker indirectly: preview re-identification risk before export.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A quotation may identify its speaker indirectly: preview re-identification risk before export.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A quotation may identify its speaker indirectly: preview re-identification risk before export. Use only the facts in caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—preview re-identification risk before export.—as a versioned proposal against caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preview re-identification risk before export.) against caseId=SYN-007-03, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "007-workflow-04",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-007-04",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "researchQuestion": "How do participants describe reminder timing and task completion?",
+            "decisionContext": "Improve reminder schedule without inferring motivation",
+            "corpusIds": [
+              "INTERVIEW-P7"
+            ],
+            "consentPolicyId": "CONSENT-STUDY-7",
+            "principalInvestigatorId": "Dr Ana Reyes",
+            "tenantId": "tenant-007",
+            "id": "RESEARCH-LANGUAGE-7",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-007",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-007"
+            ],
+            "retentionPolicyId": "retention-007"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "007-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+              },
+              {
+                "id": "E2",
+                "source": "007-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Researchers A-7 and B-7 disagree on code C-7; both interpretations cite transcript span 22:10-23:05."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-007",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: Two researchers disagree productively: preserve minority interpretation in the synthesis packet. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: Two researchers disagree productively: preserve minority interpretation in the synthesis packet. Use only the facts in caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve minority interpretation in the synthesis packet.—as a versioned proposal against caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve minority interpretation in the synthesis packet.) against caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "Two researchers disagree productively: preserve minority interpretation in the synthesis packet.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "Two researchers disagree productively: preserve minority interpretation in the synthesis packet.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: Two researchers disagree productively: preserve minority interpretation in the synthesis packet. Use only the facts in caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—preserve minority interpretation in the synthesis packet.—as a versioned proposal against caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve minority interpretation in the synthesis packet.) against caseId=SYN-007-04, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "007-workflow-05",
+    "root": "runCase.nl",
+    "split_group": "design-brief-app-007",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-007-05",
+        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "scope": "one named case",
+        "requestedBy": "case owner",
+        "expectedVersion": "v1"
+      },
+      "snapshot": {
+        "version": "v1",
+        "caseRecords": [
+          {
+            "researchQuestion": "How do participants describe reminder timing and task completion?",
+            "decisionContext": "Improve reminder schedule without inferring motivation",
+            "corpusIds": [
+              "INTERVIEW-P7"
+            ],
+            "consentPolicyId": "CONSENT-STUDY-7",
+            "principalInvestigatorId": "Dr Ana Reyes",
+            "tenantId": "tenant-007",
+            "id": "RESEARCH-LANGUAGE-7",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-007",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-007"
+            ],
+            "retentionPolicyId": "retention-007"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "007-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study interviews support the question whether reminder timing affects completion; completion timestamps are observable, while motivation is an unmeasured rival explanation."
+              },
+              {
+                "id": "E2",
+                "source": "007-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-12",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-7 stopped at 24 of planned 40 interviews on Oct 11; stopping threshold remains unmet."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-007",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ]
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Synthetic interviews generated from hidden motives and sampling mechanisms; independent code-boundary and evidence-support assessment.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: The study stops early: publish achieved coverage and unmet stopping conditions. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: The study stops early: publish achieved coverage and unmet stopping conditions. Use only the facts in caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—publish achieved coverage and unmet stopping conditions.—as a versioned proposal against caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (publish achieved coverage and unmet stopping conditions.) against caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "The study stops early: publish achieved coverage and unmet stopping conditions.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "The study stops early: publish achieved coverage and unmet stopping conditions.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: The study stops early: publish achieved coverage and unmet stopping conditions. Use only the facts in caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—publish achieved coverage and unmet stopping conditions.—as a versioned proposal against caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (publish achieved coverage and unmet stopping conditions.) against caseId=SYN-007-05, expectedVersion=v1, version=v1, id=RESEARCH-LANGUAGE-7, version=1, id=E1, source=007-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

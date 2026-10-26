@@ -1,0 +1,543 @@
+[
+  {
+    "id": "059-engineering-change-impact-manager-gate-supported",
+    "root": "runCase/interpretChange/audit/qualify.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "draft": {
+        "values": {
+          "designId": "assembly-A59-revC",
+          "changedFunction": "fastener length shortened",
+          "changedInterface": "new fastener applies from serial 500",
+          "preservedRequirements": [
+            "joint load rating",
+            "assembly access"
+          ],
+          "caseId": "case-59"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "changedInterface",
+            "evidenceIds": [
+              "059-engineering-change-impact-manager-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "engineering change notice and inventory ranges",
+        "evidence": [
+          {
+            "id": "059-engineering-change-impact-manager-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "EC59 shortens fastener from serial 500; stock bin mixes old and new lengths and fielded range includes 470–530. Case case-59; current first-stage record values: {\"changedFunction\": \"fastener length shortened\", \"changedInterface\": \"new fastener applies from serial 500\", \"designId\": \"assembly-A59-revC\", \"preservedRequirements\": [\"joint load rating\", \"assembly access\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Applicability crosses stock and field serial ranges and needs segregation before instruction changes."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "changedInterface",
+          "value": "new fastener applies from serial 500",
+          "evidenceIds": [
+            "059-engineering-change-impact-manager-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "engineering change notice and inventory ranges: Change EC-59 shortens one fastener in assembly A-59 starting at serial 500. Stock bin B-59 mixes old and new fasteners without lot labels; fielded units include serials 470–530. Apply the first-stage gate to the record and source versions; Applicability crosses stock and field serial ranges and needs segregation before instruction changes.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "059-engineering-change-impact-manager-gate-contradictory",
+    "root": "runCase/interpretChange/audit/qualify.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "draft": {
+        "values": {
+          "designId": "assembly-A59-revC",
+          "changedFunction": "fastener length shortened",
+          "changedInterface": "shortened fastener applies to serials 470–499",
+          "preservedRequirements": [
+            "joint load rating",
+            "assembly access"
+          ],
+          "caseId": "case-59"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "changedInterface",
+            "evidenceIds": [
+              "059-engineering-change-impact-manager-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "engineering change notice and inventory ranges",
+        "evidence": [
+          {
+            "id": "059-engineering-change-impact-manager-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "EC59 shortens fastener from serial 500; stock bin mixes old and new lengths and fielded range includes 470–530. Case case-59; current first-stage record values: {\"changedFunction\": \"fastener length shortened\", \"changedInterface\": \"new fastener applies from serial 500\", \"designId\": \"assembly-A59-revC\", \"preservedRequirements\": [\"joint load rating\", \"assembly access\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Applicability crosses stock and field serial ranges and needs segregation before instruction changes."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "changedInterface",
+          "value": "shortened fastener applies to serials 470–499",
+          "evidenceIds": [
+            "059-engineering-change-impact-manager-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "engineering change notice and inventory ranges: Change EC-59 shortens one fastener in assembly A-59 starting at serial 500. Stock bin B-59 mixes old and new fasteners without lot labels; fielded units include serials 470–530. Apply the first-stage gate to the record and source versions; Applicability crosses stock and field serial ranges and needs segregation before instruction changes.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "059-engineering-change-impact-manager-gate-missing",
+    "root": "runCase/interpretChange/audit/qualify.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-59"
+        },
+        "missingFields": [
+          "changedInterface"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes changedInterface?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "engineering change notice and inventory ranges",
+        "evidence": [],
+        "missing": [
+          "changedInterface"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Applicability crosses stock and field serial ranges and needs segregation before instruction changes."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "engineering change notice and inventory ranges: Change EC-59 shortens one fastener in assembly A-59 starting at serial 500. Stock bin B-59 mixes old and new fasteners without lot labels; fielded units include serials 470–530. Apply the first-stage gate to the record and source versions; Applicability crosses stock and field serial ranges and needs segregation before instruction changes.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "059-engineering-change-impact-manager-operational-1",
+    "root": "runCase.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "input": {
+        "caseId": "059-engineering-change-impact-manager-operational-1",
+        "goal": "Review the Engineering change impact manager evidence for case 059-engineering-change-impact-manager-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "059-operational-detail-1-source-v2",
+            "source": "Engineering change impact manager operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R059 Engineering steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R059 Engineering steward records: Inventory records show old fastener revision B and new revision C in bins B59 and C59. Engineering change EC59 applies revision C only to serials 500 and above; build order contains serials 490–510. This current event is source 059-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 059-engineering-change-impact-manager-operational-1. The supplied typed prior 059-prior-designdelta-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Inventory records show old fastener revision B and new revision C in bins B59 and C59. Engineering change EC59 applies revision C only to serials 500 and above; build order contains serials 490–510."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "059-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "059-prior-designdelta-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "059-engineering-change-impact-manager-operational-1",
+            "designId": "assembly-A59-revC",
+            "changedFunction": "fastener length shortened",
+            "changedInterface": "new fastener applies from serial 500",
+            "preservedRequirements": [
+              "joint load rating",
+              "assembly access"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 059-engineering-change-impact-manager-operational-1 against this factual event: Inventory records show old fastener revision B and new revision C in bins B59 and C59. Engineering change EC59 applies revision C only to serials 500 and above; build order contains serials 490–510. Original §9 detail: Old and new parts coexist in inventory: enforce configuration-specific selection rather than blanket replacement. Correct handling applies “enforce configuration-specific selection rather than blanket replacement.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Inventory records show old fastener revision B and new revision C in bins B59 and C59. Engineering change EC59 applies revision C only to serials 500 and above; build order contains serials 490–510.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "Old and new parts coexist in inventory: enforce configuration-specific selection rather than blanket replacement.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Inventory records show old fastener revision B and new revision C in bins B59 and C59. Engineering change EC59 applies revision C only to serials 500 and above; build order contains serials 490–510. It links source 059-operational-detail-1-source-v2 v2 with prior typed DesignDelta record 059-prior-designdelta-detail-1-v1 v1 and keeps unresolved scope visible for B59, C59, EC59.",
+      "durable_state": "The proposal retains prior record 059-prior-designdelta-detail-1-v1 v1 and versions only the affected state for B59, C59, EC59 against source 059-operational-detail-1-source-v2 v2; it applies “enforce configuration-specific selection rather than blanket replacement.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to B59, C59, EC59 and the scope supported by source 059-operational-detail-1-source-v2 v2; it represents “enforce configuration-specific selection rather than blanket replacement.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "059-engineering-change-impact-manager-operational-2",
+    "root": "runCase.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "input": {
+        "caseId": "059-engineering-change-impact-manager-operational-2",
+        "goal": "Review the Engineering change impact manager evidence for case 059-engineering-change-impact-manager-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "059-operational-detail-2-source-v2",
+            "source": "Engineering change impact manager operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R059 Engineering steward; event version verified for this case",
+            "observedAt": "2026-10-06T15:30:00Z",
+            "text": "R059 Engineering steward records: Supplier S59 shipped 240 revision-B fasteners on 2026-10-06 after the new drawing revision was issued. Receipt lot LOT59-B is at receiving; no disposition decision or usage reservation exists. This current event is source 059-operational-detail-2-source-v2 v2, observed 2026-10-06T15:30:00Z, for case 059-engineering-change-impact-manager-operational-2. The supplied typed prior 059-prior-designdelta-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Supplier S59 shipped 240 revision-B fasteners on 2026-10-06 after the new drawing revision was issued. Receipt lot LOT59-B is at receiving; no disposition decision or usage reservation exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "059-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "059-prior-designdelta-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "059-engineering-change-impact-manager-operational-2",
+            "designId": "assembly-A59-revC",
+            "changedFunction": "fastener length shortened",
+            "changedInterface": "new fastener applies from serial 500",
+            "preservedRequirements": [
+              "joint load rating",
+              "assembly access"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 059-engineering-change-impact-manager-operational-2 against this factual event: Supplier S59 shipped 240 revision-B fasteners on 2026-10-06 after the new drawing revision was issued. Receipt lot LOT59-B is at receiving; no disposition decision or usage reservation exists. Original §9 detail: A supplier has already shipped the old revision: decide disposition explicitly. Correct handling applies “decide disposition explicitly.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Supplier S59 shipped 240 revision-B fasteners on 2026-10-06 after the new drawing revision was issued. Receipt lot LOT59-B is at receiving; no disposition decision or usage reservation exists.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A supplier has already shipped the old revision: decide disposition explicitly.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Supplier S59 shipped 240 revision-B fasteners on 2026-10-06 after the new drawing revision was issued. Receipt lot LOT59-B is at receiving; no disposition decision or usage reservation exists. It links source 059-operational-detail-2-source-v2 v2 with prior typed DesignDelta record 059-prior-designdelta-detail-2-v1 v1 and keeps unresolved scope visible for S59, LOT59-B.",
+      "durable_state": "The proposal retains prior record 059-prior-designdelta-detail-2-v1 v1 and versions only the affected state for S59, LOT59-B against source 059-operational-detail-2-source-v2 v2; it applies “decide disposition explicitly.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to S59, LOT59-B and the scope supported by source 059-operational-detail-2-source-v2 v2; it represents “decide disposition explicitly.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "059-engineering-change-impact-manager-operational-3",
+    "root": "runCase.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "input": {
+        "caseId": "059-engineering-change-impact-manager-operational-3",
+        "goal": "Review the Engineering change impact manager evidence for case 059-engineering-change-impact-manager-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "059-operational-detail-3-source-v2",
+            "source": "Engineering change impact manager operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R059 Engineering steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R059 Engineering steward records: Fielded unit U59-44 has approved grandfather configuration rev B under waiver W59-3, valid through its next scheduled overhaul. Maintenance guidance still points to rev C as the blanket current part. This current event is source 059-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 059-engineering-change-impact-manager-operational-3. The supplied typed prior 059-prior-designdelta-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Fielded unit U59-44 has approved grandfather configuration rev B under waiver W59-3, valid through its next scheduled overhaul. Maintenance guidance still points to rev C as the blanket current part."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "059-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "059-prior-designdelta-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "059-engineering-change-impact-manager-operational-3",
+            "designId": "assembly-A59-revC",
+            "changedFunction": "fastener length shortened",
+            "changedInterface": "new fastener applies from serial 500",
+            "preservedRequirements": [
+              "joint load rating",
+              "assembly access"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 059-engineering-change-impact-manager-operational-3 against this factual event: Fielded unit U59-44 has approved grandfather configuration rev B under waiver W59-3, valid through its next scheduled overhaul. Maintenance guidance still points to rev C as the blanket current part. Original §9 detail: A fielded unit is grandfathered: preserve its approved configuration and maintenance guidance. Correct handling applies “preserve its approved configuration and maintenance guidance.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Fielded unit U59-44 has approved grandfather configuration rev B under waiver W59-3, valid through its next scheduled overhaul. Maintenance guidance still points to rev C as the blanket current part.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A fielded unit is grandfathered: preserve its approved configuration and maintenance guidance.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Fielded unit U59-44 has approved grandfather configuration rev B under waiver W59-3, valid through its next scheduled overhaul. Maintenance guidance still points to rev C as the blanket current part. It links source 059-operational-detail-3-source-v2 v2 with prior typed DesignDelta record 059-prior-designdelta-detail-3-v1 v1 and keeps unresolved scope visible for U59-44, W59-3.",
+      "durable_state": "The proposal retains prior record 059-prior-designdelta-detail-3-v1 v1 and versions only the affected state for U59-44, W59-3 against source 059-operational-detail-3-source-v2 v2; it applies “preserve its approved configuration and maintenance guidance.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to U59-44, W59-3 and the scope supported by source 059-operational-detail-3-source-v2 v2; it represents “preserve its approved configuration and maintenance guidance.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "059-engineering-change-impact-manager-operational-4",
+    "root": "runCase.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "input": {
+        "caseId": "059-engineering-change-impact-manager-operational-4",
+        "goal": "Review the Engineering change impact manager evidence for case 059-engineering-change-impact-manager-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "059-operational-detail-4-source-v2",
+            "source": "Engineering change impact manager operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R059 Engineering steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R059 Engineering steward records: Drawing D59 changes a reference number from 7A to 7B; geometry, material, fit and inspection note hashes are identical. Work orders still cite the old number and no physical change is recorded. This current event is source 059-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 059-engineering-change-impact-manager-operational-4. The supplied typed prior 059-prior-designdelta-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Drawing D59 changes a reference number from 7A to 7B; geometry, material, fit and inspection note hashes are identical. Work orders still cite the old number and no physical change is recorded."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "059-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "059-prior-designdelta-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "059-engineering-change-impact-manager-operational-4",
+            "designId": "assembly-A59-revC",
+            "changedFunction": "fastener length shortened",
+            "changedInterface": "new fastener applies from serial 500",
+            "preservedRequirements": [
+              "joint load rating",
+              "assembly access"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 059-engineering-change-impact-manager-operational-4 against this factual event: Drawing D59 changes a reference number from 7A to 7B; geometry, material, fit and inspection note hashes are identical. Work orders still cite the old number and no physical change is recorded. Original §9 detail: A drawing reference changes numbering only: avoid unnecessary operational churn. Correct handling applies “avoid unnecessary operational churn.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Drawing D59 changes a reference number from 7A to 7B; geometry, material, fit and inspection note hashes are identical. Work orders still cite the old number and no physical change is recorded.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A drawing reference changes numbering only: avoid unnecessary operational churn.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Drawing D59 changes a reference number from 7A to 7B; geometry, material, fit and inspection note hashes are identical. Work orders still cite the old number and no physical change is recorded. It links source 059-operational-detail-4-source-v2 v2 with prior typed DesignDelta record 059-prior-designdelta-detail-4-v1 v1 and keeps unresolved scope visible for D59.",
+      "durable_state": "The proposal retains prior record 059-prior-designdelta-detail-4-v1 v1 and versions only the affected state for D59 against source 059-operational-detail-4-source-v2 v2; it applies “avoid unnecessary operational churn.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D59 and the scope supported by source 059-operational-detail-4-source-v2 v2; it represents “avoid unnecessary operational churn.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "059-engineering-change-impact-manager-operational-5",
+    "root": "runCase.nl",
+    "split_group": "059-engineering-change-impact-manager",
+    "inputs": {
+      "input": {
+        "caseId": "059-engineering-change-impact-manager-operational-5",
+        "goal": "Review the Engineering change impact manager evidence for case 059-engineering-change-impact-manager-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "059-operational-detail-5-source-v2",
+            "source": "Engineering change impact manager operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R059 Engineering steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R059 Engineering steward records: Retrofit RF59 has completed 6 of 10 serials. Units 7–10 remain rev B while the line is paused for verification; dispatch list incorrectly marks all ten as rev C. This current event is source 059-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 059-engineering-change-impact-manager-operational-5. The supplied typed prior 059-prior-designdelta-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Retrofit RF59 has completed 6 of 10 serials. Units 7–10 remain rev B while the line is paused for verification; dispatch list incorrectly marks all ten as rev C."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "059-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "059-prior-designdelta-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "059-engineering-change-impact-manager-operational-5",
+            "designId": "assembly-A59-revC",
+            "changedFunction": "fastener length shortened",
+            "changedInterface": "new fastener applies from serial 500",
+            "preservedRequirements": [
+              "joint load rating",
+              "assembly access"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 059-engineering-change-impact-manager-operational-5 against this factual event: Retrofit RF59 has completed 6 of 10 serials. Units 7–10 remain rev B while the line is paused for verification; dispatch list incorrectly marks all ten as rev C. Original §9 detail: A retrofit is partially completed: track mixed-state constraints until verification. Correct handling applies “track mixed-state constraints until verification.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Retrofit RF59 has completed 6 of 10 serials. Units 7–10 remain rev B while the line is paused for verification; dispatch list incorrectly marks all ten as rev C.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A retrofit is partially completed: track mixed-state constraints until verification.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Retrofit RF59 has completed 6 of 10 serials. Units 7–10 remain rev B while the line is paused for verification; dispatch list incorrectly marks all ten as rev C. It links source 059-operational-detail-5-source-v2 v2 with prior typed DesignDelta record 059-prior-designdelta-detail-5-v1 v1 and keeps unresolved scope visible for RF59.",
+      "durable_state": "The proposal retains prior record 059-prior-designdelta-detail-5-v1 v1 and versions only the affected state for RF59 against source 059-operational-detail-5-source-v2 v2; it applies “track mixed-state constraints until verification.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to RF59 and the scope supported by source 059-operational-detail-5-source-v2 v2; it represents “track mixed-state constraints until verification.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

@@ -1360,3 +1360,38 @@ whitespace and embedded JSON. Run the same48 cases against the real teacher
 before adoption. The revision11 evidence is bound by SHA256
 `2ec8e1d08acf5053cc3755dec540e327af469a2f77b8801c676b4008f7cfb16f`
 at `/work/generation/qwen36-35b-teacher-20261022/typed-reader-single-header48-20261023-v2/result.json`.
+
+
+## 2026-10-25: one hundred design-brief native programs (source candidates)
+
+`codebases/design_briefs/` adds all 100 application programs from the supplied
+brief archive, with five domain stages per application, nested typed semantic
+procedures, and independent fixtures under
+`training/semantic_applications/design_briefs/`. Three Luna agents implemented
+source and constructed task worlds; they did not generate teacher responses.
+The original archive/brief hashes and implementation base revision are retained.
+All 500 original section-9 operational details have explicit workflow mappings
+and separate view, proposed-state, and proposed-effect assertions. These source
+contracts prevent stage descriptions from substituting for operational coverage.
+
+The corpus uses the current native compiler/loader and existing program/2,
+teacher-collector, and student-root whole-graph RL preparation paths. Exact
+first-stage gate counterfactuals are separate from workflows requiring an
+independent semantic judge. The whole-application split is 60 TRAIN, 20 development,
+and 20 locked evaluation. No protected existing held data was used as an authoring
+source. Static source/fixture checks and any scripted runtime checks are
+engineering evidence, not measured model task performance.
+
+Before production admission, execute the new program variants with the approved
+self-hosted teacher in its next authorized generation window, review full
+trajectories and every domain gate, diagnose systematic failures, and record
+actual checkpoint/tokenizer/runtime/actor identities and source-bound outcomes.
+Measure model-facing changes with the repository's approximately 48-sample
+qualification convention before adoption. Preserve each real sampled or forced
+producer and consumer occurrence in the complete graph; plain correct execution
+remains rewardable without a mandatory Neuralese edge.
+
+The prepared source retains `qualification: source-only-live-pending`; it is not
+an admitted production RL source or SFT corpus. Generation remains paused under
+the standing operational instructions. This PR performs source preparation only. No trajectories,
+optimizer updates, learner exposure, or capability lift are claimed by this PR.

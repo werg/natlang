@@ -1,0 +1,596 @@
+[
+  {
+    "id": "084-first-gate-pass",
+    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "split_group": "world-084-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+        "candidateIds": [
+          "084-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "084-first-e1",
+            "source": "primary case record TRN-84",
+            "version": "v1",
+            "text": "Primary domain record for case TRN-84 states: caseId=\"TRN-84\"; competencyId=\"COMP-84\"; scenarioFunction=\"Shift-change practice: conflicting transfer times appear in two records.\"; requiredDecision=\"Hold handoff until receiving team confirms medication list.\"; incidentalElements=[\"Blue clipboard\",\"Rain outside clinic\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "084-case-record",
+          "caseId": "TRN-84",
+          "sourceRefs": [
+            "084-first-e1"
+          ],
+          "state": "draft",
+          "kind": "TrainingMechanism",
+          "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "competencyId": "COMP-84",
+          "scenarioFunction": "Shift-change practice: conflicting transfer times appear in two records.",
+          "requiredDecision": "Hold handoff until receiving team confirms medication list.",
+          "incidentalElements": [
+            "Blue clipboard",
+            "Rain outside clinic"
+          ]
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "084-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "084-first-gate-fail",
+    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "split_group": "world-084-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+        "candidateIds": [
+          "084-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "084-first-e1",
+            "source": "primary case record TRN-84",
+            "version": "v1",
+            "text": "Primary domain record for case TRN-84 states: caseId=\"TRN-84\"; competencyId=\"COMP-84\"; scenarioFunction=\"Shift-change practice: conflicting transfer times appear in two records.\"; requiredDecision=\"Hold handoff until receiving team confirms medication list.\"; incidentalElements=[\"Blue clipboard\",\"Rain outside clinic\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "084-case-record",
+          "caseId": "TRN-84",
+          "sourceRefs": [
+            "084-first-e1"
+          ],
+          "state": "draft",
+          "kind": "TrainingMechanism",
+          "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "competencyId": "COMP-84",
+          "scenarioFunction": "Shift-change practice: conflicting transfer times appear in two records.",
+          "requiredDecision": "Transfer immediately without checking the medication list.",
+          "incidentalElements": [
+            "Blue clipboard",
+            "Rain outside clinic"
+          ]
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "084-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "084-first-gate-needs-review",
+    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "split_group": "world-084-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+        "candidateIds": [
+          "084-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "084-first-e1",
+            "source": "primary case record TRN-84",
+            "version": "v1",
+            "text": "Primary domain record for case TRN-84 states: caseId=\"TRN-84\"; competencyId=\"COMP-84\"; scenarioFunction=\"Shift-change practice: conflicting transfer times appear in two records.\"; incidentalElements=[\"Blue clipboard\",\"Rain outside clinic\"]. No current value is present for requiredDecision.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "requiredDecision"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "084-case-record",
+          "sourceRefs": [
+            "084-first-e1"
+          ],
+          "state": "draft",
+          "kind": "TrainingMechanism",
+          "subject": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "scenarioFunction": "Shift-change practice: conflicting transfer times appear in two records.",
+          "incidentalElements": [
+            "Blue clipboard",
+            "Rain outside clinic"
+          ],
+          "caseId": "TRN-84",
+          "competencyId": "COMP-84"
+        },
+        "missingFields": [
+          "requiredDecision"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "084-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "084-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-084-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "084-workflow-1-record",
+          "caseId": "084-workflow-1",
+          "sourceRefs": [
+            "084-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "TrainingAdaptation",
+          "subject": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "084-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "trainingProgramId": "TRN-84",
+          "audienceGuidanceId": "AUD-84",
+          "competencyIds": [
+            "HANDOFF-1"
+          ],
+          "reviewerId": "INSTR-4",
+          "targetContext": "Shift-change handoff at a community clinic."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "084-wf-1-source",
+          "source": "primary case artifact 084-E1",
+          "version": "v1",
+          "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "084-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "084-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "084-wf-1-source",
+          "source": "primary case artifact 084-E1",
+          "version": "v1",
+          "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Cross Cultural Training Adaptation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective. Use observation Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4. as the source of truth. The proposal should preserve source-linked record 084-workflow-1-record and make a recipient-facing distinction grounded in 084-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 084-workflow-1-record must accurately preserve observation 084-wf-1-source (v1): Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4. Apply brief requirement An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed TrainingAdaptation record 084-workflow-1-record and its source link to 084-wf-1-source version v1, with a disposition matching this observed state: Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4. Carry requirement An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 084-workflow-1-record based on 084-wf-1-source (v1) and observation Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4. Apply requirement An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "084-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-084-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "084-workflow-2-record",
+          "caseId": "084-workflow-2",
+          "sourceRefs": [
+            "084-event-2"
+          ],
+          "state": "draft",
+          "kind": "TrainingAdaptation",
+          "subject": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "084-event-2",
+            "sourceVersion": "v1"
+          },
+          "trainingProgramId": "TRN-84",
+          "audienceGuidanceId": "AUD-84",
+          "competencyIds": [
+            "HANDOFF-1"
+          ],
+          "reviewerId": "INSTR-4",
+          "targetContext": "Shift-change handoff at a community clinic."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "084-event-2",
+          "source": "current domain record 084-E2",
+          "version": "v1",
+          "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "084-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "084-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "084-event-2",
+          "source": "current domain record 084-E2",
+          "version": "v1",
+          "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Cross Cultural Training Adaptation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope. Use observation Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4. as the source of truth. The proposal should preserve source-linked record 084-workflow-2-record and make a recipient-facing distinction grounded in 084-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 084-workflow-2-record must accurately preserve observation 084-event-2 (v1): Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4. Apply brief requirement A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed TrainingAdaptation record 084-workflow-2-record and its source link to 084-event-2 version v1, with a disposition matching this observed state: Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4. Carry requirement A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 084-workflow-2-record based on 084-event-2 (v1) and observation Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4. Apply requirement A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "084-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-084-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "084-workflow-3-record",
+          "caseId": "084-workflow-3",
+          "sourceRefs": [
+            "084-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "TrainingAdaptation",
+          "subject": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "084-wf-3-source",
+            "sourceVersion": "v1"
+          },
+          "trainingProgramId": "TRN-84",
+          "audienceGuidanceId": "AUD-84",
+          "competencyIds": [
+            "HANDOFF-1"
+          ],
+          "reviewerId": "INSTR-4",
+          "targetContext": "Shift-change handoff at a community clinic."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "084-wf-3-source",
+          "source": "primary case artifact 084-E3",
+          "version": "v1",
+          "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "084-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "084-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "084-wf-3-source",
+          "source": "primary case artifact 084-E3",
+          "version": "v1",
+          "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Cross Cultural Training Adaptation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A scenario becomes easier after adaptation: restore the relevant decision complexity. Use observation Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff. as the source of truth. The proposal should preserve source-linked record 084-workflow-3-record and make a recipient-facing distinction grounded in 084-wf-3-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A scenario becomes easier after adaptation: restore the relevant decision complexity.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 084-workflow-3-record must accurately preserve observation 084-wf-3-source (v1): Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff. Apply brief requirement A scenario becomes easier after adaptation: restore the relevant decision complexity. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed TrainingAdaptation record 084-workflow-3-record and its source link to 084-wf-3-source version v1, with a disposition matching this observed state: Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff. Carry requirement A scenario becomes easier after adaptation: restore the relevant decision complexity. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 084-workflow-3-record based on 084-wf-3-source (v1) and observation Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff. Apply requirement A scenario becomes easier after adaptation: restore the relevant decision complexity. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "084-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-084-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "084-workflow-4-record",
+          "caseId": "084-workflow-4",
+          "sourceRefs": [
+            "084-event-4"
+          ],
+          "state": "draft",
+          "kind": "TrainingAdaptation",
+          "subject": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "084-event-4",
+            "sourceVersion": "v1"
+          },
+          "trainingProgramId": "TRN-84",
+          "audienceGuidanceId": "AUD-84",
+          "competencyIds": [
+            "HANDOFF-1"
+          ],
+          "reviewerId": "INSTR-4",
+          "targetContext": "Shift-change handoff at a community clinic."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "084-event-4",
+          "source": "current domain record 084-E4",
+          "version": "v1",
+          "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "084-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "084-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "084-event-4",
+          "source": "current domain record 084-E4",
+          "version": "v1",
+          "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Cross Cultural Training Adaptation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A local example could reinforce a stereotype: revise using supplied context rather than group generalization. Use observation Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead. as the source of truth. The proposal should preserve source-linked record 084-workflow-4-record and make a recipient-facing distinction grounded in 084-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A local example could reinforce a stereotype: revise using supplied context rather than group generalization.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 084-workflow-4-record must accurately preserve observation 084-event-4 (v1): Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead. Apply brief requirement A local example could reinforce a stereotype: revise using supplied context rather than group generalization. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed TrainingAdaptation record 084-workflow-4-record and its source link to 084-event-4 version v1, with a disposition matching this observed state: Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead. Carry requirement A local example could reinforce a stereotype: revise using supplied context rather than group generalization. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 084-workflow-4-record based on 084-event-4 (v1) and observation Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead. Apply requirement A local example could reinforce a stereotype: revise using supplied context rather than group generalization. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "084-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-084-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "084-workflow-5-record",
+          "caseId": "084-workflow-5",
+          "sourceRefs": [
+            "084-event-5"
+          ],
+          "state": "draft",
+          "kind": "TrainingAdaptation",
+          "subject": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+          "status": "candidate",
+          "evidenceIds": [
+            "084-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "084-event-5",
+            "sourceVersion": "v1"
+          },
+          "trainingProgramId": "TRN-84",
+          "audienceGuidanceId": "AUD-84",
+          "competencyIds": [
+            "HANDOFF-1"
+          ],
+          "reviewerId": "INSTR-4",
+          "targetContext": "Shift-change handoff at a community clinic."
+        }
+      ],
+      "evidence": [
+        {
+          "id": "084-event-5",
+          "source": "current domain record 084-E5",
+          "version": "v1",
+          "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "084-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "084-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "084-event-5",
+          "source": "current domain record 084-E5",
+          "version": "v1",
+          "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Cross Cultural Training Adaptation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: The source curriculum changes: revalidate affected adapted mechanisms. Use observation Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2. as the source of truth. The proposal should preserve source-linked record 084-workflow-5-record and make a recipient-facing distinction grounded in 084-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "The source curriculum changes: revalidate affected adapted mechanisms.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 084-workflow-5-record must accurately preserve observation 084-event-5 (v1): Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2. Apply brief requirement The source curriculum changes: revalidate affected adapted mechanisms. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed TrainingAdaptation record 084-workflow-5-record and its source link to 084-event-5 version v1, with a disposition matching this observed state: Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2. Carry requirement The source curriculum changes: revalidate affected adapted mechanisms. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 084-workflow-5-record based on 084-event-5 (v1) and observation Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2. Apply requirement The source curriculum changes: revalidate affected adapted mechanisms. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

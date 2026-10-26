@@ -1,0 +1,529 @@
+[
+  {
+    "id": "056-quality-escape-investigator-gate-supported",
+    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "productId": "valve-V56",
+          "lotId": "seal-batch-B17",
+          "symptom": "leak at valve seal",
+          "observedAt": "2026-10-01T09:30:00Z",
+          "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range",
+          "caseId": "case-56"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "inspectionContext",
+            "evidenceIds": [
+              "056-quality-escape-investigator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "returned valve genealogy and process checks",
+        "evidence": [
+          {
+            "id": "056-quality-escape-investigator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Valve V56 leaks at seal; lot genealogy ties 8 units to B17 with out-of-range cure temperature and 14 to B18. Case case-56; current first-stage record values: {\"inspectionContext\": \"lot genealogy ties 8 units to B17; cure temperature out of range\", \"lotId\": \"seal-batch-B17\", \"observedAt\": \"2026-10-01T09:30:00Z\", \"productId\": \"valve-V56\", \"symptom\": \"leak at valve seal\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Contain the traceable affected batch while preserving alternative causes for field conditions."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "inspectionContext",
+          "value": "lot genealogy ties 8 units to B17; cure temperature out of range",
+          "evidenceIds": [
+            "056-quality-escape-investigator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "returned valve genealogy and process checks: Returned valve V-56 leaks at the seal. Lot genealogy links 8 units to seal batch B-17 and 14 to batch B-18; only B-17 shows an out-of-range cure temperature. Apply the first-stage gate to the record and source versions; Contain the traceable affected batch while preserving alternative causes for field conditions.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "056-quality-escape-investigator-gate-contradictory",
+    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "productId": "valve-V56",
+          "lotId": "seal-batch-B18",
+          "symptom": "leak at valve seal",
+          "observedAt": "2026-10-01T09:30:00Z",
+          "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range",
+          "caseId": "case-56"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "inspectionContext",
+            "evidenceIds": [
+              "056-quality-escape-investigator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "returned valve genealogy and process checks",
+        "evidence": [
+          {
+            "id": "056-quality-escape-investigator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Valve V56 leaks at seal; lot genealogy ties 8 units to B17 with out-of-range cure temperature and 14 to B18. Case case-56; current first-stage record values: {\"inspectionContext\": \"lot genealogy ties 8 units to B17; cure temperature out of range\", \"lotId\": \"seal-batch-B17\", \"observedAt\": \"2026-10-01T09:30:00Z\", \"productId\": \"valve-V56\", \"symptom\": \"leak at valve seal\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Contain the traceable affected batch while preserving alternative causes for field conditions."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "lotId",
+          "value": "seal-batch-B18",
+          "evidenceIds": [
+            "056-quality-escape-investigator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "returned valve genealogy and process checks: Returned valve V-56 leaks at the seal. Lot genealogy links 8 units to seal batch B-17 and 14 to batch B-18; only B-17 shows an out-of-range cure temperature. Apply the first-stage gate to the record and source versions; Contain the traceable affected batch while preserving alternative causes for field conditions.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "056-quality-escape-investigator-gate-missing",
+    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-56"
+        },
+        "missingFields": [
+          "inspectionContext"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes inspectionContext?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "returned valve genealogy and process checks",
+        "evidence": [],
+        "missing": [
+          "inspectionContext"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Contain the traceable affected batch while preserving alternative causes for field conditions."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "returned valve genealogy and process checks: Returned valve V-56 leaks at the seal. Lot genealogy links 8 units to seal batch B-17 and 14 to batch B-18; only B-17 shows an out-of-range cure temperature. Apply the first-stage gate to the record and source versions; Contain the traceable affected batch while preserving alternative causes for field conditions.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "056-quality-escape-investigator-operational-1",
+    "root": "runCase.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "input": {
+        "caseId": "056-quality-escape-investigator-operational-1",
+        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-1; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "056-operational-detail-1-source-v2",
+            "source": "Quality escape investigator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R056 Quality steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R056 Quality steward records: Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history. This current event is source 056-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 056-quality-escape-investigator-operational-1. The supplied typed prior 056-prior-defectobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "056-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "056-prior-defectobservation-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-1",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 056-quality-escape-investigator-operational-1 against this factual event: Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history. Original §9 detail: A lot was reworked under a different process: preserve both histories in exposure tracing. Correct handling applies “preserve both histories in exposure tracing.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A lot was reworked under a different process: preserve both histories in exposure tracing.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history. It links source 056-operational-detail-1-source-v2 v2 with prior typed DefectObservation record 056-prior-defectobservation-detail-1-v1 v1 and keeps unresolved scope visible for B17, V56, PR56-R2, PR56-R1, R1, R2.",
+      "durable_state": "The proposal retains prior record 056-prior-defectobservation-detail-1-v1 v1 and versions only the affected state for B17, V56, PR56-R2, PR56-R1, R1, R2 against source 056-operational-detail-1-source-v2 v2; it applies “preserve both histories in exposure tracing.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to B17, V56, PR56-R2, PR56-R1, R1, R2 and the scope supported by source 056-operational-detail-1-source-v2 v2; it represents “preserve both histories in exposure tracing.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "056-quality-escape-investigator-operational-2",
+    "root": "runCase.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "input": {
+        "caseId": "056-quality-escape-investigator-operational-2",
+        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-2; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "056-operational-detail-2-source-v2",
+            "source": "Quality escape investigator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R056 Quality steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R056 Quality steward records: Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period. This current event is source 056-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 056-quality-escape-investigator-operational-2. The supplied typed prior 056-prior-defectobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "056-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "056-prior-defectobservation-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-2",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 056-quality-escape-investigator-operational-2 against this factual event: Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period. Original §9 detail: Inspection methods changed: avoid treating changed detection rates as changed defect rates. Correct handling applies “avoid treating changed detection rates as changed defect rates.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Inspection methods changed: avoid treating changed detection rates as changed defect rates.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period. It links source 056-operational-detail-2-source-v2 v2 with prior typed DefectObservation record 056-prior-defectobservation-detail-2-v1 v1 and keeps unresolved scope visible for IM56.",
+      "durable_state": "The proposal retains prior record 056-prior-defectobservation-detail-2-v1 v1 and versions only the affected state for IM56 against source 056-operational-detail-2-source-v2 v2; it applies “avoid treating changed detection rates as changed defect rates.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to IM56 and the scope supported by source 056-operational-detail-2-source-v2 v2; it represents “avoid treating changed detection rates as changed defect rates.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "056-quality-escape-investigator-operational-3",
+    "root": "runCase.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "input": {
+        "caseId": "056-quality-escape-investigator-operational-3",
+        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-3; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "056-operational-detail-3-source-v2",
+            "source": "Quality escape investigator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R056 Quality steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R056 Quality steward records: Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators. This current event is source 056-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 056-quality-escape-investigator-operational-3. The supplied typed prior 056-prior-defectobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "056-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "056-prior-defectobservation-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-3",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 056-quality-escape-investigator-operational-3 against this factual event: Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators. Original §9 detail: An operator is named in a report: do not infer blame from correlation. Correct handling applies “do not infer blame from correlation.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "An operator is named in a report: do not infer blame from correlation.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators. It links source 056-operational-detail-3-source-v2 v2 with prior typed DefectObservation record 056-prior-defectobservation-detail-3-v1 v1 and keeps unresolved scope visible for O56, B17.",
+      "durable_state": "The proposal retains prior record 056-prior-defectobservation-detail-3-v1 v1 and versions only the affected state for O56, B17 against source 056-operational-detail-3-source-v2 v2; it applies “do not infer blame from correlation.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O56, B17 and the scope supported by source 056-operational-detail-3-source-v2 v2; it represents “do not infer blame from correlation.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "056-quality-escape-investigator-operational-4",
+    "root": "runCase.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "input": {
+        "caseId": "056-quality-escape-investigator-operational-4",
+        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-4; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "056-operational-detail-4-source-v2",
+            "source": "Quality escape investigator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R056 Quality steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R056 Quality steward records: Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”. This current event is source 056-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 056-quality-escape-investigator-operational-4. The supplied typed prior 056-prior-defectobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "056-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "056-prior-defectobservation-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-4",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 056-quality-escape-investigator-operational-4 against this factual event: Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”. Original §9 detail: A hold is lifted for only part of a lot: maintain unit-level release scope. Correct handling applies “maintain unit-level release scope.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A hold is lifted for only part of a lot: maintain unit-level release scope.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”. It links source 056-operational-detail-4-source-v2 v2 with prior typed DefectObservation record 056-prior-defectobservation-detail-4-v1 v1 and keeps unresolved scope visible for H56, B17.",
+      "durable_state": "The proposal retains prior record 056-prior-defectobservation-detail-4-v1 v1 and versions only the affected state for H56, B17 against source 056-operational-detail-4-source-v2 v2; it applies “maintain unit-level release scope.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to H56, B17 and the scope supported by source 056-operational-detail-4-source-v2 v2; it represents “maintain unit-level release scope.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "056-quality-escape-investigator-operational-5",
+    "root": "runCase.nl",
+    "split_group": "056-quality-escape-investigator",
+    "inputs": {
+      "input": {
+        "caseId": "056-quality-escape-investigator-operational-5",
+        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-5; return a traceable proposal from the supplied records.",
+        "evidence": [
+          {
+            "id": "056-operational-detail-5-source-v2",
+            "source": "Quality escape investigator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R056 Quality steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R056 Quality steward records: Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim. This current event is source 056-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 056-quality-escape-investigator-operational-5. The supplied typed prior 056-prior-defectobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "056-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "domainRecords": {
+          "firstStage": {
+            "id": "056-prior-defectobservation-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-5",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 056-quality-escape-investigator-operational-5 against this factual event: Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim. Original §9 detail: A defect recurs after closure: reopen the causal claim and effectiveness test. Correct handling applies “reopen the causal claim and effectiveness test.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A defect recurs after closure: reopen the causal claim and effectiveness test.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim. It links source 056-operational-detail-5-source-v2 v2 with prior typed DefectObservation record 056-prior-defectobservation-detail-5-v1 v1 and keeps unresolved scope visible for V56, CA56-4, R56-9.",
+      "durable_state": "The proposal retains prior record 056-prior-defectobservation-detail-5-v1 v1 and versions only the affected state for V56, CA56-4, R56-9 against source 056-operational-detail-5-source-v2 v2; it applies “reopen the causal claim and effectiveness test.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to V56, CA56-4, R56-9 and the scope supported by source 056-operational-detail-5-source-v2 v2; it represents “reopen the causal claim and effectiveness test.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

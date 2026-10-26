@@ -1,0 +1,590 @@
+[
+  {
+    "id": "082-first-gate-pass",
+    "root": "runCase/recoverMeaning/audit/qualify.nl",
+    "split_group": "world-082-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+        "candidateIds": [
+          "082-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "082-first-e1",
+            "source": "primary case record PLAIN-82",
+            "version": "v1",
+            "text": "Primary domain record for case PLAIN-82 states: caseId=\"PLAIN-82\"; proposition=\"Permit remains valid only while annual inspection is current.\"; modality=\"conditional obligation\"; condition=\"Inspection completed by June 30.\"; exception=\"30-day extension applies only when inspector cancels.\"; sourceSpan=\"POL-82 §4, lines 12–16\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "082-case-record",
+          "caseId": "PLAIN-82",
+          "sourceRefs": [
+            "082-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MeaningUnit",
+          "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "proposition": "Permit remains valid only while annual inspection is current.",
+          "modality": "conditional obligation",
+          "condition": "Inspection completed by June 30.",
+          "exception": "30-day extension applies only when inspector cancels.",
+          "sourceSpan": "POL-82 §4, lines 12–16"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "082-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "082-first-gate-fail",
+    "root": "runCase/recoverMeaning/audit/qualify.nl",
+    "split_group": "world-082-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+        "candidateIds": [
+          "082-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "082-first-e1",
+            "source": "primary case record PLAIN-82",
+            "version": "v1",
+            "text": "Primary domain record for case PLAIN-82 states: caseId=\"PLAIN-82\"; proposition=\"Permit remains valid only while annual inspection is current.\"; modality=\"conditional obligation\"; condition=\"Inspection completed by June 30.\"; exception=\"30-day extension applies only when inspector cancels.\"; sourceSpan=\"POL-82 §4, lines 12–16\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "082-case-record",
+          "caseId": "PLAIN-82",
+          "sourceRefs": [
+            "082-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MeaningUnit",
+          "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "proposition": "Permit remains valid only while annual inspection is current.",
+          "modality": "unconditional guarantee of permit validity.",
+          "condition": "Inspection completed by June 30.",
+          "exception": "30-day extension applies only when inspector cancels.",
+          "sourceSpan": "POL-82 §4, lines 12–16"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "082-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "082-first-gate-needs-review",
+    "root": "runCase/recoverMeaning/audit/qualify.nl",
+    "split_group": "world-082-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+        "candidateIds": [
+          "082-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "082-first-e1",
+            "source": "primary case record PLAIN-82",
+            "version": "v1",
+            "text": "Primary domain record for case PLAIN-82 states: caseId=\"PLAIN-82\"; proposition=\"Permit remains valid only while annual inspection is current.\"; condition=\"Inspection completed by June 30.\"; exception=\"30-day extension applies only when inspector cancels.\"; sourceSpan=\"POL-82 §4, lines 12–16\". No current value is present for modality.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "modality"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "082-case-record",
+          "sourceRefs": [
+            "082-first-e1"
+          ],
+          "state": "draft",
+          "kind": "MeaningUnit",
+          "subject": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "condition": "Inspection completed by June 30.",
+          "exception": "30-day extension applies only when inspector cancels.",
+          "sourceSpan": "POL-82 §4, lines 12–16",
+          "caseId": "PLAIN-82",
+          "proposition": "Permit remains valid only while annual inspection is current."
+        },
+        "missingFields": [
+          "modality"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "082-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "082-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-082-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Plain Language Transformation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "082-workflow-1-record",
+          "caseId": "082-workflow-1",
+          "sourceRefs": [
+            "082-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "PlainLanguageProject",
+          "subject": "Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "082-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "documentIds": [
+            "POL-82"
+          ],
+          "audienceDescription": "Permit applicants reading on mobile.",
+          "purpose": "Explain inspection and extension conditions faithfully.",
+          "reviewerId": "REV-2",
+          "fidelityPolicyId": "FIDELITY-82"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "082-wf-1-source",
+          "source": "primary case artifact 082-E1",
+          "version": "v1",
+          "text": "Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "082-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "082-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "082-wf-1-source",
+          "source": "primary case artifact 082-E1",
+          "version": "v1",
+          "text": "Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Plain Language Transformation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A summary removes a crucial unless clause: block release through a boundary-case test. Use observation Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels. as the source of truth. The proposal should preserve source-linked record 082-workflow-1-record and make a recipient-facing distinction grounded in 082-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A summary removes a crucial unless clause: block release through a boundary-case test.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 082-workflow-1-record must accurately preserve observation 082-wf-1-source (v1): Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels. Apply brief requirement A summary removes a crucial unless clause: block release through a boundary-case test. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed PlainLanguageProject record 082-workflow-1-record and its source link to 082-wf-1-source version v1, with a disposition matching this observed state: Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels. Carry requirement A summary removes a crucial unless clause: block release through a boundary-case test. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 082-workflow-1-record based on 082-wf-1-source (v1) and observation Policy POL-82 says permit remains valid only if annual inspection is current by June 30; 30-day extension applies only when inspector cancels. Apply requirement A summary removes a crucial unless clause: block release through a boundary-case test. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "082-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-082-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Plain Language Transformation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "082-workflow-2-record",
+          "caseId": "082-workflow-2",
+          "sourceRefs": [
+            "082-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "PlainLanguageProject",
+          "subject": "Draft summary omits “only if” and states that all permits remain valid through July. The source clause excludes missed inspections.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "082-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "documentIds": [
+            "POL-82"
+          ],
+          "audienceDescription": "Permit applicants reading on mobile.",
+          "purpose": "Explain inspection and extension conditions faithfully.",
+          "reviewerId": "REV-2",
+          "fidelityPolicyId": "FIDELITY-82"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "082-wf-2-source",
+          "source": "primary case artifact 082-E2",
+          "version": "v1",
+          "text": "Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "082-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "082-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "082-wf-2-source",
+          "source": "primary case artifact 082-E2",
+          "version": "v1",
+          "text": "Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Plain Language Transformation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: An example sounds like a new rule: label and revise it to preserve scope. Use observation Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation. as source of truth. Preserve source-linked record 082-workflow-2-record and make the distinct exception/continuity condition explicit in the recipient view and proposed durable state; keep any effect pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "An example sounds like a new rule: label and revise it to preserve scope.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 082-workflow-2-record must distinguish the relevant condition in 082-wf-2-source (v1): Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation. Apply detail An example sounds like a new rule: label and revise it to preserve scope. without turning its example or conflicting draft into a new rule.",
+      "durable_state": "Durable-state proposal must retain typed PlainLanguageProject record 082-workflow-2-record, source 082-wf-2-source version v1, and the evidenced condition: Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation. Carry An example sounds like a new rule: label and revise it to preserve scope. as a source-linked proposed disposition; do not claim persistence.",
+      "effects": "Effect ledger may propose only a follow-up grounded in 082-wf-2-source (v1) for 082-workflow-2-record: Example EX-82 in draft v2 says “If an inspector cancels, the permit holder receives a 30-day extension.” Readers in test R-82 quote the example as a general extension rule; source policy POL-82 limits the exception to inspector cancellation. Apply An example sounds like a new rule: label and revise it to preserve scope. while keeping external action pending host authorization and receipt; report no completed effect."
+    }
+  },
+  {
+    "id": "082-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-082-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Plain Language Transformation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "082-workflow-3-record",
+          "caseId": "082-workflow-3",
+          "sourceRefs": [
+            "082-event-3"
+          ],
+          "state": "draft",
+          "kind": "PlainLanguageProject",
+          "subject": "Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "082-event-3",
+            "sourceVersion": "v1"
+          },
+          "documentIds": [
+            "POL-82"
+          ],
+          "audienceDescription": "Permit applicants reading on mobile.",
+          "purpose": "Explain inspection and extension conditions faithfully.",
+          "reviewerId": "REV-2",
+          "fidelityPolicyId": "FIDELITY-82"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "082-event-3",
+          "source": "current domain record 082-E3",
+          "version": "v1",
+          "text": "Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "082-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "082-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "082-event-3",
+          "source": "current domain record 082-E3",
+          "version": "v1",
+          "text": "Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Plain Language Transformation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A technical term has no safe plain synonym: retain it with an explanation. Use observation Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained. as the source of truth. The proposal should preserve source-linked record 082-workflow-3-record and make a recipient-facing distinction grounded in 082-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A technical term has no safe plain synonym: retain it with an explanation.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 082-workflow-3-record must accurately preserve observation 082-event-3 (v1): Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained. Apply brief requirement A technical term has no safe plain synonym: retain it with an explanation. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed PlainLanguageProject record 082-workflow-3-record and its source link to 082-event-3 version v1, with a disposition matching this observed state: Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained. Carry requirement A technical term has no safe plain synonym: retain it with an explanation. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 082-workflow-3-record based on 082-event-3 (v1) and observation Source policy POL-82 uses the technical term “abatement” for a permit reduction after inspection. Legal reviewer says no safe plain-language synonym preserves the legal meaning; glossary entry G-82 defines it, but the current summary leaves it unexplained. Apply requirement A technical term has no safe plain synonym: retain it with an explanation. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "082-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-082-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Plain Language Transformation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "082-workflow-4-record",
+          "caseId": "082-workflow-4",
+          "sourceRefs": [
+            "082-event-4"
+          ],
+          "state": "draft",
+          "kind": "PlainLanguageProject",
+          "subject": "Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "082-event-4",
+            "sourceVersion": "v1"
+          },
+          "documentIds": [
+            "POL-82"
+          ],
+          "audienceDescription": "Permit applicants reading on mobile.",
+          "purpose": "Explain inspection and extension conditions faithfully.",
+          "reviewerId": "REV-2",
+          "fidelityPolicyId": "FIDELITY-82"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "082-event-4",
+          "source": "current domain record 082-E4",
+          "version": "v1",
+          "text": "Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "082-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "082-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "082-event-4",
+          "source": "current domain record 082-E4",
+          "version": "v1",
+          "text": "Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Plain Language Transformation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: The source changes after review: invalidate only affected meaning units and approvals. Use observation Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash. as the source of truth. The proposal should preserve source-linked record 082-workflow-4-record and make a recipient-facing distinction grounded in 082-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "The source changes after review: invalidate only affected meaning units and approvals.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 082-workflow-4-record must accurately preserve observation 082-event-4 (v1): Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash. Apply brief requirement The source changes after review: invalidate only affected meaning units and approvals. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed PlainLanguageProject record 082-workflow-4-record and its source link to 082-event-4 version v1, with a disposition matching this observed state: Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash. Carry requirement The source changes after review: invalidate only affected meaning units and approvals. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 082-workflow-4-record based on 082-event-4 (v1) and observation Source clause v5 was approved after review. Revision v6 changes the eligibility sentence and its punctuation on 2026-10-25; approval A-82 is linked to meaning unit MU-4, while all other source units retain the same text hash. Apply requirement The source changes after review: invalidate only affected meaning units and approvals. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "082-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-082-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Plain Language Transformation Studio proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "082-workflow-5-record",
+          "caseId": "082-workflow-5",
+          "sourceRefs": [
+            "082-event-5"
+          ],
+          "state": "draft",
+          "kind": "PlainLanguageProject",
+          "subject": "Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections.",
+          "status": "candidate",
+          "evidenceIds": [
+            "082-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "082-event-5",
+            "sourceVersion": "v1"
+          },
+          "documentIds": [
+            "POL-82"
+          ],
+          "audienceDescription": "Permit applicants reading on mobile.",
+          "purpose": "Explain inspection and extension conditions faithfully.",
+          "reviewerId": "REV-2",
+          "fidelityPolicyId": "FIDELITY-82"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "082-event-5",
+          "source": "current domain record 082-E5",
+          "version": "v1",
+          "text": "Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "082-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "082-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "082-event-5",
+          "source": "current domain record 082-E5",
+          "version": "v1",
+          "text": "Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Plain Language Transformation Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: Readers use assistive technology: verify headings, reading order, and link descriptions. Use observation Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections. as the source of truth. The proposal should preserve source-linked record 082-workflow-5-record and make a recipient-facing distinction grounded in 082-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "Readers use assistive technology: verify headings, reading order, and link descriptions.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 082-workflow-5-record must accurately preserve observation 082-event-5 (v1): Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections. Apply brief requirement Readers use assistive technology: verify headings, reading order, and link descriptions. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed PlainLanguageProject record 082-workflow-5-record and its source link to 082-event-5 version v1, with a disposition matching this observed state: Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections. Carry requirement Readers use assistive technology: verify headings, reading order, and link descriptions. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 082-workflow-5-record based on 082-event-5 (v1) and observation Screen-reader QA for page P-82 finds headings jump from level 2 to level 4, reading order places the exception after the application link, and link text says only “click here.” Test profile SR-3 and review file v2 identify the affected sections. Apply requirement Readers use assistive technology: verify headings, reading order, and link descriptions. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

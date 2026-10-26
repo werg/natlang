@@ -1,0 +1,49 @@
+{
+  "application_id": "030",
+  "title": "Disclosure and redaction review workspace",
+  "source_relative_path": "applications/06-contracts-policies-and-information-governance/030-disclosure-and-redaction-review-workspace.md",
+  "program_root": "codebases/design_briefs/030-disclosure-and-redaction-review-workspace",
+  "source_sha256": "3872e912794b5083a82d243790b1ecbd3fe228643f71cb98b445c945b8a8101d",
+  "domain_id": "06",
+  "stages": [
+    {
+      "name": "interpretScope",
+      "output_type": "DisclosureScope",
+      "algorithm": "Read the request, authorization, and supplied disclosure policy together. Determine recipient, purpose, relevant time span, and permitted material; flag conflicting instructions rather than treating the broadest request as sufficient authority.",
+      "gate": "Scope and recipient authority are established before document access or export."
+    },
+    {
+      "name": "selectMaterial",
+      "output_type": "DisclosureSelection",
+      "algorithm": "Identify responsive content at passage level, retaining enough context for accurate interpretation. Separate nonresponsive material from restricted responsive material so reviewers can see whether an omission is about relevance or permission.",
+      "gate": "No whole-document inclusion merely because one passage is relevant."
+    },
+    {
+      "name": "proposeRedactions",
+      "output_type": "RedactionProposal",
+      "algorithm": "Apply supplied rules to personal, confidential, privileged, or third-party material. Propose the smallest redaction that protects the restricted information while preserving the permitted claim; identify cases requiring qualified interpretation rather than making final legal judgments.",
+      "gate": "Each redaction has a rule and precise span; over-redaction is evaluated separately from leakage."
+    },
+    {
+      "name": "inspectComposition",
+      "output_type": "DisclosureRisk",
+      "algorithm": "Review the proposed bundle for information revealed by combining otherwise permissible fragments, filenames, metadata, and repeated identifiers. Distinguish plausible reconstruction from speculative risk and propose targeted changes for reviewer approval.",
+      "gate": "Bundle-level checks include metadata and cross-document references, not text alone."
+    },
+    {
+      "name": "renderAndRelease",
+      "output_type": "DisclosureManifest",
+      "algorithm": "Render irreversible redactions through a trusted host service, inspect extracted text and metadata, and assemble a manifest. Bind approval and delivery to the exact recipient and artifact hashes, retaining a controlled review copy and disclosure receipt.",
+      "gate": "No recoverable redacted text, hidden layers, or wrong-recipient delivery."
+    }
+  ],
+  "operational_details": [
+    "A PDF contains hidden OCR text: sanitize all text layers and verify extraction after rendering.",
+    "A filename contains a restricted identity: rename the export and remove embedded metadata.",
+    "A recipient changes after approval: invalidate delivery authorization.",
+    "A redaction removes a necessary qualifier: revise the surrounding permitted text without inventing meaning.",
+    "A disclosure is challenged: retain an auditable mapping from released artifacts to reviewed source spans."
+  ],
+  "representative_episode": "Several documents separately reveal role, date, and location that jointly identify a protected third party despite name redaction.",
+  "independent_truth_basis": "Synthetic disclosure policies, hidden restricted facts, span-level permitted content, and exact post-render extraction tests."
+}

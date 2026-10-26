@@ -1,0 +1,49 @@
+{
+  "application_id": "001",
+  "title": "Decision-dependency ledger",
+  "source_relative_path": "applications/01-organizational-knowledge-and-institutional-memory/001-decision-dependency-ledger.md",
+  "program_root": "codebases/design_briefs/001-decision-dependency-ledger",
+  "source_sha256": "5a2770d0b379fcfa81b85ad9e7b3226d45846de368286bf23dd3658984bf014c",
+  "domain_id": "01",
+  "stages": [
+    {
+      "name": "extractDecisions",
+      "output_type": "DecisionAssertion",
+      "algorithm": "Segment meetings at topic boundaries; distinguish a suggestion, assent, and an authorized resolution. Link explicit objections and preserve the speaker rather than attributing a collective decision from an unchallenged statement.",
+      "gate": "No accepted resolution without attributable acceptance and scope evidence."
+    },
+    {
+      "name": "bindAssumptions",
+      "output_type": "AssumptionBinding",
+      "algorithm": "For each decision ask what would have to change to make reconsideration necessary. Separate essential premises from background rationale; emit a directed dependency with a counterfactual explanation and a passage establishing the connection.",
+      "gate": "Every edge has source support; inferred edges remain proposals until owner review."
+    },
+    {
+      "name": "assessChange",
+      "output_type": "ChangeImpact",
+      "algorithm": "Compare old and new assertions under their dates, scope, and authority. Determine which premise is actually invalidated and retain the part of the decision whose conditions still hold; never treat a synonym edit as a substantive reversal.",
+      "gate": "Exact interval overlap plus semantic premise contradiction, not keyword overlap alone."
+    },
+    {
+      "name": "planReconsideration",
+      "output_type": "ReviewPlan",
+      "algorithm": "Traverse only necessary dependencies first, then inspect supporting edges for materiality. Group reviews sharing an unresolved premise, formulate a decision-ready question, and avoid automatically cancelling downstream work that remains independently justified.",
+      "gate": "No dependency cycle silently flattened; each affected owner receives one deduplicated task."
+    },
+    {
+      "name": "recordResolution",
+      "output_type": "ResolutionDelta",
+      "algorithm": "Reconcile owner responses against the pending question and current evidence version. Distinguish approval of wording from approval of the decision; append the adopted resolution and invalidate only consumers of the replaced version.",
+      "gate": "Signed owner authority and expected version must match before commit."
+    }
+  ],
+  "operational_details": [
+    "A decision owner leaves: retain the historical author and route new reviews through an explicit successor assignment.",
+    "A private source supports a public decision: expose a restricted-evidence marker, never a revealing excerpt.",
+    "Two reviews finish concurrently: reject the stale resolution and show the intervening change rather than overwriting.",
+    "A renamed project receives copied notes: keep identity mapping separate from evidence independence.",
+    "A meeting correction arrives late: retain both recorded and effective dates and reopen only the affected interval."
+  ],
+  "representative_episode": "A launch depends on a supplier certification; an amendment invalidates only the European scope while an unrelated pricing note changes.",
+  "independent_truth_basis": "Hidden premise graph, authority assignments, scoped change events, and exact expected reopen set; human review for inferred necessity."
+}

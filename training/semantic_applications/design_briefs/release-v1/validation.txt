@@ -1,0 +1,59 @@
+Release validation evidence
+Recorded 2026-10-26; no model execution.
+
+UNIT TESTS
+Command: node ts-host/scripts/design-briefs/check.test.mjs
+✔ the declared split holds entire application families out in all twenty domains (2.685232ms)
+✔ native input and expected-result contracts reject invented or incomplete fixture shapes (23.241595ms)
+✔ domain contracts reject erased enums, missing fields, and floating money amounts (8.509056ms)
+✔ a sibling mentioned in prose must be moved into actual native callable scope (3.487546ms)
+✔ existing exact scorer rewards only the finite answer; judged workflow never auto-passes (0.901574ms)
+✔ source snapshots exclude oracle files, generated declarations and symlink escapes (19.46907ms)
+✔ record identity and source hash are deterministic; expected answers stay outside visible source and inputs (4.891183ms)
+✔ packet validation detects content tampering and unlisted path traversal (5.982502ms)
+✔ only native oracle declarations are accepted (0.332138ms)
+✔ original use cases cannot be replaced by stage descriptions or duplicate workflows (1.011048ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 77.422261
+
+QUICK GATE
+Command: scripts/check-main.sh --quick
+Base: 2d14506aa343e3a7b8993a0f6b645fae8dec0243
+workspace dependency overlay unchanged
+=== source-review-manifest: python3 scripts/source_review.py verify
+{"manifest": "/workspace/scratch/da784dea17f2/natlang/training/corpus-manifests/source-reviews-20261015-v36.json", "sha256": "8d15b6e0ce4cd533b85ea2b8f537aa1d747aff3180a5fc030f0d73d175e31d56", "current": true}
+=== python-ratchets: env HF_HOME=/workspace/scratch/da784dea17f2/natlang/.local/design-brief-tmp/tmp.ndNfT9KkwZ python -m pytest -q -p no:cacheprovider tests/test_machine_paths_ratchet.py tests/test_duplicate_helpers_ratchet.py tests/test_check_spec_links.py tests/neuralese/test_line_parity.py
+............                                                             [100%]
+12 passed in 3.12s
+=== ts-check: sh -c cd ts-host && npm run --silent check
+=== summary (2d14506aa)
+source-review-manifest ok              0s
+python-ratchets        ok              8s
+ts-check               ok             20s
+
+EARLIER FULL GATE (NOT GREEN)
+Command: scripts/check-main.sh
+Base: 1b6b4102cf338f6eae6a449e93f17b8e91f48b2d
+=== summary (1b6b410)
+source-review-manifest ok              0s
+ts-build-node          ok             15s
+python-tests           FAILED (1)    279s
+python-neuralese       FAILED (2)     20s
+python-neuralese-gpu   FAILED (2)     11s
+ts-build-browser       ok              0s
+ts-build-apps          FAILED (1)      1s
+ts-browser-types       ok              2s
+ts-layering            ok              1s
+ts-tests               FAILED (1)   1176s
+ts-conformance         ok              3s
+
+= 87 failed, 2508 passed, 63 skipped, 54 errors, 6 subtests passed in 275.15s (0:04:35) =
+Conformance: {"passed":22,"failed":0,"skipped":0}
+
+Observed restrictions include unavailable /proc, Triton/GPU dependencies, child process capture/EPERM, and historical objects absent from the then-shallow checkout. These observations do not establish that every failure is a baseline failure. The full gate must be rerun on the merge candidate in the repository environment before merge.

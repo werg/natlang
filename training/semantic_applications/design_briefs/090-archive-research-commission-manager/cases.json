@@ -1,0 +1,611 @@
+[
+  {
+    "id": "090-first-gate-pass",
+    "root": "runCase/frameCommission/audit/qualify.nl",
+    "split_group": "world-090-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+        "candidateIds": [
+          "090-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "090-first-e1",
+            "source": "primary case record COMM-90",
+            "version": "v1",
+            "text": "Primary domain record for case COMM-90 states: caseId=\"COMM-90\"; subquestions=[\"Which two catalogues index the 1912 correspondence?\",\"Does the cited letter mention flood relief committee?\"]; intendedDeliverable=\"Cited memo limited to catalogue and letter evidence.\"; excludedClaims=[\"Do not infer private motives.\",\"Do not claim correspondence is complete.\"]; stoppingRule=\"Check two catalogues and cited letter; report unavailable holdings.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "090-case-record",
+          "caseId": "COMM-90",
+          "sourceRefs": [
+            "090-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ResearchCommissionScope",
+          "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "subquestions": [
+            "Which two catalogues index the 1912 correspondence?",
+            "Does the cited letter mention flood relief committee?"
+          ],
+          "intendedDeliverable": "Cited memo limited to catalogue and letter evidence.",
+          "excludedClaims": [
+            "Do not infer private motives.",
+            "Do not claim correspondence is complete."
+          ],
+          "stoppingRule": "Check two catalogues and cited letter; report unavailable holdings."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "090-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "090-first-gate-fail",
+    "root": "runCase/frameCommission/audit/qualify.nl",
+    "split_group": "world-090-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+        "candidateIds": [
+          "090-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "090-first-e1",
+            "source": "primary case record COMM-90",
+            "version": "v1",
+            "text": "Primary domain record for case COMM-90 states: caseId=\"COMM-90\"; subquestions=[\"Which two catalogues index the 1912 correspondence?\",\"Does the cited letter mention flood relief committee?\"]; intendedDeliverable=\"Cited memo limited to catalogue and letter evidence.\"; excludedClaims=[\"Do not infer private motives.\",\"Do not claim correspondence is complete.\"]; stoppingRule=\"Check two catalogues and cited letter; report unavailable holdings.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "090-case-record",
+          "caseId": "COMM-90",
+          "sourceRefs": [
+            "090-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ResearchCommissionScope",
+          "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "subquestions": [
+            "Which two catalogues index the 1912 correspondence?",
+            "Does the cited letter mention flood relief committee?"
+          ],
+          "intendedDeliverable": "Cited memo limited to catalogue and letter evidence.",
+          "excludedClaims": [
+            "The correspondence is complete and proves private motive."
+          ],
+          "stoppingRule": "Check two catalogues and cited letter; report unavailable holdings."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "090-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "090-first-gate-needs-review",
+    "root": "runCase/frameCommission/audit/qualify.nl",
+    "split_group": "world-090-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+        "candidateIds": [
+          "090-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "090-first-e1",
+            "source": "primary case record COMM-90",
+            "version": "v1",
+            "text": "Primary domain record for case COMM-90 states: caseId=\"COMM-90\"; subquestions=[\"Which two catalogues index the 1912 correspondence?\",\"Does the cited letter mention flood relief committee?\"]; intendedDeliverable=\"Cited memo limited to catalogue and letter evidence.\"; stoppingRule=\"Check two catalogues and cited letter; report unavailable holdings.\". No current value is present for excludedClaims.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "excludedClaims"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "090-case-record",
+          "sourceRefs": [
+            "090-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ResearchCommissionScope",
+          "subject": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "intendedDeliverable": "Cited memo limited to catalogue and letter evidence.",
+          "stoppingRule": "Check two catalogues and cited letter; report unavailable holdings.",
+          "caseId": "COMM-90",
+          "subquestions": [
+            "Which two catalogues index the 1912 correspondence?",
+            "Does the cited letter mention flood relief committee?"
+          ]
+        },
+        "missingFields": [
+          "excludedClaims"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "090-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "090-workflow-1",
+    "root": "runCase.nl",
+    "split_group": "world-090-workflow-1",
+    "inputs": {
+      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "090-workflow-1-record",
+          "caseId": "090-workflow-1",
+          "sourceRefs": [
+            "090-event-1"
+          ],
+          "state": "draft",
+          "kind": "ArchiveCommission",
+          "subject": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "090-event-1",
+            "sourceVersion": "v1"
+          },
+          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+          "requesterId": "REQ-90",
+          "collectionIds": [
+            "CAT-A",
+            "CAT-B",
+            "BOX-18"
+          ],
+          "researcherId": "RES-90",
+          "effortBudget": 6
+        }
+      ],
+      "evidence": [
+        {
+          "id": "090-event-1",
+          "source": "current domain record 090-E1",
+          "version": "v1",
+          "text": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "090-workflow-1-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "090-workflow-1-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "090-event-1",
+          "source": "current domain record 090-E1",
+          "version": "v1",
+          "text": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Archive Research Commission Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A catalog entry points to missing material: record the lead and absence without inventing contents. Use observation Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available. as the source of truth. The proposal should preserve source-linked record 090-workflow-1-record and make a recipient-facing distinction grounded in 090-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 090-workflow-1-record must accurately preserve observation 090-event-1 (v1): Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available. Apply brief requirement A catalog entry points to missing material: record the lead and absence without inventing contents. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ArchiveCommission record 090-workflow-1-record and its source link to 090-event-1 version v1, with a disposition matching this observed state: Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available. Carry requirement A catalog entry points to missing material: record the lead and absence without inventing contents. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 090-workflow-1-record based on 090-event-1 (v1) and observation Catalogue A card C-90 cites box 18 for the 1912 flood-relief correspondence. Repository inventory v6 marks box 18 missing after the 2024 move; no contents list or substitute scan is available. Apply requirement A catalog entry points to missing material: record the lead and absence without inventing contents. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "090-workflow-2",
+    "root": "runCase.nl",
+    "split_group": "world-090-workflow-2",
+    "inputs": {
+      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "090-workflow-2-record",
+          "caseId": "090-workflow-2",
+          "sourceRefs": [
+            "090-event-2"
+          ],
+          "state": "draft",
+          "kind": "ArchiveCommission",
+          "subject": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "090-event-2",
+            "sourceVersion": "v1"
+          },
+          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+          "requesterId": "REQ-90",
+          "collectionIds": [
+            "CAT-A",
+            "CAT-B",
+            "BOX-18"
+          ],
+          "researcherId": "RES-90",
+          "effortBudget": 6
+        }
+      ],
+      "evidence": [
+        {
+          "id": "090-event-2",
+          "source": "current domain record 090-E2",
+          "version": "v1",
+          "text": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "090-workflow-2-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "090-workflow-2-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "090-event-2",
+          "source": "current domain record 090-E2",
+          "version": "v1",
+          "text": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Archive Research Commission Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A collection is temporarily closed: preserve the coverage limitation. Use observation Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure. as the source of truth. The proposal should preserve source-linked record 090-workflow-2-record and make a recipient-facing distinction grounded in 090-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A collection is temporarily closed: preserve the coverage limitation.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 090-workflow-2-record must accurately preserve observation 090-event-2 (v1): Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure. Apply brief requirement A collection is temporarily closed: preserve the coverage limitation. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ArchiveCommission record 090-workflow-2-record and its source link to 090-event-2 version v1, with a disposition matching this observed state: Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure. Carry requirement A collection is temporarily closed: preserve the coverage limitation. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 090-workflow-2-record based on 090-event-2 (v1) and observation Repository notice N-90 closes Collection B for conservation from 2026-10-20 through 2026-11-03. Commission C-90 covers both Catalogues A and B; search log has not inspected Collection B during closure. Apply requirement A collection is temporarily closed: preserve the coverage limitation. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "090-workflow-3",
+    "root": "runCase.nl",
+    "split_group": "world-090-workflow-3",
+    "inputs": {
+      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "090-workflow-3-record",
+          "caseId": "090-workflow-3",
+          "sourceRefs": [
+            "090-event-3"
+          ],
+          "state": "draft",
+          "kind": "ArchiveCommission",
+          "subject": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "090-event-3",
+            "sourceVersion": "v1"
+          },
+          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+          "requesterId": "REQ-90",
+          "collectionIds": [
+            "CAT-A",
+            "CAT-B",
+            "BOX-18"
+          ],
+          "researcherId": "RES-90",
+          "effortBudget": 6
+        }
+      ],
+      "evidence": [
+        {
+          "id": "090-event-3",
+          "source": "current domain record 090-E3",
+          "version": "v1",
+          "text": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "090-workflow-3-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "090-workflow-3-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "090-event-3",
+          "source": "current domain record 090-E3",
+          "version": "v1",
+          "text": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Archive Research Commission Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”"
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Historical terminology differs from the request: maintain query variants and their results. Use observation Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.” as the source of truth. The proposal should preserve source-linked record 090-workflow-3-record and make a recipient-facing distinction grounded in 090-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.”",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Historical terminology differs from the request: maintain query variants and their results.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 090-workflow-3-record must accurately preserve observation 090-event-3 (v1): Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.” Apply brief requirement Historical terminology differs from the request: maintain query variants and their results. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ArchiveCommission record 090-workflow-3-record and its source link to 090-event-3 version v1, with a disposition matching this observed state: Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.” Carry requirement Historical terminology differs from the request: maintain query variants and their results. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 090-workflow-3-record based on 090-event-3 (v1) and observation Research request R-90 uses “relief” to mean flood assistance. Historical catalogue index v2 uses “relief” for both flood aid and sculptural relief; query log records no variants for “flood aid” or “disaster assistance.” Apply requirement Historical terminology differs from the request: maintain query variants and their results. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "090-workflow-4",
+    "root": "runCase.nl",
+    "split_group": "world-090-workflow-4",
+    "inputs": {
+      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "090-workflow-4-record",
+          "caseId": "090-workflow-4",
+          "sourceRefs": [
+            "090-event-4"
+          ],
+          "state": "draft",
+          "kind": "ArchiveCommission",
+          "subject": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "090-event-4",
+            "sourceVersion": "v1"
+          },
+          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+          "requesterId": "REQ-90",
+          "collectionIds": [
+            "CAT-A",
+            "CAT-B",
+            "BOX-18"
+          ],
+          "researcherId": "RES-90",
+          "effortBudget": 6
+        }
+      ],
+      "evidence": [
+        {
+          "id": "090-event-4",
+          "source": "current domain record 090-E4",
+          "version": "v1",
+          "text": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "090-workflow-4-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "090-workflow-4-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "090-event-4",
+          "source": "current domain record 090-E4",
+          "version": "v1",
+          "text": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Archive Research Commission Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A promising lead exceeds budget: present a scoped extension decision instead of continuing silently. Use observation Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved. as the source of truth. The proposal should preserve source-linked record 090-workflow-4-record and make a recipient-facing distinction grounded in 090-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A promising lead exceeds budget: present a scoped extension decision instead of continuing silently.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 090-workflow-4-record must accurately preserve observation 090-event-4 (v1): Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved. Apply brief requirement A promising lead exceeds budget: present a scoped extension decision instead of continuing silently. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ArchiveCommission record 090-workflow-4-record and its source link to 090-event-4 version v1, with a disposition matching this observed state: Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved. Carry requirement A promising lead exceeds budget: present a scoped extension decision instead of continuing silently. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 090-workflow-4-record based on 090-event-4 (v1) and observation Search lead L-90 points to 14 uncatalogued boxes. The current commission has 3 researcher-hours remaining; the repository estimate for those boxes is 8 hours, and no budget extension has been approved. Apply requirement A promising lead exceeds budget: present a scoped extension decision instead of continuing silently. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "090-workflow-5",
+    "root": "runCase.nl",
+    "split_group": "world-090-workflow-5",
+    "inputs": {
+      "request": "Prepare a reviewable Archive Research Commission Manager proposal from the supplied case records and evidence.",
+      "records": [
+        {
+          "id": "090-workflow-5-record",
+          "caseId": "090-workflow-5",
+          "sourceRefs": [
+            "090-event-5"
+          ],
+          "state": "draft",
+          "kind": "ArchiveCommission",
+          "subject": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+          "status": "candidate",
+          "evidenceIds": [
+            "090-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "090-event-5",
+            "sourceVersion": "v1"
+          },
+          "researchQuestion": "Which catalogues index 1912 correspondence and does letter L-12 mention flood relief?",
+          "requesterId": "REQ-90",
+          "collectionIds": [
+            "CAT-A",
+            "CAT-B",
+            "BOX-18"
+          ],
+          "researcherId": "RES-90",
+          "effortBudget": 6
+        }
+      ],
+      "evidence": [
+        {
+          "id": "090-event-5",
+          "source": "current domain record 090-E5",
+          "version": "v1",
+          "text": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "policyCandidates": [],
+      "expectedCoverage": [
+        "090-workflow-5-record"
+      ],
+      "recipient": "accountable reviewer",
+      "committedSnapshot": [
+        "090-workflow-5-record"
+      ],
+      "sourceDelta": [
+        {
+          "id": "090-event-5",
+          "source": "current domain record 090-E5",
+          "version": "v1",
+          "text": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Archive Research Commission Manager",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image. Use observation Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists. as the source of truth. The proposal should preserve source-linked record 090-workflow-5-record and make a recipient-facing distinction grounded in 090-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 090-workflow-5-record must accurately preserve observation 090-event-5 (v1): Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists. Apply brief requirement A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ArchiveCommission record 090-workflow-5-record and its source link to 090-event-5 version v1, with a disposition matching this observed state: Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists. Carry requirement A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 090-workflow-5-record based on 090-event-5 (v1) and observation Image IMG-90 is a restricted donor scan that cannot be reproduced publicly under deed D-90. Archive policy permits a call-number citation and a staff-authored description; no public reproduction license exists. Apply requirement A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

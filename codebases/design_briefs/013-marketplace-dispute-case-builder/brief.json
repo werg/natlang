@@ -1,0 +1,49 @@
+{
+  "application_id": "013",
+  "title": "Marketplace dispute case builder",
+  "source_relative_path": "applications/03-customer-service-and-commercial-casework/013-marketplace-dispute-case-builder.md",
+  "program_root": "codebases/design_briefs/013-marketplace-dispute-case-builder",
+  "source_sha256": "d43a4656336847949042774f0ee223e36d2624e50ca1de55dd5a8088ef5baf1d",
+  "domain_id": "03",
+  "stages": [
+    {
+      "name": "reconstructTimeline",
+      "output_type": "DisputeEvent",
+      "algorithm": "Align listings, messages, shipping records, and submissions without equating timestamps with event occurrence. Attribute disputed statements to their speakers, preserve edited listings, and mark contradictions rather than manufacturing a single settled narrative.",
+      "gate": "Every event distinguishes asserted facts from independently corroborated records."
+    },
+    {
+      "name": "identifyQuestions",
+      "output_type": "DisputedQuestion",
+      "algorithm": "Determine which factual questions would change the rule-based outcome. Separate immaterial disagreements from decisive ones, identify the applicable evidence burden, and formulate neutral questions that either party can answer with concrete records.",
+      "gate": "Questions do not assume guilt, motive, or facts not established in evidence."
+    },
+    {
+      "name": "assessEvidence",
+      "output_type": "EvidenceFinding",
+      "algorithm": "Evaluate relevance, consistency, and provenance of each submitted item against a specific question. Distinguish evidence authenticity checks from semantic support, and discount multiple copies of the same record without dismissing independent corroboration.",
+      "gate": "No private-party submission is treated as conclusive solely because it is detailed."
+    },
+    {
+      "name": "applyRules",
+      "output_type": "DisputeRecommendation",
+      "algorithm": "Apply supplied marketplace rules to established facts and explicitly conditional alternatives for unresolved facts. Explain how the outcome changes under plausible resolutions and route cases outside delegated interpretation to authorized reviewers.",
+      "gate": "Outcome follows the selected rule edition; uncertainty cannot silently become an adverse finding."
+    },
+    {
+      "name": "prepareDisputeDossier",
+      "output_type": "ReviewDossier",
+      "algorithm": "Assemble a balanced dossier with evidence, disputed questions, reasoning summary, and each party’s response opportunity. Redact unnecessary personal information while preserving contestable evidence and record the reviewer’s actual disposition separately from the recommendation.",
+      "gate": "Both relevant positions represented; disclosure scope and response windows satisfied."
+    }
+  ],
+  "operational_details": [
+    "A seller edits the listing after purchase: bind review to the transaction-time edition.",
+    "One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance.",
+    "A deadline falls during a service outage: apply the configured extension rule and notify both parties.",
+    "A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy.",
+    "An appeal contains new evidence: reopen only affected findings and preserve the original decision."
+  ],
+  "representative_episode": "A buyer disputes an item description; the listing changed after purchase, delivery is confirmed, and condition evidence remains ambiguous.",
+  "independent_truth_basis": "Hidden transaction facts with controlled evidence visibility; explicit policy outcomes and evidence-sufficiency labels."
+}
