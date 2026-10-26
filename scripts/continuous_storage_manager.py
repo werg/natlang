@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
 
 GIB = 1024 ** 3
 DEFAULT_POLICY = Path(__file__).resolve().parents[1] / 'training' / 'continuous-storage-policy.json'
+_MELLUM_METADATA_READERS = {}
 
 
 def durable_json(path, value):
@@ -206,6 +210,603 @@ def _mellum_status(policy):
     return result
 
 
+def _stat_binding(path):
+    st = Path(path).stat(follow_symlinks=False)
+    if not stat.S_ISREG(st.st_mode):
+        raise ValueError(f'cache candidate is not a regular file: {path}')
+    return {'device': st.st_dev, 'inode': st.st_ino, 'bytes': st.st_size,
+            'mtime_ns': st.st_mtime_ns, 'ctime_ns': st.st_ctime_ns,
+            'links': st.st_nlink, 'allocated_bytes': st.st_blocks * 512}
+
+
+def _hash_mellum_pin(path, expected_stat, *, block_bytes=8 * 1024 * 1024):
+    """Stream an external full-state pin with bounded memory and drop consumed cache pages."""
+    path = Path(path)
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+    fd = os.open(path, flags)
+    try:
+        before = os.fstat(fd)
+        binding = {'device': before.st_dev, 'inode': before.st_ino, 'bytes': before.st_size,
+                   'mtime_ns': before.st_mtime_ns, 'ctime_ns': before.st_ctime_ns,
+                   'links': before.st_nlink, 'allocated_bytes': before.st_blocks * 512}
+        if binding != expected_stat:
+            raise ValueError(f'cache candidate changed before hashing: {path}')
+        digest = hashlib.sha256()
+        offset = 0
+        while True:
+            block = os.read(fd, block_bytes)
+            if not block:
+                break
+            digest.update(block)
+            offset += len(block)
+            if hasattr(os, 'posix_fadvise'):
+                os.posix_fadvise(fd, offset - len(block), len(block), os.POSIX_FADV_DONTNEED)
+        after = os.fstat(fd)
+        final = {'device': after.st_dev, 'inode': after.st_ino, 'bytes': after.st_size,
+                 'mtime_ns': after.st_mtime_ns, 'ctime_ns': after.st_ctime_ns,
+                 'links': after.st_nlink, 'allocated_bytes': after.st_blocks * 512}
+        if final != expected_stat or offset != expected_stat['bytes']:
+            raise ValueError(f'cache candidate changed while hashing: {path}')
+        return digest.hexdigest()
+    finally:
+        os.close(fd)
+
+
+def _mellum_receipt(path, sha256, size):
+    sys.path.insert(0, str(Path(__file__).resolve().parent / 'coreweave'))
+    from private_export_guard import validate_receipt
+    receipt_path = Path(path)
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        raise ValueError('private receipt is not a regular file')
+    receipt = _json(receipt_path)
+    validate_receipt(receipt, {'sha256': sha256, 'bytes': size})
+    expected_source = f'/work/resume/independent-exports/mellum-{sha256}.pt'
+    expected_name = f'mellum/{sha256}/mellum-{sha256}.pt'
+    if (receipt.get('role') != 'mellum' or receipt.get('source') != expected_source
+            or receipt.get('name') != expected_name):
+        raise ValueError('private receipt is not the exact Mellum hash-addressed full export')
+    return receipt
+
+
+def _authenticated_private_presence(policy, receipt):
+    """Confirm the receipt's exact object still exists in its private run, without downloading it."""
+    sdk_python = policy.get('mellum_sdk_python')
+    if not isinstance(sdk_python, str) or not Path(sdk_python).is_file() or not os.access(sdk_python, os.X_OK):
+        raise ValueError('explicit executable CoreWeave SDK Python is not configured')
+    query = r'''import json,sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import cwctl
+cwctl.load_env_file()
+import wandb
+run, name, size = sys.argv[2], sys.argv[3], int(sys.argv[4])
+matches = list(wandb.Api(timeout=45).run(run).files(names=[name]))
+present = (len(matches) == 1 and getattr(matches[0], 'name', None) == name
+           and getattr(matches[0], 'size', None) == size)
+print('NATLANG_PRIVATE_OBJECT_PRESENT=' + ('1' if present else '0'))
+'''
+    result = subprocess.run([sdk_python, '-c', query,
+        str(Path(__file__).resolve().parent / 'coreweave'), receipt['run'], receipt['name'],
+        str(receipt['identity']['bytes'])], capture_output=True, text=True, timeout=90)
+    if result.returncode != 0:
+        raise RuntimeError('authenticated private-object query failed in the declared SDK interpreter '
+                           f'(exit {result.returncode}; stderr tail: {result.stderr[-400:]})')
+    markers = [line for line in result.stdout.splitlines() if line.startswith('NATLANG_PRIVATE_OBJECT_PRESENT=')]
+    if len(markers) != 1 or markers[0] not in ('NATLANG_PRIVATE_OBJECT_PRESENT=0',
+                                               'NATLANG_PRIVATE_OBJECT_PRESENT=1'):
+        raise RuntimeError('SDK private-object query returned an invalid result')
+    return markers[0].endswith('=1')
+
+
+def _mellum_pointer_binding(policy, pointer_key, cache_root):
+    pointer_declared = Path(policy[pointer_key])
+    if pointer_declared.is_symlink() or not pointer_declared.is_file():
+        raise ValueError(f'{pointer_key} is not a regular pointer file')
+    pointer_path = pointer_declared.resolve(strict=True)
+    pointer = _json(pointer_path)
+    checkpoint = pointer.get('checkpoint') or {}
+    sha, size, path = checkpoint.get('sha256'), checkpoint.get('bytes'), checkpoint.get('path')
+    step = pointer.get('global_step')
+    if ((pointer_key == 'mellum_local_pointer' and pointer.get('passed') is not True)
+            or not isinstance(sha, str) or not re.fullmatch(r'[0-9a-f]{64}', sha)
+            or type(size) is not int or size <= 0 or type(step) is not int or step < 0):
+        raise ValueError(f'{pointer_key} is not a passed exact full-state checkpoint pointer')
+    if pointer_key == 'mellum_local_pointer':
+        local = Path(path)
+        if (local.parent.resolve() != cache_root or local.name != f'mellum-{sha}.pt'
+                or local.is_symlink() or not local.is_file() or local.stat().st_size != size):
+            raise ValueError('current Mellum local recovery does not name an exact cache pin')
+        receipt_path = pointer.get('private_receipt') or pointer.get('receipt')
+        receipt_file = Path(receipt_path) if isinstance(receipt_path, str) else None
+        if (receipt_file is None or receipt_file.is_symlink() or not receipt_file.is_file()
+                or receipt_file.resolve(strict=True).parent != Path(policy['mellum_receipt_root']).resolve(strict=True)):
+            raise ValueError('current Mellum local recovery lacks a receipt in the exact receipt root')
+    else:
+        if path != f'/work/resume/independent-exports/mellum-{sha}.pt':
+            raise ValueError('current Mellum private recovery path is not the exact hash-addressed export')
+        receipt_path = pointer.get('receipt') or pointer.get('private_receipt')
+        receipt_file = Path(receipt_path) if isinstance(receipt_path, str) else None
+        if receipt_file is None or receipt_file.is_symlink() or not receipt_file.is_file():
+            raise ValueError('current Mellum private recovery lacks its exact receipt path')
+        if receipt_file.resolve(strict=True).parent != Path(policy['mellum_receipt_root']).resolve(strict=True):
+            raise ValueError('current Mellum private receipt escaped the exact receipt root')
+    return {'pointer_path': str(pointer_path), 'pointer_sha256': _stable_file_sha256(pointer_path),
+            'sha256': sha, 'bytes': size, 'global_step': step, 'path': path,
+            'receipt_path': str(Path(receipt_path).resolve(strict=True))}
+
+
+def _verify_mellum_local_pin(path, sha, size, receipt_path, proof_cache):
+    binding = _stat_binding(path)
+    if binding['bytes'] != size:
+        raise ValueError('local cache pin size differs from its private receipt')
+    receipt = _mellum_receipt(receipt_path, sha, size)
+    receipt_sha = _stable_file_sha256(receipt_path)
+    key = str(Path(path))
+    proof = proof_cache['entries'].get(key)
+    if not (isinstance(proof, dict) and proof.get('sha256') == sha
+            and proof.get('stat') == binding and proof.get('receipt_sha256') == receipt_sha):
+        actual = _hash_mellum_pin(path, binding)
+        if actual != sha:
+            raise ValueError('local bytes do not match the hash-addressed pin name')
+        proof = {'path': key, 'sha256': sha, 'stat': binding, 'receipt_sha256': receipt_sha,
+                 'verified_at': time.time(), 'method': 'streaming-sha256-8mib-stat-bound-v1'}
+        proof_cache['entries'][key] = proof
+    return binding, receipt_sha, receipt
+
+
+def _mellum_checkpoint_lineage(policy, path, sha):
+    """Read only exact torch archive metadata and bind the checkpoint to its model ancestry."""
+    reader_value = policy.get('mellum_checkpoint_metadata_reader_path')
+    reader_sha = policy.get('mellum_checkpoint_metadata_reader_sha256')
+    source_value = policy.get('mellum_checkpoint_metadata_source_path')
+    source_sha = policy.get('mellum_checkpoint_metadata_source_sha256')
+    if (not isinstance(reader_value, str) or not isinstance(source_value, str)
+            or not re.fullmatch(r'[0-9a-f]{64}', str(reader_sha))
+            or not re.fullmatch(r'[0-9a-f]{64}', str(source_sha))):
+        raise ValueError('exact metadata-only checkpoint reader custody is not configured')
+    reader_declared = Path(reader_value)
+    source_declared = Path(source_value)
+    if reader_declared.is_symlink() or source_declared.is_symlink():
+        raise ValueError('metadata-only reader dependency cannot be a symlink')
+    reader_path = reader_declared.resolve(strict=True)
+    source_path = source_declared.resolve(strict=True)
+    actual_reader_sha = _stable_file_sha256(reader_path)
+    actual_source_sha = _stable_file_sha256(source_path)
+    if actual_reader_sha != reader_sha or actual_source_sha != source_sha:
+        raise ValueError('metadata-only checkpoint reader source changed from its reviewed binding')
+    cache_key = (str(reader_path), reader_sha, str(source_path), source_sha)
+    read_metadata = _MELLUM_METADATA_READERS.get(cache_key)
+    if read_metadata is None:
+        spec = importlib.util.spec_from_file_location(
+            'natlang_bound_mellum_checkpoint_metadata_reader', reader_path)
+        if spec is None or spec.loader is None:
+            raise ValueError('cannot load the exact metadata-only checkpoint reader')
+        module = importlib.util.module_from_spec(spec)
+        old_hash_cache = os.environ.get('NATLANG_HASH_CACHE')
+        had_hash_cache = 'NATLANG_HASH_CACHE' in os.environ
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            if had_hash_cache:
+                os.environ['NATLANG_HASH_CACHE'] = old_hash_cache
+            else:
+                os.environ.pop('NATLANG_HASH_CACHE', None)
+        read_metadata = getattr(module, 'checkpoint_metadata', None)
+        if not callable(read_metadata):
+            raise ValueError('bound metadata-only checkpoint reader has no checkpoint_metadata function')
+        _MELLUM_METADATA_READERS[cache_key] = read_metadata
+
+    before = _stat_binding(path)
+    metadata = read_metadata(path)
+    after = _stat_binding(path)
+    if after != before:
+        raise ValueError('checkpoint changed during metadata-only lineage inspection')
+    if not isinstance(metadata, dict):
+        raise ValueError('checkpoint metadata root is not an object')
+    training = metadata.get('training')
+    config = metadata.get('model_config')
+    options = training.get('options') if isinstance(training, dict) else None
+    step = metadata.get('step')
+    if type(step) is not int and isinstance(training, dict):
+        step = training.get('global_step', training.get('step'))
+    architecture = config.get('architecture') if isinstance(config, dict) else None
+    base_sha = config.get('base_inventory_sha256') if isinstance(config, dict) else None
+    ancestors = options.get('native_snapshot_ancestors') if isinstance(options, dict) else None
+    if (type(step) is not int or step < 0 or architecture != 'mellum'
+            or not isinstance(base_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', base_sha)
+            or not isinstance(ancestors, list)
+            or any(not isinstance(item, str) or not re.fullmatch(r'[0-9a-f]{64}', item)
+                   for item in ancestors)
+            or len(set(ancestors)) != len(ancestors)):
+        raise ValueError('checkpoint metadata lacks exact Mellum model identity, step, or ancestor bindings')
+    if training.get('global_step') != step:
+        raise ValueError('checkpoint root step differs from its training metadata')
+    return {'sha256': sha, 'global_step': step,
+            'model_identity': f'{architecture}:{base_sha}',
+            'native_snapshot_ancestors': ancestors,
+            'native_snapshot_ancestors_sha256': hashlib.sha256(
+                json.dumps(ancestors, separators=(',', ':')).encode()).hexdigest(),
+            'metadata_reader': {'path': str(reader_path), 'sha256': reader_sha,
+                                'metadata_source_path': str(source_path),
+                                'metadata_source_sha256': source_sha},
+            'checkpoint_stat': before}
+
+
+def _live_file_inodes():
+    found = set()
+    for proc in Path('/proc').glob('[0-9]*'):
+        try:
+            for descriptor in (proc / 'fd').iterdir():
+                try:
+                    st = descriptor.stat()
+                    found.add((st.st_dev, st.st_ino))
+                except OSError:
+                    pass
+            maps = proc / 'maps'
+            if maps.is_file():
+                for line in maps.read_text(errors='ignore').splitlines():
+                    fields = line.split(None, 5)
+                    if len(fields) != 6 or not fields[5].startswith('/'):
+                        continue
+                    try:
+                        major, minor = fields[3].split(':', 1)
+                        inode = int(fields[4])
+                        device = os.makedev(int(major, 16), int(minor, 16))
+                        found.add((device, inode))
+                    except (ValueError, OSError):
+                        pass
+        except OSError:
+            pass
+    return found
+
+
+def _mellum_cache_maintenance(policy, *, apply=False, max_candidates=None):
+    lock_value = policy.get('mellum_prune_lock_path')
+    if not isinstance(lock_value, str) or not lock_value:
+        return {'state': 'skipped', 'reason': 'Mellum prune lock path is not configured'}
+    lock_path = Path(lock_value)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    if lock_path.parent.is_symlink():
+        return {'state': 'skipped', 'reason': 'Mellum prune lock directory cannot be a symlink'}
+    try:
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    except OSError as error:
+        return {'state': 'skipped', 'reason': f'cannot open exact Mellum prune lock: {error}'}
+    with os.fdopen(lock_fd, 'r+b') as lock:
+        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+            return {'state': 'skipped', 'reason': 'Mellum prune lock is not a regular file'}
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return {'state': 'skipped', 'reason': 'another Mellum cache verification or prune pass holds the lock'}
+        try:
+            return _mellum_cache_maintenance_locked(policy, apply=apply, max_candidates=max_candidates)
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def _mellum_cache_maintenance_locked(policy, *, apply=False, max_candidates=None):
+    """Verify cached pins against private receipts and persist a plan before any deletion."""
+    cache_value = policy.get('mellum_cache_root')
+    receipt_value = policy.get('mellum_receipt_root')
+    if not isinstance(cache_value, str) or not isinstance(receipt_value, str):
+        return {'state': 'skipped', 'reason': 'Mellum cache or receipt root is not configured'}
+    cache_declared, receipt_declared = Path(cache_value), Path(receipt_value)
+    if cache_declared.is_symlink() or receipt_declared.is_symlink():
+        return {'state': 'skipped', 'reason': 'Mellum cache or receipt root cannot be a symlink'}
+    try:
+        cache_root = cache_declared.resolve(strict=True)
+        receipt_root = receipt_declared.resolve(strict=True)
+    except OSError as error:
+        return {'state': 'skipped', 'reason': f'Mellum cache or receipt root is unavailable: {error}'}
+    if not cache_root.is_dir() or not receipt_root.is_dir():
+        return {'state': 'skipped', 'reason': 'Mellum cache or receipt root is not a verified directory'}
+    mount_value, expected_uuid = policy.get('external_mount'), policy.get('external_uuid')
+    if not isinstance(mount_value, str) or not isinstance(expected_uuid, str) or not expected_uuid:
+        return {'state': 'skipped', 'reason': 'external cache mount identity is not configured'}
+    mount_declared = Path(mount_value)
+    try:
+        mount_root = mount_declared.resolve(strict=True)
+        mount_uuid = _mount_uuid(mount_root)
+        if (not mount_root.is_dir() or mount_uuid != expected_uuid
+                or not cache_root.is_relative_to(mount_root)
+                or cache_root.stat().st_dev != mount_root.stat().st_dev):
+            return {'state': 'skipped', 'reason': 'Mellum cache is not on the declared external mount'}
+    except OSError as error:
+        return {'state': 'skipped', 'reason': f'external Mellum cache mount is unavailable: {error}'}
+
+    try:
+        local_pointer = _mellum_pointer_binding(policy, 'mellum_local_pointer', cache_root)
+        private_pointer = _mellum_pointer_binding(policy, 'mellum_private_pointer', cache_root)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return {'state': 'skipped', 'reason': f'current recovery pointer is invalid: {error}'}
+    protected_paths = set(map(str, policy.get('mellum_protected_paths') or []))
+    protected_paths.add(str(local_pointer['path']))
+    protected_shas = {local_pointer['sha256'], private_pointer['sha256']}
+
+    try:
+        latest_private_receipt = _mellum_receipt(
+            private_pointer['receipt_path'], private_pointer['sha256'], private_pointer['bytes'])
+        latest_private_present = _authenticated_private_presence(policy, latest_private_receipt)
+        if not latest_private_present:
+            return {'state': 'skipped', 'reason': 'latest private full-state object is not currently present'}
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+        return {'state': 'skipped', 'reason': f'latest private full-state presence could not be verified: {error}'}
+
+    state_value = policy.get('mellum_retention_state_path')
+    if not isinstance(state_value, str) or not state_value:
+        return {'state': 'skipped', 'reason': 'Mellum retention-state path is not configured'}
+    state_path = Path(state_value)
+    old_state = None
+    if state_path.exists():
+        try:
+            old_state = _json(state_path)
+            if old_state.get('schema') != 'natlang.mellum-local-retention-state/1':
+                raise ValueError('unsupported retention-state schema')
+            for name in ('current_local', 'previous_local'):
+                row = old_state.get(name)
+                if row is not None and (not isinstance(row, dict)
+                    or not re.fullmatch(r'[0-9a-f]{64}', str(row.get('sha256', '')))
+                    or type(row.get('bytes')) is not int or row['bytes'] <= 0
+                    or not isinstance(row.get('path'), str)):
+                    raise ValueError('malformed retained Mellum local parent')
+        except (OSError, ValueError, AttributeError) as error:
+            return {'state': 'skipped', 'reason': f'Mellum retention state is invalid: {error}'}
+    if old_state and old_state.get('current_local', {}).get('sha256') != local_pointer['sha256']:
+        previous_local = old_state.get('current_local')
+        current_local = {key: local_pointer[key] for key in ('sha256', 'bytes', 'global_step', 'path')}
+    elif old_state:
+        previous_local = old_state.get('previous_local')
+        current_local = old_state.get('current_local')
+    else:
+        current_local = {key: local_pointer[key] for key in ('sha256', 'bytes', 'global_step', 'path')}
+        previous_shas = [Path(path).stem.removeprefix('mellum-')
+                         for path in policy.get('mellum_protected_paths', [])]
+        previous_shas = [sha for sha in previous_shas if re.fullmatch(r'[0-9a-f]{64}', sha)
+                         and sha not in protected_shas]
+        previous_local = None
+        if previous_shas:
+            sha = previous_shas[0]
+            candidate = Path(cache_root / f'mellum-{sha}.pt')
+            if candidate.is_file() and not candidate.is_symlink():
+                previous_local = {'sha256': sha, 'bytes': candidate.stat().st_size,
+                                  'global_step': None, 'path': str(candidate)}
+    for parent in (current_local, previous_local):
+        if parent:
+            protected_shas.add(parent['sha256'])
+            protected_paths.add(parent['path'])
+
+    proof_value = policy.get('mellum_local_proof_cache')
+    if not isinstance(proof_value, str) or not proof_value:
+        return {'state': 'skipped', 'reason': 'Mellum local proof-cache path is not configured'}
+    proof_path = Path(proof_value)
+    proof_cache = {'schema': 'natlang.mellum-local-cache-proofs/1', 'entries': {}}
+    if proof_path.exists():
+        try:
+            prior = _json(proof_path)
+            if prior.get('schema') != proof_cache['schema'] or not isinstance(prior.get('entries'), dict):
+                raise ValueError('local pin proof cache has an unsupported schema')
+            proof_cache = prior
+        except (OSError, ValueError, AttributeError) as error:
+            return {'state': 'skipped', 'reason': f'local pin proof cache is invalid: {error}'}
+
+    protected_inodes = _live_file_inodes()
+    candidates = []
+    inventory = []
+    verified_by_sha = {}
+    current_lineage = None
+    required_parent_shas = {local_pointer['sha256']}
+    if previous_local:
+        required_parent_shas.add(previous_local['sha256'])
+    paths = sorted(cache_root.glob('mellum-*.pt'), key=lambda path: (
+        0 if path.name == f"mellum-{local_pointer['sha256']}.pt" else
+        1 if previous_local and path.name == f"mellum-{previous_local['sha256']}.pt" else 2,
+        path.name))
+    visited_paths = set()
+    for path in paths:
+        match = re.fullmatch(r'mellum-([0-9a-f]{64})\.pt', path.name)
+        if not match or path.is_symlink() or not path.is_file() or path.resolve().parent != cache_root:
+            continue
+        visited_paths.add(str(path))
+        sha = match.group(1)
+        if sha in protected_shas and sha not in required_parent_shas:
+            inventory.append({'path': str(path), 'sha256': sha, 'state': 'protected',
+                              'reason': 'pending or explicitly protected Mellum pin; no prune attempted'})
+            continue
+        try:
+            receipt_path = receipt_root / f'{sha}.private-receipt.json'
+            binding, receipt_sha, receipt = _verify_mellum_local_pin(
+                path, sha, path.stat().st_size, receipt_path, proof_cache)
+            # Persist each completed file proof so a stopped or interrupted pass
+            # resumes at the next exact file instead of rereading verified bytes.
+            durable_json(proof_path, proof_cache)
+            present = _authenticated_private_presence(policy, receipt)
+            protected = (str(path) in protected_paths or sha in protected_shas
+                         or (binding['device'], binding['inode']) in protected_inodes)
+            row = {'path': str(path), 'sha256': sha, 'bytes': binding['bytes'],
+                   'allocated_bytes': binding['allocated_bytes'], 'stat': binding,
+                   'receipt_path': str(receipt_path), 'receipt_sha256': receipt_sha,
+                   'receipt_run': receipt.get('run'),
+                   'local_digest_verified': True, 'private_object_present': bool(present),
+                   'protected': protected}
+            if sha != private_pointer['sha256'] and receipt.get('run') != latest_private_receipt.get('run'):
+                raise ValueError('cached pin private receipt is not from the current Mellum training run')
+            if sha == local_pointer['sha256']:
+                lineage = _mellum_checkpoint_lineage(policy, path, sha)
+                if lineage['global_step'] != local_pointer['global_step']:
+                    raise ValueError('current local pointer step differs from checkpoint metadata')
+                ancestors_sha = hashlib.sha256(json.dumps(
+                    lineage['native_snapshot_ancestors'], separators=(',', ':')).encode()).hexdigest()
+                if lineage.get('native_snapshot_ancestors_sha256') != ancestors_sha:
+                    raise ValueError('current parent ancestry digest is inconsistent')
+                lineage['receipt_run'] = receipt.get('run')
+                current_lineage = lineage
+                row['lineage'] = {'model_identity': lineage['model_identity'],
+                    'global_step': lineage['global_step'], 'current_parent': True,
+                    'metadata_reader': lineage['metadata_reader']}
+            else:
+                if current_lineage is None:
+                    raise ValueError('current local model ancestry has not been authenticated')
+                ancestor = sha in current_lineage['native_snapshot_ancestors']
+                same_model_run = receipt.get('run') == current_lineage['receipt_run']
+                row['lineage'] = {'model_identity': current_lineage['model_identity'],
+                    'current_global_step': current_lineage['global_step'],
+                    'ancestor_of_current': ancestor, 'same_model_run': same_model_run,
+                    'current_checkpoint_sha256': current_lineage['sha256'],
+                    'metadata_reader': current_lineage['metadata_reader']}
+                if not (ancestor and same_model_run):
+                    raise ValueError('candidate is not an exact older same-model ancestor of the current local parent')
+            inventory.append(row)
+            verified_by_sha[sha] = row
+            if not protected and present:
+                candidates.append(row)
+                if (max_candidates is not None and type(max_candidates) is int
+                        and max_candidates > 0 and len(candidates) >= max_candidates):
+                    break
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+            inventory.append({'path': str(path), 'sha256': sha, 'state': 'ineligible',
+                              'reason': f'{type(error).__name__}: {str(error)[:400]}'})
+    if max_candidates is not None and type(max_candidates) is int and max_candidates > 0 \
+            and len(candidates) >= max_candidates:
+        for path in paths:
+            match = re.fullmatch(r'mellum-([0-9a-f]{64})\.pt', path.name)
+            if match and str(path) not in visited_paths and path.is_file() and not path.is_symlink():
+                inventory.append({'path': str(path), 'sha256': match.group(1), 'state': 'not_examined',
+                                  'reason': 'per-pass candidate limit reached; no receipt or content claim made'})
+
+    # Current recovery must still have two locally verified parents (the live
+    # pointer plus the newest prior protected cache pin) and a fresh private
+    # object before any old cache is eligible for pruning.
+    current_row = verified_by_sha.get(local_pointer['sha256'])
+    private_error = None
+    prior_parent_rows = [verified_by_sha.get(previous_local['sha256'])] if previous_local else []
+    prior_parent_rows = [row for row in prior_parent_rows if row and row.get('local_digest_verified')
+                         and row.get('private_object_present')]
+    local_recovery_ready = bool(current_row and current_row.get('local_digest_verified')
+                                and current_row.get('lineage', {}).get('current_parent')
+                                and latest_private_present and prior_parent_rows
+                                and all(row.get('lineage', {}).get('ancestor_of_current')
+                                        and row.get('lineage', {}).get('same_model_run')
+                                        for row in prior_parent_rows)
+                                and current_row.get('receipt_run') == latest_private_receipt.get('run'))
+    if not local_recovery_ready:
+        candidates = []
+    else:
+        state = {'schema': 'natlang.mellum-local-retention-state/1',
+                 'current_local': current_local, 'previous_local': previous_local,
+                 'updated_at': time.time()}
+        durable_json(state_path, state)
+
+    plan = {'schema': 'natlang.mellum-local-cache-prune-plan/1', 'at': time.time(),
+            'operator': policy.get('_operator_binding'),
+            'cache_root': str(cache_root), 'receipt_root': str(receipt_root),
+            'current_local_pointer': local_pointer, 'current_private_pointer': private_pointer,
+            'retention_state': {'current_local': current_local, 'previous_local': previous_local},
+            'protected_sha256': sorted(protected_shas), 'protected_paths': sorted(protected_paths),
+            'verified_current_and_previous_bindings': [row for row in inventory if row.get('protected')],
+            'current_local_lineage': ({key: current_lineage[key] for key in (
+                'sha256', 'global_step', 'model_identity', 'native_snapshot_ancestors',
+                'native_snapshot_ancestors_sha256', 'metadata_reader', 'checkpoint_stat')}
+                if current_lineage else None),
+            'inventory': inventory,
+            'candidates': candidates,
+            'candidate_bytes': sum(row['bytes'] for row in candidates),
+            'candidate_allocated_bytes': sum(row['allocated_bytes'] for row in candidates),
+            'latest_private_object_present': latest_private_present,
+            'latest_private_error': private_error,
+            'local_recovery_ready': local_recovery_ready,
+            'candidate_limit': max_candidates,
+            'scan_complete': not any(row.get('state') == 'not_examined' for row in inventory),
+            'apply_enabled': bool(apply and local_recovery_ready), 'deletions': [],
+            'scope': 'hash-addressed Mellum local cache only; no remote object or source is changed'}
+    plan_value = policy.get('mellum_prune_plan_path')
+    if not isinstance(plan_value, str) or not plan_value:
+        return {'state': 'skipped', 'reason': 'Mellum prune-plan path is not configured', 'inventory': inventory}
+    plan_path = Path(plan_value)
+    durable_json(plan_path, plan)
+    # Rebind both pointers after the expensive hash/API pass. A learner export
+    # can advance while the external cache is being checked.
+    try:
+        local_after = _mellum_pointer_binding(policy, 'mellum_local_pointer', cache_root)
+        private_after = _mellum_pointer_binding(policy, 'mellum_private_pointer', cache_root)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return {'state': 'skipped', 'path': str(plan_path), 'reason': f'pointer changed during verification: {error}',
+                'inventory': inventory, 'deletions': []}
+    pointers_stable = local_after == local_pointer and private_after == private_pointer
+    if not pointers_stable or _live_file_inodes() != protected_inodes:
+        # Inode tables are naturally volatile; only discard stale candidates
+        # whose identity is now live, then proceed with the exact old plan.
+        live_now = _live_file_inodes()
+        candidates = [row for row in candidates
+                      if (row['stat']['device'], row['stat']['inode']) not in live_now]
+        plan['candidates'] = candidates
+        plan['candidate_bytes'] = sum(row['bytes'] for row in candidates)
+        plan['candidate_allocated_bytes'] = sum(row['allocated_bytes'] for row in candidates)
+        plan['apply_enabled'] = bool(apply and local_recovery_ready and pointers_stable)
+        if not pointers_stable:
+            plan['skip_reason'] = 'current local or private recovery pointer changed during verification'
+        durable_json(plan_path, plan)
+    if not pointers_stable:
+        return {'state': 'skipped', 'path': str(plan_path), 'reason': plan['skip_reason'],
+                'candidate_count': len(candidates), 'candidate_bytes': plan['candidate_bytes'],
+                'deletions': [], 'inventory': inventory}
+    if not apply or not plan['apply_enabled']:
+        return {'state': 'planned', 'path': str(plan_path), 'sha256': _stable_file_sha256(plan_path),
+                'candidate_count': len(candidates), 'candidate_bytes': plan['candidate_bytes'],
+                'candidate_allocated_bytes': plan['candidate_allocated_bytes'],
+                'ineligible_count': sum(row.get('state') == 'ineligible' for row in inventory),
+                'deletions': [], 'inventory': inventory}
+
+    # The plan is durable before unlink. Recheck pointers, path, receipt, private
+    # object and open/mapped readers immediately before removal; never add rows.
+    deleted = []
+    for row in candidates:
+        path = Path(row['path'])
+        try:
+            local_now = _mellum_pointer_binding(policy, 'mellum_local_pointer', cache_root)
+            private_now = _mellum_pointer_binding(policy, 'mellum_private_pointer', cache_root)
+            if local_now != local_pointer or private_now != private_pointer:
+                break
+            if path.resolve(strict=True).parent != cache_root or path.is_symlink():
+                raise ValueError('candidate escaped the exact cache root')
+            if (str(path) in protected_paths or row['sha256'] in protected_shas
+                    or (path.stat().st_dev, path.stat().st_ino) in _live_file_inodes()):
+                continue
+            if _stat_binding(path) != row['stat']:
+                continue
+            receipt_now = _mellum_receipt(row['receipt_path'], row['sha256'], row['bytes'])
+            if _stable_file_sha256(row['receipt_path']) != row['receipt_sha256']:
+                continue
+            if not _authenticated_private_presence(policy, receipt_now):
+                continue
+            st = path.stat()
+            path.unlink()
+            fd = os.open(cache_root, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            if path.exists():
+                raise RuntimeError('cache path remains after unlink')
+            inode_still_live = (st.st_dev, st.st_ino) in _live_file_inodes()
+            reclaimed = row['allocated_bytes'] if st.st_nlink == 1 and not inode_still_live else 0
+            deleted.append({'path': str(path), 'sha256': row['sha256'], 'bytes': row['bytes'],
+                            'links_before': st.st_nlink, 'confirmed_absent': True,
+                            'reclaimed_bytes': reclaimed})
+            plan['deletions'] = deleted
+            plan['deletions_updated_at'] = time.time()
+            durable_json(plan_path, plan)
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+            row['apply_error'] = f'{type(error).__name__}: {str(error)[:400]}'
+    plan['deletions'] = deleted
+    plan['applied_at'] = time.time()
+    durable_json(plan_path, plan)
+    return {'state': 'applied' if deleted else 'planned-no-deletions', 'path': str(plan_path),
+            'sha256': _stable_file_sha256(plan_path), 'candidate_count': len(candidates),
+            'deleted': deleted, 'reclaimed_bytes': sum(row['reclaimed_bytes'] for row in deleted),
+            'inventory': inventory}
+
+
 def _archive_command(policy, budget_bytes, protected_paths=(), *, apply=False):
     batch_cap = int(policy.get('archive_batch_max_bytes', 60 * GIB))
     budget_gb = max(0.1, min(float(min(budget_bytes, batch_cap)) / GIB, 60.0))
@@ -305,7 +906,7 @@ def _lfm_retention_reference(policy, selected_sha256, owner):
                 'error': f'{type(error).__name__}: {str(error)[:500]}', 'applied': False}
 
 
-def inspect(policy):
+def inspect(policy, *, mellum_prune_plan=False):
     status = {'schema': 'natlang.continuous-storage-status/1', 'at': time.time(),
               'policy': str(policy.get('_path', '')), 'actions_applied': []}
     try:
@@ -343,11 +944,27 @@ def inspect(policy):
         external.update(free_bytes=None, floor_ok=False)
     status['external'] = external
     status['mellum'] = _mellum_status(policy)
+    should_maintain_mellum = mellum_prune_plan or policy.get('mellum_prune_enabled') is True
+    if should_maintain_mellum:
+        apply_mellum = policy.get('mellum_prune_enabled') is True and not mellum_prune_plan
+        if apply_mellum and not (external.get('identity_ok') and external.get('floor_ok')):
+            status['mellum_cache_prune'] = {'state': 'skipped',
+                'reason': 'external mount identity or configured free-space floor is not verified'}
+        else:
+            max_candidates = (policy.get('mellum_prune_max_candidates_per_pass', 1) if apply_mellum else
+                              policy.get('mellum_plan_max_candidates', 1))
+            result = _mellum_cache_maintenance(policy, apply=apply_mellum,
+                                               max_candidates=max_candidates)
+            status['mellum_cache_prune'] = result
+            if result.get('deleted'):
+                status['actions_applied'].append('verified-old-mellum-cache-prune')
 
     internal = status.get('internal') or {}
     pressure = (not status.get('internal_state_error')
                 and not internal.get('target_headroom_ok', internal.get('headroom_ok', False)))
-    if pressure and external_ok and external.get('floor_ok'):
+    if pressure and mellum_prune_plan:
+        status['action_required'] = 'Mellum cache plan mode skipped unrelated LFM archive planning or apply.'
+    elif pressure and external_ok and external.get('floor_ok'):
         free = internal.get('free_bytes')
         target = internal.get('target_free_bytes', internal.get('next_write_required_headroom_bytes'))
         protected = _archive_protected_paths(policy, status['checkpoint'])
@@ -357,7 +974,8 @@ def inspect(policy):
         status['action_required'] = ('Review bounded closed-file archive candidates; no file was moved.'
                                      if plan['returncode'] == 0 else
                                      'Archive dry-run failed; preserve current checkpoint and review the error.')
-        if plan['returncode'] == 0 and policy.get('archive_apply_enabled') is True:
+        if (not mellum_prune_plan and plan['returncode'] == 0
+                and policy.get('archive_apply_enabled') is True):
             expected = {
                 'owner': {k: status['owner'].get(k) for k in
                           ('pid', 'unit', 'runtime', 'scope', 'command_sha256')},
@@ -393,12 +1011,21 @@ def inspect(policy):
     status['lfm_retention_plan'] = _lfm_retention_reference(
         policy, (status.get('checkpoint') or {}).get('cursor_checkpoint_sha256'), status.get('owner') or {})
     status['state'] = 'healthy' if status['action_required'] is None else 'attention'
-    status['next_write_admission'] = 'atomic writer estimates the current full state and reserves transfer headroom'
+    # The active frozen learner has not been rebound to CheckpointWriteAdmission.
+    # This service can estimate pressure and archive eligible closed files, but it
+    # is not in the learner's first-write path and must not claim to reserve space.
+    status['next_write_admission'] = {
+        'mode': 'monitor-and-recover',
+        'live_writer_guard_installed': False,
+        'estimated_required_headroom_bytes': internal.get('next_write_required_headroom_bytes'),
+        'reason': ('the active frozen runtime does not call the shared checkpoint admission guard; '
+                   'this estimate is advisory until an explicitly bound runtime cutover'),
+    }
     return status
 
 
-def run_once(policy):
-    status = inspect(policy)
+def run_once(policy, *, mellum_prune_plan=False):
+    status = inspect(policy, mellum_prune_plan=mellum_prune_plan)
     durable_json(policy['status_path'], status)
     _append_journal(policy['journal_path'], {key: status.get(key) for key in
         ('at', 'state', 'action_required')} | {'internal_free_bytes': (status.get('internal') or {}).get('free_bytes'),
@@ -451,12 +1078,26 @@ def main(argv=None):
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--watch', action='store_true')
     mode.add_argument('--self-test', action='store_true')
+    mode.add_argument('--mellum-prune-plan', action='store_true',
+                      help='stream-verify local Mellum cache pins and write a plan; never unlink')
     args = parser.parse_args(argv)
     if args.self_test:
         _self_test()
         return
     policy = _json(args.policy)
-    policy['_path'] = str(args.policy.resolve())
+    policy_path = args.policy.resolve(strict=True)
+    if args.policy.is_symlink() or not policy_path.is_file():
+        raise ValueError('storage policy must be a regular non-symlink file')
+    policy['_path'] = str(policy_path)
+    policy['_operator_binding'] = {
+        'script_path': str(Path(__file__).resolve(strict=True)),
+        'script_sha256': _stable_file_sha256(Path(__file__).resolve(strict=True)),
+        'policy_path': str(policy_path),
+        'policy_sha256': _stable_file_sha256(policy_path),
+    }
+    if args.mellum_prune_plan:
+        print(json.dumps(run_once(policy, mellum_prune_plan=True), sort_keys=True))
+        return
     if args.once:
         print(json.dumps(run_once(policy), sort_keys=True))
         return

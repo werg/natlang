@@ -19,15 +19,22 @@ that action and records a repairable reason.
    and recovery records, mounted-volume identity and disk availability, then
    emits an atomic status and fsynced journal event. When headroom is low, it
    requests a root-scoped dry-run from the existing archiver and references
-   the exact LFM ancestry-retention plan. The archive apply path is separately
-   policy-gated (disabled in the checked-in live policy); when enabled after
-   review, it rechecks owner, config, selected cursor/checkpoint, mount UUID and
-   free-space floor before invoking the existing bounded verified-copy tool.
+   the exact LFM ancestry-retention plan. Archive apply is enabled in the
+   reviewed policy under the standing owner authorization and root review. It
+   rechecks owner, config, selected cursor/checkpoint, mount UUID and free-space
+   floor before invoking the existing bounded verified-copy tool. Mellum cache
+   pruning remains disabled until its first concrete eligible plan is
+   independently reviewed.
    The tool independently rechecks open/mapped readers and source stability.
    External Mellum pins are inventoried and
    current, previous and pending full states are protected; older pins remain
    ineligible until their local bytes are independently reverified against
-   their private receipts.
+   their private receipts. Verification is per-file resumable: each completed
+   8 MiB streaming SHA-256 is durably cached against exact inode, device, size,
+   mtime, ctime, link count, allocation and receipt bytes. The first plan is
+   limited to one verified eligible pin so review and cleanup can begin before
+   scanning the remaining cache. The latest private object is checked through
+   the authenticated SDK without downloading it.
 2. `checkpoint_safety.py` supplies the shared checkpoint admission primitive.
    Each writer computes a tensor-storage upper bound from the state it is about
    to save, acquires a per-filesystem reservation lease, checks the bound plus
@@ -36,21 +43,31 @@ that action and records a repairable reason.
    cannot size a first save. One lease per filesystem serializes checkpoint
    writes, reserves concurrent-transfer blocks on that filesystem, and
    rechecks space after acquisition; model updates continue outside the lease.
+   The currently running frozen B1 learner has not been rebound to this guard.
+   Its manager status therefore reports an advisory estimate and explicitly
+   records `live_writer_guard_installed: false`; no current runtime qualification
+   is claimed for first-write admission.
 3. The manager uses `local-checkpoint-retention.py --plan` for LFM. Only an
    exact, currently reviewed plan may reach its apply operation. It never
    implements a second checkpoint ancestry or ownership algorithm.
 4. Closed retained LFM artifacts are selected by the existing
    `archive_to_external.py` eligibility checks and moved with its existing
    bounded, fsynced, read-back-verified copy and atomic symlink swap. The
-   manager caps each archive batch to current external free space minus the
-   80 GiB floor and a copy safety margin. Source paths remain resolvable; no
-   hardlinks are created.
+   manager caps each archive batch at 16 GiB and to current external free space
+   minus the 80 GiB floor, a 1 GiB copy margin and any exact pending Mellum
+   local-copy size. Source paths remain resolvable; no hardlinks are created.
 5. Old Mellum external full-state mirrors are eligible only when exact local
    full checkpoint and private export identities are currently verified,
-   current and previous-local recovery parents are protected, same-model
-   ancestry is proven, and no config, receipt, process, fd, or mapping names
-   the candidate. Each deletion plan is durable and explicit; the manager does
-   not remove pins from the CoreWeave sandbox.
+   current and previous-local recovery parents are protected, and the candidate
+   digest appears in the authenticated current checkpoint's
+   `native_snapshot_ancestors` for that exact Mellum model identity and run.
+   The current checkpoint metadata is read without materializing tensor bodies
+   through a version- and source-hash-bound metadata reader. Its exact ancestry
+   is recorded in the plan. No configured protected path or live fd/mapping may
+   name a candidate. A one-candidate deletion plan is durable before unlink;
+   the manager does not remove pins from the CoreWeave sandbox. Pruning remains
+   disabled in the checked-in live policy until independent review of the
+   actual plan and lineage binding.
 
 ## Tests and operation
 
