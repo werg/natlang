@@ -25,7 +25,7 @@ Every declaration the model writes in eval code carries its type annotation.
 
 Every Neuralese literal must have a contextual type (`neuralese-untyped-literal`).
 Eager typing puts the annotation in front of the literal in the token stream, where
-the writer and its stop head see it.
+the producing model sees it before it writes the span.
 
 ## Explicit captures
 
@@ -92,10 +92,12 @@ enough that a view saves context; values read once by the call that produced the
 ## Literal rendering
 
 Model-neutral records hold soft values only in reference form
-(`{ "$neuralese": { "type", "id" } }`) with their blocks in `.nz` files or the
-tensor store. The per-model render step turns references into marker-wrapped
-payload positions ([NEURALESE_PORT.md](NEURALESE_PORT.md)); nothing upstream of it
-contains control tokens.
+(`{ "$neuralese": { "type", "id" } }`) with their native states in `.nz` files or
+the native archive. The per-model render step turns a written value into a
+producer span (`<|neuralese_produce|>…<|/neuralese_produce|>` around the span's
+own tokens) and a read value into a consumer import (`<|neuralese_consume|>`, the
+spliced state, `<|/neuralese_consume|>`) ([NEURALESE_PORT.md](NEURALESE_PORT.md));
+nothing upstream of it contains control tokens.
 
 ## Lineage
 

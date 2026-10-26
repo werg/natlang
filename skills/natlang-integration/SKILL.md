@@ -403,7 +403,7 @@ a consumer must apply that same binding to splice it exactly, or explicitly
 reencode its text. Never reuse a base-bound semantic decoder as if it had been
 qualified for changed weights. For `neuralese-native-adapter-invalid`, restore
 matching coefficients/bases and use actual native matrix names. For
-`neuralese-native-tensor-as-state`, bind the adapter with `withAdapters` instead
+`neuralese-native-tensor-as-state`, bind the adapter with `withNativeAdapters` instead
 of sending it as communication state. Adapted-policy sampling/3 receipts bind
 an effective actor SHA, exact base identity and ordered coefficient IDs/hex
 scales. Retain its recursive RL artifact bundle, then evaluate the admitted
@@ -573,7 +573,7 @@ imports need their actual differentiable lowering, not relabeled provenance.
 `stopGradient(value)` preserves native typed values and soft-function bodies as
 constants for that use, including after context snapshots and `.nz` save/load.
 An equal live value remains differentiable. Keep the typed value when passing
-it to another call or `withAdapters`; do not extract its artifact ID to preserve
+it to another call or `withNativeAdapters`; do not extract its artifact ID to preserve
 a constant boundary. No payload is decoded or rewritten by this operation.
 
 Native Neuralese values retain their source-call occurrence through returns,

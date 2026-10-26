@@ -1,73 +1,83 @@
-# Literal forms, escaping, the write and read ports, cache agreement, wire protocol.
+# Role markers, producing and consuming native state, the artifact store, retired fields, agreement.
 cases:
-  - id: literal-round-trip
-    title: 'Reference form → model form → reference form preserves the block'
-    stage: S4
-    status: pending
-    spec: NEURALESE_PORT.md#rendering-reference--model-form
-    given: 'A local `plan: Neuralese<Plan>` with block nz1_x of length 12 is listed in the opening, and the model returns it unchanged with `return plan`.'
-    expect: 'The rendered prompt has `<|neuralese|>`, 12 payload positions, `<|/neuralese|>`; the staged result is `{ "$neuralese": { "type": "Neuralese<Plan>", "id": "nz1_x" } }`.'
-
   - id: marker-text-is-text
-    title: 'The marker text in ordinary content is never a literal'
+    title: 'Marker text in ordinary content is never a marker'
     stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#control-tokens
-    given: 'A string argument and a tool output both contain the characters `<|neuralese|>`.'
-    expect: 'Tokenization yields ordinary text tokens; no special token IDs; no block is read or written.'
+    spec: NEURALESE_PORT.md#role-markers
+    given: 'A string argument and a tool output both contain the characters `<|neuralese_produce|>` and `<|neuralese_consume|>`.'
+    expect: 'Tokenization yields ordinary text tokens; no role-marker token IDs; no state is produced or imported.'
 
-  - id: write-in-eval
-    title: 'Emitting the opening token in eval code invokes the write port'
-    stage: S3
+  - id: produce-in-eval
+    title: 'A producer span in eval code becomes a native state'
+    stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#writing-model-form--reference
-    given: "The model writes `const plan: Neuralese<Plan> = <|neuralese|>` inside eval(code=\"…\")."
-    expect: 'The server runs the sketch recurrence until the stop head stops, stores the block, emits `<|/neuralese|>`, and decoding continues inside the same code string; the runtime compiles `__neuralese.value("nz1_…")` in its place.'
+    spec: NEURALESE_PORT.md#producing
+    given: 'The model writes `const plan: Neuralese<Plan> = <|neuralese_produce|>…<|/neuralese_produce|>` inside eval(code="…").'
+    expect: 'The server captures the span, stores a native state and returns a `native_state` part in its place; the runtime compiles `__neuralese("nzs1_…")` there and types it as Neuralese<Plan>.'
 
-  - id: write-in-return-result
+  - id: produce-in-return-result
     title: 'A soft result written directly into return_result'
     stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#placement
-    given: 'A function declared `returns: "Neuralese<Summary>"`; the model calls return_result with a literal as value.'
-    expect: 'The call returns a Neuralese<Summary> reference; the trace has a block_write node.'
+    spec: NEURALESE_PORT.md#producing
+    given: 'A function declared `returns: "Neuralese<Summary>"`; the model calls return_result with a producer span as value.'
+    expect: 'The call returns a Neuralese<Summary> reference to an `nzs1_` state; the trace has a block_write node.'
 
-  - id: write-truncation
-    title: 'Hitting the hard maximum is recorded as truncation'
-    stage: S3
+  - id: marker-violations
+    title: 'Malformed producer and consumer markers are rejected'
+    stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#writing-model-form--reference
-    given: 'A hard maximum of 4 and a stop head forced to continue.'
-    expect: 'The block has length 4, `truncated: true`, and the trace''s block_write records it.'
+    spec: NEURALESE_PORT.md#producing
+    note: 'tests/neuralese/test_native_marker_failure.py covers the close and open violations; nested and consume-marker have no test yet.'
+    given: 'Forced draws of a close marker with no open span, a nested open marker, a consume marker, and a reply that ends inside an open span.'
+    expect: 'neuralese-native-state-close, neuralese-native-state-nested, neuralese-native-state-consume-marker and neuralese-native-state-open; with protocol recovery, a failure observation instead.'
 
-  - id: readback-agreement
-    title: 'Cached continuation after a write agrees with recomputation'
-    stage: S3
+  - id: exact-import
+    title: 'A state from the same model is spliced, not re-read'
+    stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#agreement
-    given: 'A conversation with a written block, continued greedily (a) from the server''s restored cache and (b) by recomputing the committed sequence from scratch.'
-    expect: 'Identical greedy continuations and logits within the parity tolerance, including short-convolution state.'
+    spec: NEURALESE_PORT.md#consuming
+    given: 'A request whose message names an `nzs1_` state produced by the serving checkpoint.'
+    expect: 'The import receipt has mode `exact-native-state` and `observed_native_state_id` equal to the state; the prompt counts its tokens plus the two consume markers.'
+
+  - id: text-retokenization
+    title: 'A state from another checkpoint is read as its text'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#consuming
+    given: 'A request naming a state whose checkpoint differs from the serving one, with no semantic adapter.'
+    expect: 'The import receipt has mode `best-effort-text-retokenization` and no `observed_native_state_id`; the stored tensors are not used.'
+
+  - id: retired-request-fields
+    title: 'Projected-write request fields are refused'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#chat-completions-post-v1chatcompletions
+    given: 'A chat completion request with `neuralese_temperature`, or a content part of type `"neuralese"`.'
+    expect: '400 `unsupported-request-field`, and 400 `neuralese-retired-part` for the part.'
+
+  - id: native-state-put-integrity
+    title: 'A native state whose ID does not match its content is rejected'
+    stage: S4
+    status: pending
+    spec: NEURALESE_PORT.md#native-artifact-store
+    given: 'PUT /v1/neuralese/native-states/nzs1_a with a body whose content hashes to another ID.'
+    expect: '400 `neuralese-id-mismatch`; nothing is stored.'
 
   - id: unsupported-backend
     title: 'A backend without Neuralese support fails the call'
     stage: S4
     status: pending
-    spec: NEURALESE_PORT.md#wire-protocol
+    spec: NEURALESE_PORT.md#missing-server
     given: 'A call with a Neuralese argument against a server whose /v1/neuralese/info is absent.'
     expect: { error: neuralese-unsupported-backend }
 
-  - id: block-put-integrity
-    title: 'A block whose ID does not match its content is rejected'
+  - id: cache-agreement
+    title: 'Cached capture and splicing agree with one-pass execution'
     stage: S4
-    status: pending
-    spec: NEURALESE_PORT.md#wire-protocol
-    given: 'PUT /v1/neuralese/blocks/nz1_a with content hashing to nz1_b.'
-    expect: 'The server rejects the block.'
-
-  - id: server-parity
-    title: 'Each server matches the PyTorch reference on the same blocks'
-    stage: S4
-    status: pending
+    status: implemented
+    implemented_by: tests/neuralese/test_shared_state.py, tests/neuralese/test_native_decode_batch.py
     spec: NEURALESE_PORT.md#agreement
-    given: 'A fixed set of stored blocks and prompts, run on the Python server, llama.cpp and vLLM.'
-    expect: 'Read-port logits within tolerance; identical greedy continuations; identical written block lengths for forced stop decisions.'
+    given: 'Producer and consumer sequences run (a) incrementally with captured and spliced state, batched and alone, and (b) as one teacher-forced graph pass.'
+    expect: 'Equal outputs and gradients within the tests'' tolerances, including hybrid convolution and recurrent state.'

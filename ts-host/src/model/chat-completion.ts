@@ -264,10 +264,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         wireRequest.x_natlang_native_recording = true;
       }
       if (request.template) {
-        const { length, passes, ...template } = request.template;
+        const template = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };
-        if (length !== undefined) wireRequest.neuralese_length = length;
-        if (passes !== undefined) wireRequest.neuralese_passes = passes;
       }
       if (request.seed !== null) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance

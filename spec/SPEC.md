@@ -484,11 +484,19 @@ needs an owner decision. Found while splitting the specification (2026-10-09).
 2. **Reserved child names.** The list above names `constructor`, `in` and `with`; the skill's list omits them.
 3. **`neuralese-dialect-mismatch`.** The Neuralese extension says values of different dialects do not unify, with
    this code. The runtime raises it at `.nz` loading and wherever a value is coerced to a `Neuralese` type (the
-   block's stored dialect against the type's, `DefaultDialect` bound to the runtime's reader dialect). The compiler
-   has no check of that name.
+   block's stored dialect against the type's, `DefaultDialect` bound to the runtime's reader dialect). A native
+   state of another dialect at a `DefaultDialect` slot is instead rejected with `neuralese-native-consumer-unavailable`
+   unless the reader declares a consumption mode that can take it (`native/values.ts`). The compiler has no check of
+   either name.
 4. **`readout: decision` arity.** The text says a finite result type; the loader (`runtime/loader.ts`) also
    requires at least two values, so a single-literal or `null`-only return is rejected.
 5. **`iteration-unbounded` and `iteration-measure-exhausted`.** Both are carried by `IterationLimitError` (the text
    says so only for the second); `iteration-unbounded` is thrown at run time, after the initial state fails the predicate and before the first step (a loop whose initial state already satisfies it returns without error), not when a limit is reached.
 6. **Code comments cite the old layout.** `ts-host/src/neuralese/*.ts` and `ts-host/src/runtime/contexts.ts` cite
    "spec/SPEC.md, Neuralese chapter"; that text is now `spec/ext/neuralese.md` and `spec/ext/learning.md`.
+7. **`objectives.law` and other learning declarations.** The runtime's `natlang:learning` module implements
+   `objectives.law` (law names `mapIdentity`, `mapFusion`, `readMapCommutation`, `combineAssociativity`,
+   `combineIdentity`, `splitZip`), `load`, `deltas` and `nativeAdapters.optimize` (`neuralese/learning.ts`); the
+   declarations the compiler ships for checked code (`compiler/project.ts`, `NEURALESE_MODULES_SOURCE`) omit them.
+8. **`compose`.** The `map-fusion` rewrite emits a `compose(f, g)` call (`compiler/rewrites.ts`); no standard library
+   body or `natlang:neuralese` export provides it.

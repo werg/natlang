@@ -13,9 +13,7 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
    */
   template?: { call: string; arguments: Record<string, unknown>; value: 'write' | 'decode';
     /** Native value syntax in the model prefix; opaque placeholders remain strings on the wire. */
-    value_type?: 'string' | 'unknown';
-    /** Optional size hint for a written value, in tokens. Never required: without it the native writer chooses the span length. */
-    length?: number; passes?: number };
+    value_type?: 'string' | 'unknown' };
   /** Guided generation (natlang's servers only): see the agent's `guidance` option. */
   guidance?: boolean | Record<string, unknown>;
   /** Host-side exact teacher target for native forced replay; sent only as transport metadata, never in messages. */

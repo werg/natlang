@@ -8,7 +8,7 @@ them, in the spirit of GHC rewrite rules, to make programs cheaper.
 
 ## Laws
 
-"≈" is measured through `read` and downstream consumers, never as vector equality.
+"≈" is measured through `read` and downstream consumers, never as equality of stored state.
 
 | Law | Form |
 | --- | --- |
@@ -39,7 +39,10 @@ an `await` of another call with effects, or a capture write-back.
 `compose(f, g)` is a system natural-language function with a trained soft body. For
 text functions it produces the composed function's instructions; for soft functions
 it is the same operator applied to soft bodies. Its result is a function-typed value
-in the caller's context, so it adds no executable node.
+in the caller's context, so it adds no executable node. The current standard
+library has no `compose` body and `natlang:neuralese` does not export one, so the
+rewritten `compose` call (a bare `compose`, or `compose` on the namespace the
+`map` call used) resolves only where the program provides one.
 
 ## Enabling
 

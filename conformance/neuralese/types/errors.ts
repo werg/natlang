@@ -9,7 +9,7 @@ type Label = 'urgent' | 'normal';
 
 declare const note: Neuralese<Summary>;
 declare const summary: Summary;
-declare const other: Neuralese<Summary, 'nd:natlang@2'>;
+declare const other: Neuralese<Summary, 'native-state/other'>;
 declare const triage: Neuralese<(t: Ticket) => Promise<Label>>;
 
 export async function errors() {

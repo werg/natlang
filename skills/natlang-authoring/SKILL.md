@@ -389,9 +389,10 @@ the new actual checkpoint and rebind/requalify semantic communication after
 updates. No new instruction text or reasoning-format workaround is needed.
 
 Native functional adapters use exact-base named tensor coefficients and frozen
-SVD bases. On a native service, `adapters.create({parameterNames, rank, kind})`
-selects actual named layer matrices; retain the returned `Adapter` and bind it
-with `withAdapters`. Native first-order graph learning uses
+SVD bases. On a native service,
+`nativeAdapters.create(nativeIdentity, {parameterNames, rank, kind})` selects
+actual named layer matrices; retain the returned `NativeAdapter` and bind it
+with `withNativeAdapters`. Native first-order graph learning uses
 `nativeGraphGradient` with `target: {kind: 'adapter', id}` and the same active
 adapter IDs, followed by `nativeAdapterOptimizerStep`; this does not enable the
 legacy recorded-turn GradSession API or higher-order objectives. Keep the
@@ -399,7 +400,7 @@ coefficient, basis and optimizer artifacts together when saving or restoring.
 `neuralese-native-adapter-invalid` requires restoring the exact coefficient and
 basis artifacts for the current checkpoint and selecting its advertised matrix
 names. `neuralese-native-tensor-as-state` requires binding adapters with
-`withAdapters`, rather than passing named tensor artifacts as communication
+`withNativeAdapters`, rather than passing named tensor artifacts as communication
 state. Native adapter policy learning retains sampling/3 receipts and a durable
 actor bundle containing coefficients and frozen bases. Bind the exact same
 ordered IDs/scales when evaluating its admitted native-policy objective with
@@ -561,7 +562,7 @@ imports need their actual differentiable lowering, not relabeled provenance.
 `stopGradient(value)` preserves native typed values and soft-function bodies as
 constants for that use, including after context snapshots and `.nz` save/load.
 An equal live value remains differentiable. Keep the typed value when passing
-it to another call or `withAdapters`; do not extract its artifact ID to preserve
+it to another call or `withNativeAdapters`; do not extract its artifact ID to preserve
 a constant boundary. No payload is decoded or rewritten by this operation.
 
 Native Neuralese values retain their source-call occurrence through returns,
