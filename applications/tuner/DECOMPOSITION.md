@@ -69,6 +69,15 @@ Decisions: **fn** (its own natural-language function), **inline** (one instructi
 | Rank/penalty sweep scheduling | host | shared recipe scheduler | Operational. |
 | Distillation into each base | crisp + existing recipe | shared production SFT recipe admission | Uses the existing admission/exposure mechanism. |
 
+### SFT and RL (plan §5.1a)
+
+| Part | Decision | Unit | Why |
+| --- | --- | --- | --- |
+| Alternate SFT and RL rounds | crisp schedule from the recipe; NL `proposeSchedule.nl` later over development measurements | tune recipe | Exact once declared; choosing the next round from evidence is policy. |
+| Roll out training roots with the student | crisp | runtime with native recording on the native server | Exact capture of sampled tokens and actors. |
+| Reward | crisp | root oracle / declared local checks | Verifiers are exact; no judge-as-reward without calibration. |
+| Advantages, clipped policy loss | crisp | `rl/rollout_math.py`, `rl/policy_math.py`, `rl/native_replay.py` | Shared math with the production RL. |
+
 ### Soft instructions and soft skills (plan §3.3)
 
 | Part | Decision | Unit | Why |

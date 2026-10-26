@@ -371,6 +371,35 @@ through a graph. Check zero-adapter equivalence, active/inactive gradient routin
 actual parameter changes and resume equivalence. Persist optimizer/RNG,
 sampling/exposure cursors and dependency identities for resumable jobs.
 
+### 5.1a SFT and RL objectives (owner, 2026-10-26)
+
+Program tuning supports both supervised fine-tuning and reinforcement learning over the same tunable state
+(weight residuals, family gates, soft instruction/skill states) and alternates them in one recipe.
+
+| Objective | Data | Update |
+| --- | --- | --- |
+| SFT | Verified teacher trajectories and admitted repairs (§4) | §5.1 trajectory cross-entropy |
+| RL | The student's own whole-program rollouts on training roots, `k` samples per root, each call under its own binding stack | Group-relative advantages from task rewards; clipped token policy loss over every sampled model turn of the actual graph |
+
+RL rules:
+
+1. Rewards come from task outcomes: the root's direct oracle and declared local semantic checks, never an exact
+   historical message as a reward when other continuations are correct. A root with no oracle is not an RL root.
+   A failed child is not excused by a successful parent; a correct blocked/declined result counts when the oracle
+   says so.
+2. The policy update covers the entire executed graph: every model turn of every inner invocation, each with its
+   recorded actor (its binding's effective stack and soft states), producer/consumer native-state dependencies and
+   exact sampled tokens (native recorded turns), with gradients through the real dependencies. Reuse the existing
+   recorded-policy machinery (`rl/native_replay.py` `prepare_objective`, `rl/policy_math.py`,
+   `rl/rollout_math.py`, `serve/native_grad.py`); do not detach in-episode producers.
+3. Rollouts record the exact behavior policy (release, stack identities, decoding settings) so off-policy
+   corrections are exact; a rollout from another release is not on-policy.
+4. Only training roots are rolled out. Development/confirmation/protected roots never produce rewards for updates.
+5. The schedule alternates SFT and RL rounds on development-selected settings (round sizes, `k`, temperature,
+   clipping, KL telemetry). Base-relative KL is telemetry, never a stop.
+6. RL requires a backend that records native turns (the native reference server); llama.cpp backends serve the
+   result but do not produce training rollouts.
+
 ### 5.2 Placement and subtree discovery
 
 Use development data and a fixed serving workload. Record allowable task-success
@@ -821,6 +850,8 @@ independent work; a checked item needs its artifact and actual evidence.
 **Training**
 
 - [ ] Path-routed joint trainer, balanced trajectory objective and depth penalties
+- [ ] SFT and RL objectives over the same tunable state, alternating in one recipe (§5.1a): whole-graph
+  on-policy rollouts with exact recorded actors, oracle rewards, group advantages and clipped policy updates
 - [ ] Shared nested `nnt1` bases/cores and free-factor parameterization
 - [ ] Immutable-snapshot gradient updates, actual-update checks and exact continuation
 - [ ] Per-binding family gates with fixed family scale/version contracts
