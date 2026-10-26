@@ -913,10 +913,12 @@ await rank(tickets)   // → string[] (40), checked against the declared type
   const READERS = [
     { k: 'same', label: 'the same model', mode: 'live', kind: 'ok', h: 'spliced',
       msg: 'The consumer\'s attention reads the stored keys and values at their original positions, between <|neuralese_consume|> markers; on LFM the convolution and recurrent state carry over too. The span is not tokenized or run again.' },
-    { k: 'ckpt', label: 'a newer checkpoint', mode: 'blocked', kind: 'err', h: 'neuralese-native-consumer-unavailable',
-      msg: 'State is reused only when checkpoint, tokenizer and architecture all match. The reader must declare text re-encoding or a state adapter; the old tensors are never fed to new weights.' },
+    { k: 'ckpt', label: 'a newer checkpoint', mode: 'text', kind: 'warn', h: 're-encoded',
+      msg: 'The checkpoint differs, so the stored tensors are not reused. The server tokenizes the stored text again and the reader reads it as ordinary input between the consume markers: a best effort, without the producer\'s state.' },
+    { k: 'other', label: 'another model', mode: 'blocked', kind: 'err', h: 'neuralese-native-consumer-unavailable',
+      msg: 'The value was written by a model of another architecture. Before passing it on, configure a reader that declares text re-encoding or a learned adapter; foreign tensors are never fed to different weights.' },
     { k: 'text', label: 'another model, re-encoding text', mode: 'text', kind: 'warn', h: 're-encoded',
-      msg: 'The stored text is tokenized with the reader\'s tokenizer and read as ordinary input. This is best effort: the producer\'s state does not come along.' },
+      msg: 'The reader declares text re-encoding: the stored text is tokenized with its tokenizer and read as ordinary input. The producer\'s state does not come along.' },
     { k: 'adapter', label: 'another model, learned adapter', mode: 'mapped', kind: 's', h: 'research',
       msg: 'A shared adapter turns the producer\'s per-token codes into changes to the reader\'s state. The runtime accepts one; training it is the next stage of the research and has no results yet.' },
   ];
