@@ -249,6 +249,52 @@ def test_archive_apply_runs_only_after_exact_revalidation(tmp_path, monkeypatch)
     assert calls[0][1]['timeout'] == 1800
 
 
+def test_archive_apply_keeps_manifest_verified_partial_success_when_later_file_fails(tmp_path, monkeypatch):
+    policy, _, checkpoint = _fixture(tmp_path)
+    policy.update(external_mount=str(tmp_path/'external'), archive_destination=str(tmp_path/'archive'))
+    archived_source = tmp_path/'internal'/'cycle'/'closed.pt'
+    archived_source.parent.mkdir(parents=True, exist_ok=True)
+    archived_destination = Path(policy['archive_destination'])/'lfm-cycles'/'cycle'/'closed.pt'
+    archived_destination.parent.mkdir(parents=True)
+    archived_destination.write_bytes(b'verified checkpoint bytes')
+    archived_source.symlink_to(archived_destination)
+    digest = 'a' * 64
+    Path(policy['archive_destination']).mkdir(parents=True, exist_ok=True)
+    (Path(policy['archive_destination'])/'manifest.jsonl').write_text(json.dumps({
+        'source': str(archived_source), 'dest': str(archived_destination),
+        'bytes': archived_destination.stat().st_size, 'sha256': digest,
+    })+'\n')
+    owner = manager._owner_status(policy['owner_path'], policy['owner_command_contains'])
+    current = manager._checkpoint_status(policy['cursor_path'], policy['internal_path'])
+    expected = {'owner': {k: owner.get(k) for k in
+                          ('pid', 'unit', 'runtime', 'scope', 'command_sha256')},
+                'config_sha256': manager._stable_file_sha256(policy['config_path']),
+                'checkpoint': {k: current.get(k) for k in (
+                    'path', 'device', 'inode', 'bytes', 'mtime_ns', 'cursor_checkpoint_sha256',
+                    'cycle', 'phase', 'stage_index')}}
+    monkeypatch.setattr(manager, '_mount_uuid', lambda _: 'fixture-uuid')
+    monkeypatch.setattr(manager.shutil, 'disk_usage', lambda _: type('Usage', (), {'free': 100})())
+    event = json.dumps({'archived': str(archived_source), 'gb': 0.0})
+    monkeypatch.setattr(manager.subprocess, 'run', lambda *args, **kwargs: type('Result', (), {
+        'returncode': 1, 'stdout': event+'\nexternal disk floor\n', 'stderr': 'later candidate failed'})())
+    result = manager._archive_apply(policy, 2048, (), expected)
+    assert result['returncode'] == 1
+    assert result['moved_files'] == 1
+    assert result['moved_bytes'] == archived_destination.stat().st_size
+    assert result['verified_archived_records'] == [{
+        'source': str(archived_source), 'dest': str(archived_destination),
+        'bytes': archived_destination.stat().st_size, 'sha256': digest,
+    }]
+
+
+def test_archive_event_is_not_counted_without_live_manifest_backed_symlink(tmp_path):
+    policy, _, _ = _fixture(tmp_path)
+    policy.update(archive_destination=str(tmp_path/'archive'))
+    source = tmp_path/'missing.pt'
+    event = json.dumps({'archived': str(source), 'gb': 4.0})
+    assert manager._verified_archive_events(event, policy) == []
+
+
 def test_archive_protection_covers_active_and_previous_cycles_and_config_refs(tmp_path):
     policy, _, checkpoint = _fixture(tmp_path)
     cycle_root = Path(policy['internal_path'])/'cycles'
