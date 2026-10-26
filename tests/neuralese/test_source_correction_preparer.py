@@ -93,7 +93,33 @@ def test_flattened_nested_manifest_preserves_only_bound_cloud_logical_path(tmp_p
     assert flattened[0]['path'] == '/work/old/fit.jsonl.zst'
 
 
-def test_mellum_missing_cloud_leaf_relocates_only_through_exact_registry_role(tmp_path):
+def test_prior_manifest_is_staged_with_exact_map_without_mutating_original(tmp_path):
+    import json
+
+    source = tmp_path / 'remote' / 'held.json'
+    source.parent.mkdir()
+    source.write_text('{"schema":"natlang.native-graph-sources/1","sources":[]}\n')
+    original = source.read_bytes()
+    output = tmp_path / 'prepared' / 'prior-held.json'
+    output.parent.mkdir()
+    map_path = output.parent / '.natlang-source-map.json'
+    mapping = {'/work/resume/inputs/payloads/abc': str(tmp_path / 'leaf')}
+
+    staged = PREPARER._stage_manifest_for_validation(source, output, mapping, map_path)
+
+    assert staged.read_bytes() == original
+    assert source.read_bytes() == original
+    assert mapping[str(source.resolve())] == str(output.resolve())
+    assert json.loads(map_path.read_text()) == {
+        'schema': 'natlang.staged-source-map/1', 'paths': mapping}
+
+
+@pytest.mark.parametrize('logical_root', [
+    '/work/resume/teacher-append-20261025/artifacts/runs',
+    '/work/resume/teacher-append-20261026-v13/artifacts/runs',
+    '/work/resume/training/teacher-append-20261026-v13/artifacts/runs',
+])
+def test_mellum_missing_cloud_leaf_relocates_only_through_exact_registry_role(tmp_path, logical_root):
     import json
 
     corpus = ('qwen36-verified-positive-native-graphs-20261023-internal-batch0047-tranche0000'
@@ -113,7 +139,7 @@ def test_mellum_missing_cloud_leaf_relocates_only_through_exact_registry_role(tm
         'receipt': {'path': str(receipt_path), 'bytes': receipt_path.stat().st_size,
                     'sha256': hashlib.sha256(receipt_path.read_bytes()).hexdigest()}}}}}
     (registry / f'{corpus}.entry.json').write_text(json.dumps(entry))
-    logical = (f'/work/resume/teacher-append-20261025/artifacts/runs/{corpus}'
+    logical = (f'{logical_root}/{corpus}'
                '/mellum21/train/native-graphs.jsonl.zst')
     train = tmp_path / 'train.json'
     train.write_text(json.dumps({'schema': 'natlang.native-graph-sources/1', 'sources': [

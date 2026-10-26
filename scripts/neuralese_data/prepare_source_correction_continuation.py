@@ -157,7 +157,7 @@ def _relocate_declared_mellum_package_leaves(train_manifest, held_manifest, mapp
     registry = (Path(registry_root) if registry_root is not None else
         Path('/home/werg/data/natlang-internal-spool/teacher-qwen36-continuation-20261023/registered-packages'))
     relocated = []
-    pattern = re.compile(r'^/work/resume/teacher-append-20261025/artifacts/runs/'
+    pattern = re.compile(r'^/work/resume/(?:teacher-append-20261025|teacher-append-20261026-v13|training/teacher-append-20261026-v13)/artifacts/runs/'
         r'(?P<corpus>qwen36-verified-positive-native-graphs-20261023-internal-batch[0-9]{4}-tranche[0-9]{4}'
         r'(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)/'
         r'(?P<role>mellum21)/(?P<split>train|test)/native-graphs\.jsonl\.zst$')
@@ -263,6 +263,24 @@ def _merge_map(model, train_manifest, held_manifest, train_map_path, held_map_pa
     target = out / '.natlang-source-map.json'
     target.write_text(json.dumps(doc, sort_keys=True, indent=2) + '\n')
     return target, mapping, relocated
+
+
+def _stage_manifest_for_validation(source, output_path, mapping, map_path):
+    """Copy a source manifest beside the combined custody map for exact leaf resolution."""
+    source = Path(source).resolve(strict=True)
+    output_path = Path(output_path)
+    before = source.stat()
+    digest = sha256_file_hex_cached(source)
+    shutil.copyfile(source, output_path)
+    after = source.stat()
+    if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+            or sha256_file_hex_cached(output_path) != digest):
+        raise ValueError(f'prior source manifest changed while staging: {source}')
+    mapping[str(source)] = str(output_path.resolve())
+    map_path.write_text(json.dumps({'schema': 'natlang.staged-source-map/1', 'paths': mapping},
+                                   sort_keys=True, indent=2) + '\n')
+    return output_path
 
 
 def _replacement_sources(model_id):
@@ -447,12 +465,20 @@ def build(model, out_root):
     cfg = _current_config(model)
     map_path, mapping, relocated_sources = _merge_map(
         model, train_old, held_old, train_map, held_map, out, cfg)
+    # The original Mellum held manifest lives under the recovery packet, whose
+    # historical source map names remote /work/resume payload aliases. Stage the
+    # exact manifest next to the merged map so validation uses the already
+    # authenticated local payload copies without changing that global map.
+    old_train_validation = _stage_manifest_for_validation(
+        train_old, out / 'prior-native-training-sources.json', mapping, map_path)
+    old_held_validation = _stage_manifest_for_validation(
+        held_old, out / 'prior-held-native-graphs.json', mapping, map_path)
     train_path, removed = _flatten_train_inputs(model, train_old, mapping, cfg['model_id'], out)
     held_path, held_changed, old_held_leaves = _flatten_held(model, held_old, mapping, cfg['model_id'], out)
     roles = _role_ids(cfg)
-    old_train = NativeGraphSource(train_old, cfg['fingerprint'], required_split='train', role_ids=roles)
+    old_train = NativeGraphSource(old_train_validation, cfg['fingerprint'], required_split='train', role_ids=roles)
     current_train = NativeGraphSource(train_path, cfg['fingerprint'], required_split='train', role_ids=roles)
-    old_held = NativeGraphSource(held_old, cfg['fingerprint'], required_split='test', role_ids=roles)
+    old_held = NativeGraphSource(old_held_validation, cfg['fingerprint'], required_split='test', role_ids=roles)
     current_held = NativeGraphSource(held_path, cfg['fingerprint'], required_split='test', role_ids=roles)
     if old_held.ordered_ids() != current_held.ordered_ids():
         raise ValueError(f'{model}: protected held correction changed exact ID/order membership')
