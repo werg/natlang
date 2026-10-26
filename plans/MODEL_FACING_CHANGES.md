@@ -1518,3 +1518,13 @@ prompt yet. Before selecting `nl`, sample it on the live executor (~48 samples
 over varied calibration tables) in `shadow` mode and compare with the crisp
 choice. Only measured teachers meeting the minimum are ever offered, and an
 answer naming anything else falls back to the crisp rule.
+
+## Tuner family proposal policy (2026-10-26, unmeasured debt)
+
+`applications/tuner/proposeFamilies.nl` is the natural-language side of the
+`proposeFamilies` pluggable (`ts-host/src/tune/families.ts`). The crisp rule
+(author tags plus discovered clusters spanning two programs) is the default, so
+nothing serves the prompt yet. Before selecting `nl`, sample it on the live
+executor (~48 samples over varied discovery tables) in `shadow` mode and compare
+with the crisp proposals. Answers naming members outside the discovery fall back
+to the crisp proposals.

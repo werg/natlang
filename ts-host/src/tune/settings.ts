@@ -51,6 +51,10 @@ export type TuneSettings = {
   readonly recipe?: Readonly<Record<string, unknown>>;
   /** SFT/RL round schedule for `natlang tune --rounds` (plan §5.1a). */
   readonly rounds?: RoundsSettings;
+  /** Cross-program families (plan §5.5): discovery threshold, minimum programs per cluster, proposal policy mode and
+   * the family fit recipe (`rank`, `steps`, ...). */
+  readonly families?: { readonly threshold?: number; readonly minPrograms?: number; readonly mode?: PluggableSetting;
+    readonly recipe?: Readonly<Record<string, unknown>> };
   /** Placement envelope (plan §5.2). */
   readonly placement?: PlacementSettings;
 };
@@ -90,7 +94,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   const backend = tune.backend ?? 'managed-local';
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
   return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.teachers?.length ? { teachers: tune.teachers } : {}),
-    teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.recipe ? { recipe: tune.recipe } : {}), ...(tune.rounds ? { rounds: tune.rounds } : {}),
+    teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.families ? { families: tune.families } : {}), ...(tune.recipe ? { recipe: tune.recipe } : {}), ...(tune.rounds ? { rounds: tune.rounds } : {}),
     placement: { ...DEFAULT_PLACEMENT, ...tune.placement, costWeights: { ...DEFAULT_PLACEMENT.costWeights, ...tune.placement?.costWeights } } },
     student: { ...student, name } };
 }

@@ -177,7 +177,9 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   /** Continue this earlier build (a trainer output directory): its node, gate and soft-state lineage and moments. */
   readonly parent?: string;
   /** Scored student rollouts (natlang.tune-rollout/v1 JSONL): the RL rows of this fit (§5.1a). */
-  readonly rollouts?: string };
+  readonly rollouts?: string;
+  /** Directories of published artifacts the fit imports first (frozen family versions, §5.4). */
+  readonly artifactDirs?: readonly string[] };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
@@ -203,7 +205,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
         exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
         softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}),
-        ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}) }, null, 2));
+        ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
+        ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}) }, null, 2));
       await runTrainer(student, plan, out, log);
     }
     return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
@@ -221,7 +224,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
       for (const file of readdirSync(join(out, folder))) if (!existsSync(join(directory, folder, file)))
         copyFileSync(join(out, folder, file), join(directory, folder, file));
     }
-    for (const artifact of sealed.artifacts) if (artifact.exports?.gguf) {
+    for (const artifact of [...sealed.artifacts, ...sealed.families]) if (artifact.exports?.gguf) {
       const target = join(directory, artifact.exports.gguf.file);
       mkdirSync(dirname(target), { recursive: true });
       if (!existsSync(target)) copyFileSync(join(out, artifact.exports.gguf.file), target);
@@ -247,17 +250,21 @@ async function exportVllmStacks(options: TuneOptions, manifest: WeightManifest):
   writeFileSync(stacksPath, JSON.stringify([...stacks.values()], null, 1));
   const { student } = options;
   if (!student.hfConfigDir) throw new Error('vLLM stack export needs tune.students.<name>.hfConfigDir');
-  // The student's Python entry, pointed at the stack exporter instead of the trainer.
-  const module = student.trainer.indexOf('-m');
-  if (module < 0) throw new Error('vLLM stack export derives its Python entry from a `-m` trainer argv');
-  const argv = [...student.trainer.slice(0, module + 1), 'natlang_neuralese.tune.stack_export',
-    '--release', directory, '--stacks', stacksPath, '--module-map', student.moduleMap, '--hf-config', student.hfConfigDir, '--out', out];
+  await runStudentModule(student, 'natlang_neuralese.tune.stack_export',
+    ['--release', directory, '--stacks', stacksPath, '--module-map', student.moduleMap, '--hf-config', student.hfConfigDir, '--out', out]);
+}
+
+/** Run another module of the student's Python entry (the trainer argv with its `-m` module replaced). */
+export async function runStudentModule(student: TuneOptions['student'], module: string, args: readonly string[]): Promise<void> {
+  const index = student.trainer.indexOf('-m');
+  if (index < 0) throw new Error(`${module} derives its Python entry from a \`-m\` trainer argv`);
+  const argv = [...student.trainer.slice(0, index + 1), module, ...args];
   await new Promise<void>((resolveRun, reject) => {
     const child = spawn(argv[0]!, argv.slice(1), { cwd: student.workdir ?? process.cwd(), env: { ...process.env, ...student.env }, stdio: ['ignore', 'pipe', 'pipe'] });
     let tail = ''; const keep = (chunk: Buffer) => { tail = (tail + chunk.toString()).slice(-4000); };
     child.stdout.on('data', keep); child.stderr.on('data', keep);
     child.once('error', reject);
-    child.once('exit', code => code === 0 ? resolveRun() : reject(new Error(`stack export exited with ${code}\n${tail.trim()}`)));
+    child.once('exit', code => code === 0 ? resolveRun() : reject(new Error(`${module} exited with ${code}\n${tail.trim()}`)));
   });
 }
 

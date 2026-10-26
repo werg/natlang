@@ -854,9 +854,9 @@ independent work; a checked item needs its artifact and actual evidence.
   on-policy rollouts with exact recorded actors, oracle rewards, group advantages and clipped policy updates
 - [ ] Shared nested `nnt1` bases/cores and free-factor parameterization
 - [ ] Immutable-snapshot gradient updates, actual-update checks and exact continuation
-- [ ] Per-binding family gates with fixed family scale/version contracts
+- [x] Per-binding family gates with fixed family scale/version contracts (mechanism; no real multi-program run yet)
 - [ ] Placement, interactions, refits, pins and subtree discovery using measured costs
-- [ ] Invariant family clustering, balanced training and dependent program refits
+- [x] Invariant family clustering, balanced training and dependent program refits (`tune/families.py`, `ts-host/src/tune/families.ts`; no real multi-program run yet)
 - [ ] Rank/penalty/capacity sweeps and development-only defaults/student selection
 - [ ] Verified stack/data distillation into each base followed by adapter rebuilds
 - [ ] LFM and Mellum coverage with shared recipes and declared architecture differences

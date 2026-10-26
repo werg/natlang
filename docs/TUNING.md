@@ -74,6 +74,25 @@ other. Turns map to their invocation's binding exactly as at serving time and ke
 collection guidance to the system prompt; imported rows present the ordinary serving prompt with exactly that block
 removed. Programs with program-level guidance, imported programs or services cannot use the pool yet.
 
+## Families across programs
+
+`natlang tune --families ./prog-a ./prog-b ...` looks for behavior several tuned programs share. All programs must
+have an active release on the same exact base model.
+
+1. Discovery compares every tuned definition's effective weight change across programs (a gauge-invariant
+   similarity, never raw adapter factors) and clusters those above `tune.families.threshold` (default 0.5) that
+   span at least `tune.families.minPrograms` programs (default 2). Author tags in `tune.families.json` beside a
+   program, `{ "<family>": ["<definition source path>", ...] }`, are always proposed.
+2. The proposal policy (`tune.families.mode`: `crisp` by default, or `nl`/`shadow` with
+   `applications/tuner/proposeFamilies.nl`) chooses the families to fit.
+3. Each family is fit once on its members' training rows only, with every program-private adapter absent and each
+   program weighted equally, then normalized to a fixed amplitude and published as an immutable version in
+   `<natlang config>/tune/families/<base digest>/`. Refitting a published name keeps its amplitude.
+4. Each member program is refit with the family frozen and a gate per member definition (starting at 1, trained
+   with an L1 penalty, 0 removes it), measured against its previous release on development roots, and activated only
+   within `tune.placement.maxSuccessLoss`. The report flags negative transfer; `--rollback` restores the previous
+   release. Programs you do not name never contribute data.
+
 ## How calls use a release
 
 Each call runs its **own** definition's stack: its families, then its scope ancestry from the program root to its own
@@ -170,9 +189,9 @@ explicit `withNativeAdapters` scopes. Programs without a release are unaffected.
 Implemented: scope compilation, per-call resolution with requested/effective identities and coherent fallback,
 release store with compare-before-activate and rollback, `natlang tune` (collect, split, train, export, validate,
 activate, report, watch), managed llama.cpp and in-page wllama serving with per-request stacks, the joint trainer with nested shared
-bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
+bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps, paired evaluation reports and cross-program families are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
 oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
 resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
 them yet. Not yet
-implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, a CLI
+implemented: full per-lambda fine-tuning arm, base distillation, a CLI
 command for the RL rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.

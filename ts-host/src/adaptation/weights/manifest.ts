@@ -35,7 +35,9 @@ export type WeightArtifact = { readonly node: string; readonly artifact: string;
 export type WeightExports = { readonly gguf?: { readonly file: string; readonly sha256: string; readonly baseGgufSha256: string };
   readonly peft?: { readonly directory: string; readonly sha256: string } };
 /** An immutable published family version for this base; its amplitude is fixed (§5.4). */
-export type FamilyVersion = { readonly family: string; readonly version: string; readonly artifact: string; readonly amplitudeHex: string };
+export type FamilyVersion = { readonly family: string; readonly version: string; readonly artifact: string; readonly amplitudeHex: string;
+  /** Backend exports of the unscaled family residual; a member's gate is its request scale. */
+  readonly exports?: WeightExports };
 /** A static per-binding family membership with its learned, bounded gate. */
 export type FamilyMembership = { readonly binding: string; readonly family: string; readonly version: string; readonly gate: number };
 

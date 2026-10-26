@@ -11,13 +11,14 @@
  *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
  *                                          candidate within the declared success envelope
  *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
+ *   natlang tune <program> --distill       export the active release's verified training outputs for base SFT (§5.7)
  *   natlang tune <program> --rounds        SFT then RL rounds (tune.rounds), best development release activates (§5.1a)
  *   natlang tune <program> --calibrate     measure the configured teachers on development roots and route one (§4.2)
  *   natlang tune <program> --export-cases <dir> [--include-confirmation]
  *                                          case list of roots needing data, for the reviewed generation pool (pool.ts)
  *   natlang tune <program> --import-cases <results>
  *                                          the pool's collector results → per-root tune data under the actor's identity
- *   natlang tune --families                cross-program family discovery and refits
+ *   natlang tune --families <programs...>  cross-program family discovery, fits and member refits (families.ts)
  */
 import { existsSync, readdirSync, readFileSync, watch } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -25,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { buildProject } from '../compiler/node-project.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { createResolvedModelSession, executorIdentityForChoice, loadModelConfiguration } from '../model/index.js';
-import { activateRelease, currentManifest, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
+import { activateRelease, currentManifest, currentRelease, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings } from '../tune/settings.js';
@@ -34,19 +35,22 @@ import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
 import { programSites } from '../tune/sites.js';
 import { exportCases, importCases } from '../tune/pool.js';
-import { evaluateRelease, prepareData, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
+import { evaluateRelease, prepareData, runStudentModule, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
 import { evaluateRoots } from '../tune/evaluate.js';
 import { protectedExamples, readRootExamples } from '../tune/collect.js';
 import { runPlacement } from '../tune/placement.js';
 import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
 import { roundsSelector } from '../tune/schedule.js';
+import { exportDistillation } from '../tune/distill.js';
+import { runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
 import { loadNatlang } from '../runtime/node-files.js';
 
 const ROUTE_TEACHER = fileURLToPath(new URL('../../../applications/tuner/routeTeacher.nl', import.meta.url));
+const PROPOSE_FAMILIES = fileURLToPath(new URL('../../../applications/tuner/proposeFamilies.nl', import.meta.url));
 const identityOf = (profile: string) => executorIdentityForChoice(loadModelConfiguration(profile).choice).id;
 
 const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
@@ -76,10 +80,8 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation', '--rounds']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation', '--rounds', '--distill']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
-  if (flags.has('--families'))
-    throw new Error('natlang tune --families: cross-program family training is not implemented yet (plans/HIERARCHICAL_LORA_TUNING.md §5.5); program tunes run with no family level');
   const root = resolve(words[0] ?? '.');
   if (!existsSync(root)) throw new Error(`natlang tune: ${root} does not exist`);
   if (flags.has('--rollback')) { const record = rollbackRelease(root); io.out(`active release is now ${record.release.slice(0, 12)}`); return 0; }
@@ -94,18 +96,18 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       formatOverview(overview)].join('\n'));
     return 0;
   }
-  const withOptions = async <T>(fn: (options: TuneOptions) => Promise<T>): Promise<T> => {
+  const withOptions = async <T>(fn: (options: TuneOptions) => Promise<T>, programRoot = root): Promise<T> => {
     const { settings, student } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
-    const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
+    const inventory = buildProject({ project: programRoot, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
     if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
     const program = inventory.manifest.adaptation!;
     // Several configured teachers: collection uses the calibrated, routed one; an explicit --teacher overrides.
     const teacherProfile = settings.teachers?.length && !value('--teacher')
-      ? routedTeacherProfile(root, settings.teachers.map(profile => ({ profile, id: identityOf(profile) }))) : settings.teacher;
+      ? routedTeacherProfile(programRoot, settings.teachers.map(profile => ({ profile, id: identityOf(profile) }))) : settings.teacher;
     const teacherConfig = loadModelConfiguration(teacherProfile);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
     try {
-      return await fn({ root, program, settings, student, teacher: driverOf(teacherSession),
+      return await fn({ root: programRoot, program, settings, student, teacher: driverOf(teacherSession),
         teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
         serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
@@ -127,7 +129,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             session.vllmStacks?.(loaded.names);
             return { driver: driverOf(session), loaded: loaded.available, close: () => session.close() };
           }
-          const adapters = manifest.artifacts.filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
+          const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(undefined);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');
           const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { loraAdapters: () => adapters });
@@ -154,6 +156,33 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       for (const arm of arms) saveArm(root, arm);
     });
     io.out(formatOverview(loadOverview(root, partition)));
+    return 0;
+  }
+  if (flags.has('--families')) {
+    // Every named program stays open (sessions, data) while families are discovered, fit and members refit.
+    const programs = words.map(word => resolve(word));
+    const open = async (rest: string[], opened: FamilyProgram[]): Promise<FamiliesReport> => {
+      if (rest.length) return withOptions(async options => {
+        const active = currentRelease(options.root);
+        if (!active?.active) throw new Error(`natlang tune --families: ${options.root} has no active release; run natlang tune there first`);
+        const data = await prepareData(options, [], io.err);
+        return open(rest.slice(1), [...opened, { options, data, release: active.manifest, releaseDir: active.directory }]);
+      }, rest[0]);
+      const settings = opened[0]!.options.settings;
+      const nl = async (discovery: string) => {
+        const runtime = createNatlangRuntime({ model: opened[0]!.options.teacher });
+        try { return await runtime.run(() => (loadNatlang(PROPOSE_FAMILIES) as (...args: unknown[]) => Promise<unknown>)(discovery)); }
+        finally { runtime.close(); }
+      };
+      return runFamilies(opened, { ...settings.families, nl, log: io.err });
+    };
+    const report = await open(programs, []);
+    io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : [
+      `families: ${report.published.map(item => `${item.family}@${item.version} (${item.members.length} members)`).join(', ') || 'none published'}` +
+        (report.absent.length ? `; absent: ${report.absent.join(', ')}` : ''),
+      ...report.programs.map(item => `${item.program}: ${item.activated ? 'activated' : 'kept previous'} ${item.release?.slice(0, 12) ?? ''}` +
+        (item.development ? ` (development ${item.development.previous.toFixed(2)} -> ${item.development.refit.toFixed(2)}` +
+          `${item.negativeTransfer ? ', negative transfer' : ''})` : '') + (item.reason ? `: ${item.reason}` : ''))].join('\n'));
     return 0;
   }
   if (flags.has('--placement')) {
@@ -220,6 +249,20 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         choice.teacher ? `teacher: ${choice.profile} (${choice.policy}: ${choice.reason})` : `no teacher chosen: ${choice.reason}`].join('\n'));
       return choice.teacher ? 0 : 1;
     } finally { for (const { session } of sessions) await session.close(); }
+  }
+  if (flags.has('--distill')) {
+    const result = await withOptions(async options => {
+      const current = currentManifest(root);
+      if (!current) throw new Error('natlang tune --distill exports the active release; run natlang tune first');
+      const exported = await exportDistillation(options, await prepareData(options, [], io.err), current, io.err);
+      await runStudentModule(options.student, 'natlang_neuralese.tune.distill', ['--export', exported.directory,
+        '--checkpoint', options.student.checkpoint, '--device', options.student.engine?.device ?? 'cpu']);
+      return exported;
+    });
+    io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `distillation export: ${result.manifest.turns.rows} training rows ` +
+      `(${result.manifest.turns.bySource.teacher} teacher, ${result.manifest.turns.bySource.stack} tuned stack; ${result.manifest.roots.correct}/` +
+      `${result.manifest.roots.rerun} training roots correct) in ${result.directory}; not admitted: register it in training/neuralese_corpora.json to train on it`);
+    return 0;
   }
   const sweepPath = value('--sweep');
   if (sweepPath !== undefined) {

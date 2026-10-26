@@ -197,7 +197,8 @@ def fit(plan, out):
         save()
         print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}),
               flush=True)
-    artifact, rho = normalized_family(trainer, rho=plan.get('rho'))
+    rho = plan.get('rho')
+    artifact, rho = normalized_family(trainer, rho=float.fromhex(rho) if isinstance(rho, str) else rho)
     receipt = trainer.receipt()
     if artifact is None:
         _write(out / 'result.json', {'schema': 'natlang.tune-family-fit/v1', 'family': plan['family'], 'absent': True,
