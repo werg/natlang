@@ -61,6 +61,57 @@ The primary outcome is held-out program-level task success under a declared
 inference-cost envelope. Report success, latency, throughput and memory together;
 do not substitute token loss or adapter size for task success.
 
+### 1.1 Author workflow: set up, tune, call normally
+
+Seamless inference-engine integration is a primary product requirement. An
+author sets up an ordinary natlang program, trains it through one command, and
+uses the same program and call sites immediately. The intended CLI workflow is:
+
+```sh
+natlang setup                 # one-time model/runtime configuration
+natlang tune ./my-program     # collect/reuse data, train, validate and activate
+natlang run ./my-program      # ordinary execution automatically uses the result
+```
+
+`natlang tune` is a planned command, not an existing CLI capability at the
+reviewed revision. Its setup preflight must resolve the selected student,
+training capability, authorized teacher and serving backend from the existing
+profile/settings. Reuse those settings across programs. An author supplies the
+normal typed program plus available root examples, tests or traces; the build
+discovers its callable/site inventory and generates the adapter metadata.
+
+The default path requires no handwritten adapter manifest, adapter IDs, manual
+export/conversion, server-loading command, `withNativeAdapters` wrapper or
+alternate inference API. Normal `natlang run`, `natlang call` and program-aware
+SDK calls resolve the active compatible binding automatically. An ordinary
+typed function call stays an ordinary typed function call. Package distribution
+may pin a release, and experts may override it, without adding steps to local use.
+
+A successful tune means the chosen backend has loaded and accepted the release
+and a normal engine call has exercised it with a safe recorded test input. It
+does not mean merely that training produced files. Report the active program,
+student/backend, measured validation outcome and time to readiness. If activation
+fails, retain the previous compatible release and report the failure explicitly.
+
+**Fast first use.** Fit the requested program for its selected executor using a
+declared default recipe, existing compatible families and reusable admitted
+data. Warm runs reuse source/tokenization/basis/export caches and incremental
+state where valid. Cold runs collect the missing data through the same command.
+An absent family is a valid empty hierarchy level (§3).
+
+Per-program readiness does not wait for a global rank/capacity sweep, a new
+cross-program family generation, a base-distillation round, training the other
+student, or exporting to every other backend. Those remain required system
+capabilities and separately scheduled/explicit maintenance work; a build waits
+only for its selected release's real dependencies and correctness checks. Both
+students and every serving target must support this same author workflow.
+
+Measure time from invoking `tune` to the first successful tuned call through
+the normal engine, separating queue/setup, data, training, validation, export
+and loading time. Report cold and warm cases, data volume and hardware. Optimize
+this measure alongside quality; do not promise seconds or minutes before
+measurement. Once ready, inference has no teacher or trainer in its request path.
+
 ## 2. Verified starting point
 
 These are integration points at the reviewed revision, not claims that the
@@ -72,6 +123,7 @@ hierarchical pipeline already exists.
 | `nnt1` frozen-SVD bases, coefficient cores and functional weight substitution | [native_adapters.py](../training/neuralese/natlang_neuralese/model/native_adapters.py), [basis math](../training/neuralese/natlang_neuralese/model/native_adapter_math.py) | Multi-node joint updates, shared basis inventory, free-factor option and export |
 | `withNativeAdapters`, recorded objectives and optimizer continuation | [learning.ts](../ts-host/src/neuralese/learning.ts) | Separate resolved lexical bindings from explicit dynamic experiment scopes |
 | Runtime contexts and callable bindings | [contexts.ts](../ts-host/src/runtime/contexts.ts), [callable.ts](../ts-host/src/runtime/callable.ts) | Immutable per-invocation stack selection and trace fields |
+| Program discovery, normal run/call launch and runtime model driver | [CLI launch](../ts-host/src/cli/main.ts), [runtime](../ts-host/src/runtime/runtime.ts) | Automatic active weight-binding discovery and per-request stack dispatch on the existing inference path |
 | Source/world connected-component selector | [memetic_batch.py](../training/neuralese/natlang_neuralese/rl/memetic_batch.py) | Extend train-only development/confirmation selection; preserve external protected sets |
 | Explicit `same-base-adapter-state` imports and consumption receipts | [native_adapters.py](../training/neuralese/natlang_neuralese/model/native_adapters.py), [native_grad.py](../training/neuralese/natlang_neuralese/serve/native_grad.py) | Retain cross-stack producer/consumer identity and gradients; distinguish cache reuse |
 | Teacher configuration and current operating instructions | [TEACHER_SETUP.md](../TEACHER_SETUP.md), [AGENTS.md](../AGENTS.md) | Calibrated routing among currently authorized actors |
@@ -430,6 +482,43 @@ merely because architecture and tokenizer names are unchanged.
 
 ## 6. Runtime contracts
 
+### Integration into the normal inference engine
+
+Extend the existing program descriptor/compiler inventory, CLI launch,
+`createNatlangRuntime` and model-driver path. Resolve the program's active
+weight binding during normal program loading/task creation; select each
+callee's stack at the model-driver/server request boundary. All model turns,
+decision readouts and native-state operations for that call use its pinned
+effective actor. Applications do not pass stack IDs or select a special runner.
+
+Use one resolver and binding contract across CLI, SDK and browser entrypoints.
+The loader supplies program identity/root metadata automatically when available;
+an embedded host registers its program once at runtime construction, not on
+every call. Extend `natlang call`'s cwd/project resolution to obtain that identity
+without an explicit adaptation flag. Generated `natlang.adapters.json` and the Natlang-managed active
+release record drive discovery. A deployment/package can carry an immutable
+release reference instead of relying on a mutable local active pointer.
+
+The existing `adaptation` artifact carries instruction/guidance changes, not
+LoRA weights. Reuse its program inventory and compatibility principles without
+reinterpreting that schema or reinstating obsolete memetic adapters. Combine
+compatible instruction, native-guidance and weight bindings through the normal
+runtime with one explicit effective-source/executor identity. An explicit model
+profile override must be checked against the trained binding; a fallback cannot
+be reported as tuned execution (§6, Effective identity).
+
+Activate only after the selected driver/backend acknowledges the exact loaded
+artifact and passes a normal-call readiness probe against a replayable test world
+that does not repeat real side effects. Publish the active reference
+atomically; existing tasks finish on their pinned release and subsequent tasks
+resolve the new one. Watch mode uses the same path. At a new task boundary the
+default program loader constructs a fresh immutable program/context/callable
+binding snapshot from the active release. Existing callable handles retain
+their captured contexts/releases, and explicit pins stay pinned; never replace
+the context behind a callable already held by application code. Surface
+`untuned`, `tuning`, `ready`, `stale` and `degraded` status through normal CLI/API
+diagnostics, with actionable reasons rather than exposing internal tensor names.
+
 ### Binding, publication and scopes
 
 Adapters are immutable data items in contexts. Folder adapters reside in their
@@ -595,13 +684,20 @@ isolates in-progress builds, and compares the source/release revision before
 publication so an older job cannot overwrite a newer result. Full joint refits
 run on a configured schedule and after a configured number of incremental builds.
 
-- `natlang tune <program>`: capture, teachers, evidence, joint training, placement,
-  export, validation and manifest publication for the declared targets.
+- `natlang tune <program>`: discover the program; capture/reuse data; verify, fit,
+  place and export for its selected executor/backend; load, validate through the
+  normal inference path and atomically activate. Success means ready to call.
 - `natlang tune <program> --incremental`: rebuild the stale dependency closure.
 - `natlang tune <program> --watch`: resumable background incremental builds.
 - `natlang tune --families`: versioned cross-program discovery/training/refits.
 - `natlang tune --report <program>`: exact candidate/release results, ablations,
-  provenance, costs, degradation and incomplete required work.
+  provenance, costs, time to first tuned call, degradation and incomplete work.
+
+Progress reports identify the current stage and a resumable job; rerunning the
+same command resumes/reuses valid work. The ordinary run/call path remains
+available during tuning with its current compatible release or declared base
+fallback. Training is an explicit build operation; a normal inference request
+does not unexpectedly start a teacher job or block on retraining.
 
 Reports distinguish collected, admitted, trained, exported and actually served
 artifacts. Receipts identify all affected dependencies so a regression can be
@@ -612,6 +708,13 @@ bisected without pretending one adapter necessarily has sole causal credit.
 Evaluation runs alongside implementation and on builds. It informs repairs and
 publication choices, without cancelling required work. Protect data according
 to §4.1 and report a versioned candidate, workload and measurement protocol.
+
+The foreground per-program build validates its selected candidate, compatible
+backend and readiness through the ordinary engine. Full capacity sweeps,
+cross-backend comparisons and fleet-wide evaluation run through the wider work
+schedule; they do not add unrelated prerequisites to first use (§1.1). Include
+time to first tuned call and the number of manual author actions in acceptance
+reports. Exercise the same CLI/SDK entrypoints authors actually use.
 
 | Arm | Question |
 | --- | --- |
@@ -698,6 +801,8 @@ independent work; a checked item needs its artifact and actual evidence.
 **Runtime and serving**
 
 - [ ] Manifest-bound lexical scopes over context DAGs, `.in()` and library imports
+- [ ] One setup/tune/ordinary-call workflow with automatic active-binding
+  discovery, backend loading and activation across CLI, SDK and browser
 - [ ] Explicit experiment scopes and async/browser isolation
 - [ ] Atomic release pinning, requested/effective identities and coherent fallback
 - [ ] Call/prefix/KV/hybrid cache compatibility and rollback behavior
@@ -713,10 +818,15 @@ independent work; a checked item needs its artifact and actual evidence.
 
 - [ ] Acyclic build keys, reverse dependencies and invalidation matrix
 - [ ] All five CLI modes, resumable jobs, watch races and scheduled full refits
+- [ ] First-use defaults, trace/data/cache reuse and progress/readiness reporting;
+  global maintenance does not block a program's selected release
 - [ ] Every evaluation arm, paired uncertainty and held-program transfer reports
 - [ ] Conformance: DAG aliases/rebinding, nested/parallel scopes, exact exports,
   wrong-base rejection, explicit cross-stack states/gradients, degraded cache
   identities, ancestor invalidation, interrupted publication and rollback
+- [ ] End-to-end author-flow cases: setup/tune/run and tune/call without manual
+  manifests or flags; unchanged SDK calls; readiness/activation failure;
+  new-task release refresh with old tasks/pins preserved; cold/warm timings
 - [ ] Spec, author guide, authoring/integration skill updates and API migration
 - [ ] Live measurement of actual model-facing changes under repository rules
 
@@ -740,6 +850,13 @@ independent work; a checked item needs its artifact and actual evidence.
 
 - Every production-packet program can be tuned from its permitted training data
   with one `natlang tune` command on both students; protected rows stay excluded.
+- From a configured installation and ordinary program/examples, the author can
+  tune once and execute through the existing run/call/SDK path without handling
+  adapter files, IDs, exports or server-loading steps. Successful completion
+  means the selected tuned release has been exercised and is ready in that path.
+- Cold and warm time to first tuned call is measured on declared hardware;
+  required global family/sweep/distillation work is independent of program
+  readiness, and runtime requests do not unexpectedly initiate training.
 - Bound tuned programs execute on the reference server, vLLM, the llama.cpp fork
   and wllama with declared target/state coverage, measured parity and actual
   hardware evidence. Required backend gaps remain visible until implemented.
