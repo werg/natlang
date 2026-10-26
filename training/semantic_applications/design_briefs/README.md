@@ -179,6 +179,11 @@ in [`plans/MODEL_FACING_CHANGES.md`](../../../plans/MODEL_FACING_CHANGES.md).
 
 ## Release records
 
+[`release-v3`](release-v3/) binds the reviewed source, compiler evidence and
+TRAIN/development/test packet. Its [review](release-v3/REVIEW.md) records effect
+and spending fixes, collection/judge integration, RL eligibility and validation
+limits. Use this source identity for new collection.
+
 [`release-v2`](release-v2/) records the revised inventory, compiler evidence,
 fixture migration, architecture review, type pruning, packet hashes and
 validation limits. The [readiness record](release-v2/readiness.json) is the
