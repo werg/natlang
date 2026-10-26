@@ -16,15 +16,16 @@ SPEC.loader.exec_module(subject)
 
 @pytest.fixture
 def packages(tmp_path):
-    # This frozen production parent predates the prefix extension; its exact
-    # compiler is the independent old semantics, not a reverse-patched fixture.
+    # This reachable immutable production parent predates the prefix
+    # extension; its exact compiler is the independent old semantics, not a
+    # reverse-patched fixture.
     roots = tmp_path / 'old', tmp_path / 'new'
     for root in roots:
         for name in (*subject.POLICY_FILES, 'common/paths.py'):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             if root == roots[0]:
-                target.write_bytes(subprocess.check_output(['git', 'show', f'3042af96a386:training/neuralese/natlang_neuralese/{name}'], cwd=ROOT))
+                target.write_bytes(subprocess.check_output(['git', 'show', f'd8bb4642f9dad3c1eff9cd86c1130e4c96cba0af:training/neuralese/natlang_neuralese/{name}'], cwd=ROOT))
             else:
                 # This verifier supports exactly the historical prefix change.
                 # Later import-adjoint/compiler changes require new indexes,

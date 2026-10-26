@@ -1527,7 +1527,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       captureAllOutputs: true, maxBytes: 1_048_576 },
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId,
     ...(options.runLabel !== undefined ? { runLabel: options.runLabel } : {}), signal: options.signal });
-  registerTrace(options.runId, runtime.trace);
+  registerTrace(options.runId, runtime.trace, runtime.episodeBudget);
   try {
     let result: Awaited<ReturnType<typeof runtime.run>>;
     try { result = await runtime.run(root); }

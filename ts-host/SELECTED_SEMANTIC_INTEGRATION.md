@@ -2,7 +2,7 @@
 
 `installSelectedSemanticEnvironment` installs the asynchronous executor at both
 the task evaluator and callable-folder module loader. The implementation uses
-the `semantic-trace/4` / `semantic-execution/4` contract supplied by the pinned
+the `semantic-trace/5` / `semantic-execution/5` contract supplied by the pinned
 tracer. The JavaScript source is published before an explicit invocation. Model
 selections drive the guest; declared native bindings run only after a committed
 request, and their actual results become observations.
@@ -199,7 +199,7 @@ tarball, with the package lock recording its integrity. The `owned-tracing-smoke
 workflow installs that package with `npm ci` and runs these tests through its
 public selected-execution and training exports. No sibling checkout is needed.
 The final roadmap integration pins tracer revision
-[`b238fb48e6dc2b3a97e8c1280d4b961c0593466c`](https://github.com/werg/tracing-js-self/commit/b238fb48e6dc2b3a97e8c1280d4b961c0593466c).
+[`360d42b15537bed1a749261108c5c94b7562f323`](https://github.com/werg/tracing-js-self/commit/360d42b15537bed1a749261108c5c94b7562f323).
 Its public selected prefixes include the checked source and retained-state
 context used by both the teacher and executing model. Native orchestration,
 child completion, callback ownership and context-eviction verification use that
@@ -248,3 +248,7 @@ scripts for its export and dependency boundaries. The selected integration
 workflow uses the smaller five-file production integration gate above. These
 checks perform no optimizer updates; controlled selections retain their fixture
 origin and are not evidence of learned model success.
+
+## One canonical execution witness
+
+Natlang's selected environment consumes the source-grounded `semantic-execution/5` / `semantic-trace/5` selected-harness trace from its **pinned tracer commit**, never the old group-shaped diagnostic producer. The model does not choose between explicit, compact or outcome-only alternatives. Its returned work must satisfy the same selected-state checks and external effect authorization. Private interpreter journals and independent reference outcomes are not model inputs. A schema change must update the package pin and lockfile together and pass the actual selected async module/callback tests.

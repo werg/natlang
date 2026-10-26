@@ -23,7 +23,7 @@ import { fetchModel } from '../model/chat-completion.js';
 import { neuraleseServerInfo, serves } from '../model/neuralese-info.js';
 import { requestNativeStateIds } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
-import { graphNode, traceFor, blockInput } from '../native/graph.js';
+import { graphNode, traceFor, blockInput, producerScopeForTrace } from '../native/graph.js';
 import { archiveNativeState, restoreNativeInputs } from '../model/native-state-client.js';
 
 /** The type of a written view: the Neuralese instance of view's result. */
@@ -83,7 +83,7 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
         }
         const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: failure?[]:['return_result'],
           temperature: 1, seed: null, source_kind: 'native-view', source_turn: turn },
-          imports.map(id => blockInput(id, 'native-state')));
+          imports.map(id => blockInput(id, 'native-state', undefined, producerScopeForTrace(trace))));
         for (const write of receipt.writes) {
           const artifact = await archiveNativeState(client, write.state_id);
           if (artifact.metadata.schema === 'neuralese.semantic-state/1') {

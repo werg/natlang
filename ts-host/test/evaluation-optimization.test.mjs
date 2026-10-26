@@ -139,11 +139,18 @@ test('full observations and judge calls cross the worker boundary without live h
   assert.equal(gateway.ledger.roles.executor, undefined);
 });
 
-test('worker timeout aborts coordinator requests and retains unknown incurred usage', async () => {
+test('worker timeout aborts coordinator requests and retains unknown incurred usage', { timeout: 15000 }, async t => {
   const prepared = await loadEvaluationSuite(fixtureSuite().path);
   const gateway = new (await import('../dist/evaluation/usage.js')).UsageGateway(prepared.suite.budget);
-  await assert.rejects(evaluate(prepared, { gateway, driver: () => new Promise(() => {}), timeoutMs: 2000 }), /timed out/);
-  await new Promise(resolve => setTimeout(resolve, 20));
+  // Hold the worker timeout until the real request dispatch has crossed the
+  // worker boundary. Then advance only the timeout timer deterministically.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let dispatch;
+  const dispatched = new Promise(resolve => { dispatch = resolve; });
+  const evaluation = evaluate(prepared, { gateway, driver: () => { dispatch(); return new Promise(() => {}); }, timeoutMs: 5000 });
+  await dispatched;
+  t.mock.timers.tick(5000);
+  await assert.rejects(evaluation, /timed out/);
   assert.equal(gateway.ledger.unknownRequests, 1);
   assert.equal(gateway.snapshot().reserved.modelCalls, 0);
 });

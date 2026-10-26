@@ -26,7 +26,7 @@ import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { dialectBinding, isNeuraleseRef, neuraleseRef, neuraleseSentinel, nativeLiteralArguments, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
-import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
+import { bindTraceScope, blockInput, FILE_CONTEXT, graphNode, invocationNodeId, producerScopeForTrace, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
 import { isNatlangCallable } from '../runtime/callable.js';
 import { withSelectedCaptureAccessors } from '../runtime/selected-captures.js';
@@ -611,6 +611,7 @@ export class NativeRuntime {
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       environment: { mode: options.environment.mode, authority: options.environment.authority, native_state_replayable: false },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
+    bindTraceScope(this.trace, this.episodeBudget);
     this.exactHostTraceCapture = options.exactHostTraceCapture;
     const capture = this.exactHostTraceCapture;
     if (capture && (!Number.isSafeInteger(capture.maxBytes) || capture.maxBytes < 1 || capture.maxBytes > 8_000_000 ||
@@ -754,8 +755,8 @@ export class NativeRuntime {
     const manifest = (this.trace.events[0] ?? {}) as Record<string, unknown>;
     const parent = typeof manifest.parent_call_id === "string" ? manifest.parent_call_id : undefined;
     const inputs = [...(parent ? [{ node: invocationNodeId(parent), port: 'caller' }] : []),
-      ...Object.entries(node.args).flatMap(([name, value]) => valueInputs(value, `arg:${name}`)),
-      ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`); } catch { return []; } })];
+      ...Object.entries(node.args).flatMap(([name, value]) => valueInputs(value, `arg:${name}`, producerScopeForTrace(this.trace))),
+      ...Object.values(node.captures ?? {}).flatMap(cell => { try { return valueInputs(cell.get(), `capture:${cell.name}`, producerScopeForTrace(this.trace)); } catch { return []; } })];
     const definitionId=String(manifest.definition_id ?? node.functionName), revision=String(manifest.source_revision ?? '');
     const context=String(manifest.context_id ?? FILE_CONTEXT), signature=formatType(node.type);
     const argumentBindingSha=hexDigest(stableBinding(dump(node.args,true)));
@@ -1973,14 +1974,14 @@ export class NativeSession {
       const turn = [...this.runtime.trace.events].reverse().find(event => event.kind === 'model_turn')?.node as string | undefined;
       for (const literal of compiled.literals ?? []) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
         block: literal.id, type: literal.type, expression: `__neuralese(${nativeLiteralArguments(literal.id,literal.stopGradient,literal.sourceOccurrence)})` },
-        [blockInput(literal.id, 'block'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+        [blockInput(literal.id, 'block', literal.sourceOccurrence, producerScopeForTrace(this.runtime.trace)), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
       for (const plan of compiled.plans ?? []) if (plan.softBody) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
         block: plan.softBody, type: `Neuralese<(${plan.parameters.map(item => `${item.name}: ${item.type.natlang ?? item.type.text}`).join(', ')}) => ${plan.returns.natlang ?? plan.returns.text}>`,
         expression: `__neuralese.body(${nativeLiteralArguments(plan.softBody,plan.softBodyStopGradient,plan.softBodySourceOccurrence)})`,
         captures: plan.captures.filter(capture => !capture.shadowedByParameter).map(capture => capture.name),
         shadowed_capture_initializers: plan.captures.filter(capture => capture.shadowedByParameter)
           .map(({ name, mode }) => ({ name, mode: mode ?? 'snapshot' })) },
-        [blockInput(plan.softBody, 'body'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
+        [blockInput(plan.softBody, 'body', plan.softBodySourceOccurrence, producerScopeForTrace(this.runtime.trace)), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
     }
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item => `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
