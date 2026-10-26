@@ -143,10 +143,12 @@ not match the content.
 
 This repository contains one implementation of this protocol, the reference server
 (`training/neuralese/natlang_neuralese/serve/`, `python -m natlang_neuralese.serve`).
-The vendored WebAssembly build in `ts-host/vendor/neuralese-wasm/` (the browser's local
-model engine) predates native state: it serves chat completions, decisions and guidance,
-and declares no `native_state` in `info`, so a runtime configured for Neuralese values
-refuses it at setup (`neuralese-native-state-unavailable`).
+The llama.cpp fork serves part of it for llama.cpp models without this protocol's routes:
+it consumes stored native states exported as native state spans (`--native-state`, content
+parts `{type: "native_state", id}`) and scores decisions (`POST /v1/natlang/score`). The
+browser's local model is the patched wllama (`ts-host/src/browser/local-model.ts`), which
+runs that fork in the page: a tuned release's soft states and decision readout work there,
+while producing native state, the store, guidance and learning need a native-state server.
 
 ### Capabilities
 

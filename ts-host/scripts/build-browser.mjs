@@ -38,11 +38,6 @@ await build({ entryPoints: { natlang: resolve(root, 'src/browser/index.ts') }, b
   define: { __NATLANG_PRELUDE__: JSON.stringify(readFileSync(resolve(root, 'prelude.js'), 'utf8')),
     __NATLANG_TS_LIBS__: JSON.stringify(libs) },
   legalComments: 'none' });
-// The Neuralese service as WebAssembly (vendor/neuralese-wasm, built from the llama.cpp fork) and the worker that hosts
-// it (startBrowserNeuralese).
-await build({ entryPoints: { 'neuralese-worker': resolve(root, 'src/browser/neuralese-worker.ts') }, bundle: true,
-  platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
-  plugins: [browserNodeImports()], legalComments: 'none' });
 // The call store's worker (src/browser/call-store-worker.ts) and SQLite's WebAssembly, which it loads from beside itself.
 await build({ entryPoints: { 'call-store-worker': resolve(root, 'src/browser/call-store-worker.ts') }, bundle: true,
   platform: 'browser', format: 'esm', target: 'es2022', outdir: resolve(root, 'dist/browser'), external: ['undici'],
@@ -54,9 +49,6 @@ copy(fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm')),
 const sqliteEntry = fileURLToPath(import.meta.resolve('@sqlite.org/sqlite-wasm'));
 for (const asset of ['sqlite3-opfs-async-proxy.js', 'sqlite3-worker1.mjs'])
   copy(join(dirname(sqliteEntry), asset), resolve(root, 'dist/browser', asset));
-for (const asset of ['neuralese-wasm.mjs', 'neuralese-wasm.wasm', 'neuralese-wasm-mt.mjs', 'neuralese-wasm-mt.wasm',
-  'neuralese-wasm-gpu.mjs', 'neuralese-wasm-gpu.wasm'])
-  copy(resolve(root, 'vendor/neuralese-wasm', asset), resolve(root, 'dist/browser', asset));
 copy(fileURLToPath(import.meta.resolve('@wllama/wllama/esm/wasm/wllama.wasm')),
   resolve(root, 'dist/browser/wllama.wasm'));
 for (const [source, target] of [['wllama.js', 'wllama-compat.js'],
@@ -70,7 +62,7 @@ for (const asset of ['pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip',
   copy(fileURLToPath(import.meta.resolve(`pyodide/${asset}`)), join(pyodideDir, asset));
 for (const asset of readdirSync(resolve(root, 'vendor/pyodide')).filter(name => name.endsWith('.whl')))
   copy(resolve(root, 'vendor/pyodide', asset), join(pyodideDir, asset));
-// What this build read and wrote, and a check that it is consistent (e.g. the vendored wasm matches provenance.json).
+// What this build read and wrote, and a check that it is consistent.
 writeFileSync(STAMP, JSON.stringify(makeStamp({ inputs, assets, outputs }), null, 1) + '\n');
 const problems = browserBuildProblems();
 if (problems.length) { console.error(staleMessage(problems, 'the browser build just written')); process.exit(1); }

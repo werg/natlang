@@ -51,7 +51,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Reference server on Mellum (markers, QAT latents) | partial | Markers via `hf_port.family_controls`; QAT conversion output not loadable as a served student yet |
 | llama.cpp fork (LFM2): ports, server, LoRA adapters, read adapter | used | fork 8155cff42, `tests/neuralese/test_server_conformance.py` |
 | llama.cpp fork for Maple/Mellum (MoE, ternary TQ2_0, heads) (#26, #32) | not started | `export/` handles LFM2 only |
-| Browser wasm/WebGPU | used (LFM, lagging fork build) | `ts-host/vendor/neuralese-wasm/provenance.json` (fork 5d999c0c5) |
+| Browser wasm/WebGPU | removed 2026-10-26 (retired projected-vector protocol; the browser's local model is the patched wllama, without native state yet) | was `ts-host/vendor/neuralese-wasm` (fork 1f4e334d5) |
 | Legacy vLLM Neuralese parity (projected PortHeads) | retired | `scripts/neuralese_vllm_parity.py` removed with the projected adapter path; current vLLM serving is ordinary teacher inference |
 | Batched-execution integration (BATCHED_EXECUTION §7: diagnostic code union, turn/function in requests, shared scheduler in improvement/pi drivers, author note) | not started on main | Owner: TS batching session |
 
@@ -119,7 +119,7 @@ Out of 44 audited deliverables (updated 2026-10-09 after the artifact work and a
 | 5 | S5 multi-call graph replay (credit across chains of calls and closures); per-call replay over converted records exists in `trajectories.py` | built 2026-10-10 (`train/graph_replay.py`, smoke-gated); next: full-size run, Mellum records |
 | 6 | Operator/combinator training samples and operator training (S5 items 6–7) with law terms | built 2026-10-10 (smoke, unqualified artifacts); next: scale cases, live runtime check |
 | 7 | Reference server serving Mellum students (QAT-converted latents, read adapter) | Mellum session |
-| 8 | llama.cpp/wasm for Mellum (MoE + ternary) and refreshing the browser build to the fork pin | batched-scoring/fork agent |
+| 8 | llama.cpp/wasm for Mellum (MoE + ternary) and refreshing the browser build to the fork pin (browser part moot: the vendored Neuralese wasm was removed 2026-10-26) | batched-scoring/fork agent |
 | 9 | S7 rollout task record, environment contract and rollout driver (smoke done 2026-10-09; next: monitors, multi-round on Mellum) | RL sub-agent |
 | 10 | Learned updater v0 (S6 items 6–8) from improvement-step records (v0 built, unqualified; next: more data, D init) | RL sub-agent |
 

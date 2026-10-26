@@ -417,8 +417,8 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
  * without header or body timeouts; callers bound calls with their own deadlines. Elsewhere this is plain fetch.
  */
 let longDispatcher: Promise<unknown> | undefined;
-/** In-process endpoints: a base URL whose requests a handler answers instead of the network (the WebAssembly
- * Neuralese service in a browser worker or in Node). */
+/** In-process endpoints: a base URL whose requests a handler answers instead of the network (e.g. a test's fake
+ * provider). */
 const localEndpoints = new Map<string, (url: string, init: RequestInit) => Promise<Response>>();
 
 /** Answer requests under `base` (such as `http://neuralese.local`) with `handler`; returns the unregistration. */
