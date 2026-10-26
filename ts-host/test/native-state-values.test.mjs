@@ -592,6 +592,8 @@ test('tool JSON history records every actual native import with its writer and g
   const part={type:'native_state',id:artifact.id,source_occurrence:'actual-writer#6',stop_gradient:true};
   const messages=[{role:'assistant',tool_calls:[{function:{name:'return_result',arguments:JSON.stringify({value:[part],nested:{again:[part]}})}}]}];
   const before=structuredClone(messages);
+  const {graphNode}=await import('../dist/native/graph.js');
+  graphNode(invocation.runtime.trace,'block_write',{call_id:'actual-writer',turn:'actual-writer#turn6',block:artifact.id},[],'actual-writer#6');
   await agent.modelTurnNode(invocation,messages,{},2);
   const reads=invocation.runtime.trace.events.filter(event=>event.kind==='block_read');
   assert.equal(reads.length,2);
@@ -605,4 +607,55 @@ test('tool JSON history records every actual native import with its writer and g
   await agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:JSON.stringify({singleton:part,text:JSON.stringify(part)})}}]}],{},3);
   assert.equal(invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length,prior);
   await assert.rejects(()=>agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:'not json'}}]}],{},4),SyntaxError);
+});
+
+test('captured sampler prompt adds omitted external native context to the whole-turn graph', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const prompt = [{kind:'native_state',id:artifact.id,native_identity:{
+    architecture:artifact.metadata.architecture,checkpoint_sha256:artifact.metadata.checkpoint_sha256,
+    tokenizer_fingerprint:artifact.metadata.tokenizer_fingerprint,
+    embedding_weight_sha256:artifact.metadata.embedding_weight_sha256}}, {kind:'tokens',token_ids:[1,2]}];
+  await agent.modelTurnNode(invocation,[{role:'system',content:'context was supplied outside the message list'}],{
+    raw_response:{x_natlang_rl_capture:{prompt,writes:[]}},text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.ok(read);
+  assert.equal(read.block,artifact.id);
+  assert.equal(read.inputs[0].node,'external');
+  assert.deepEqual(read.positions,[0,0]);
+  assert.equal(read.position_source,'captured_prompt_segment');
+  const turn=invocation.runtime.trace.events.find(event=>event.kind==='model_turn');
+  assert.equal(turn.inputs.filter(input=>input.port==='read').length,1);
+});
+
+test('captured prompt reconciles existing native reads and rejects unexplained graph reads', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const part={type:'native_state',id:artifact.id};
+  await agent.modelTurnNode(invocation,[{role:'user',content:[part]}],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id}],writes:[]}},text:'',calls:[]},1);
+  assert.equal(invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length,1);
+  const other=await store.putNativeState(nativeStateFixture('second-fixture'));
+  await assert.rejects(()=>agent.modelTurnNode(invocation,[{role:'user',content:[{type:'native_state',id:other.id}]}],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'tokens',token_ids:[1]}],writes:[]}},text:'',calls:[]},2),
+  /request graph contains native reads absent from the captured model prompt/);
+});
+
+test('captured-only native reads bind a unique in-episode writer and reject an unknown declared writer', async () => {
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const {graphNode}=await import('../dist/native/graph.js');
+  const writer = graphNode(invocation.runtime.trace,'block_write',{call_id:'producer',turn:'producer#turn1',block:artifact.id},[],'producer#write1');
+  await agent.modelTurnNode(invocation,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id}],writes:[]}},text:'',calls:[]},1);
+  const read=invocation.runtime.trace.events.find(event=>event.kind==='block_read');
+  assert.equal(read.inputs[0].node,writer);
+  const second = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const secondAgent = new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  await assert.rejects(()=>secondAgent.modelTurnNode(second,[],{
+    raw_response:{x_natlang_rl_capture:{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:'missing#writer'}],writes:[]}},
+    text:'',calls:[]},1), /names no matching in-episode writer/);
 });

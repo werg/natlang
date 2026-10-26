@@ -110,7 +110,8 @@
           "turn": { "type": "string" },
           "stop_gradient": { "const": true },
           "block": { "$ref": "#/$defs/blockId" },
-          "positions": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
+          "positions": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+          "position_source": { "enum": ["captured_prompt_segment"] }
         }
       }
     },
