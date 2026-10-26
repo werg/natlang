@@ -6,7 +6,13 @@ import pytest
 from test_native_serving_adapters import engine_fixture
 
 SNAPSHOTS = sorted(Path.home().glob('.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/*/config.json'))
-real_lfm = pytest.mark.skipif(not SNAPSHOTS, reason='needs the LiquidAI/LFM2.5-350M snapshot in the local HF cache')
+_needs_lfm = pytest.mark.skipif(not SNAPSHOTS, reason='needs the LiquidAI/LFM2.5-350M snapshot in the local HF cache')
+
+
+def real_lfm(test):
+    """Real LFM2.5-350M in float32 on the CPU: a multi-GB peak, so check-main runs these in the separate heavy process
+    (a full run's suite process was killed in the soft-state build test, 2026-10-26)."""
+    return pytest.mark.gpu_heavy(_needs_lfm(test))
 
 
 def real_engine(tmp_path):
