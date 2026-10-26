@@ -158,6 +158,37 @@ def _resolve_config_file(path,routes):
     return binding(matches[0])
 
 
+def _source_recipe_relation(receipt,config,recipe_path,current_recipe,current_recipe_sha):
+    """Bind a saved checkpoint's recipe separately from the currently adopted recipe."""
+    source=receipt.get('recipe')or{}
+    if source.get('sha256') in (None,current_recipe_sha):
+        return {'kind':'same-recipe','source':copy.deepcopy(source),
+            'current':binding(recipe_path)}
+    source_path=source.get('path')
+    if not isinstance(source_path,str)or not Path(source_path).is_file():
+        raise ValueError('owner receipt names a different recipe without an available exact ancestry file')
+    source_file=binding(source_path)
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    source_value=json.loads(Path(source_path).read_bytes())
+    source_sha=recipe_identity_sha256(source_path)
+    source_lineage=source_value.get('production_lineage_sha256')
+    current_lineage=current_recipe.get('production_lineage_sha256')
+    owner_recipe=((config.get('trainer_parameters')or{}).get('recipe_binding')
+        or (config.get('seed_trainer_parameters')or{}).get('recipe_binding')or{})
+    if (source_sha!=source.get('sha256')
+            or source_file['sha256']!=source.get('file_sha256',source.get('sha256'))
+            or source_lineage is None or source_lineage!=source.get('lineage_sha256')
+            or current_lineage is None or current_lineage!=source_lineage
+            or owner_recipe.get('path')!=config.get('production_recipe')
+            or owner_recipe.get('sha256')!=current_recipe_sha
+            or owner_recipe.get('lineage_sha256')!=current_lineage):
+        raise ValueError('owner receipt recipe is not an exact ancestor in the currently adopted production lineage')
+    return {'kind':'same-production-lineage-continuation','source':{
+            **source_file,'recipe_sha256':source_sha,'lineage_sha256':source_lineage},
+        'current':{**binding(recipe_path),'lineage_sha256':current_lineage},
+        'current_config_binding':copy.deepcopy(owner_recipe)}
+
+
 def _validate_typescript_host(runtime_source,archive_path):
     host=runtime_source.get('typescript_host')
     if host is None:return None
@@ -290,8 +321,9 @@ def build_role_declarations(role_inputs):
         if not isinstance(model_id,str)or ':' not in model_id or model_id.split(':',1)[0]!=('lfm2' if role=='lfm' else 'mellum'):
             raise ValueError('owner receipt model identity does not match the requested role')
         recipe=resolve_recipe_data(recipe_path);policy_sha=recipe_identity_sha256(recipe_path)
-        if (source_evidence_key=='source_receipt' and source_recipe_sha not in (None,policy_sha)):
-            raise ValueError('owner receipt names a different production recipe identity')
+        recipe_relation=({'kind':'metadata-only-source-identity','current':binding(recipe_path)}
+            if source_evidence_key=='source_checkpoint_identity'
+            else _source_recipe_relation(receipt,config,recipe_path,recipe,policy_sha))
         matching=[stage for stage in recipe['stages']if stage.get('id')==config.get('production_stage')]
         if len(matching)!=1 or matching[0].get('kind')!='native_state_sft':
             raise ValueError('current configured stage must resolve to one native full-state SFT stage')
@@ -332,6 +364,7 @@ def build_role_declarations(role_inputs):
             'source_identity':{'config':binding(config_path,item['config']),
                 source_evidence_key:source_evidence_ref,'owner_state':owner_state_ref,
                 'owner_cursor':owner_cursor_ref,'recipe':binding(recipe_path,item['recipe']),
+                'checkpoint_recipe_relation':recipe_relation,
                 'source_map':source_map_ref,'runtime_mechanism_evidence':mechanism_ref,
                 'declared_paths':{'production_recipe':declared_recipe,'cases':config['cases'],
                     'seed_native_graphs':config.get('seed_native_graphs'),

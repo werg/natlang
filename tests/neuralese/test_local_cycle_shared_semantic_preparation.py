@@ -149,6 +149,39 @@ def test_unready_restored_head_uses_exact_metadata_identity_without_readiness_cr
     assert mellum['source_identity']['source_checkpoint_identity']['sha256']==binding(identity)['sha256']
 
 
+def test_saved_checkpoint_recipe_may_be_an_exact_same_lineage_ancestor(tmp_path):
+    inputs=source_rows(tmp_path)
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    for role,item in inputs.items():
+        current_path=Path(item['recipe']['path'])
+        current=json.loads(current_path.read_text());current['production_lineage_sha256']='a'*64
+        write(current_path,current);item['recipe']=binding(current_path)
+        config_path=Path(item['config']['path']);config=json.loads(config_path.read_text())
+        recipe_binding=native_recipe_binding(current_path,'a'*64)
+        recipe_binding['path']=config['production_recipe']
+        config['trainer_parameters']={'recipe_binding':recipe_binding}
+        write(config_path,config);item['config']=binding(config_path)
+        receipt_path=Path(item['source_receipt']['path']);receipt=json.loads(receipt_path.read_text())
+        receipt['recipe']=native_recipe_binding(current_path,'a'*64)
+        write(receipt_path,receipt);item['source_receipt']=binding(receipt_path)
+    mellum=inputs['mellum'];current_path=Path(mellum['recipe']['path'])
+    previous=json.loads(current_path.read_text());previous['description']='exact earlier recipe bytes'
+    previous_path=tmp_path/'mellum-prior-recipe.json';write(previous_path,previous)
+    receipt_path=Path(mellum['source_receipt']['path']);receipt=json.loads(receipt_path.read_text())
+    receipt['recipe']=native_recipe_binding(previous_path,'a'*64)
+    write(receipt_path,receipt);mellum['source_receipt']=binding(receipt_path)
+    raw,_,_,_=build_role_declarations(inputs)
+    relation=next(row for row in raw if row['model']=='mellum')['source_identity']['checkpoint_recipe_relation']
+    assert relation['kind']=='same-production-lineage-continuation'
+    assert relation['source']['recipe_sha256']==receipt['recipe']['sha256']
+    assert relation['current']['sha256']==mellum['recipe']['sha256']
+    previous['production_lineage_sha256']='f'*64;write(previous_path,previous)
+    receipt['recipe']=native_recipe_binding(previous_path,'f'*64)
+    write(receipt_path,receipt);mellum['source_receipt']=binding(receipt_path)
+    with pytest.raises(ValueError,match='not an exact ancestor'):
+        build_role_declarations(inputs)
+
+
 @pytest.mark.parametrize('fault',['checkpoint-path','private-role','prior-identity'])
 def test_metadata_only_source_identity_rejects_mismatched_custody(tmp_path,fault):
     inputs=source_rows(tmp_path);item=inputs['mellum'];old=item.pop('source_receipt')['path']
