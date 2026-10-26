@@ -22,7 +22,7 @@ function mulberry(seed) {
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 
-/* ------------------------------------------------------------------ theme, progress, nav */
+/* ------------------------------------------------------------------ theme and navigation */
 const themeBtn = $('#theme');
 themeBtn.addEventListener('click', () => {
   const cur = document.documentElement.dataset.theme
@@ -31,15 +31,13 @@ themeBtn.addEventListener('click', () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('natlang-theme', next); } catch (e) { /* storage unavailable: theme lasts this visit */ }
 });
-const prog = $('#progress');
-const tocLinks = $$('.toc a');
-const chapters = tocLinks.map(a => $(a.getAttribute('href')));
+/* The plate dots in the top bar mark the chapter being read. */
+const dots = $$('.platedots a');
+const chapters = dots.map(a => $(a.getAttribute('href')));
 function onScroll() {
-  const max = document.documentElement.scrollHeight - innerHeight;
-  prog.style.width = (max > 0 ? (scrollY / max) * 100 : 0) + '%';
   let on = -1;
   chapters.forEach((c, i) => { if (c && c.getBoundingClientRect().top < innerHeight * 0.35) on = i; });
-  tocLinks.forEach((a, i) => a.classList.toggle('on', i === on));
+  dots.forEach((a, i) => { a.classList.toggle('on', i === on); if (i === on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
 }
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
@@ -97,9 +95,9 @@ $$('pre[data-hl]').forEach(p => {
   const btn = $('#copy-cmds'), pre = $('#cmds');
   if (!btn || !pre) return;
   btn.addEventListener('click', () => {
-    const done = label => { btn.textContent = label; setTimeout(() => { btn.textContent = 'copy'; }, 1600); };
-    const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done('selected: press ⌘C / Ctrl+C'); };
-    try { navigator.clipboard.writeText(pre.textContent).then(() => done('copied'), select); } catch (e) { select(); }
+    const done = label => { btn.textContent = label; setTimeout(() => { btn.textContent = 'Copy'; }, 1600); };
+    const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done('Selected: press ⌘C or Ctrl+C'); };
+    try { navigator.clipboard.writeText(pre.textContent).then(() => done('Copied'), select); } catch (e) { select(); }
   });
 })();
 
@@ -162,15 +160,15 @@ not urgent.`;
       let ans;
       if (mode === 'crisp') ans = `<span class="pill c">${c}</span>`;
       else if (mode === 'nl') ans = `<span class="pill p">${n}</span>`;
-      else ans = `<span class="pill c">crisp ${c}</span><span class="pill p">nl ${n}</span>${c === n ? '<span class="pill ok">agree</span>' : '<span class="pill err">disagree</span>'}`;
-      return `<button class="ticket" type="button" data-i="${i}"><span>${esc(t.text)}</span><span class="ans">${i === picked || mode === 'shadow' ? ans : '<span class="pill">await →</span>'}</span></button>`;
+      else ans = `<span class="pill c">code ${c}</span><span class="pill p">prose ${n}</span>${c === n ? '<span class="pill ok">agree</span>' : '<span class="pill err">disagree</span>'}`;
+      return `<button class="ticket" type="button" data-i="${i}"><span>${esc(t.text)}</span><span class="ans">${i === picked || mode === 'shadow' ? ans : '<span class="pill">call</span>'}</span></button>`;
     }).join('');
     $$('.ticket', list).forEach(b => b.addEventListener('click', () => { picked = +b.dataset.i; render(); }));
     note.innerHTML = mode === 'crisp'
-      ? 'The regex really runs. Try the payment ticket (money lost, no keyword) and the down-arrow ticket (keyword, no outage).'
+      ? 'This regular expression runs in your browser. It misses the payment ticket, which has no keyword, and wrongly flags the down-arrow ticket, which contains "down".'
       : mode === 'nl'
-        ? 'Callers never see which body ran: <code>await isUrgent(t)</code> type-checks the same either way, and the result is checked to be a <code>boolean</code>.'
-        : 'Shadow mode is how you decide which body to trust for a given part: serve one, compare both, read the disagreements.';
+        ? 'The caller cannot tell which body ran: <code>await isUrgent(t)</code> has the same type either way, and the result is checked to be a <code>boolean</code>.'
+        : 'Shadow mode runs both bodies on the same input, returns one result and records whether they agreed. It is how a project decides which body to trust.';
   }
   $$('#swap [data-mode]').forEach(b => b.addEventListener('click', () => show(b.dataset.mode)));
   show('nl');
@@ -206,17 +204,17 @@ not urgent.`;
     $$('.chip', chips).forEach((b, i) => b.classList.toggle('on', i === cur));
     $('#dial-code').innerHTML = hl(`const verdict: ${t.ty} =\n  await nl\`Decide how bad ticket is.\`(ticket);`);
     $('#dial-open').innerHTML = hl(`const ticket: string = "${TICKET}";\n// result: ${t.ty}\n// finish with return_result(status, value?, reason?)`);
-    $('#dial-bad').textContent = badShown ? 'show the clean answer' : 'answer with the wrong shape';
+    $('#dial-bad').textContent = badShown ? 'Return a correct value' : 'Return a wrong value';
     const out = $('#dial-out');
     if (!badShown) {
-      out.innerHTML = `<div class="msg ok fadein"><span class="h">✓ checked</span>  verdict = ${esc(t.val)}</div>`;
+      out.innerHTML = `<div class="msg ok fadein"><span class="h">checked</span>  verdict = ${esc(t.val)}</div>`;
     } else if (t.how === 'coerce') {
       out.innerHTML = `<div class="msg warn fadein"><span class="h">model returns</span> ${esc(t.bad)}</div>
-        <div class="msg ok fadein"><span class="h">✓ coerced</span>  ${esc(t.msg)}</div>`;
+        <div class="msg ok fadein"><span class="h">converted</span>  ${esc(t.msg)}</div>`;
     } else {
       out.innerHTML = `<div class="msg warn fadein"><span class="h">model returns</span> ${esc(t.bad)}</div>
-        <div class="msg err fadein"><span class="h">✗ rejected → told to the model</span>\n${esc(t.msg)}</div>
-        <div class="msg ok fadein"><span class="h">✓ repaired, then checked</span>  verdict = ${esc(t.fix)}</div>`;
+        <div class="msg err fadein"><span class="h">rejected, error sent to the model</span>\n${esc(t.msg)}</div>
+        <div class="msg ok fadein"><span class="h">corrected and checked</span>  verdict = ${esc(t.fix)}</div>`;
     }
   }
   render();
@@ -277,7 +275,7 @@ not urgent.`;
     [...on].forEach(i => (USES[i].kind === 'weak' ? weakReq : req).add(USES[i].ty));
     let s = '';
     Object.entries(TYPES).forEach(([k, t]) => t.sup.forEach(p => { s += `<line class="e" x1="${t.x}" y1="${t.y - 16}" x2="${TYPES[p].x}" y2="${TYPES[p].y + 16}"/>`; }));
-    s += `<text x="10" y="22" style="font:11px JetBrains Mono,monospace;fill:var(--muted)">↑ supertypes · lines are "is assignable to"</text>`;
+    s += `<text class="cap" x="10" y="22">A line joins a type to a wider type that accepts it.</text>`;
     if (r.kind === 'conflict') {
       for (let a = 0; a < r.bad.length; a++) for (let b = a + 1; b < r.bad.length; b++) {
         const A = TYPES[r.bad[a]], B = TYPES[r.bad[b]];
@@ -295,15 +293,15 @@ not urgent.`;
     });
     svg.innerHTML = s;
     const out = $('#infer-out');
-    const sig = ty => `<div class="msg ok fadein"><span class="h">✓ planned before the model runs</span>\nnl\`Judge how bad ticket is.\` : (ticket: Ticket) =&gt; Promise&lt;${esc(ty)}&gt;</div>`;
+    const sig = ty => `<div class="msg ok fadein"><span class="h">type fixed before the model runs</span>\nnl\`Judge how bad ticket is.\` : (ticket: Ticket) =&gt; Promise&lt;${esc(ty)}&gt;</div>`;
     if (r.kind === 'ok') {
-      out.innerHTML = sig(TYPES[r.ty].label) + `<p class="note" style="margin:8px 0 0">${r.weakOnly ? 'Only weak requirements: they apply because nothing strong exists.' : `${r.reqs.length > 1 ? 'Most specific requirement that satisfies the others wins.' : 'One strong requirement.'}${r.ignoredWeak ? ' Weak requirements are ignored when a strong one exists.' : ''}`}</p>`;
+      out.innerHTML = sig(TYPES[r.ty].label) + `<p class="note" style="margin:8px 0 0">${r.weakOnly ? 'Only weak requirements are present, so they decide the type.' : `${r.reqs.length > 1 ? 'The most specific requirement satisfies the others.' : 'One strong requirement decides the type.'}${r.ignoredWeak ? ' The weak requirement is ignored because a strong one exists.' : ''}`}</p>`;
     } else if (r.kind === 'open') {
-      out.innerHTML = `<div class="msg s fadein"><span class="h">open result, shaped by use</span>\nthe call may return any value; the fields read shape it: { severity: unknown, … }\nproposed annotation: nl&lt;{ severity: …; … }&gt;</div>`;
+      out.innerHTML = `<div class="msg s fadein"><span class="h">open result</span>\nThe call may return any value with the fields the code reads:\n{ severity: unknown, … }. The compiler suggests nl&lt;{ severity: …; … }&gt;.</div>`;
     } else if (r.kind === 'conflict') {
-      out.innerHTML = `<div class="msg err fadein"><span class="h">✗ nl-ambiguous-signature</span>  ${esc(r.msg)}\n${r.reqs.map(u => `  · ${esc(u.code.split('   //')[0])}  (${esc(u.why)})`).join('\n')}</div>`;
+      out.innerHTML = `<div class="msg err fadein"><span class="h">compile error: nl-ambiguous-signature</span>  ${esc(r.msg)}\n${r.reqs.map(u => `  · ${esc(u.code.split('   //')[0])}  (${esc(u.why)})`).join('\n')}</div>`;
     } else {
-      out.innerHTML = `<div class="msg warn fadein"><span class="h">nothing constrains r</span>\nThe result is open: the call may return any value.\nAnnotate the binding or write nl&lt;T&gt; to say what you want.</div>`;
+      out.innerHTML = `<div class="msg warn fadein"><span class="h">no requirements</span>\nNothing constrains r, so the call may return any value.\nAnnotate the variable or write nl&lt;T&gt; to fix the type.</div>`;
     }
   }
   render();
@@ -377,13 +375,13 @@ not urgent.`;
     if (unknownBacktick.length) {
       msgs += `<div class="msg warn fadein"><span class="h">nl-unknown-name</span>  \`${esc(unknownBacktick[0])}\` is backticked but nothing visible has that name.</div>`;
     }
-    msgs += `<div class="msg fadein"><span class="h">capture manifest</span>  ${caps.length ? caps.map(esc).join(', ') : 'none'}${params.length ? `\n<span class="h">explicit inputs</span>   ${params.map(esc).join(', ')}` : ''}\n<span class="h">prose</span>             ${words} words; ordinary English words stay prose, never "unresolved variable" errors</div>`;
+    msgs += `<div class="msg fadein"><span class="h">capture manifest</span>  ${caps.length ? caps.map(esc).join(', ') : 'none'}${params.length ? `\n<span class="h">explicit inputs</span>   ${params.map(esc).join(', ')}` : ''}\n<span class="h">other words</span>       ${words} words; English words that match no variable are left alone</div>`;
     $('#cap-out').innerHTML = msgs;
     const v = (+thr.value).toFixed(2);
     $('#cap-thr-v').textContent = v;
     $('#cap-late').innerHTML = hits.has('threshold')
-      ? `The judge was created when <code>threshold = 0.70</code>. Called now, the child sees <b class="p">${v}</b>: captures are read at each call, not frozen at creation.${v !== '0.70' ? '' : ' Move the slider.'}`
-      : `This instruction doesn't mention <code>threshold</code>, so the child never sees it, whatever its value. Mention it by name to capture it.`;
+      ? `The function was created when <code>threshold</code> was 0.70. A call made now sees <b>${v}</b>, because captures are read at each call.${v !== '0.70' ? '' : ' Move the slider to change it.'}`
+      : `The instruction does not mention <code>threshold</code>, so the function never sees it. Mention it by name to capture it.`;
   }
   render();
 })();
@@ -404,7 +402,7 @@ not urgent.`;
     $('#fence-interp').classList.toggle('p', true);
     $('#fence-msg').innerHTML = interp
       ? `<div class="msg err fadein"><span class="h">✗ untrusted-instruction</span>  the interpolated expression is Untrusted&lt;string&gt;. Pass the value as an argument instead, as in nl\`Summarize the message.\`(message).</div>`
-      : `<div class="msg ok fadein"><span class="h">✓ data, not instructions</span>  fence length ${n} = max(3, longest backtick run ${longestRun(t)} + 1), so the text cannot close its own fence.</div>`;
+      : `<div class="msg ok fadein"><span class="h">passed as data</span>  The fence is ${n} backticks: one more than the longest run in the text (${longestRun(t)}), and at least 3.</div>`;
   }
   ta.addEventListener('input', render);
   $('#fence-interp').addEventListener('click', () => { interp = true; render(); });
@@ -461,17 +459,17 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     $('#th-vars').innerHTML = vars.map(([k, n, t, fresh]) => `<div class="${fresh ? 'added' : ''}"><span class="k">${k}</span> <span class="nm">${esc(n)}</span>: <span class="ty">${esc(t)}</span></div>`).join('');
     $('#th-calls').innerHTML = calls.length ? calls.map((fresh, i) => `<span style="${fresh ? `animation-delay:${i * 60}ms` : 'animation:none'}">isUrgent #${i + 1}</span>`).join('') : '<span style="background:none;border:0;color:var(--muted);padding:0">none yet</span>';
     $('#th-result').innerHTML = stage ? `<div class="added"><span class="ty">${esc(stage)}</span></div>` : '<div><span class="k">nothing staged</span></div>';
-    $('#th-count').textContent = `step ${idx + 1} / ${F.length}`;
+    $('#th-count').textContent = `Step ${idx + 1} of ${F.length}`;
     $('#th-prev').disabled = idx === 0;
     $('#th-next').disabled = idx === F.length - 1;
   }
-  const stop = () => { clearInterval(timer); timer = null; $('#th-play').textContent = 'play'; };
+  const stop = () => { clearInterval(timer); timer = null; $('#th-play').textContent = 'Play'; };
   $('#th-next').addEventListener('click', () => { stop(); if (idx < F.length - 1) { idx++; render(true); } });
   $('#th-prev').addEventListener('click', () => { stop(); if (idx > 0) { idx--; render(false); } });
   $('#th-play').addEventListener('click', () => {
     if (timer) return stop();
     if (idx === F.length - 1) idx = 0, render(true);
-    $('#th-play').textContent = 'pause';
+    $('#th-play').textContent = 'Pause';
     timer = setInterval(() => { if (idx >= F.length - 1) return stop(); idx++; render(true); }, 1900);
   });
   render(false);
@@ -492,7 +490,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
   };
   const E = [['review', 'assess'], ['review', 'summarize']];
   let s = `<defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--line-strong)"/></marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d2840"/></marker>
     <marker id="arrowbad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--err)"/></marker></defs>
     <rect class="folder" x="40" y="104" width="470" height="210" rx="14"/>
     <text class="flabel" x="56" y="124">review/</text><text class="hash" x="494" y="124" text-anchor="end">id ${hReviewDir}</text>
@@ -523,26 +521,26 @@ await rank(tickets)   // → string[] (40), checked against the declared type
   $('#dag-call').addEventListener('click', async () => {
     if (busy) return; busy = true; $('#e-bad', svg).style.display = 'none';
     hot('review', true);
-    eqs.innerHTML = `review runs with context review/ (${hReviewDir}): it may call exactly assess and summarize.`;
+    eqs.innerHTML = `review runs with the context review/ (${hReviewDir}), so it can call assess and summarize.`;
     await sleep(300);
     await Promise.all([pulse('review', 'assess'), sleep(120).then(() => pulse('review', 'assess')), sleep(240).then(() => pulse('review', 'assess'))]);
     hot('assess', true);
-    eqs.innerHTML += `<br>assess × 3, concurrently, each with context assess/ (${hAssessDir}): it may call nothing.`;
+    eqs.innerHTML += `<br>Three calls of assess run at once, each with the context assess/ (${hAssessDir}), which is empty, so they can call nothing.`;
     await sleep(350);
     await pulse('review', 'summarize'); hot('summarize', true);
-    eqs.innerHTML += `<br>summarize is crisp TypeScript: exact counts. Every call stepped down. ∎`;
+    eqs.innerHTML += `<br>summarize is TypeScript and counts the results exactly. Every call moved down the graph.`;
     await sleep(900);
     ['review', 'assess', 'summarize'].forEach(k => hot(k, false));
     busy = false;
   });
   $('#dag-cycle').addEventListener('click', () => {
     $('#e-bad', svg).style.display = '';
-    eqs.innerHTML = `For assess to call review, assess/ must contain review bound to review/:<br>
+    eqs.innerHTML = `For assess to call review, the folder assess/ would have to contain review, bound to review/:<br>
       id(assess/) = H(…, review ↦ id(review/))<br>
       id(review/) = H(…, assess/ ↦ id(assess/), …)<br>
-      <span class="bad">⟹ id(assess/) = H(… H(… id(assess/) …) …): a folder would contain its own hash.</span><br>
-      So the edge cannot be expressed at all, and there is nothing to reject at run time. Rebinding cannot add it either: rebinding never adds an executable node (<code>context-new-executable</code>).
-      If one function must call another while active, nest it in the caller's callable folder: <code>root/inspect.nl</code>, <code>root/inspect/decide.nl</code>.`;
+      <span class="bad">so id(assess/) = H(… H(… id(assess/) …) …): the folder would contain its own hash.</span><br>
+      This edge cannot be expressed. Rebinding a function to another context cannot add it either, because rebinding never adds an executable function (<code>context-new-executable</code>).
+      When one function must call another, the callee goes in the caller's folder: <code>root/inspect.nl</code>, then <code>root/inspect/decide.nl</code>.`;
   });
 })();
 
@@ -658,7 +656,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     const y = v => H - 22 - (v / maxW) * (H - 40);
     let s = `<line class="axis" x1="${pad}" y1="${H - 22}" x2="${W - 6}" y2="${H - 22}"/>`;
     const goal = mode === 'nl' ? 66 : GOAL;
-    s += `<line class="goal" x1="${pad}" y1="${y(goal)}" x2="${W - 6}" y2="${y(goal)}"/><line class="goal" x1="${W - 196}" y1="10" x2="${W - 176}" y2="10"/><text x="${W - 8}" y="14" text-anchor="end">${mode === 'nl' ? 'where the nl predicate says yes' : 'until: words ≤ 60'}</text>`;
+    s += `<line class="goal" x1="${pad}" y1="${y(goal)}" x2="${W - 6}" y2="${y(goal)}"/><text x="${W - 8}" y="14" text-anchor="end">${mode === 'nl' ? 'where the nl predicate says yes' : 'until: words ≤ 60'}</text>`;
     states.forEach((st, i) => {
       const x = pad + i * bw + 3, h = (H - 22) - y(st.w);
       s += `<rect class="wbar ${st.done ? 'done' : st.stuck ? 'stuck' : ''}" x="${x}" y="${y(st.w)}" width="${Math.max(4, bw - 6)}" height="${h}" rx="3"/>`;
@@ -852,7 +850,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       if (active.served % 2 === 0) {
         const tk = agentTokens(); stats.tokens += tk; stats.audits++;
         if (active.value !== truth) {
-          active.status = 'demoted';
+          active.status = 'demoted'; active.demotedBy = 'audit';
           active.why = `audit: on "${text}" the case said '${active.value}', the agent said '${truth}'. Demoted; calls it admitted go back to the agent.`;
           entry.audit = 'audit disagrees';
         } else entry.audit = 'audit agrees';
@@ -861,7 +859,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       const tk = agentTokens(); stats.model++; stats.tokens += tk; entry.tok = tk; entry.value = truth;
       shadow.forEach(c => {
         if (c.value === truth) { c.live++; if (c.live >= 3) { c.status = 'active'; c.why = 'agreed with the agent on 3 live calls, plus its replays: promoted.'; } else c.why = `shadow: ${c.live} / 3 live comparisons agree`; }
-        else { c.status = 'demoted'; c.why = `shadow disagreement on "${text}"`; }
+        else { c.status = 'demoted'; c.demotedBy = 'shadow'; c.why = `shadow disagreement on "${text}"`; }
       });
       if (shadow.length) entry.audit = 'shadow compared';
     }
@@ -886,9 +884,10 @@ await rank(tickets)   // → string[] (40), checked against the declared type
       <div class="metric"><div class="v">${stats.model}</div><div class="l">agent runs</div></div>
       <div class="metric"><div class="v" style="color:var(--crisp)">${stats.crisp}</div><div class="l">served crisp</div></div>
       <div class="metric"><div class="v">${(stats.saved / 1000).toFixed(1)}k</div><div class="l">tokens saved, est.</div></div>`;
-    const anyDemoted = cases.some(c => c.status === 'demoted');
+    const demoted = cases.find(c => c.status === 'demoted');
     $('#jit-note').innerHTML = !mined ? 'Order matters: the first active case whose guard admits the arguments serves the call.'
-      : anyDemoted ? 'Case 2 assumed every ticket mentioning a refund is about billing. A red row is a wrong answer it served before an audit caught it, and the audit then demoted it. Replays of old calls cannot catch this kind of mistake, which is why promotion also requires comparisons on live calls.'
+      : demoted && demoted.demotedBy === 'shadow' ? 'Case 2 assumed every ticket mentioning a refund is about billing. While it was being shadowed it disagreed with the model on a ticket about a broken refund API, so it was demoted before serving any call.'
+      : demoted ? 'Case 2 assumed every ticket mentioning a refund is about billing. A red row is a wrong answer it served before an audit caught it, and the audit then demoted it. Replays of old calls cannot catch this kind of mistake, which is why promotion also requires comparisons on live calls.'
       : 'Shadow cases run beside the agent and their answers are compared. Keep sending calls: a ticket about a broken refund API is coming.';
   }
   $('#jit-one').addEventListener('click', send);
@@ -912,7 +911,7 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     cells.forEach((c, i) => {
       const eps = tau ? (Math.random() * 2 - 1) : 0;
       const v = Math.min(1, Math.max(0, mu[i] + tau * sigma[i] * eps));
-      c.style.background = `color-mix(in srgb, var(--soft) ${Math.round(18 + v * 82)}%, var(--surface-2))`;
+      c.style.background = `color-mix(in srgb, #c9b3ec ${Math.round(14 + v * 86)}%, #1d2840)`;
     });
   }
   tauEl.addEventListener('input', () => { tau = +tauEl.value; $('#nz-tau-v').textContent = tau.toFixed(2); paint(); });
