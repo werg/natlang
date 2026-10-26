@@ -284,6 +284,61 @@ def source_correction_dependencies(reference):
     return dependencies
 
 
+def validate_held_correction_history(options, *, held_receipt):
+    """Validate proof custody for held-source transitions independently of train rows."""
+    if not isinstance(options, dict):
+        return [], None
+    history = options.get('held_correction_history') or []
+    selected = options.get('held_correction_binding')
+    if not isinstance(history, list):
+        raise ValueError('held correction history is malformed')
+    if not history:
+        if selected is not None:
+            raise ValueError('selected held correction is absent from its history')
+        return [], None
+    if (not isinstance(selected, dict) or not isinstance(selected.get('path'), str)
+            or not isinstance(selected.get('sha256'), str)):
+        raise ValueError('held correction history lacks its selected proof binding')
+    prior_current = None
+    model_id = None
+    normalized = []
+    for record in history:
+        if not isinstance(record, dict):
+            raise ValueError('held correction history record is malformed')
+        reference = {'path': record.get('proof_path'), 'sha256': record.get('proof_sha256')}
+        dependencies = source_correction_dependencies(reference)
+        proof_path = Path(reference['path']).resolve(strict=True)
+        proof = json.loads(proof_path.read_text())
+        protected = proof.get('protected_held_correction')
+        if (protected is None
+                or _binding(record.get('prior_source')) != _binding(protected.get('prior_source'))
+                or _binding(record.get('current_source')) != _binding(protected.get('current_source'))
+                or record.get('origin_stage_id') != proof.get('stage_id')
+                or record.get('model_id') != proof.get('model_id')):
+            raise ValueError('held correction record differs from its authenticated full proof')
+        expected_rows = _proof_file(proof_path, protected.get('row_bindings_path', ''))
+        if (Path(str(record.get('row_bindings_path', ''))).resolve() != expected_rows
+                or record.get('row_bindings_sha256') != protected.get('row_bindings_sha256')):
+            raise ValueError('held correction record differs from its authenticated row ledger')
+        if model_id is not None and proof.get('model_id') != model_id:
+            raise ValueError('held correction history changes model identity')
+        model_id = proof.get('model_id')
+        if prior_current is not None and _binding(record.get('prior_source')) != _binding(prior_current):
+            raise ValueError('held correction history is not a contiguous source chain')
+        prior_current = record.get('current_source')
+        normalized.append((record, proof, dependencies))
+    last = normalized[-1][0]
+    if (selected.get('sha256') != last.get('proof_sha256')
+            or Path(selected.get('path')).resolve() != Path(last.get('proof_path')).resolve()):
+        raise ValueError('selected held correction differs from its latest history record')
+    last_proof = normalized[-1][1]
+    if not _receipt_matches_with_staged_relocation(
+            last.get('current_source'), held_receipt, last_proof,
+            Path(normalized[-1][0]['proof_path']).resolve(strict=True)):
+        raise ValueError('held correction history does not end at the loaded held source')
+    return [item[0] for item in normalized], selected
+
+
 def _fresh_quota(epochs, index, row_count, *, communication):
     """Match pending_exposure_batches' integer and fractional epoch schedule."""
     value = float(epochs)
@@ -362,18 +417,94 @@ def _apply_protected_held_correction(result, training, proof, held, proof_path):
         raise ValueError('protected held correction lost source receipt pair')
     receipts[1] = held['current_receipt']
     result['source_receipts'] = receipts
-    progress = dict(result.get('sft_progress') or {})
-    frame = dict(progress.get(proof.get('stage_id')) or {})
-    if frame:
-        frame['held_row_bindings'] = dict(current_bindings)
-        frame_receipts = list(frame.get('source_receipts') or [])
-        if len(frame_receipts) < 2:
-            raise ValueError('protected held correction carried frame lost held receipt')
-        frame_receipts[1] = held['current_receipt']
-        frame['source_receipts'] = frame_receipts
-        progress[proof['stage_id']] = frame
-        result['sft_progress'] = progress
     return len(changed)
+
+
+def _propagate_held_correction_to_frames(progress, *, held, proof, proof_path,
+        quality_binding=None, excluded_ids=(), at_global_step=0):
+    """Rebind every carried frame that consumed this exact protected held source.
+
+    Train receipts and train exposure are intentionally not consulted or
+    changed here: a DPO frame can share the held set while training on a
+    different pair source. Held observations are retired only for rows whose
+    target binding changed, then the exact quality exclusions are applied.
+    """
+    from .native_held import (bind_held_quality_exclusions,
+                              rebind_held_coverage_after_exact_correction)
+
+    proof_ref = {'path': str(Path(proof_path).resolve()),
+                 'sha256': sha256_file_hex_cached(proof_path)}
+    protected = proof.get('protected_held_correction') or {}
+    current_receipt = held['current_receipt']
+    binding_path = _proof_file(Path(proof_path), protected.get('row_bindings_path', ''))
+    history_record = {
+        'proof_path': proof_ref['path'], 'proof_sha256': proof_ref['sha256'],
+        'model_id': proof.get('model_id'),
+        'origin_stage_id': proof.get('stage_id'),
+        'prior_source': protected.get('prior_source'),
+        'current_source': protected.get('current_source'),
+        'row_bindings_path': str(binding_path),
+        'row_bindings_sha256': protected.get('row_bindings_sha256'),
+        'weights_optimizer_rng_exposure': 'preserved',
+        'held_observation_credit_from_correction': 0,
+        'at_global_step': int(at_global_step),
+    }
+    if quality_binding is not None:
+        history_record['held_quality_hold_binding'] = dict(quality_binding)
+    transitioned = []
+    for frame_id, original in list(progress.items()):
+        receipts = list(original.get('source_receipts') or [])
+        if len(receipts) < 2 or not _receipt_matches_with_staged_relocation(
+                protected.get('prior_source'), receipts[1], proof, proof_path):
+            continue
+        frame = dict(original)
+        if frame.get('held_row_bindings') != held['prior_bindings']:
+            raise ValueError('carried held source has different exact row bindings: ' + str(frame_id))
+        frame['held_row_bindings'] = dict(held['current_bindings'])
+        receipts[1] = current_receipt
+        frame['source_receipts'] = receipts
+
+        metrics = dict(frame.get('metrics') or {})
+        coverage = metrics.get('held_coverage')
+        if coverage is not None:
+            coverage = rebind_held_coverage_after_exact_correction(
+                held['prior_entries'], held['current_entries'], coverage,
+                source_sha256=current_receipt['sha256'])
+            if quality_binding is not None:
+                coverage = bind_held_quality_exclusions(
+                    held['current_entries'], coverage, excluded_ids,
+                    source_sha256=current_receipt['sha256'], allow_transition=True)
+                coverage['quality_hold_binding'] = dict(quality_binding)
+            metrics['held_coverage'] = coverage
+        # A loss or accuracy summary measured the old held targets. Keep the
+        # re-bound per-row observation ledger above, but require fresh scores.
+        metrics.pop('held', None)
+        frame['metrics'] = metrics
+
+        options = dict(frame.get('options') or {})
+        prior_quality = options.get('held_quality_hold_binding')
+        if (prior_quality is not None and quality_binding is None
+                and prior_quality.get('source_sha256') != current_receipt.get('sha256')):
+            raise ValueError('held correction omits the carried frame quality hold for its new source')
+        history = list(options.get('held_correction_history') or [])
+        if not any(item.get('proof_sha256') == proof_ref['sha256']
+                   and Path(str(item.get('proof_path', ''))).resolve() == Path(proof_ref['path']).resolve()
+                   for item in history if isinstance(item, dict)):
+            history.append(dict(history_record))
+        options['held_correction_history'] = history
+        options['held_correction_binding'] = dict(proof_ref)
+        if quality_binding is not None:
+            options['held_quality_hold_binding'] = dict(quality_binding)
+        frame['options'] = options
+        progress[frame_id] = frame
+        transitioned.append({'stage_id': frame_id,
+            'held_prior_source': _binding(protected.get('prior_source')),
+            'held_current_source': _binding(protected.get('current_source')),
+            'changed_held_rows': len({key for key, value in held['prior_bindings'].items()
+                                      if held['current_bindings'].get(key) != value}),
+            'held_visits_reset_for_changed_rows': True,
+            'train_source_and_exposure': 'preserved'})
+    return transitioned
 
 
 def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_receipt,
@@ -393,8 +524,6 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
     current_ids = set(current_bindings)
     prior_ids = set(prior_bindings)
     communication_ids = set(current_communication_ids)
-    protected_current = (_binding(protected_held['current_receipt'])
-                         if protected_held is not None else None)
     transitions = []
     for frame_id, original in progress.items():
         if frame_id == stage_id:
@@ -447,23 +576,6 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
                 options[option_key] = [key for key in current_order if key in communication_ids]
         frame['options'] = options
 
-        if (protected_held is not None and len(receipts) > 1
-                and _receipt_matches_with_staged_relocation(
-                    protected_held['prior_receipt'], receipts[1], proof or {}, proof_path)):
-            held_bindings = dict(protected_held['current_bindings'])
-            if frame.get('held_row_bindings') != protected_held['prior_bindings']:
-                raise ValueError('carried frame held source differs from exact protected predecessor: '+frame_id)
-            frame['held_row_bindings'] = held_bindings
-            receipts[1] = protected_held['current_receipt']
-            frame['source_receipts'] = receipts
-            frame_metrics = dict(frame.get('metrics') or {})
-            coverage = frame_metrics.get('held_coverage')
-            if coverage is not None:
-                from .native_held import rebind_held_coverage_after_exact_correction
-                frame_metrics['held_coverage'] = rebind_held_coverage_after_exact_correction(
-                    protected_held['prior_entries'], protected_held['current_entries'], coverage,
-                    source_sha256=protected_held['current_receipt']['sha256'])
-                frame['metrics'] = frame_metrics
         if corrected or added or deferred:
             frame['completed_foundations'] = []
         progress[frame_id] = frame
@@ -773,6 +885,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
     protected_held_rows = _apply_protected_held_correction(
         result, training, proof, protected_held, path)
     quality_ref = proof.get('held_quality_hold')
+    quality_binding = None
+    quality_excluded_ids = set()
     prior_quality_binding = (training.get('options') or {}).get('held_quality_hold_binding')
     if prior_quality_binding is not None and quality_ref is None:
         raise ValueError('source correction cannot silently discard an existing held quality hold')
@@ -814,15 +928,17 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                   for item in manifest.get('pending_sources', [])}
         if actual != expected:
             raise ValueError('held quality hold differs from unresolved protected correction debt')
-        result['options']['held_quality_hold_binding'] = {
+        quality_binding = {
             **quality['manifest'], 'row_bindings_path': quality['row_bindings']['path'],
             'row_bindings_sha256': quality['row_bindings']['sha256'],
             'source_sha256': quality['source_sha256'],
             'excluded_rows': quality['excluded_rows']}
+        result['options']['held_quality_hold_binding'] = quality_binding
+        quality_excluded_ids = quality['excluded_ids']
         active_frame = (result.get('sft_progress') or {}).get(stage_id)
         if active_frame is not None:
             frame_options = dict(active_frame.get('options') or {})
-            frame_options['held_quality_hold_binding'] = dict(result['options']['held_quality_hold_binding'])
+            frame_options['held_quality_hold_binding'] = dict(quality_binding)
             active_frame['options'] = frame_options
         record['held_quality_hold'] = {
             'manifest_sha256': quality['manifest']['sha256'],
@@ -837,8 +953,30 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         current_communication_ids=current_communication_ids, corrected=corrected,
         deferred=deferred, added=added, pending=pending,
         protected_held=protected_held, proof=proof, proof_path=path)
-    if carried_transitions:
+    held_transitions = []
+    if protected_held is not None:
+        progress = dict(result.get('sft_progress') or {})
+        held_transitions = _propagate_held_correction_to_frames(
+            progress, held=protected_held, proof=proof, proof_path=path,
+            quality_binding=quality_binding, excluded_ids=quality_excluded_ids,
+            at_global_step=int(training.get('global_step', training.get('step', 0))))
         result['sft_progress'] = progress
+        active_frame = progress.get(stage_id)
+        if active_frame is not None:
+            result['metrics'] = dict(active_frame.get('metrics') or {})
+            active_options = dict(active_frame.get('options') or {})
+            for key in ('held_correction_history', 'held_correction_binding',
+                        'held_quality_hold_binding'):
+                if key in active_options:
+                    result['options'][key] = active_options[key]
+        if held_transitions:
+            result['options']['held_correction_history'] = list(
+                (result.get('options') or {}).get('held_correction_history') or [])
+            result['options']['held_correction_binding'] = dict(
+                progress[stage_id].get('options', {}).get('held_correction_binding')
+                if stage_id in progress else {'path':str(path),'sha256':proof_sha})
+    result['sft_progress'] = progress
+    if carried_transitions:
         result['options']['source_correction_history'][-1]['carried_frame_transitions'] = carried_transitions
         transitioned_ids = {item['stage_id'] for item in carried_transitions}
         for frame_id in transitioned_ids:
@@ -850,6 +988,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
             if quality_ref is not None:
                 frame_options['held_quality_hold_binding'] = dict(result['options']['held_quality_hold_binding'])
             frame['options'] = frame_options
+    if held_transitions:
+        result['options']['source_correction_history'][-1]['held_frame_transitions'] = held_transitions
     if protected_held_rows:
         record['protected_held_rows'] = protected_held_rows
     return result, {'changed': True, 'proof_sha256': proof_sha,
