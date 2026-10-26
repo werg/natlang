@@ -169,6 +169,10 @@ def main(argv=None):
         export_nodes(trainer, engine, plan, out, fragment['artifacts'])
         export_families(trainer, engine, plan, out, families)
     soft_states = trainer.soft_fragment(soft) if soft else []
+    if soft_states and 'gguf' in plan.get('exports', []):
+        # The managed llama.cpp fork consumes soft states as exact native state spans (`--native-state`).
+        from .soft_export import export_soft_states
+        export_soft_states(engine, soft_states, out, base_gguf_sha256=plan['student'].get('baseGgufSha256') or '')
     _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': families, 'softStates': soft_states,
                                  'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
                                  'receipt': trainer.receipt()})

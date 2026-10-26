@@ -176,6 +176,12 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   return { scaffold, sites, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
 }
 
+/** Whether this backend serves soft instruction/skill states, so the build trains and exports them (plan §3.3): the
+ * native reference server always; managed llama.cpp when `tune.softStates` declares the fork's `--native-state`. */
+export function softStatesServed(settings: TuneOptions['settings']): boolean {
+  return settings.backend === 'native' || (settings.backend === 'managed-local' && settings.softStates === true);
+}
+
 /** One training variant: a scaffold (scales, tree roots), a recipe and optionally a row subset. */
 export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?: Readonly<Record<string, unknown>>;
   readonly rows?: readonly CollectedTurn[]; readonly label?: string;
@@ -217,7 +223,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
           ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
         exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
-        softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}),
+        softStates: softStatesServed(options.settings), recipe, ...(variant.label ? { label: variant.label } : {}),
         ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
         ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
         ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}) }, null, 2));
@@ -249,6 +255,14 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
       const target = join(directory, artifact.exports.gguf.file);
       mkdirSync(dirname(target), { recursive: true });
       if (!existsSync(target)) copyFileSync(join(out, artifact.exports.gguf.file), target);
+    }
+    // Soft states exported as llama.cpp native state spans: from this build, or a carried state's earlier release.
+    for (const state of sealed.softStates) if (state.exports?.gguf) {
+      const target = join(directory, state.exports.gguf.file);
+      mkdirSync(dirname(target), { recursive: true });
+      const source = existsSync(join(out, state.exports.gguf.file)) ? join(out, state.exports.gguf.file)
+        : variant.carrySoftStates ? join(variant.carrySoftStates.directory, state.exports.gguf.file) : join(out, state.exports.gguf.file);
+      if (!existsSync(target)) copyFileSync(source, target);
     }
     return sealed;
   });

@@ -96,7 +96,7 @@ and timings. Tuning a program does not train the production lineages and gives t
 ## Not yet implemented (implementation work, not operations)
 
 Open: a family schedule and member-vs-non-member transfer
-reports, soft states on the llama.cpp fork's Neuralese server and in the browser, OPFS caching, upstreaming the
+reports, Mellum soft states on the llama.cpp fork (LFM2 serves them: `tune.softStates: true`) and soft states in the browser, OPFS caching, upstreaming the
 llama.cpp and wllama patches. Earlier list for reference:
 
 Cross-program families (`--families`), base distillation, on-policy repair rounds, refitting only dirty nodes,
@@ -138,3 +138,13 @@ exactly); imported turns carry instruction texts for named definitions but not s
 get no imported rows. The collector's `GENERATION_GUIDANCE` is removed from system messages at import (verified
 byte-equal to the serving runtime's rendering in `ts-host/test/tune-luna-bridge.test.mjs`).
 
+
+## Soft states on the managed llama.cpp fork (2026-10-26)
+
+The fork (`~/llama.cpp-neuralese`, branch `neuralese`, commit `6eff8834f`, unpushed) serves tuned soft
+instruction/skill states exactly: `llama_state_span_register` plus `llama-server --native-state FILE`. To use it:
+build `build-cuda`/`build-cpu` from that commit, point the managed runtime at the fork's `llama-server`
+(`NATLANG_LLAMA_SERVER` or the runtime setting), and set `tune.softStates: true` with `backend: "managed-local"`.
+Then `natlang tune` trains soft states and exports them as `exports/<state>.state.gguf`. Check parity on the GPU build
+once with `scripts/llama_state_span_parity.py <workdir>`; it was verified on CPU only. LFM2 only; Mellum soft states
+are not exportable yet. Soft states cannot be combined with speculative decoding.
