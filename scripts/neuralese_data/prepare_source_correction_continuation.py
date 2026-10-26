@@ -177,6 +177,7 @@ def _replacement_sources(model_id):
 
 def _registered_sources(model, role):
     out = []
+    cfg = _current_config(model)
     for tranche in ('000001', '000002'):
         corpus = f'luna-verified-positive-native-graphs-20261026-tranche{tranche}'
         package = PACKAGE / corpus
@@ -207,10 +208,28 @@ def _registered_sources(model, role):
             raise ValueError(f'{corpus} actual private archive differs from its independent proof')
         package_role = 'lfm25' if model == 'lfm' else 'mellum21'
         graph = package / package_role / role / 'native-graphs.jsonl.zst'
-        # Exact package path and content are bound; registration/private receipts
-        # are also captured in the top-level preparation record.
+        _validate_registered_role(entry, package_role, role, graph,
+                                  model_id=cfg['model_id'], fingerprint=cfg['fingerprint'])
         out.append(add_source(graph, kind='native-graphs'))
     return out
+
+
+def _validate_registered_role(entry, package_role, split, graph, *, model_id, fingerprint):
+    """Bind the selected unpacked graph leaf to its exact admitted registry role."""
+    models = (entry.get('source_binding') or {}).get('models') or {}
+    selected = models.get(package_role)
+    if not isinstance(selected, dict):
+        raise ValueError(f'registry entry has no exact {package_role} source binding')
+    declared = selected.get(split)
+    if not isinstance(declared, dict):
+        raise ValueError(f'registry entry has no exact {package_role}/{split} graph binding')
+    graph = Path(graph).resolve(strict=True)
+    declared_path = Path(declared.get('path', '')).resolve(strict=True)
+    if (declared_path != graph or declared.get('bytes') != graph.stat().st_size
+            or declared.get('sha256') != sha256_file_hex_cached(graph)
+            or selected.get('model_id') != model_id
+            or selected.get('tokenizer_fingerprint') != fingerprint):
+        raise ValueError(f'unpacked {package_role}/{split} graph differs from its registered model binding')
 
 
 def _current_config(model):
