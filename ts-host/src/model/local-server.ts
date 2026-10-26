@@ -48,6 +48,8 @@ export type ManagedModelRuntimeOptions = { ensureRuntime?:
   /** Tuned weight adapters (GGUF LoRA exports of the active release) to load at server start, keyed by artifact ID.
    * Each request then applies only its own call's stack through per-request `lora` scales. */
   loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
+  /** Native state span files (tuned soft states) the managed server loads with `--native-state` (the llama.cpp fork). */
+  nativeStates?: () => readonly { readonly id: string; readonly path: string }[];
   /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
   rlCapture?: boolean };
 
@@ -93,16 +95,20 @@ export async function managedModelSha256(environment: NodeJS.ProcessEnv = proces
   return hash;
 }
 
-const perSequenceLora = new Map<string, boolean>();
-/** Whether a llama-server binary batches different per-request LoRA stacks (`--lora-per-sequence`). */
-function supportsPerSequenceLora(executable: string): boolean {
-  let known = perSequenceLora.get(executable);
-  if (known === undefined) {
-    const help = spawnSync(executable, ['--help'], { encoding: 'utf8', timeout: 20000 });
-    perSequenceLora.set(executable, known = `${help.stdout ?? ''}${help.stderr ?? ''}`.includes('--lora-per-sequence'));
+const serverHelp = new Map<string, string>();
+/** Whether a llama-server binary has an option (its `--help`, read once per executable). */
+function serverSupports(executable: string, option: string): boolean {
+  let help = serverHelp.get(executable);
+  if (help === undefined) {
+    const result = spawnSync(executable, ['--help'], { encoding: 'utf8', timeout: 20000 });
+    serverHelp.set(executable, help = `${result.stdout ?? ''}${result.stderr ?? ''}`);
   }
-  return known;
+  return help.includes(option);
 }
+/** Whether a llama-server binary batches different per-request LoRA stacks (`--lora-per-sequence`). */
+const supportsPerSequenceLora = (executable: string) => serverSupports(executable, '--lora-per-sequence');
+/** Whether a llama-server binary imports native state spans exactly (`--native-state`, the llama.cpp fork). */
+export const supportsNativeStates = (executable: string) => serverSupports(executable, '--native-state');
 
 async function verifiedDefault(path: string): Promise<boolean> {
   if (!existsSync(path) || statSync(path).size !== DEFAULT_LOCAL_MODEL.bytes) return false;
@@ -201,6 +207,8 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // Loaded tuned adapters: artifact ID -> llama-server adapter index (fixed for the server's lifetime).
   const loraIndex = new Map<string, number>();
   const tunedRequest = () => perRequestLora(loraIndex, 'the managed model server');
+  // Native state spans loaded by the managed server (--native-state): soft-state sentinels become native_state parts.
+  const nativeStatesLoaded = new Set<string>();
   // A native reference server: one driver whose requests carry the exact native adapter stack and state parts.
   let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
   const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
@@ -217,7 +225,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   };
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
     scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
-    ...(choice.kind === 'managed-local' ? { tunedRequest } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
+    ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => nativeStatesLoaded } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
   const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
     { contextWindow: () => serverContextWindow(options) }) : openai(options);
   let unscored: string | null = null;
@@ -258,6 +266,13 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         // fork) also batches requests whose stacks differ; others serialize them.
         args.push('--lora-init-without-apply', ...(supportsPerSequenceLora(prerequisites.executable) ? ['--lora-per-sequence'] : []));
         for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
+      }
+      nativeStatesLoaded.clear();
+      const states = runtimeOptions.nativeStates?.() ?? [];
+      if (states.length) {
+        if (!supportsNativeStates(prerequisites.executable))
+          throw new Error(`weights-unavailable: ${prerequisites.executable} cannot import native state spans (tuned soft states need the llama.cpp fork's --native-state)`);
+        for (const state of states) { nativeStatesLoaded.add(state.id); args.push('--native-state', state.path); }
       }
       error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });

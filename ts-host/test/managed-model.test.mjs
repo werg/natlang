@@ -88,3 +88,52 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
   assert.equal(requests, 1); assert.equal(existsSync(marker), true);
   await session.close();
 });
+
+test('tuned soft states load as native state spans and requests carry them as native_state parts', async () => {
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  const { nativeStateMessages } = await import('../dist/model/openai-compatible.js');
+  const state = 'nzs1_' + 'a'.repeat(52), other = 'nzs1_' + 'b'.repeat(52);
+  const messages = [{ role: 'system', content: `Rules: ${nativeStateSentinel(state)} end` }, { role: 'user', content: 'plain' }];
+  assert.deepEqual(nativeStateMessages(messages, new Set([state]))[0].content,
+    [{ type: 'text', text: 'Rules: ' }, { type: 'native_state', id: state }, { type: 'text', text: ' end' }]);
+  assert.equal(nativeStateMessages(messages, new Set([state]))[1], messages[1], 'text without states is unchanged');
+  assert.throws(() => nativeStateMessages(messages, new Set([other])), /weights-unavailable: native state/);
+
+  const fake = (supports) => {
+    const root = mkdtempSync(join(tmpdir(), 'natlang-native-state-'));
+    const executable = join(root, 'fake-llama-server'), log = join(root, 'log'), model = join(root, 'model.gguf'), template = join(root, 'template.jinja');
+    writeFileSync(model, 'fixture'); writeFileSync(template, 'fixture');
+    writeFileSync(executable, `#!${process.execPath}
+if (process.argv.includes('--version')) { console.log('version: 0.5.0 (build 11146, commit 7fe450e19)'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log(${JSON.stringify(supports ? '--lora-per-sequence\n--native-state FNAME' : '--lora')}); process.exit(0); }
+const http = require('node:http'), fs = require('node:fs');
+const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args }) + '\\n');
+const server = http.createServer((request, response) => {
+  response.setHeader('content-type', 'application/json');
+  if (request.url === '/health') return response.end(JSON.stringify({ status: 'ok' }));
+  let body = ''; request.on('data', chunk => body += chunk); request.on('end', () => {
+    fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ body: JSON.parse(body) }) + '\\n');
+    response.end(JSON.stringify({ choices: [{ message: { content: 'ok', tool_calls: [] } }], usage: { completion_tokens: 1 } })); });
+});
+server.listen(port, '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`);
+    chmodSync(executable, 0o755);
+    return { log, environment: { ...process.env, NATLANG_LLAMA_SERVER: executable, NATLANG_MODEL_PATH: model, NATLANG_TEMPLATE: template,
+      NATLANG_MODEL_START_TIMEOUT_MS: '5000' } };
+  };
+  const fork = fake(true);
+  const session = createManagedModelSession({}, fork.environment, process.stderr, { nativeStates: () => [{ id: state, path: '/release/exports/state.gguf' }] });
+  await session.turn({ messages, tools: [], temperature: 0, seed: 1, max_tokens: 4 });
+  await session.close();
+  const records = readFileSync(fork.log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const args = records.find(record => record.args).args;
+  assert.equal(args[args.indexOf('--native-state') + 1], '/release/exports/state.gguf');
+  assert.deepEqual(records.find(record => record.body).body.messages[0].content[1], { type: 'native_state', id: state });
+  // A server without --native-state cannot serve soft states: the session refuses to start rather than run them as text.
+  const upstream = fake(false);
+  const refused = createManagedModelSession({}, upstream.environment, process.stderr, { nativeStates: () => [{ id: state, path: '/x.gguf' }] });
+  await assert.rejects(refused.prepare(), /weights-unavailable: .* cannot import native state spans/);
+  await refused.close();
+});

@@ -141,9 +141,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(undefined);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');
-          const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { loraAdapters: () => adapters });
+          // Soft states as exact native state spans on the llama.cpp fork (`--native-state`); refused by other servers.
+          const states = manifest.softStates.filter(item => item.exports?.gguf).map(item => ({ id: item.state, path: join(directory, item.exports!.gguf!.file) }));
+          const session = createResolvedModelSession(serving.choice, process.env, process.stderr,
+            { loraAdapters: () => adapters, nativeStates: () => states });
           await session.prepare();
-          return { driver: driverOf(session), loaded: new Set(adapters.map(item => item.id)), close: () => session.close() };
+          return { driver: driverOf(session), loaded: new Set([...adapters, ...states].map(item => item.id)), nativeState: states.length > 0, close: () => session.close() };
         } });
     } finally { await teacherSession.close(); }
   };

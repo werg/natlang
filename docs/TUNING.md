@@ -208,10 +208,21 @@ reference server applies the stack through its exact native adapter path.
 | Backend | Weight residuals | Soft instruction/skill states | Mixed stacks in one batch |
 | --- | --- | --- | --- |
 | Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
-| llama.cpp fork (`--lora-per-sequence`) | Same | Through its Neuralese server (not yet wired here) | Yes, per-sequence scales, verified bitwise isolation |
+| llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
 | wllama in the page (vendored build, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
+
+**Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
+attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With
+`tune.softStates: true` on the `managed-local` backend, the build trains soft states and exports each as a llama.cpp
+native state span (`exports/<state>.state.gguf`, bound to the base GGUF). The managed session passes them with
+`--native-state`, and requests carry `{"type": "native_state", "id"}` content parts where the instruction or skill
+text was. The fork imports the stored state exactly for virtual tokens between the consume markers. On the real
+LFM2.5-350M it matches the reference engine as closely as plain text does (max |Δlogit| 0.043 vs 0.075, top-1 1.0;
+`scripts/llama_state_span_parity.py`). A server without `--native-state` (the upstream runtime) refuses to start with
+soft states (`weights-unavailable`); in `run`/`call` such releases run their soft-state bindings degraded. Mellum
+soft states are not exportable yet.
 
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
 checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
