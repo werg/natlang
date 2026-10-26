@@ -1,0 +1,134 @@
+/**
+ * Whole-program data collection for `natlang tune` (plans/HIERARCHICAL_LORA_TUNING.md §4).
+ *
+ * Root examples are split by source/world component BEFORE anything is expanded; every derived row inherits its
+ * root's partition. The program then runs on the real runtime with the authorized teacher as executor. Each model turn
+ * is captured with the binding of the invocation that made it (resolved from the callee, exactly as at serving time),
+ * its exact request and reply, and separate evidence fields. Protected examples never enter collection.
+ */
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import type { ProgramDescriptor } from '../adaptation/types.js';
+import { sealManifest, type WeightManifest } from '../adaptation/weights/manifest.js';
+import { compileScopeTree, type ScopeOptions } from '../adaptation/weights/scopes.js';
+import { WeightBinding } from '../adaptation/weights/binding.js';
+import type { NativeModelIdentity } from '../native/neuralese-store.js';
+import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelDriver } from '../runtime/runtime.js';
+import { createNatlangRuntime } from '../runtime/runtime.js';
+import { currentFrame } from '../runtime/context.js';
+import { loadNatlang } from '../runtime/node-files.js';
+
+export type Partition = 'train' | 'development' | 'confirmation';
+export type RootExample = { readonly function: string; readonly input: unknown; readonly expected?: unknown;
+  /** Source/world component: related examples share one, so they land on one side of every split. */
+  readonly group?: string; readonly protected?: boolean; readonly source?: 'real' | 'synthetic' };
+export type SplitExample = RootExample & { readonly id: string; readonly component: string; readonly partition: Partition };
+
+/** One captured model turn of one inner invocation. */
+export type CollectedTurn = {
+  readonly schema: 'natlang.tune-turn/v1';
+  readonly root: string; readonly component: string; readonly partition: Partition;
+  readonly binding: string | null; readonly definition: string | null; readonly call: string | null; readonly turn: number;
+  readonly messages: unknown[]; readonly tools: unknown[]; readonly reply: Pick<ModelTurn, 'calls' | 'text' | 'reasoning' | 'truncated'>;
+  readonly teacher: string; readonly source: 'real' | 'synthetic';
+  /** Separate evidence (§4.3); never collapsed into one flag. */
+  readonly evidence: { readonly rootOracle: boolean | null; readonly enclosingSuccess: boolean; readonly callOutcome: string | null };
+};
+
+const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+/** Read `tune.examples.jsonl` beside the program (or an explicit path). Each line is one root invocation. */
+export function readRootExamples(root: string, path = join(root, 'tune.examples.jsonl')): RootExample[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8').split('\n').filter(line => line.trim()).map((line, index) => {
+    const value = JSON.parse(line) as RootExample;
+    if (typeof value.function !== 'string' || !value.function) throw new Error(`${path}:${index + 1}: each example names its root function`);
+    if (!('input' in value)) throw new Error(`${path}:${index + 1}: each example has an input`);
+    return value;
+  });
+}
+
+/**
+ * Partition by connected component before expansion: the component is the declared group, else the example itself.
+ * Deterministic in the component ID. Protected examples are excluded here and stay out of every later stage.
+ */
+export function splitExamples(examples: readonly RootExample[]): SplitExample[] {
+  const usable = examples.filter(example => !example.protected);
+  const components = [...new Set(usable.map(example => example.group ?? digest([example.function, example.input])))].sort();
+  const ranked = components.map(component => ({ component, key: digest(['natlang.tune-split/v1', component]) }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  const partitionOf = new Map<string, Partition>();
+  // About 70/20/10, but with few components development comes first so selection never runs on training roots.
+  ranked.forEach(({ component }, index) => {
+    const n = ranked.length;
+    const development = Math.max(n >= 2 ? 1 : 0, Math.round(n * 0.2)), confirmation = n >= 5 ? Math.max(1, Math.round(n * 0.1)) : 0;
+    partitionOf.set(component, index < development ? 'development' : index < development + confirmation ? 'confirmation' : 'train');
+  });
+  return usable.map(example => {
+    const component = example.group ?? digest([example.function, example.input]);
+    return { ...example, id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16), component,
+      partition: partitionOf.get(component)! };
+  });
+}
+
+/** A manifest with the program's bindings and no artifacts: every call resolves its binding, all run the base. */
+export function scaffoldManifest(program: ProgramDescriptor, base: NativeModelIdentity, scopes: ScopeOptions = {}): WeightManifest {
+  const { tree, bindings } = compileScopeTree(program, scopes);
+  return sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
+    artifacts: [], families: [], memberships: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
+}
+
+const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+
+/**
+ * Run each example's root function with the teacher and capture every inner model turn. A failing root is still
+ * recorded (its turns are not positive targets: `enclosingSuccess` and `rootOracle` say so).
+ */
+export async function collect(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; examples: readonly SplitExample[];
+  teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void }): Promise<{
+  turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] }> {
+  const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] = [];
+  const binding = new WeightBinding(options.scaffold);
+  for (const example of options.examples) {
+    if (options.partitions && !options.partitions.includes(example.partition)) continue;
+    const pending: Omit<CollectedTurn, 'evidence'>[] = [];
+    const outcomes = new Map<string, string>();
+    const counters = new Map<string, number>();
+    const driver: ModelDriver = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions?: unknown) => {
+      const frame = currentFrame();
+      const reply = await (options.teacher as (r: ModelTurnRequest, s?: AbortSignal, o?: unknown) => Promise<ModelTurn>)(request, signal, turnOptions);
+      const call = frame?.parentCallId ?? null, turn = (counters.get(call ?? '') ?? 0) + 1;
+      counters.set(call ?? '', turn);
+      pending.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
+        binding: frame?.weights?.binding ?? null, definition: frame?.chain.at(-1) ?? null, call, turn,
+        messages: structuredClone(request.messages), tools: structuredClone(request.tools),
+        reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
+          ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
+        teacher: options.teacherId, source: example.source ?? 'real' });
+      return reply;
+    }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
+    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding],
+      trace: trace => { outcomes.set(trace.callId, trace.outcome); } });
+    let ok = false, oracle: boolean | null = null, error: string | undefined;
+    try {
+      const fn = loadNatlang(resolve(options.root, example.function), options.root);
+      const params = (fn as unknown as Record<symbol, { definition: { params: { name: string }[] } }>)[Symbol.for('natlang.callable')]!.definition.params;
+      const input = example.input;
+      const args = input && typeof input === 'object' && !Array.isArray(input) ? params.map(p => (input as Record<string, unknown>)[p.name])
+        : Array.isArray(input) ? input : [input];
+      const value = await runtime.run(() => fn(...args));
+      ok = true;
+      if ('expected' in example) oracle = equal(value, example.expected);
+    } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
+    finally { runtime.close(); }
+    roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}) });
+    for (const turn of pending) {
+      const record: CollectedTurn = { ...turn, evidence: { rootOracle: oracle, enclosingSuccess: ok && oracle !== false,
+        callOutcome: turn.call ? outcomes.get(turn.call) ?? null : null } };
+      turns.push(record); options.onTurn?.(record);
+    }
+  }
+  return { turns, roots };
+}

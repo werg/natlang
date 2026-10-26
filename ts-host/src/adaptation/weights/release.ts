@@ -92,13 +92,15 @@ export function rollbackRelease(root: string): ActiveRecord {
   return record;
 }
 
-/** The release that ordinary execution of the program at `root` uses: the active one, else a packaged pin. */
-export function currentManifest(root: string): WeightManifest | undefined {
+/** The release that ordinary execution of the program at `root` uses (the active one, else a packaged pin) and the
+ * directory its export paths are relative to. */
+export function currentRelease(root: string): { manifest: WeightManifest; directory: string; active?: ActiveRecord } | undefined {
   const active = readActive(root);
-  if (active) return readRelease(root, active.release);
+  if (active) return { manifest: readRelease(root, active.release), directory: dirname(releaseFile(root, active.release)), active };
   const packaged = join(root, 'natlang.adapters.json');
-  return existsSync(packaged) ? parseManifest(readFileSync(packaged, 'utf8')) : undefined;
+  return existsSync(packaged) ? { manifest: parseManifest(readFileSync(packaged, 'utf8')), directory: root } : undefined;
 }
+export function currentManifest(root: string): WeightManifest | undefined { return currentRelease(root)?.manifest; }
 
 export type TuneStatus = { status: 'untuned' | 'tuning' | WeightStatus; release?: string; reason?: string };
 
@@ -135,4 +137,4 @@ export function activeWeights(root: string, options: Omit<ConstructorParameters<
   };
 }
 
-export { jobLock as tuneJobLock };
+export { jobLock as tuneJobLock, releaseFile };

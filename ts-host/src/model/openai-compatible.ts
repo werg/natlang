@@ -20,7 +20,13 @@ export type OpenAICompatibleOptions = HttpChatOptions & {
   scoreEndpoint?: string | boolean;
   /** Decision readouts arriving within this many ms are scored together (default 0: the same tick). */
   scoreCoalesceMs?: number;
+  /**
+   * Extra request fields selecting the current call's tuned weights (llama.cpp's per-request `lora` scales). Read in
+   * the calling invocation's context, before any queueing or coalescing, so each request carries its own stack.
+   */
+  tunedRequest?: () => Record<string, unknown> | undefined;
 };
+const TUNED: unique symbol = Symbol('natlang.tuned-request');
 const isScheduler = (value: unknown): value is Scheduler => typeof (value as Scheduler | undefined)?.transport === 'function';
 
 /**
@@ -29,7 +35,7 @@ const isScheduler = (value: unknown): value is Scheduler => typeof (value as Sch
  * the server how many tokens the model's context holds (undefined when the server does not say).
  */
 export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
-  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, ...http } = options;
+  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, tunedRequest, ...http } = options;
   // A bare number keeps its plain FIFO limit; a scheduler adds priority, adjacency and batch records.
   const scheduler = isScheduler(concurrency) ? concurrency : undefined;
   const limit: RequestLimit | undefined = typeof concurrency === 'number' ? requestLimit(concurrency) : scheduler ? undefined : concurrency as RequestLimit | undefined;
@@ -40,14 +46,27 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
   let window: Promise<number | undefined> | undefined;
   // Decision readouts that arrive together are scored together: by the explicit-batch endpoint where the backend has
   // declared one, otherwise as concurrent requests that the scheduler and the server batch.
-  const single = promptLogprobDecider(transport({ ...http, stream: false }), { request });
+  type Tuned = { [TUNED]?: Record<string, unknown> };
+  const single = promptLogprobDecider(transport({ ...http, stream: false }), { request,
+    ...(tunedRequest ? { extraFor: (item: object) => (item as Tuned)[TUNED] } : {}) });
   const url = scoreEndpoint === true ? openAIEndpointRoot(http.endpoint) + '/v1/natlang/score' : scoreEndpoint || undefined;
   const concurrent = concurrentScoreMany(single);
-  const many = url ? explicitBatchScoreMany({ url, headers: { ...(http.apiKey ? { authorization: `Bearer ${http.apiKey}` } : {}), ...http.headers },
+  const explicit = url ? explicitBatchScoreMany({ url, headers: { ...(http.apiKey ? { authorization: `Bearer ${http.apiKey}` } : {}), ...http.headers },
     extra: { model: http.model, ...(request ? { request } : {}) }, scheduler }, concurrent) : concurrent;
-  const decide = coalescingScorer(Object.assign((...args: Parameters<typeof single>) => single(...args), { scoreMany: many }),
+  // The explicit-batch endpoint carries no per-item weights; tuned items are scored as individual requests.
+  const many: typeof explicit = items => items.some(item => (item as Tuned)[TUNED]) ? concurrent(items) : explicit(items);
+  const coalesced = coalescingScorer(Object.assign((...args: Parameters<typeof single>) => single(...args), { scoreMany: many }),
     { windowMs: scoreCoalesceMs ?? 0 });
-  return Object.assign(chatCompletionModelTurn(transport(http), { toolAliases, request, onExchange, onRequestStart }),
+  const decide: typeof coalesced = tunedRequest ? (item, signal) => {
+    const tuned = tunedRequest();
+    return coalesced(tuned ? Object.assign({ ...item }, { [TUNED]: tuned }) : item, signal);
+  } : coalesced;
+  const turns = transport(http);
+  const tunedTurns: typeof turns = tunedRequest ? (body, signal, meta) => {
+    const tuned = tunedRequest();
+    return turns(tuned ? { ...body, ...tuned } : body, signal, meta);
+  } : turns;
+  return Object.assign(chatCompletionModelTurn(tunedTurns, { toolAliases, request, onExchange, onRequestStart }),
     { model: http.model, decide, contextWindow: () => window ??= serverContextWindow(http) });
 }
 

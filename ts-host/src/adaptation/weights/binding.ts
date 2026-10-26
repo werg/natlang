@@ -43,6 +43,8 @@ export type WeightBindingOptions = {
   readonly program?: ProgramDescriptor;
   /** Evaluation/export validation: missing, stale or incompatible artifacts throw instead of falling back. */
   readonly strict?: boolean;
+  /** The serving backend found the release incompatible (for example its GGUF exports bind another base file). */
+  readonly incompatible?: string;
 };
 
 export function stackIdentity(base: NativeModelIdentity, stack: readonly StackEntry[]): string {
@@ -74,7 +76,10 @@ export class WeightBinding {
       this.byComponent.set(key(entry.component), entry);
     }
     let status: WeightStatus = 'ready', reason: string | undefined;
-    if (options.executor && !nativeModelIdentityEqual(options.executor, manifest.base)) {
+    if (options.incompatible) {
+      status = 'degraded'; reason = options.incompatible;
+      if (options.strict) throw new WeightBindingError('weights-incompatible', options.incompatible);
+    } else if (options.executor && !nativeModelIdentityEqual(options.executor, manifest.base)) {
       status = 'degraded'; reason = 'the release was trained on another base; it runs the base model until retuned';
       if (options.strict) throw new WeightBindingError('weights-incompatible', `release ${manifest.digest.slice(0, 12)} was trained on another exact base`);
     } else if (options.program) {

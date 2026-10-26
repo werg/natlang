@@ -372,12 +372,16 @@ export function limitedTransport(transport: ChatTransport, limit: RequestLimit):
   };
 }
 
-export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json } = {}): DecisionScorer {
+export function promptLogprobDecider(transport: ChatTransport, options: { request?: Json;
+  /** Per-decision request fields (a tuned call's weight selection) carried on the decision item itself. */
+  extraFor?: (item: object) => Json | undefined } = {}): DecisionScorer {
   const { max_tokens: _max, temperature: _temperature, stream: _stream, ...extra } = options.request ?? {};
-  return async ({ messages, options: replies }, signal) => {
+  return async (item, signal) => {
+    const { messages, options: replies } = item;
     if (!replies.length) throw new Error('a decision needs at least one option');
+    const itemExtra = options.extraFor?.(item);
     const sequences = await Promise.all(replies.map(async reply => {
-      const raw = await transport({ ...extra, messages: [...messages, { role: 'assistant', content: reply }],
+      const raw = await transport({ ...extra, ...itemExtra, messages: [...messages, { role: 'assistant', content: reply }],
         add_generation_prompt: false, continue_final_message: false, prompt_logprobs: 0, max_tokens: 1 }, signal);
       const body = isStream(raw) ? await assembleChatCompletion(raw) : raw;
       const rows = body.prompt_logprobs;

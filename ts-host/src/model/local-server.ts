@@ -1,8 +1,9 @@
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { activeNativeAdapters } from '../native/model-recording.js';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -34,7 +35,10 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   /** The slot sizing of a managed local server once it has started (null otherwise). */
   slotPlan(): SlotPlan | null };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
-  (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
+  (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
+  /** Tuned weight adapters (GGUF LoRA exports of the active release) to load at server start, keyed by artifact ID.
+   * Each request then applies only its own call's stack through per-request `lora` scales. */
+  loraAdapters?: () => readonly { readonly id: string; readonly path: string }[] };
 
 export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
   const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
@@ -61,6 +65,21 @@ async function fileHash(path: string): Promise<string> {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest('hex');
+}
+
+/**
+ * The sha256 of the base GGUF the managed server runs: the pinned default's declared hash, or the configured file's
+ * content hash (cached beside it by size and mtime). Tuned GGUF adapters must bind exactly this file.
+ */
+export async function managedModelSha256(environment: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (!environment.NATLANG_MODEL_PATH) return DEFAULT_LOCAL_MODEL.sha256;
+  const path = resolve(environment.NATLANG_MODEL_PATH), stat = statSync(path);
+  const cache = join(defaultNatlangCacheDirectory(environment), 'model-hashes', createHash('sha256').update(path).digest('hex').slice(0, 24));
+  const stamp = `${stat.size}:${stat.mtimeMs}`;
+  try { const [seen, hash] = readFileSync(cache, 'utf8').split('\n'); if (seen === stamp && hash && /^[0-9a-f]{64}$/.test(hash)) return hash; } catch { /* not cached */ }
+  const hash = await fileHash(path);
+  mkdirSync(dirname(cache), { recursive: true }); writeFileSync(cache, `${stamp}\n${hash}`);
+  return hash;
 }
 
 async function verifiedDefault(path: string): Promise<boolean> {
@@ -157,8 +176,26 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   // server's concurrency is its slot count unless configured, and is set once the server has started.
   const scheduler = choice.kind === 'pi-provider' ? undefined : schedulerForSettings(choice);
   let plan: SlotPlan | null = null;
+  // Loaded tuned adapters: artifact ID -> llama-server adapter index (fixed for the server's lifetime).
+  const loraIndex = new Map<string, number>();
+  const tunedRequest = () => {
+    const active = activeNativeAdapters();
+    if (!loraIndex.size) {
+      if (active.length) throw new Error(`weights-unavailable: the managed model server loaded no tuned adapters, but this call requests ${active.map(item => item.id).join(', ')}`);
+      return undefined;
+    }
+    const scales = new Map<number, number>();
+    for (const { id, scale } of active) {
+      const index = loraIndex.get(id);
+      if (index === undefined) throw new Error(`weights-unavailable: adapter ${id} is not loaded by the managed model server; rerun natlang tune or restart`);
+      scales.set(index, (scales.get(index) ?? 0) + scale);
+    }
+    // Every loaded adapter is listed, so an adapter outside this call's stack is explicitly off.
+    return { lora: [...loraIndex.values()].map(index => ({ id: index, scale: scales.get(index) ?? 0 })) };
+  };
   const driver = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
-    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint });
+    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
+    ...(choice.kind === 'managed-local' ? { tunedRequest } : {}) });
   let unscored: string | null = null;
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
@@ -190,6 +227,13 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
         '-c', String(plan.totalContext), '-ngl',
         String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
         '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
+      loraIndex.clear();
+      const adapters = runtimeOptions.loraAdapters?.() ?? [];
+      if (adapters.length) {
+        // Loaded off; each request sets its own stack's scales.
+        args.push('--lora-init-without-apply');
+        for (const adapter of adapters) { loraIndex.set(adapter.id, loraIndex.size); args.push('--lora', adapter.path); }
+      }
       error.write(`natlang: starting managed model ${basename(modelPath)} with ${plan.slots} slot${plan.slots === 1 ? '' : 's'} (${plan.contextPerSlot} tokens each; ${plan.budgetSource === 'configured-parallel' ? 'local.parallel' : `${plan.budgetSource === 'default' ? 'default' : plan.budgetSource} KV budget ${Math.round((plan.budgetBytes ?? 0) / 2 ** 20)} MiB`})\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });

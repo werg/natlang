@@ -25,7 +25,12 @@ export type WeightBindingEntry = { readonly id: string; readonly component: stri
 /** A trained residual for one scope node: an archived nnt1 coefficient artifact. `requires` names the exact parent
  * artifacts it was fit against, so a fallback never keeps a child without the parent version it assumed. */
 export type WeightArtifact = { readonly node: string; readonly artifact: string; readonly rank: number;
-  readonly parameterization: 'native-subspace' | 'free-lora'; readonly requires: readonly string[] };
+  readonly parameterization: 'native-subspace' | 'free-lora'; readonly requires: readonly string[];
+  /** Backend exports of this residual, paths relative to the release directory (tune/export.py receipts). */
+  readonly exports?: WeightExports };
+/** A GGUF LoRA for the llama.cpp fork and wllama binds the exact base GGUF it was converted against. */
+export type WeightExports = { readonly gguf?: { readonly file: string; readonly sha256: string; readonly baseGgufSha256: string };
+  readonly peft?: { readonly directory: string; readonly sha256: string } };
 /** An immutable published family version for this base; its amplitude is fixed (§5.4). */
 export type FamilyVersion = { readonly family: string; readonly version: string; readonly artifact: string; readonly amplitudeHex: string };
 /** A static per-binding family membership with its learned, bounded gate. */
@@ -111,6 +116,11 @@ export function validateManifest(value: unknown): asserts value is WeightManifes
     if (byNode.has(artifact.node)) fail(`node ${artifact.node} has two artifacts`);
     if (!isString(artifact.artifact) || !Number.isInteger(artifact.rank) || artifact.rank < 1) fail(`artifact on ${artifact.node} needs id and positive rank`);
     if (!['native-subspace', 'free-lora'].includes(artifact.parameterization)) fail(`artifact on ${artifact.node} has unknown parameterization`);
+    const gguf = artifact.exports?.gguf, peft = artifact.exports?.peft;
+    const relativePath = (path: unknown) => isString(path) && !path.startsWith('/') && !path.split(/[\\/]/).includes('..');
+    if (gguf && (!relativePath(gguf.file) || !/^[0-9a-f]{64}$/.test(gguf.sha256) || !/^[0-9a-f]{64}$/.test(gguf.baseGgufSha256)))
+      fail(`gguf export of ${artifact.node} needs a release-relative file, its sha256 and the base GGUF sha256`);
+    if (peft && (!relativePath(peft.directory) || !/^[0-9a-f]{64}$/.test(peft.sha256))) fail(`peft export of ${artifact.node} is malformed`);
     byNode.add(artifact.node); artifacts.add(artifact.artifact);
   }
   for (const artifact of manifest.artifacts) for (const parent of artifact.requires ?? fail('requires missing'))
