@@ -333,6 +333,8 @@ def main(argv=None):
     p.add_argument('--hdd-floor-gb', type=float, default=100.0, help='free space to keep on the external disk')
     p.add_argument('--archive', type=Path, default=ARCHIVE)
     p.add_argument('--root', type=Path, action='append', help='override the roots')
+    p.add_argument('--exclude', type=Path, action='append', default=[],
+                   help='protect an exact path and its descendants in this run')
     p.add_argument('--report', action='store_true', help='also report ~/.cache and git-ignored large items')
     p.add_argument('--list-limit', type=int, default=40)
     p.add_argument('--idle-run-min-age-hours', type=float, default=None,
@@ -352,7 +354,7 @@ def main(argv=None):
             print(json.dumps({'skipped': 'another archive run is applying'}))
             return 0
     roots = tuple(a.root) if a.root else ROOTS
-    excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes() + plan_excludes(roots)
+    excludes = list(BUILTIN_EXCLUDES) + ledger_excludes() + user_excludes() + plan_excludes(roots) + list(a.exclude)
     held = open_paths()
     busy = busy_run_dirs(roots, held, process_cwds())
     idle_age = None if a.idle_run_min_age_hours is None else a.idle_run_min_age_hours * 3600
