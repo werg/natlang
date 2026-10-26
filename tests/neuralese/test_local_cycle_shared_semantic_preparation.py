@@ -205,6 +205,25 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
     assert prepared['commands']['lfm_cycle']['mode']=='local-frozen-runtime-subprocess'
     assert prepared['commands']['mellum_cycle']['mode']=='existing-cloud-provider-exec'
     assert prepared['owner_handoffs']['lfm']['applied'] is False
+    for role in ('lfm','mellum'):
+        export=prepared['owner_handoffs'][role]['full_state_export']
+        assert export['schema']=='natlang.native-shared-participant-export-follow/1'
+        assert export['participant']==prepared['participant_ids'][role]
+        assert export['state_path']==role_inputs[role]['state_path']
+        assert export['cursor_path']==role_inputs[role]['cursor_path']
+        assert 'prepare-current' in export['prepare_command']
+        assert export['training_credit']==0 and export['activated'] is False
+        runner=export['private_export_runner']
+        assert runner['python']==provider['local_source_host']['python']
+        assert 'export' in export['export_command_template']
+        assert runner['source_mode']==('local' if role=='lfm' else 'sandbox')
+    mellum_export=prepared['owner_handoffs']['mellum']['full_state_export']
+    assert mellum_export['private_export_runner']['manifest_transport']['source_host_id']==cloud_id
+    assert mellum_export['private_export_runner']['manifest_transport']['maximum_bytes']==16*1024**2
+    relay_provider=json.loads(Path(prepared['relay']['path']).read_text())['provider']
+    assert relay_provider['local_source_host']['private_export_role']=='lfm'
+    assert relay_provider['local_source_host']['private_export_inventory']==prepared[
+        'owner_handoffs']['lfm']['full_state_export']['private_export_inventory']
     assert any(item['kind']=='snapshot-curriculum' for item in prepared['stage_files'])
     assert sum(item['kind']=='task-eval-python-collector' for item in prepared['stage_files'])==2
     assert sum(item['kind']=='task-eval-packet' for item in prepared['stage_files'])==2

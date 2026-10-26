@@ -139,6 +139,8 @@ def stage_preparation_files(config,io):
             raise ValueError('existing prepared-file receipt is for another source inventory')
         return receipt
     copied=io.stage_prepared_files(staged['files'],source_host_id=source_host)
+    if copied is False:
+        return {'status':'prepared-files-private-export-pending','receipt_path':staged['receipt_path']}
     receipt={'schema':'natlang.native-role-preparation-files-receipt/1',
         'inventory_sha256':inventory,'files':staged['files'],'verified_copies':copied}
     io.write_atomic(sid,staged['receipt_path'],
@@ -149,7 +151,9 @@ def stage_preparation_files(config,io):
 def tick(config,io):
     if config.get('schema')!='natlang.native-role-exchange-service/1':
         raise ValueError('unsupported source-host role exchange service')
-    stage_preparation_files(config,io)
+    preparation=stage_preparation_files(config,io)
+    if isinstance(preparation,dict)and preparation.get('status')=='prepared-files-private-export-pending':
+        return preparation
     hosts=config['hosts'];plans={};contract=None
     for role,host in hosts.items():
         allowed=(io.has_host(host['source_host_id'])if hasattr(io,'has_host')

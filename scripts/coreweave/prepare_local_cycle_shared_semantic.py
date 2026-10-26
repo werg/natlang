@@ -59,6 +59,72 @@ def _host_roots(provider,role,host_id):
     return roots
 
 
+def _private_export_inventory_path(provider,role,participant):
+    """Select a writable local receipt index with a declared read route."""
+    host=provider.get('local_source_host')or{}
+    read_roots=[Path(value).resolve()for value in host.get('read_roots',[])]
+    write_roots=[Path(value).resolve()for value in host.get('write_roots',[])]
+    explicit=host.get('private_export_inventories',{}).get(role)
+    if explicit is not None:
+        path=Path(explicit)
+        if (not path.is_absolute()or'..'in path.parts or str(path)!=str(path.resolve(strict=False))
+                or not any(path.resolve(strict=False)==root or root in path.resolve(strict=False).parents for root in read_roots)
+                or not any(path.resolve(strict=False)==root or root in path.resolve(strict=False).parents for root in write_roots)):
+            raise ValueError('explicit private export inventory must be readable and writable under the local source host roots')
+        return str(path.resolve(strict=False))
+    roots=[root for root in write_roots if any(root==read or read in root.parents for read in read_roots)]
+    if not roots:
+        raise ValueError('local source owner needs a root shared by private export inventory readers and writers')
+    digest=canonical_json_sha256_hex({'role':role,'participant':participant})[:24]
+    return str(roots[0]/'control'/'private-export-inventories'/(role+'-'+digest+'.json'))
+
+
+def _bundle_export_descriptor(role,item,participant,provider,inventory_path):
+    writable=_host_roots(provider,role,item['source_host_id'])
+    root=Path(writable[0])/('control/native-shared-participant-exports/'+
+        canonical_json_sha256_hex({'role':role,'participant':participant})[:24])
+    entrypoint='scripts.coreweave.native_shared_participant_export'
+    manifest=str(root/'current-prepared.json')
+    common=[item['python'],'-m',entrypoint]
+    source_provider=provider.get('local_source_host')or{}
+    export_python=source_provider.get('python')
+    export_runtime=source_provider.get('runtime')
+    if not isinstance(export_python,str)or not Path(export_python).is_absolute()or not isinstance(export_runtime,str):
+        raise ValueError('private full-state export needs the exact local owner Python/runtime to keep uploader credentials host-side')
+    export_source_mode='local' if role=='lfm' else 'sandbox'
+    export_manifest=manifest if role=='lfm' else str(Path(source_provider['write_roots'][0])/
+        ('control/native-shared-participant-exports/'+canonical_json_sha256_hex(
+            {'role':role,'participant':participant})[:24]+'/current-prepared.json'))
+    export_command=[export_python,'-m',entrypoint,'export','--manifest',export_manifest,
+        '--inventory',inventory_path,'--role',role,'--exporter','{bound_private_exporter}',
+        '--source-mode',export_source_mode]
+    if role=='mellum':export_command.extend(['--sandbox-id',item['source_host_id']])
+    return {'schema':'natlang.native-shared-participant-export-follow/1','role':role,
+        'participant':participant,'source_host_id':item['source_host_id'],
+        'state_path':item['state_path'],'cursor_path':item['cursor_path'],
+        'runtime':item['runtime'],'python':item['python'],
+        'export_root':str(root),'private_export_inventory':inventory_path,
+        'entrypoint':entrypoint,'manifest_path':manifest,
+        'command_context':{'cwd':item['runtime'],'PYTHONPATH':[item['runtime']+'/training/neuralese',item['runtime']]},
+        'prepare_command':[*common,'prepare-current','--state',item['state_path'],
+            '--participant',participant,'--out-root',str(root),'--manifest',manifest],
+        'private_export_runner':{'source_host_id':source_provider.get('source_host_id'),
+            'runtime':export_runtime,'python':export_python,
+            'manifest_source_host_id':item['source_host_id'],
+            'source_manifest_path':manifest,'local_manifest_path':export_manifest,
+            'manifest_must_be_read_back_before_export':role=='mellum',
+            'manifest_transport':({'mode':'bounded-provider-metadata-read','source_host_id':item['source_host_id'],
+                'source_path':manifest,'local_target':export_manifest,'maximum_bytes':16*1024**2}
+                if role=='mellum' else None),
+            'source_mode':export_source_mode},
+        'export_command_template':export_command,
+        'pending_command':[*common,'pending','--manifest',manifest,'--inventory',inventory_path,'--role',role],
+        'record_receipt_command_template':[*common,'record','--manifest',manifest,
+            '--inventory',inventory_path,'--role',role,'--source','{source_path}','--receipt','{receipt_path}'],
+        'private_export_contract':'Every bundle member, including the selected participant shard, global semantic/training shards, bundle manifest, and tokenizer/control files, needs an exact private receipt with independent full GET before the atomic inventory append.',
+        'training_credit':0,'readiness_granted':False,'activated':False}
+
+
 def _source_map_routes(reference):
     if reference is None:return {},{},None
     path=Path(binding(reference['path'],reference)['path'])
@@ -259,6 +325,7 @@ def prepare(spec_path,out):
     if out.exists():raise FileExistsError('local-cycle semantic preparation needs a new immutable output directory')
     out.mkdir(parents=True)
     plans={};controls={};control_refs={};raw_states={};config_paths={};plan_targets={};cycle_targets={};owner_handoffs={}
+    private_export_inventories={}
     stage_files=[]
     # TaskEval imports this Python entrypoint through the frozen logical
     # NATLANG_REPO on each owner. Bind and stage the exact collector alongside
@@ -425,6 +492,10 @@ def prepare(spec_path,out):
             'owner_identity_path':item['owner_identity_path'],'required_boundary':'whole-update-or-stage',
             'new_cycle_plan':{'path':cycle_target,'sha256':cycle_local_ref['sha256'],
                 'bytes':Path(cycle_path).stat().st_size},'applied':False}
+        inventory_path=_private_export_inventory_path(provider,role,ids[role])
+        private_export_inventories[role]=inventory_path
+        owner_handoffs[role]['full_state_export']=_bundle_export_descriptor(
+            role,item,ids[role],provider,inventory_path)
         plan_targets[role]={'base':base_remote_ref,'successor':item['successor_plan_target']}
         cycle_targets[role]={'path':cycle_target,'sha256':cycle_local_ref['sha256'],
             'bytes':Path(cycle_path).stat().st_size}
@@ -566,6 +637,12 @@ def prepare(spec_path,out):
     controller['raw_rl_bootstrap']=relay['hosts']['mellum']['plan']
     controller['snapshot_successor']['rl_bootstrap']=controller['raw_rl_bootstrap']
     relay['preparation_curriculum']=snapshot_curriculum_remote
+    relay_provider=relay.setdefault('provider',copy.deepcopy(provider))
+    local_provider=relay_provider.get('local_source_host')
+    if not isinstance(local_provider,dict):
+        raise ValueError('source relay lost its exact local owner provider declaration')
+    local_provider['private_export_inventory']=private_export_inventories['lfm']
+    local_provider['private_export_role']='lfm'
     relay['task_eval_collector_assets']=collector_assets
     relay['local_cycle_returns']['completion_path']=spec['semantic_consumer_out']+'/joint/shared-stage-completion.json'
     for staged in stage_files:
@@ -595,6 +672,7 @@ def prepare(spec_path,out):
         'task_eval_python_collectors':collector_assets,
         'source_plan_targets':plan_targets,'cycle_plan_targets':cycle_targets,
         'owner_handoffs':owner_handoffs,
+        'full_state_private_exports':{role:owner_handoffs[role]['full_state_export']for role in ('lfm','mellum')},
         'stage_files':stage_files,
         'commands':{'lfm_cycle':{'mode':'local-frozen-runtime-subprocess',
                 'source_host_id':assignments['lfm']['source_host_id'],'python':spec['roles']['lfm']['python'],

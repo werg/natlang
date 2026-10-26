@@ -31,7 +31,7 @@ class NativeRoleExchangeIO:
         local=provider.get('local_source_host')
         if local is not None:
             required={'source_host_id','runtime','python','read_roots','write_roots'}
-            if (not isinstance(local,dict)or set(local)-required-{'role_controls','reserve_bytes','cpu_helpers','cpu_helper_loader','private_exports','readonly_input_roots'}
+            if (not isinstance(local,dict)or set(local)-required-{'role_controls','reserve_bytes','cpu_helpers','cpu_helper_loader','private_exports','private_export_inventory','private_export_role','readonly_input_roots'}
                     or not required<=set(local)
                     or not all(isinstance(local.get(key),str)and local[key] for key in
                         ('source_host_id','runtime','python'))
@@ -47,6 +47,15 @@ class NativeRoleExchangeIO:
                 raise ValueError('local source host disk reserve must be a nonnegative byte count')
             if 'private_exports'in local and not isinstance(local['private_exports'],list):
                 raise ValueError('local source host private export inventory must be a list')
+            if 'private_export_inventory'in local:
+                inventory=Path(local['private_export_inventory'])
+                if (not inventory.is_absolute()or'..'in inventory.parts or str(inventory)!=os.path.normpath(str(inventory))
+                        or (inventory.exists()and inventory.is_symlink())):
+                    raise ValueError('dynamic private export inventory must be an absolute canonical nonsymlink path')
+                if not any(inventory==Path(root)or Path(root)in inventory.parents for root in local['read_roots']):
+                    raise ValueError('dynamic private export inventory must be under a declared local read root')
+            if 'private_export_role'in local and local['private_export_role']not in ('lfm','mellum'):
+                raise ValueError('local private export inventory role is unsupported')
             if local['source_host_id'] in provider['sandboxes']:
                 raise ValueError('local source host identity collides with a CoreWeave sandbox')
         self.local=local
@@ -196,7 +205,7 @@ class NativeRoleExchangeIO:
         local_path=self._local_path(item['path']);before=local_path.stat()
         if before.st_size!=item['bytes']or self._file_sha(local_path)!=item['sha256']:
             raise ValueError('local source bytes differ from the exact role inventory')
-        if item['bytes']>=32*1024**2:self._require_private_export(item)
+        if item['bytes']>=32*1024**2 and not self._require_private_export(item):return False
         target_path=target_path or item['path']
         target_host=self.config['sandboxes'].get(target,{})
         write_roots=target_host.get('write_roots')or ['/work/native-production']
@@ -270,7 +279,8 @@ class NativeRoleExchangeIO:
                     finally:
                         if temp.exists():temp.unlink()
             else:
-                self._stream_local_to_cloud(source_host_id,target_host,source,target_path=entry['target'])
+                copied=self._stream_local_to_cloud(source_host_id,target_host,source,target_path=entry['target'])
+                if copied is False:return False
             staged.append({'source_host_id':source_host_id,'target_host_id':target_host,
                 'target':entry['target'],'sha256':source['sha256'],'bytes':source['bytes']})
         return staged
@@ -288,7 +298,33 @@ class NativeRoleExchangeIO:
                     or('bytes'in ref and len(raw)!=ref['bytes'])):
                 raise ValueError('large local role transfer private receipt bytes changed')
             validate_receipt(json.loads(raw),identity)
-            return ref
+            return True
+        inventory_reference=self.local.get('private_export_inventory')
+        if inventory_reference is not None:
+            inventory_path=self._local_path(inventory_reference)
+            if not inventory_path.exists():return False
+            raw=self._local_file(inventory_path)
+            value=__import__('json').loads(raw)
+            if (value.get('schema')!='natlang.native-private-export-inventory/1'
+                    or value.get('role')!=self.local.get('private_export_role')
+                    or not isinstance(value.get('entries'),list)):
+                raise ValueError('dynamic private export inventory has another schema or owner')
+            for entry in value['entries']:
+                if (not isinstance(entry,dict)or not isinstance(entry.get('identity'),dict)
+                        or not isinstance(entry.get('source_path'),str)):
+                    raise ValueError('dynamic private export inventory entry is malformed')
+                identity=entry['identity']
+                if identity!={'sha256':item['sha256'],'bytes':item['bytes']}:
+                    continue
+                source=Path(entry['source_path'])
+                if source.resolve(strict=True)!=self._local_path(item['path']).resolve(strict=True):
+                    continue
+                validate_receipt(entry.get('receipt'),identity)
+                if (entry['receipt'].get('source')!=entry['source_path']
+                        or entry['receipt'].get('role')!=self.local.get('private_export_role')):
+                    raise ValueError('dynamic private receipt names another bundle member')
+                return True
+            return False
         raise ValueError('large local role transfer lacks its independently verified private export receipt')
 
     def _stream_cloud_to_local(self,source,target,item):

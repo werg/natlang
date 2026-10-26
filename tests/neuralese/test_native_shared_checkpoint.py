@@ -52,6 +52,12 @@ def actual_shared(tmp_path, *, history_policy=None):
         reference=native_recipe_binding(recipe,('a' if name=='lfm' else 'b')*64)
         trained[name] = SemanticParticipant(entry.model, entry.tokenizer, entry.config,
             channel.bindings[name], optimizer, sft_progress={'stage': {'exposure_counts': {'earned': 3}}}, global_step=7,recipe_binding=reference)
+        trained[name].optimizer_options={'lr':.001,'weight_decay':0.,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None,'native_optimizer_migration':None}
+        trained[name].fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
+        trained[name].optimizer_state_storage='device'
+        trained[name].source_rng=torch.get_rng_state().clone()
+        trained[name].snapshot_ancestors=[]
     optimizer = torch.optim.AdamW(channel.vae.parameters(), lr=.001)
     sum(value.square().mean() for value in channel.vae.parameters()).backward()
     optimizer.step(); optimizer.zero_grad(set_to_none=True)

@@ -58,7 +58,7 @@ def make_io(tmp_path,monkeypatch):
 
 def test_local_source_host_exec_and_metadata_roots_are_exact(tmp_path,monkeypatch):
     io,root,_=make_io(tmp_path,monkeypatch)
-    assert io.remote('dgx-local','print("local-ok")').strip()=='local-ok'
+    assert io.remote('dgx-local','import json;print(json.dumps("local-ok"))')=='local-ok'
     path=root/'proof.json';io.write_atomic('dgx-local',str(path),b'{"proof":true}')
     assert io.read('dgx-local',str(path))==b'{"proof":true}'
     with pytest.raises(ValueError,match='escaped'):
@@ -79,6 +79,44 @@ def test_local_to_cloud_stream_is_hash_checked_and_atomic(tmp_path,monkeypatch):
     source.write_bytes(data+b'changed')
     with pytest.raises(ValueError,match='differ'):
         io._stream_local_to_cloud('dgx-local','mellum',item)
+
+
+def test_large_local_stage_pauses_for_dynamic_independent_receipt_then_resumes(tmp_path,monkeypatch):
+    io,root,fake=make_io(tmp_path,monkeypatch)
+    inventory=root/'control'/'private-export-inventory.json'
+    inventory.parent.mkdir()
+    io.local['private_export_role']='lfm'
+    io.local['private_export_inventory']=str(inventory)
+    monkeypatch.setattr(io,'_cloud_target_state',lambda sid,item:'missing')
+    source=root/'large-source.bin';data=bytes(range(251))*(33*1024*1024//251+1);source.write_bytes(data)
+    item={'path':str(source),'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+    entry={'source_host_id':'dgx-local','target_host_id':'mellum',
+        'target':'/work/native-production/large-source.bin','source':item}
+    assert io.stage_prepared_files([entry],source_host_id='dgx-local') is False
+    assert not fake.files
+    receipt={'private':True,'role':'lfm','source':str(source),'identity':{'sha256':item['sha256'],'bytes':item['bytes']},
+        'independent_verification':{'sha256':item['sha256'],'bytes':item['bytes']},
+        'run':'fixture/natlang','name':'large-source'}
+    inventory.write_text(__import__('json').dumps({'schema':'natlang.native-private-export-inventory/1',
+        'role':'lfm','entries':[{'source_path':str(source),'identity':receipt['identity'],'receipt':receipt}]}))
+    copied=io.stage_prepared_files([entry],source_host_id='dgx-local')
+    assert copied and fake.files[entry['target']]==data
+
+
+def test_large_local_stage_rejects_stale_dynamic_receipt(tmp_path,monkeypatch):
+    io,root,fake=make_io(tmp_path,monkeypatch)
+    inventory=root/'inventory.json';io.local['private_export_role']='lfm'
+    io.local['private_export_inventory']=str(inventory)
+    source=root/'large.bin';data=bytes(range(251))*(33*1024*1024//251+1);source.write_bytes(data)
+    item={'path':str(source),'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
+    wrong={'private':True,'role':'lfm','source':str(source),'identity':{'sha256':item['sha256'],'bytes':item['bytes']},
+        'independent_verification':{'sha256':'0'*64,'bytes':item['bytes']},
+        'run':'fixture/natlang','name':'large'}
+    inventory.write_text(__import__('json').dumps({'schema':'natlang.native-private-export-inventory/1',
+        'role':'lfm','entries':[{'source_path':str(source),'identity':wrong['identity'],'receipt':wrong}]}))
+    with pytest.raises(ValueError,match='independent'):
+        io._require_private_export(item)
+    assert not fake.files
 
 
 def test_prepared_files_stage_to_explicit_cloud_target_and_verify_existing(tmp_path,monkeypatch):
@@ -143,6 +181,28 @@ def test_exchange_stages_prepared_inventory_once_under_exact_receipt(tmp_path):
     io.receipts[('cloud',staged['receipt_path'])]=b'{"schema":"wrong"}'
     with pytest.raises(ValueError,match='another source inventory'):
         stage_preparation_files(config,io)
+
+
+def test_exchange_keeps_large_preparation_pending_until_dynamic_private_receipt(tmp_path):
+    from native_role_exchange import stage_preparation_files
+    class PendingIO:
+        local={'source_host_id':'dgx-local'}
+        def __init__(self):self.receipts={};self.stages=0
+        def read_optional(self,sid,path):return self.receipts.get((sid,path))
+        def stage_prepared_files(self,files,*,source_host_id):self.stages+=1;return False
+        def write_atomic(self,*args):raise AssertionError('pending private export must not publish readiness')
+    io=PendingIO();files=[{'source_host_id':'dgx-local','target_host_id':'cloud',
+        'target':'/work/native-production/big-shared-object','source':{
+            'path':'/data/shared-object','sha256':'a'*64,'bytes':40*1024**2}}]
+    staged={'schema':'natlang.native-role-preparation-files/1','source_host_id':'dgx-local',
+        'files':files,'receipt_path':'/work/native-production/semantic/staged.json'}
+    staged['inventory_sha256']=canonical_json_sha256_hex({'schema':staged['schema'],
+        'source_host_id':staged['source_host_id'],'files':files})
+    config={'hosts':{'lfm':{'source_host_id':'dgx-local'},'mellum':{'source_host_id':'cloud'}},
+        'local_cycle_returns':{'consumer':'mellum'},'preparation_stage_files':staged}
+    assert stage_preparation_files(config,io)=={
+        'status':'prepared-files-private-export-pending','receipt_path':staged['receipt_path']}
+    assert io.stages==1 and io.receipts=={}
 
 
 def test_cloud_to_local_stream_uses_verified_durable_download(tmp_path,monkeypatch):
