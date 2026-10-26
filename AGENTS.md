@@ -195,6 +195,21 @@ this incident's snapshot recovery is implemented or qualified from offline tests
 Retain the latest verified recovery state and its active dependencies; prune a
 superseded snapshot/export only after its replacement is actually durable.
 
+Before uploading a checkpoint, persist an immutable export intent on the
+workstation with its actual step, exact SHA/size, source pin, runtime and owner.
+An upload can finish just before its sandbox disappears. Recover such an object
+with an independent complete GET/hash and verify its actual checkpoint metadata;
+never infer its step from a later learner log or the last drained parent. The
+2026-10-26 late object was step36054, while the last observed learner was36073.
+The19 unexported updates remain lost until independently recovered.
+
+Inspect assigned host RAM before restoration. An unconstrained one-GPU request
+returned a96GB GPU with only2Gi host RAM; it was closed without starting training.
+The current Mellum restore uses a measured96Gi minimum after128Gi capacity was
+rejected. GPU capacity alone does not establish host-memory capacity. Keep actual
+cgroup pressure and learner progress visible; a Running label or controller exec
+is not an optimizer update.
+
 Every supervised entry, including zero-success RL seed fallback, must use the
 shared exact-source resume and publication-owner mechanism. Otherwise useful
 updates can remain invisible to the durable exporter. Preserve optimizer, RNG
@@ -382,6 +397,13 @@ comprehensive training on the entire evolving production recipe.
   is not the objective: base-relative KL/agreement are telemetry, never a stop
   or qualification barrier. Exact state and artifact identities support safe
   continuation and debugging; they are not a scientific-purity requirement.
+- **Qualify current foundations on an explicit shared-stage request.** Retain
+  genuine completed producer/consumer exposure and require fresh current-weight
+  qualification before cross-model work. Repeated synchronous zero-update
+  qualification must not replace full-source SGD between ordinary SFT/DPO/RL
+  continuations. Publish a genuine qualified zero-update boundary through the
+  exact normal mechanism without epoch, source-visit or optimizer-update credit;
+  then continue training. Preserve unfinished full-recipe obligations.
 - **Keep launch checks nonmutating and necessary** (engineering lesson, 2026-10-20).
   Run normal metadata/argument preflight once; let the real entry perform its
   required state, numerical and capacity checks before updates. Do not execute

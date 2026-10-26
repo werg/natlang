@@ -1,5 +1,35 @@
 # Local LFM training policy
 
+Status at2026-10-26 07:10 Berlin: local LFM resumed from its independently backed
+step37994 and has actually advanced through38001 on full-source SFT. Its active
+recipe declares1,618,603 rows; declared supply is not completed exposure. Eleven
+whole-graph RL rounds are complete. Round11 was rejected before updates because
+the captured prompt consumed native state absent from the saved graph. Its exact
+collection remains preserved and unfinished while SFT/DPO continues. Shared
+capture repair5297bdd41 and replay-position/gradient check54d70f12d are integrated;
+the focused29 TS and10 replay tests pass. New collections use the repaired local
+runtime; any historical capture repair must retain its original actor and actual
+producer/import dependencies. Recent protected task checks still do not establish
+capability lift.
+
+One cloud Mellum learner is authorized again. Its replacement is
+`b00fcc02-a619-40c7-911f-6363d569d979`, with one96GB Blackwell GPU and96Gi host RAM.
+It restores the fully verified step36054 through exact R4 runtimebe025b9b7,
+retaining optimizer/RNG/exposure and unfinished SFT/DPO frames. The controller
+has launched; first new optimizer progress is still being checked. Last observed
+step36073 was not exported:19 later updates remain unrecovered. Independent
+checkpoint publication and a workstation mirror remain primary; snapshots have
+not been qualified. Cloud generation and evaluators remain paused. Allocation
+lifetime is bounded at8h with one cloud learner; actual rates/balance remain
+opaque, and$500 is only the owner's upper bound.
+
+Current LFM controls and evidence:
+`/home/werg/data/lfm-local-recovery-20261024/source-rejoin/round11-capture-error-sft-continuation-20261026/`.
+Cloud source/control and recovery evidence:
+`/home/werg/data/mellum-cloud-continuation-20261025-r2/second-reset-*` and
+`/home/werg/data/mellum-cloud-resume-20261025/current-private-recovery.json`.
+The older deployment observations below are historical, not current owner heads.
+
 Use the DGX GB10 for the current earned LFM, alternating an on-policy whole-episode
 RL round with a finite continuation of every available mandatory SFT/DPO stage.
 Reward correct execution without requiring Neuralese; retain every real graph
