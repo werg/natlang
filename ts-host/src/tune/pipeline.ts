@@ -13,8 +13,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
 import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
-import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
-import type { ModelDriver } from '../runtime/runtime.js';
+import { activateRelease, readActive, readRelease, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { sharedSourceHash, rootDataValid, trainingScaffoldKey } from './keys.js';
 import { programSites } from './sites.js';
 import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample, type SplitReceipt } from './collect.js';
@@ -43,6 +43,9 @@ export type TuneOptions = {
     /** Whether the backend imports stored native state (soft instruction/skill states). */
     nativeState?: boolean; close(): Promise<void> }>;
   examplesPath?: string; log?: (line: string) => void;
+  /** Host services for one root invocation, fresh per root: a test or sandbox world (SDK hosts; the CLI passes none).
+   * Collection journals every call so repairs replay the same world (world.ts). */
+  services?: (example: SplitExample) => Services;
 };
 
 /** Persist an evaluated arm for reports: `.natlang/tune/evaluations/<partition>/<arm>.json`. */
@@ -146,7 +149,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   await timed(timings, 'data', log, async () => {
     if (!missing.length) return;
     mkdirSync(rootsDir, { recursive: true });
-    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId });
+    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services });
     const failures = collected.roots.filter(item => !item.ok && item.error);
     if (failures.length === collected.roots.length)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
@@ -295,7 +298,7 @@ export async function evaluateRelease(options: TuneOptions, data: TuneData, mani
   try {
     const weights = manifest ? [new WeightBinding(manifest, { program: options.program, available: served.loaded,
       nativeState: !!served.nativeState, strict: true })] : [];
-    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm,
+    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services,
       release: manifest?.digest ?? null, partition });
   } finally { await served.close(); }
 }
@@ -321,7 +324,14 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
     report.data.turns = data.turns.length; report.data.trainTurns = data.trainRows.length;
     const examples = data.examples;
     // 3-4. One joint run over all bindings against one input snapshot, then the content-addressed release.
-    const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, { manifest: data.scaffold }, timings, log)).manifest;
+    // A full refit keeps the active release's published families and learned gates (refit with the family frozen).
+    const active = expectedActive ? { manifest: readRelease(root, expectedActive), directory: dirname(releaseFile(root, expectedActive)) } : null;
+    const bindings = new Set(data.scaffold.bindings.map(entry => entry.id));
+    const memberships = active?.manifest.memberships.filter(item => bindings.has(item.binding)) ?? [];
+    const variant: TrainVariant = active && memberships.length
+      ? { manifest: { ...data.scaffold, families: active.manifest.families, memberships }, artifactDirs: [join(active.directory, 'artifacts')] }
+      : { manifest: data.scaffold };
+    const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, variant, timings, log)).manifest;
     report.build = typeof manifest.receipts.build === 'string' ? manifest.receipts.build : 'full';
     report.release = manifest.digest;
     // 5. Load on the backend and validate through the normal engine, strict: nothing may silently fall back.
@@ -332,9 +342,9 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
       const probe = development.length ? development : examples.filter(example => example.partition === 'train').slice(0, 1);
       const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
       const validation = await timed(timings, 'validate', log, async () => {
-        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe,
+        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services,
           arm: 'hierarchy', release: manifest.digest, partition: 'development' });
-        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe,
+        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services,
           arm: 'untuned', release: null, partition: 'development' });
         return { tuned, base };
       });

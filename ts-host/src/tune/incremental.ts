@@ -84,7 +84,7 @@ export function planIncremental(previous: WeightManifest, current: WeightManifes
 }
 
 /** The variant an incremental build trains: the current scaffold with the release's families and learned gates. */
-function carried(previous: Previous, current: WeightManifest): WeightManifest {
+export function carried(previous: Previous, current: WeightManifest): WeightManifest {
   const bindings = new Set(current.bindings.map(entry => entry.id));
   return { ...current, families: previous.manifest.families, memberships: previous.manifest.memberships.filter(item => bindings.has(item.binding)) };
 }

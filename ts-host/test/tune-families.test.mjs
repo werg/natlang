@@ -123,6 +123,12 @@ test('families: discovery across programs, a fit on training rows only, member r
     const again = await runFamilies(programs.map(program => ({ ...program })), { store });
     assert.equal(again.published[0].version, family.version);
     assert.equal(readdirSync(join(store, 'jobs')).length, jobs.length);
+    // A later ordinary tune of a member keeps its published family and gates (refit with the family frozen).
+    const retuned = await tuneProgram(a.options);
+    assert.equal(retuned.activated, true, retuned.reason);
+    const kept = currentRelease(a.root).manifest;
+    assert.deepEqual(kept.families.map(entry => entry.artifact), [family.artifact]);
+    assert.equal(kept.memberships.length, 2);
   } finally { for (const root of [a.root, b.root, c.root, scratch]) rmSync(root, { recursive: true, force: true }); }
 });
 

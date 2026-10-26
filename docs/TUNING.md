@@ -181,6 +181,16 @@ boundary, the round, the teacher and the verification evidence; the whole repair
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 
+## Programs that use host services
+
+`natlang tune` from the CLI runs programs without host services. An SDK host that tunes a service-using program
+passes `services: example => ({ ... })` in the tune options: fresh services per root invocation, a test or sandbox
+world rather than production systems, because collection, evaluation and rollouts call them. Every call made during
+collection and on-policy repair runs is journaled exactly (service, method, arguments, result or error). A repair
+replays the student's journal: it is admitted only when every service call of the repaired run was answered from
+that journal, so a repair never acts on the world a second time; a continuation that needs a call the student's
+run never made is rejected as leaving the captured world.
+
 ## SDK hosts
 
 ```ts

@@ -16,7 +16,8 @@ import { WeightBinding } from '../adaptation/weights/binding.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import type { ModelDriver } from '../runtime/runtime.js';
-import { createNatlangRuntime } from '../runtime/runtime.js';
+import { createNatlangRuntime, type Services } from '../runtime/runtime.js';
+import { journaledServices, type World } from './world.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
 
@@ -105,9 +106,11 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
 export async function collect(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; examples: readonly SplitExample[];
   teacher: ModelDriver; teacherId: string; partitions?: readonly Partition[]; onTurn?: (turn: CollectedTurn) => void;
   /** Serve a tuned release while collecting (distillation): its strict binding labels and serves each call. */
-  weights?: WeightBinding }): Promise<{
-  turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] }> {
-  const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string }[] = [];
+  weights?: WeightBinding;
+  /** Host services for one root, fresh per root (a test or sandbox world); every call is journaled (world.ts). */
+  services?: (example: SplitExample) => Services }): Promise<{
+  turns: CollectedTurn[]; roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] }> {
+  const turns: CollectedTurn[] = [], roots: { id: string; ok: boolean; oracle: boolean | null; error?: string; world?: World }[] = [];
   const binding = options.weights ?? new WeightBinding(options.scaffold);
   for (const example of options.examples) {
     if (options.partitions && !options.partitions.includes(example.partition)) continue;
@@ -129,7 +132,9 @@ export async function collect(options: { root: string; program: ProgramDescripto
           requested: frame.weights.requested.map(entry => entry.id), effective: frame.weights.effective.map(entry => entry.id) } } : {}) });
       return reply;
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
-    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding],
+    const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
+    const services = options.services ? journaledServices(options.services(example), world) : undefined;
+    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding], ...(services ? { services } : {}),
       trace: trace => { outcomes.set(trace.callId, trace.outcome); } });
     let ok = false, oracle: boolean | null = null, error: string | undefined;
     try {
@@ -143,7 +148,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
       if ('expected' in example) oracle = equal(value, example.expected);
     } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
     finally { runtime.close(); }
-    roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}) });
+    roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}), ...(services ? { world } : {}) });
     for (const turn of pending) {
       const record: CollectedTurn = { ...turn, evidence: { rootOracle: oracle, enclosingSuccess: ok && oracle !== false,
         callOutcome: turn.call ? outcomes.get(turn.call) ?? null : null } };

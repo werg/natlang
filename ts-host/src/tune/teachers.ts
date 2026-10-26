@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { tuneDirectory } from '../adaptation/weights/release.js';
-import type { ModelDriver } from '../runtime/runtime.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import type { SplitExample } from './collect.js';
 import { evaluateRoots, rootSuccess } from './evaluate.js';
@@ -30,7 +30,7 @@ const writeJson = (path: string, value: unknown) => { writeFileSync(path + '.tmp
 
 /** Measure each candidate on the same development roots; a stored measurement for the same identity and roots is reused. */
 export async function calibrateTeachers(options: { root: string; program: ProgramDescriptor; candidates: readonly TeacherCandidate[];
-  examples: readonly SplitExample[]; log?: (line: string) => void }): Promise<TeacherCalibration[]> {
+  examples: readonly SplitExample[]; log?: (line: string) => void; services?: (example: SplitExample) => Services }): Promise<TeacherCalibration[]> {
   if (!options.examples.length) throw new Error('teacher calibration needs development root examples');
   const examples = sha(options.examples.map(example => example.id).sort());
   const directory = join(tuneDirectory(options.root), 'teachers');
@@ -40,7 +40,7 @@ export async function calibrateTeachers(options: { root: string; program: Progra
     const path = join(directory, sha([candidate.id, examples]).slice(0, 24) + '.json');
     if (existsSync(path)) { results.push(JSON.parse(readFileSync(path, 'utf8'))); continue; }
     options.log?.(`calibrating teacher ${candidate.profile} on ${options.examples.length} development roots`);
-    const arm = await evaluateRoots({ root: options.root, program: options.program, driver: candidate.driver, weights: [],
+    const arm = await evaluateRoots({ root: options.root, program: options.program, driver: candidate.driver, weights: [], services: options.services,
       examples: options.examples, arm: 'teacher', release: null, partition: 'development' });
     const roots = arm.roots.length;
     const record: TeacherCalibration = { schema: 'natlang.tune-teacher-calibration/v1', teacher: candidate.id, profile: candidate.profile, examples, roots,

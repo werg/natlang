@@ -22,10 +22,11 @@ import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { WeightBinding } from '../adaptation/weights/binding.js';
 import type { WeightManifest } from '../adaptation/weights/manifest.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
-import type { ModelDriver } from '../runtime/runtime.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { openingText, type Message } from '../teacher/opening.js';
 import { observed, scriptedDriver } from '../teacher/replay.js';
 import { collect, type CollectedTurn, type SplitExample } from './collect.js';
+import { replayServices } from './world.js';
 
 export const REPAIR_SCHEMA = 'natlang.tune-repair/v1';
 
@@ -80,7 +81,10 @@ function callsOf(turns: readonly CollectedTurn[]): { numbers: number[]; openings
 export async function runRepairs(options: { root: string; program: ProgramDescriptor; scaffold: WeightManifest; release: WeightManifest;
   weights: WeightBinding; student: ModelDriver; teacher: ModelDriver; teacherId: string; examples: readonly SplitExample[];
   round: number; records: string; rows: string; checkpointSha256: string; maxPerRoot?: number; maxBoundaries?: number;
-  log?: (line: string) => void }): Promise<RepairSummary> {
+  log?: (line: string) => void;
+  /** Host services for one root (TuneOptions.services): the student runs in them, journaled; a repair replays that
+   * journal and is rejected when its continuation needs a call the student's world never recorded. */
+  services?: (example: SplitExample) => Services }): Promise<RepairSummary> {
   const maxPerRoot = options.maxPerRoot ?? 1, log = options.log ?? (() => {});
   mkdirSync(dirname(options.records), { recursive: true });
   const done = new Set((existsSync(options.records) ? readFileSync(options.records, 'utf8').split('\n').filter(Boolean) : [])
@@ -94,7 +98,8 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
     if (done.has(example.id)) continue;
     // 1. The student's own run, served by the release (strict: no silent fallback).
     const run = await collect({ root: options.root, program: options.program, scaffold: options.release, examples: [example],
-      partitions: ['train'], teacher: options.student, teacherId: actor, weights: options.weights });
+      partitions: ['train'], teacher: options.student, teacherId: actor, weights: options.weights, services: options.services });
+    const world = run.roots[0]?.world;
     if (run.roots[0]?.oracle === true) { studentCorrect++; continue; }
     const student = run.turns;
     const calls = callsOf(student);
@@ -123,8 +128,10 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
         return reply;
       }, { contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as unknown as ModelDriver;
       // The same program and inputs with the student's replies replayed re-execute the student's world.
+      // The student's journaled world, replayed: no call acts on the live world again.
+      const replayWorld = options.services && world ? replayServices(options.services(example), world) : undefined;
       const repaired = await collect({ root: options.root, program: options.program, scaffold: options.scaffold, examples: [example],
-        partitions: ['train'], teacher: driver, teacherId: options.teacherId });
+        partitions: ['train'], teacher: driver, teacherId: options.teacherId, ...(replayWorld ? { services: () => replayWorld.services } : {}) });
       const turns = repaired.turns.map(turn => ({ ...turn, role: scripted.get(sha(turn.messages)) ? 'student-prefix' as const : 'correction' as const }));
       const reject = (reason: string) => {
         rejected++;
@@ -145,6 +152,8 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
           break;
         }
       }
+      const diverged = replayWorld?.divergence();
+      if (diverged) { reject(`the continuation left the captured world: ${diverged}`); continue; }
       if (mismatch) { reject(mismatch); continue; }
       if (boundaryTurn === null) { reject('the replay never reached the boundary'); continue; }
       if (repaired.roots[0]?.oracle !== true) { reject(repaired.roots[0]?.error ? `the repaired run failed: ${repaired.roots[0].error.slice(0, 200)}` : 'the repaired run misses the root oracle'); continue; }

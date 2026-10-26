@@ -22,7 +22,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { neuraleseServerModelTurn, type NeuraleseServerOptions } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
-import { createNatlangRuntime, type ModelDriver } from '../runtime/runtime.js';
+import { createNatlangRuntime, type ModelDriver, type Services } from '../runtime/runtime.js';
 import type { SplitExample } from './collect.js';
 import { exampleArguments } from './evaluate.js';
 
@@ -70,7 +70,9 @@ class Skip extends Error {}
  */
 export async function runRollouts(options: { root: string; program: ProgramDescriptor; release: WeightManifest;
   weights: readonly WeightBinding[]; driver: ModelDriver; examples: readonly SplitExample[]; samples: number; temperature: number;
-  round: number; out: string; policyCheckpointSha256: string; log?: (line: string) => void }): Promise<RolloutSummary> {
+  round: number; out: string; policyCheckpointSha256: string; log?: (line: string) => void;
+  /** Host services for one root, fresh per rollout (TuneOptions.services). */
+  services?: (example: SplitExample) => Services }): Promise<RolloutSummary> {
   if (!Number.isInteger(options.samples) || options.samples < 2)
     throw new Error('group-relative rewards need at least two rollouts per root');
   if (!(options.temperature > 0)) throw new Error('rollouts sample the student at a positive temperature');
@@ -137,7 +139,8 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
   const decide = (options.driver as unknown as { decide?: (...args: unknown[]) => unknown }).decide;
   if (decide) (driver as unknown as { decide: unknown }).decide = (...args: unknown[]) => { decided = true; return decide(...args); };
-  const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights, trace: trace => {
+  const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights,
+    ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
     if (weights) stacks.push(weights);
     events.push(...trace.events.filter(event => typeof event.node === 'string' && Array.isArray(event.inputs)));

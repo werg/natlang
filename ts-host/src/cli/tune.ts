@@ -160,7 +160,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
       if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
       // The teacher reference runs as an isolated evaluator: its answers are never training data.
-      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples,
+      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services,
         arm: 'teacher', release: null, partition }));
       for (const arm of arms) saveArm(root, arm);
     });

@@ -6,7 +6,7 @@
 import { resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { WeightBinding, ResolvedWeightStack } from '../adaptation/weights/binding.js';
-import { createNatlangRuntime, type ModelDriver } from '../runtime/runtime.js';
+import { createNatlangRuntime, type ModelDriver, type Services } from '../runtime/runtime.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import type { ModelTurn } from '../contracts.js';
 import type { Partition, SplitExample } from './collect.js';
@@ -36,7 +36,9 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
 
 /** Run one arm over the examples, one fresh task per root. */
 export async function evaluateRoots(options: { root: string; program: ProgramDescriptor; driver: ModelDriver;
-  weights: readonly WeightBinding[]; examples: readonly SplitExample[]; arm: string; release: string | null; partition: string }): Promise<ArmResult> {
+  weights: readonly WeightBinding[]; examples: readonly SplitExample[]; arm: string; release: string | null; partition: string;
+  /** Host services for one root, fresh per root (TuneOptions.services). */
+  services?: (example: SplitExample) => Services }): Promise<ArmResult> {
   const roots: RootOutcome[] = [];
   for (const example of options.examples) {
     const stacks: RootOutcome['stacks'][number][] = [];
@@ -48,7 +50,8 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
       turns++; promptTokens += turn.prompt_tokens ?? 0; completionTokens += turn.completion_tokens ?? 0;
       return turn;
     }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
-    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights, trace: trace => {
+    const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: options.weights,
+      ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
       const recorded = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
       if (recorded) stacks.push({ identity: recorded.identity, status: recorded.status, requested: recorded.requested.length, effective: recorded.effective.length });
     } });
