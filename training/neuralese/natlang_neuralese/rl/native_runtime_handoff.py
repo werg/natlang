@@ -745,7 +745,7 @@ def _configure_runtime_handoff(plan_path,declaration,bootstrap,config_path,*,ver
     continued,_=continuation_config(config,stage,checkpoint=proof['checkpoint']['path'],adapter=None,out=config['out'])
     # Preserve all controller/case/selection/parent fields; only the recipe-owned
     # supervised invocation contract and provider hooks may change here.
-    for key in ('trainer_parameters','seed_native_graphs','held_native_graphs','foundation_native_graphs',
+    for key in ('trainer_parameters','seed_native_graphs','held_native_graphs','foundation_native_graphs','foundation_declaration_recovery',
                 'continued_native_graphs','continued_held_native_graphs','pending_native_sources','objective_spec'):
         if key in continued:config[key]=continued[key]
         else:config.pop(key,None)

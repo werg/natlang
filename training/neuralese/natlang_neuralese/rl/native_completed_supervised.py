@@ -458,7 +458,7 @@ def _future_config(config,recipe_reference,recipe,checkpoint,lineage,*,declarati
     future=copy.deepcopy(config);future['production_recipe']=str(_bound(recipe_reference))
     configured,_=continuation_config(future,foundation,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
     for key in ('trainer_parameters','seed_command','seed_native_graphs','held_native_graphs',
-                'foundation_native_graphs','continued_native_graphs','continued_held_native_graphs',
+                'foundation_native_graphs','foundation_declaration_recovery','continued_native_graphs','continued_held_native_graphs',
                 'pending_native_sources','withdrawn_native_graphs','objective_spec'):
         if key in configured:future[key]=configured[key]
         else:future.pop(key,None)

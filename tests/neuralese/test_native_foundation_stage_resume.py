@@ -14,7 +14,7 @@ from natlang_neuralese.train.native_continuation import collect_sft_progress
 
 
 @pytest.mark.parametrize('mode,stage', [
-    ('policy', 'full'), ('ordinary', 'full'), ('policy', None),
+    ('policy', 'full'), ('ordinary', 'full'), ('policy', None), ('recovered_declaration', 'full'),
     ('wrong_stage', 'full'), ('missing_flag', 'full'), ('unrelated_top_flag', 'full')])
 def test_real_resume_uses_only_the_requested_carried_foundation(tmp_path, mode, stage):
     base=tmp_path/'base';tiny_source(base)
@@ -24,10 +24,15 @@ def test_real_resume_uses_only_the_requested_carried_foundation(tmp_path, mode, 
     ordinary=[dict(graph('ordinary'),tokenizer_fingerprint=fp)]
     old_pair=authenticated_pair('old',roles=roles.ids,fingerprint=fp)
     manifest=source_manifest(original,ordinary,[old_pair])
+    foundation_directory=tmp_path/'foundation';foundation_directory.mkdir()
+    foundation_manifest=source_manifest(foundation_directory,[],[old_pair])
+    foundation_value=json.loads(foundation_manifest.read_text())
+    foundation_value['sources']=[item for item in foundation_value['sources'] if item['kind']=='semantic-pairs']
+    foundation_manifest.write_text(json.dumps(foundation_value))
     held=tmp_path/'held.jsonl'
     held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
     args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
-        '--native-graphs',str(manifest),'--foundation-native-graphs',str(manifest),
+        '--native-graphs',str(manifest),'--foundation-native-graphs',str(foundation_manifest),
         '--communication-foundation','--held-native-graphs',str(held),'--epochs','1',
         '--eval-every','100','--out',str(tmp_path/'first'),
         '--forward-atol','1e-4','--gradient-atol','1e-5']
@@ -42,6 +47,32 @@ def test_real_resume_uses_only_the_requested_carried_foundation(tmp_path, mode, 
     carried=collect_sft_progress(source_frame)
     carried[key]['completed_foundations']=[old_cohort]
     parent=copy.deepcopy(first)
+    recovery_path=None
+    if mode=='recovered_declaration':
+        from natlang_neuralese.common.hashing import sha256_file_hex
+        def bind(path):return {'path':str(path),'sha256':sha256_file_hex(path)}
+        checkpoint={'sha256':sha256_file_hex(tmp_path/'first/checkpoint.pt'),
+                    'bytes':(tmp_path/'first/checkpoint.pt').stat().st_size}
+        historical_recipe=tmp_path/'historical-recipe.json'
+        historical_recipe.write_text(json.dumps({'input_bindings':{'foundation':bind(foundation_manifest)},
+            'stages':[{'id':key,'kind':'native_state_sft','inputs':{'foundation_native_graphs':'foundation'},
+                       'parameters':{'communication_foundation':True,'epochs':1.}}]}))
+        historical_metadata=tmp_path/'historical-metadata.json'
+        historical_metadata.write_text(json.dumps({'checkpoint_identity':checkpoint,'model_config':first['model_config'],
+            'training':{'global_step':source_frame['global_step'],'options':source_frame['options']}}))
+        verification=tmp_path/'historical-checkpoint-verification.json'
+        verification.write_text(json.dumps({'passed':True,'checkpoint':checkpoint,'stage_id':key,
+            'architecture':config['architecture'],'global_step':source_frame['global_step'],
+            'optimizer_present':True,'rng_present':True}))
+        recovery_path=tmp_path/'foundation-declaration-recovery.json'
+        recovery_path.write_text(json.dumps({'schema':'natlang.native-foundation-declaration-recovery/1',
+            'stage_id':key,'historical_recipe':bind(historical_recipe),
+            'historical_training_metadata':bind(historical_metadata),
+            'historical_checkpoint_verification':bind(verification),
+            'foundation_sources':bind(foundation_manifest),'reason':'Restore exact unavailable historical declaration.'}))
+        parent['training']['options']['native_snapshot_ancestors']=[checkpoint['sha256']]
+        carried[key]['options']['communication_foundation']=False
+        carried[key]['options']['foundation_native_graphs']=None
     if mode!='ordinary':
         top=parent['training']
         top['identity']['objective']={'kind':'native-policy','sha256':'a'*64}
@@ -63,6 +94,7 @@ def test_real_resume_uses_only_the_requested_carried_foundation(tmp_path, mode, 
     continued[continued.index('--eval-every')+1]='1'
     continued+=['--continue-from',str(parent_path),'--objective-continuation',
         '--continued-native-graphs',str(manifest),'--refresh-at-checkpoint','--checkpoint-every','1']
+    if recovery_path:continued+=['--foundation-declaration-recovery',str(recovery_path)]
     if mode in ('wrong_stage','missing_flag','unrelated_top_flag'):
         with pytest.raises(ValueError,match='entire currently declared communication cohort'):
             trainer.main(continued)
@@ -83,6 +115,11 @@ def test_real_resume_uses_only_the_requested_carried_foundation(tmp_path, mode, 
     assert any(not torch.equal(first['backbone_state'][name],value)
                for name,value in saved['backbone_state'].items())
     assert frame['optimizer']
+    if mode=='recovered_declaration':
+        history=frame['options']['foundation_declaration_recovery_history']
+        assert len(history)==1 and history[0]['new_exposure']==0
+        assert history[0]['qualification_granted'] is False
+        assert history[0]['cohort_sha256']==old_cohort
     if mode=='policy' and stage=='full':
         # The same actual weights/moments/RNG/credits through a direct ordinary
         # parent must produce the identical next update. No fake policy update

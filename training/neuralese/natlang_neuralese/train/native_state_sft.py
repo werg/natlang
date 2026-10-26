@@ -917,6 +917,8 @@ def build_parser():
     parser.add_argument('--ce-supervision-policy', type=Path,
         help='explicit source-bound balanced CE continuation; preserves raw row credits and optimizer/RNG')
     parser.add_argument('--foundation-native-graphs', type=Path)
+    parser.add_argument('--foundation-declaration-recovery', type=Path,
+                        help='Exact ancestor-bound recovery of an unavailable historical foundation declaration; grants no exposure or qualification')
     parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
@@ -1236,6 +1238,8 @@ def _main(argv=None, *, requested_refresh):
         if loaded_snapshot not in snapshot_ancestors:
             snapshot_ancestors.append(loaded_snapshot)
     checkpoint_options['native_snapshot_ancestors'] = snapshot_ancestors
+    checkpoint_options['foundation_declaration_recovery_history'] = list(
+        saved_options.get('foundation_declaration_recovery_history') or [])
     previous_cotangent_backend = saved_options.get('cotangent_accumulator_backend', 'cpu_file')
     args.cotangent_accumulator_backend = (previous_cotangent_backend
         if args.cotangent_accumulator_backend is None else args.cotangent_accumulator_backend)
@@ -1374,11 +1378,29 @@ def _main(argv=None, *, requested_refresh):
         raise ValueError('foundation-readiness refresh requires its exact declared communication cohort')
     if args.foundation_qualification_request and (not args.communication_foundation or args.foundation_readiness_policy != 'on-shared-request'):
         raise ValueError('shared qualification request requires its explicit foundation readiness policy')
+    foundation_declaration_changed = False
     if args.communication_foundation:
         from .native_continuation import verify_initial_foundation_cohort
         foundation_frame = carried_progress.get(args.stage_id or 'native-graph-ce') or {}
+        recovered_declaration = False
+        if args.foundation_declaration_recovery:
+            from .native_foundation_recovery import restore_declaration
+            record = restore_declaration(args.foundation_declaration_recovery,
+                model_config=config, stage_id=args.stage_id or 'native-graph-ce',
+                training_frame=foundation_frame, snapshot_ancestors=snapshot_ancestors,
+                foundation=foundation_source, active_bindings=train.bindings, epochs=args.epochs)
+            history = checkpoint_options['foundation_declaration_recovery_history']
+            if not any(item.get('recovery') == record['recovery'] for item in history):
+                history.append(record)
+                foundation_declaration_changed = True
+            if saved_options.get('communication_foundation') != args.communication_foundation:
+                foundation_declaration_changed = True
+            recovered_declaration = True
         verify_initial_foundation_cohort(train, foundation_source,
-            already_declared=bool((foundation_frame.get('options') or {}).get('communication_foundation')))
+            already_declared=recovered_declaration or bool(
+                (foundation_frame.get('options') or {}).get('communication_foundation')))
+    elif args.foundation_declaration_recovery:
+        raise ValueError('foundation declaration recovery requires active communication foundation tracking')
     objective = None
     objective_binding = None
     if args.objective_spec is not None:
@@ -1831,6 +1853,7 @@ def _main(argv=None, *, requested_refresh):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or foundation_declaration_changed
         or args.native_shared_execution is not None and args.native_shared_execution!=previous_shared_declaration
         or config.get('native_shared_execution','source-v1')!=previous_shared_execution
         or args.native_norm_execution is not None and args.native_norm_execution != previous_norm_declaration

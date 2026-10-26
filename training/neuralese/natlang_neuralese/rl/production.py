@@ -1059,20 +1059,14 @@ def configure_native(args):
         config['learner_command'] += ['--history-reasoning-binding-path',
                                       '{history_reasoning_binding_path}']
     from ..train.recipe import resolve_stage_inputs
-    pending_source = resolve_stage_inputs(recipe, stages[0], {}).get('pending_native_sources')
-    if pending_source:
-        config['pending_native_sources'] = pending_source['path']
-        config['seed_command'] += ['--pending-native-sources', '{pending_native_sources}']
+    sources = resolve_stage_inputs(recipe, stages[0], {})
     if parameters.get('communication_foundation'):
-        from ..train.recipe import resolve_stage_inputs
-        sources=resolve_stage_inputs(recipe,stages[0],{})
         foundation=sources.get('foundation_native_graphs')
         if not foundation:
             raise ValueError('native production foundation requires its exact declared foundation_native_graphs source')
-        config['foundation_native_graphs']=foundation['path']
-        config['seed_command'] += ['--foundation-native-graphs','{foundation_native_graphs}']
-    from .native_supervised import bind_seed_objective
-    bind_seed_objective(config,stages[0]['kind'],resolve_stage_inputs(recipe,stages[0],{}))
+    from .native_supervised import bind_seed_objective, bind_seed_sources
+    bind_seed_sources(config, sources)
+    bind_seed_objective(config,stages[0]['kind'],sources)
     if stages[0]['kind']=='native_offline_preference':
         config['seed_trainer_parameters']=dict(parameters)
         config['trainer_parameters']={key:value for key,value in parameters.items()

@@ -299,7 +299,7 @@ def test_custom_seed_contract_retains_implicit_core_sources_and_current_optional
 
 
 @pytest.mark.parametrize('role',['ce_supervision_policy','source_classification_migration',
-                                'foundation_qualification_request','unavailable_native_sources'])
+                                'foundation_qualification_request','foundation_declaration_recovery','unavailable_native_sources'])
 def test_source_contract_flags_follow_declared_stage_and_clear_obsolete_seed_bindings(role):
     from natlang_neuralese.rl.production import expand_command
     flag='--'+role.replace('_','-')
