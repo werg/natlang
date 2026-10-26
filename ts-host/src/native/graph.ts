@@ -89,9 +89,22 @@ export function blockInput(block: string, port?: string, sourceOccurrence?: stri
   // authenticated writer ledger is the same authority used by modelTurnNode;
   // do not detach those real dependencies because their local budgets differ.
   const recorded = activeRecorder()?.nativeStateWriters?.(block) ?? [];
-  const node = sourceOccurrence !== undefined ?
-    ((scope && hasProducerOccurrence(block, sourceOccurrence, scope)) || recorded.includes(sourceOccurrence) ? sourceOccurrence : 'external') :
-    (isNativeStateId(block) ? recorded.length === 1 ? recorded[0]! : 'external' : producer ?? 'external');
+  let node: string;
+  if (sourceOccurrence !== undefined) {
+    const exactLocal = Boolean(scope && hasProducerOccurrence(block, sourceOccurrence, scope));
+    if (exactLocal || recorded.includes(sourceOccurrence)) node = sourceOccurrence;
+    else if (isNativeStateId(block) && (Boolean(occurrences?.size) || recorded.length > 0))
+      throw Object.assign(new Error(
+        `neuralese-native-grad-invalid: native state ${block} names no matching in-trajectory writer ${sourceOccurrence}`),
+      { code: 'neuralese-native-grad-invalid' });
+    else node = 'external';
+  } else if (isNativeStateId(block)) {
+    const writers = new Set([...(occurrences ?? []), ...recorded]);
+    if (writers.size > 1) throw Object.assign(
+      new Error(`neuralese-native-grad-invalid: native state ${block} has multiple in-trajectory writers and no occurrence binding`),
+      { code: 'neuralese-native-grad-invalid' });
+    node = writers.values().next().value ?? 'external';
+  } else node = producer ?? 'external';
   return { node, block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */
