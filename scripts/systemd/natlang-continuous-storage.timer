@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll natlang checkpoint storage headroom every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=natlang-continuous-storage.service
+
+[Install]
+WantedBy=timers.target

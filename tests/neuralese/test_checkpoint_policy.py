@@ -172,6 +172,71 @@ def test_disk_reserve_holds_the_next_write_and_grows_with_optimizer_state(tmp_pa
     assert not (tmp_path / '.checkpoint-space.reserve').exists()
 
 
+def test_atomic_checkpoint_admission_sizes_first_write_and_holds_transfer_reserve(tmp_path):
+    from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission, checkpoint_size_upper_bound
+    from natlang_neuralese.train.trajectory_state import atomic_checkpoint
+
+    tensor = torch.zeros(4096, dtype=torch.float32)
+    state = {'model': {'w': tensor, 'view': tensor[:32]}, 'step': 3}
+    bound = checkpoint_size_upper_bound(state, margin=1.0, minimum_overhead=0)
+    assert bound >= tensor.numel() * tensor.element_size()
+    assert bound < tensor.numel() * tensor.element_size() * 2
+    target = tmp_path / 'new' / 'checkpoint.pt'
+    with CheckpointWriteAdmission(target, 2 * 1024**2, transfer_bytes=1024**2,
+                                  minimum_free_bytes=0) as admission:
+        reserve = target.parent / f'.natlang-transfer-reserve-{target.parent.stat().st_dev}'
+        assert admission._reserve is not None
+        assert reserve.stat().st_size >= 1024**2
+    assert not reserve.exists()
+    atomic_checkpoint(target, state)
+    assert torch.load(target, weights_only=True)['step'] == 3
+
+
+def test_checkpoint_admission_refuses_insufficient_first_write_without_target(tmp_path):
+    from natlang_neuralese.train.checkpoint_safety import CheckpointReserveError, CheckpointWriteAdmission
+
+    target = tmp_path / 'missing' / 'checkpoint.pt'
+    with pytest.raises(CheckpointReserveError, match='atomic checkpoint admission needs'):
+        with CheckpointWriteAdmission(target, 10**30, transfer_bytes=0, minimum_free_bytes=0):
+            pytest.fail('admission unexpectedly passed')
+    assert not target.exists()
+
+
+def test_checkpoint_admission_serializes_same_filesystem_writers(tmp_path):
+    from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission
+
+    target = tmp_path / 'checkpoint.pt'
+    first = CheckpointWriteAdmission(target, 1, transfer_bytes=0, minimum_free_bytes=0)
+    second = CheckpointWriteAdmission(target, 1, transfer_bytes=0, minimum_free_bytes=0,
+                                      lock_timeout_seconds=0.05)
+    first.__enter__()
+    try:
+        with pytest.raises(Exception, match='timed out waiting'):
+            second.__enter__()
+    finally:
+        first.__exit__(None, None, None)
+
+
+def test_checkpoint_admission_reuses_owned_reserve_left_by_interrupted_writer(tmp_path, monkeypatch):
+    from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission
+    target = tmp_path/'checkpoint.pt'
+    device = tmp_path.stat().st_dev
+    reserve = tmp_path/f'.natlang-transfer-reserve-{device}'
+    fd = os.open(reserve, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        os.pwrite(fd, CheckpointWriteAdmission._MAGIC, 0)
+        os.posix_fallocate(fd, 0, 1024*1024)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    monkeypatch.setattr(cp.shutil, 'disk_usage', lambda _: type('Usage', (), {
+        'total': 10**9, 'used': 10**9-1024*1024, 'free': 1024*1024})())
+    with CheckpointWriteAdmission(target, 1024*1024, transfer_bytes=1024*1024,
+                                  minimum_free_bytes=0):
+        assert reserve.stat().st_size >= 1024*1024
+    assert not reserve.exists()
+
+
 def test_weights_digest_is_a_cheap_on_device_fingerprint_that_sees_every_element():
     from natlang_neuralese.train.trajectory_state import weights_digest
     backbone = {'w': torch.randn(3, 5).to(torch.bfloat16), 'b': torch.zeros(4)}

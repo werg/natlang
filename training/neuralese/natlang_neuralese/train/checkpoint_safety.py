@@ -5,11 +5,188 @@ import fcntl
 import math
 import os
 import shutil
+import stat
+import time
 from pathlib import Path
 
 
 class CheckpointReserveError(RuntimeError):
     """There is not enough disk space to guarantee an atomic full checkpoint."""
+
+
+def checkpoint_size_upper_bound(state, *, margin=1.2, minimum_overhead=16 * 1024 * 1024):
+    """Bound the next serialization without materializing another checkpoint copy.
+
+    Tensor storage is counted once by storage identity; aliased views therefore do
+    not inflate the estimate, while non-tensor metadata receives a conservative
+    fixed allowance. Unsupported tensor layouts fail closed.
+    """
+    import torch
+
+    if not math.isfinite(margin) or margin < 1.0:
+        raise ValueError('checkpoint size margin must be finite and at least one')
+    seen = set()
+    tensor_bytes = 0
+    metadata_bytes = 0
+
+    def visit(value):
+        nonlocal tensor_bytes, metadata_bytes
+        if isinstance(value, torch.Tensor):
+            if value.layout != torch.strided or value.is_conj() or value.is_neg():
+                raise CheckpointReserveError('cannot bound unsupported tensor storage for checkpoint admission')
+            storage = value.untyped_storage()
+            key = (storage.data_ptr(), storage.nbytes(), value.device.type, value.device.index)
+            if key not in seen:
+                seen.add(key)
+                tensor_bytes += int(storage.nbytes())
+            return
+        if isinstance(value, dict):
+            metadata_bytes += len(value) * 128
+            for key, item in value.items():
+                if isinstance(key, (str, bytes)):
+                    metadata_bytes += len(key)
+                visit(item)
+            return
+        if isinstance(value, (tuple, list, set, frozenset)):
+            metadata_bytes += len(value) * 64
+            for item in value:
+                visit(item)
+            return
+        if isinstance(value, (str, bytes, bytearray)):
+            metadata_bytes += len(value)
+        elif isinstance(value, (int, float, bool)) or value is None:
+            metadata_bytes += 16
+        elif hasattr(value, 'state_dict'):
+            visit(value.state_dict())
+        else:
+            # Pickle metadata is usually small. Unknown objects must not silently
+            # be treated as zero-sized.
+            metadata_bytes += 4096
+
+    visit(state)
+    return int(math.ceil((tensor_bytes + max(minimum_overhead, metadata_bytes)) * margin))
+
+
+class CheckpointWriteAdmission:
+    """Serialize checkpoint writers per filesystem and hold concurrent-transfer space.
+
+    The reserved blocks remain allocated while the atomic writer is active, so
+    a same-filesystem checkpoint copy cannot consume the space needed for the
+    checkpoint being committed. Writers recheck available bytes only after
+    taking the shared per-device lock.
+    """
+
+    _MAGIC = b'NATLANG-CHECKPOINT-TRANSFER-RESERVE/1\n'
+
+    def __init__(self, target, write_bound_bytes, *, transfer_bytes=None,
+                 minimum_free_bytes=None, lock_timeout_seconds=None):
+        self.target = Path(target)
+        self.write_bound_bytes = int(write_bound_bytes)
+        if self.write_bound_bytes < 1:
+            raise ValueError('checkpoint write bound must be positive')
+        if transfer_bytes is None:
+            factor = float(os.environ.get('NATLANG_CHECKPOINT_TRANSFER_HEADROOM_FACTOR', '1.0'))
+            if not math.isfinite(factor) or factor < 0:
+                raise ValueError('checkpoint transfer headroom factor must be finite and nonnegative')
+            transfer_bytes = math.ceil(self.write_bound_bytes * factor)
+        self.transfer_bytes = max(0, int(transfer_bytes))
+        if minimum_free_bytes is None:
+            minimum_free_bytes = int(os.environ.get('NATLANG_CHECKPOINT_MIN_FREE_BYTES', str(512 * 1024**2)))
+        self.minimum_free_bytes = max(0, int(minimum_free_bytes))
+        self.lock_timeout_seconds = (float(os.environ.get('NATLANG_CHECKPOINT_LOCK_TIMEOUT_SECONDS', '1800'))
+                                     if lock_timeout_seconds is None else float(lock_timeout_seconds))
+        if not math.isfinite(self.lock_timeout_seconds) or self.lock_timeout_seconds <= 0:
+            raise ValueError('checkpoint lock timeout must be finite and positive')
+        self._lock_fd = None
+        self._reserve = None
+
+    def __enter__(self):
+        self.target.parent.mkdir(parents=True, exist_ok=True)
+        device = os.stat(self.target.parent).st_dev
+        lock_path = Path('/tmp') / f'natlang-checkpoint-admission-{os.getuid()}-{device}.lock'
+        self._lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
+            os.close(self._lock_fd)
+            self._lock_fd = None
+            raise CheckpointReserveError('checkpoint admission lock is not a regular file')
+        deadline = time.monotonic() + self.lock_timeout_seconds
+        while True:
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    os.close(self._lock_fd)
+                    self._lock_fd = None
+                    raise CheckpointReserveError('timed out waiting for another full-state checkpoint write')
+                time.sleep(0.25)
+        try:
+            reserve_fd = None
+            additional_transfer = self.transfer_bytes
+            if self.transfer_bytes:
+                reserve_path = self.target.parent / f'.natlang-transfer-reserve-{device}'
+                reserve_fd = os.open(reserve_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+                try:
+                    reserve_stat = os.fstat(reserve_fd)
+                    if not stat.S_ISREG(reserve_stat.st_mode) or reserve_stat.st_dev != device:
+                        raise CheckpointReserveError(f'checkpoint transfer reserve is not a regular file on target filesystem: {reserve_path}')
+                    size = reserve_stat.st_size
+                    if size and os.pread(reserve_fd, len(self._MAGIC), 0) != self._MAGIC:
+                        raise CheckpointReserveError(f'unowned checkpoint transfer reserve path: {reserve_path}')
+                    additional_transfer = max(0, self.transfer_bytes - size)
+                    if size < len(self._MAGIC):
+                        os.pwrite(reserve_fd, self._MAGIC, 0)
+                    free = shutil.disk_usage(self.target.parent).free
+                    required = self.write_bound_bytes + additional_transfer + self.minimum_free_bytes
+                    if free < required:
+                        raise CheckpointReserveError(
+                            f'atomic checkpoint admission needs {required} free bytes '
+                            f'(write={self.write_bound_bytes}, additional_transfer={additional_transfer}, '
+                            f'safety={self.minimum_free_bytes}); only {free} are free')
+                    if additional_transfer:
+                        os.posix_fallocate(reserve_fd, 0, self.transfer_bytes)
+                        os.pwrite(reserve_fd, self._MAGIC, 0)
+                        os.fsync(reserve_fd)
+                    # Keep allocated blocks for the duration of the write.
+                    self._reserve = (reserve_fd, reserve_path)
+                    reserve_fd = None
+                except BaseException:
+                    if reserve_fd is not None:
+                        os.close(reserve_fd)
+                    raise
+            else:
+                free = shutil.disk_usage(self.target.parent).free
+                required = self.write_bound_bytes + self.minimum_free_bytes
+                if free < required:
+                    raise CheckpointReserveError(
+                        f'atomic checkpoint admission needs {required} free bytes '
+                        f'(write={self.write_bound_bytes}, safety={self.minimum_free_bytes}); only {free} are free')
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._reserve is not None:
+            fd, reserve_path = self._reserve
+            self._reserve = None
+            try:
+                st = os.fstat(fd)
+                try:
+                    path_st = reserve_path.stat(follow_symlinks=False)
+                except FileNotFoundError:
+                    path_st = None
+                if path_st and (path_st.st_dev, path_st.st_ino) == (st.st_dev, st.st_ino):
+                    os.unlink(reserve_path)
+            finally:
+                os.close(fd)
+        if self._lock_fd is not None:
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(self._lock_fd)
+                self._lock_fd = None
+        return False
 
 
 class CheckpointDiskReserve:
