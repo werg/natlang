@@ -223,8 +223,11 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     if (!vllmLoaded.has(name)) throw new Error(`weights-unavailable: stack ${name} is not loaded by the vLLM server; rerun natlang tune or restart`);
     return { x_natlang_model_override: name };
   };
+  // The managed llama.cpp fork scores decisions at /v1/natlang/score (single readouts and per-call LoRA scales too);
+  // an upstream server answers 404 there and decisions fall back to prompt_logprobs, which it does not serve.
   const openai = (options: OpenAICompatibleOptions) => openAICompatibleModelTurn({ ...options, concurrency: scheduler,
-    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint,
+    scoreEndpoint: choice.kind === 'pi-provider' ? undefined : choice.batching?.scoreEndpoint ?? (choice.kind === 'managed-local' || undefined),
+    ...(choice.kind === 'managed-local' ? { scoreAll: true } : {}),
     ...(choice.kind === 'managed-local' ? { tunedRequest, nativeStates: () => nativeStatesLoaded } : external?.vllm ? { tunedRequest: vllmTunedRequest } : {}) });
   const driver = (options: OpenAICompatibleOptions) => external?.neuraleseServer ? Object.assign(nativeDriver(),
     { contextWindow: () => serverContextWindow(options) }) : openai(options);

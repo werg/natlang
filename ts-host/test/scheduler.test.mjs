@@ -338,3 +338,32 @@ test('batching settings are validated and kept off the executor identity', async
   const { executorIdentityForChoice } = await import('../dist/model/config.js');
   assert.equal(JSON.stringify(executorIdentityForChoice(choice)).includes('batching'), false);
 });
+
+test('a scoreAll endpoint (the llama.cpp fork) scores single readouts too and carries each call\'s tuned fields', async () => {
+  const { openAICompatibleModelTurn } = await import('../dist/model/openai-compatible.js');
+  const bodies = [];
+  const instance = createServer((request, response) => {
+    let body = ''; request.on('data', chunk => body += chunk); request.on('end', () => {
+      const parsed = JSON.parse(body); bodies.push({ url: request.url, body: parsed });
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ results: parsed.items.map(item => ({ log_probs: item.continuations.map(() => -1), tokens: item.continuations.map(() => 1) })) }));
+    });
+  });
+  await new Promise(done => instance.listen(0, '127.0.0.1', done));
+  try {
+    let lora = [{ id: 0, scale: 1 }];
+    const driver = openAICompatibleModelTurn({ endpoint: `http://127.0.0.1:${instance.address().port}/v1`, model: 'm', scoreEndpoint: true, scoreAll: true,
+      tunedRequest: () => ({ lora }) });
+    const scores = await driver.decide({ messages: [{ role: 'user', content: 'q' }], options: ['a', 'b'] });
+    assert.deepEqual(scores.log_probs, [-1, -1]);
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].url, '/v1/natlang/score', 'a single readout goes to the score endpoint');
+    assert.deepEqual(bodies[0].body.items[0].lora, [{ id: 0, scale: 1 }]);
+    const first = driver.decide({ messages: [{ role: 'user', content: 'q1' }], options: ['a'] });
+    lora = [{ id: 0, scale: 0 }];
+    const second = driver.decide({ messages: [{ role: 'user', content: 'q2' }], options: ['a'] });
+    await Promise.all([first, second]);
+    assert.equal(bodies.length, 2, 'readouts arriving together share one request');
+    assert.deepEqual(bodies[1].body.items.map(item => item.lora[0].scale), [1, 0], 'each item keeps its own call\'s scales');
+  } finally { instance.close(); }
+});

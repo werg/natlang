@@ -347,3 +347,41 @@ test('a tuned release\'s soft states load into the in-page model as native state
   assert.equal(other.nativeStates.length, 0);
   assert.equal(other.weights[0].resolve('', binding.component, null).status, 'degraded');
 });
+
+test('the in-page model scores decision readouts in one engine request and carries decide on turn', async () => {
+  const api = await browserApi();
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  const state = 'nzs1_' + 'a'.repeat(52);
+  let params; const scored = [];
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => !!params, capabilities: { nativeStates: true, natlangScore: true },
+    async loadModelFromHF() {}, async loadModelFromUrl(_url, received) { params = received; }, async loadModel() {}, async exit() {},
+    async createChatCompletion() { throw new Error('not used'); },
+    async createNatlangScore(request) {
+      scored.push(request);
+      return { results: request.items.map(item => item.continuations.includes('bad') ? { error: 'cannot render' }
+        : { log_probs: item.continuations.map((_, index) => -index - 1), tokens: item.continuations.map(() => 2) }) };
+    } };
+  const engine = { engine: fake, gpuProbe: async () => ({ usable: false, reason: 'test' }) };
+  const { model } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine, gpuLayers: 0, nativeStates: [{ id: state, blob: new Blob(['span']) }] });
+  try {
+    assert.equal(model.turn.decide, model.decide, 'a runtime given model.turn finds the scorer');
+    const messages = [{ role: 'user', content: `Rules: ${nativeStateSentinel(state)}` }];
+    const [first, second, failed] = await Promise.allSettled([model.decide({ messages, options: ['true', 'false'] }),
+      model.decide({ messages: [{ role: 'user', content: 'plain' }], options: ['"a"', '"b"', '"c"'] }),
+      model.decide({ messages, options: ['bad'] })]);
+    assert.equal(scored.length, 1, 'readouts arriving together are one engine request');
+    assert.deepEqual(first.value, { log_probs: [-1, -2], tokens: [2, 2], batch: { batch_id: 'd1', batch_size: 3 } });
+    assert.deepEqual(second.value.log_probs, [-1, -2, -3]);
+    assert.match(String(failed.reason), /cannot render/, 'an item fails alone');
+    assert.deepEqual(scored[0].items[0].messages[0].content, [{ type: 'text', text: 'Rules: ' }, { type: 'native_state', id: state }]);
+    assert.deepEqual(scored[0].items[0].continuations, ['true', 'false']);
+    assert.equal(scored[0].items[0].lora, undefined, 'no tuned adapters are loaded');
+  } finally { await model.close(); }
+  // A wllama build without the scorer refuses with decision-unsupported, which the runtime treats as unscored.
+  const stock = { ...fake, capabilities: { nativeStates: true } };
+  const { model: plain } = await api.loadBrowserLocalModel({ kind: 'url', url: 'https://example.test/base.gguf' },
+    { engine: { ...engine, engine: stock }, gpuLayers: 0 });
+  try { await assert.rejects(plain.decide({ messages: [{ role: 'user', content: 'x' }], options: ['1'] }), /decision-unsupported/); }
+  finally { await plain.close(); }
+});

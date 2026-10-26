@@ -1,9 +1,10 @@
 import * as wllamaRuntime from '@wllama/wllama/esm/index.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { DecisionRequest, DecisionScorer, DecisionScores, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { chatCompletionModelTurn, modelTools, type ChatTransport, type ChatTurnStats } from '../model/chat-completion.js';
 import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
 import { perRequestLora } from '../model/lora-scales.js';
 import { nativeStateMessages } from '../model/openai-compatible.js';
+import { coalescingScorer } from '../model/scoring.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
@@ -23,11 +24,14 @@ export type BrowserInferenceEngine = {
   loadModel(files: Blob[], params: LoadParams): Promise<void>;
   /** OpenAI-style chat completion; with `stream: true` an async iterator of chunks. */
   createChatCompletion(request: Record<string, unknown>): Promise<AsyncIterable<Record<string, unknown>> | Record<string, unknown>>;
+  /** Decision readout: each reply's log-probability as the closed final assistant message (llama.cpp fork
+   * `/v1/natlang/score`, in the vendored wllama). */
+  createNatlangScore?(request: { items: Record<string, unknown>[] }): Promise<{ results: ({ log_probs: number[]; tokens: number[] } | { error: string })[] }>;
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
   getModelMetadata?(): Record<string, unknown>;
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
   /** Feature detection of the vendored wllama build (ts-host/vendor/wllama). */
-  readonly capabilities?: { readonly loraBlobs?: boolean; readonly nativeStates?: boolean };
+  readonly capabilities?: { readonly loraBlobs?: boolean; readonly nativeStates?: boolean; readonly natlangScore?: boolean };
   exit(): Promise<void>;
 };
 
@@ -212,15 +216,56 @@ export class BrowserLocalModel {
     await this.load(options, params => this.engine.loadModel(files, params));
   }
 
-  readonly turn = async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
-    if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
-    // The calling invocation's own stack, read before queueing.
-    const tuned = perRequestLora(this.loraIndex, 'the in-page model');
+  /** Run `work` after the turns and readouts queued before it (the in-page engine serves one request at a time). */
+  private async queued<T>(work: () => Promise<T>): Promise<T> {
     const previous = this.turnQueue;
     let release!: () => void;
     this.turnQueue = new Promise<void>(resolve => { release = resolve; });
     await previous;
-    try {
+    try { return await work(); } finally { release(); }
+  }
+
+  /** Score decision items in one engine request; each carries its own call's adapter scales (`tuned`). */
+  private readonly scoreItems = async (items: (DecisionRequest & { tuned?: Record<string, unknown> })[],
+    signal?: AbortSignal): Promise<PromiseSettledResult<DecisionScores>[]> => {
+    if (!this.loaded) throw new Error('load a local GGUF model before scoring a decision');
+    if (!this.engine.createNatlangScore || !this.engine.capabilities?.natlangScore)
+      throw new Error('decision-unsupported: this wllama build cannot score replies; use the vendored build (ts-host/vendor/wllama)');
+    const body = { items: items.map(item => ({ ...item.tuned, continuations: item.options,
+      messages: chatMessages(this.nativeStates.size ? nativeStateMessages(item.messages, this.nativeStates) : item.messages) })) };
+    const response = await this.queued(async () => { signal?.throwIfAborted(); return this.engine.createNatlangScore!(body); });
+    return items.map((item, index): PromiseSettledResult<DecisionScores> => {
+      const result = response.results[index];
+      if (!result || 'error' in result || result.log_probs.length !== item.options.length)
+        return { status: 'rejected', reason: new Error(result && 'error' in result ? result.error : 'batched scoring returned no scores for an item') };
+      return { status: 'fulfilled', value: { log_probs: result.log_probs, tokens: result.tokens } };
+    });
+  };
+
+  /**
+   * Decision readout (natlang `decide`): readouts arriving together are scored in one request; each item's adapter
+   * scales are its own call's, read before coalescing. Carried by `turn`, so a runtime given `model.turn` scores.
+   */
+  readonly decide: DecisionScorer = (() => {
+    const tag = (item: DecisionRequest) => {
+      const tuned = perRequestLora(this.loraIndex, 'the in-page model');
+      return tuned ? { ...item, tuned } : item;
+    };
+    const many = (items: DecisionRequest[], signal?: AbortSignal) => this.scoreItems(items, signal);
+    const coalesced = coalescingScorer(Object.assign(async (item: DecisionRequest, signal?: AbortSignal) => {
+      const [result] = await many([item], signal);
+      if (result!.status === 'rejected') throw result!.reason;
+      return result!.value;
+    }, { scoreMany: many }));
+    return Object.assign((item: DecisionRequest, signal?: AbortSignal) => coalesced(tag(item), signal),
+      { scoreMany: (items: DecisionRequest[], signal?: AbortSignal) => many(items.map(tag), signal) });
+  })();
+
+  readonly turn = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
+    if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
+    // The calling invocation's own stack, read before queueing.
+    const tuned = perRequestLora(this.loraIndex, 'the in-page model');
+    return this.queued(async () => {
       const toolSchemaBytes = new TextEncoder().encode(JSON.stringify(modelTools(request.tools))).length;
       let stats: ChatTurnStats | undefined;
       const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine, tuned, this.nativeStates),
@@ -231,8 +276,8 @@ export class BrowserLocalModel {
         this.turnHistory.push(this.lastTurn);
       }
       return turn;
-    } finally { release(); }
-  };
+    });
+  }, { decide: this.decide });
 
   async close(): Promise<void> {
     if (this.closed) return;
