@@ -54,6 +54,15 @@ before commit and must be pure. A delivery acknowledgment records transport
 evidence, not domain acceptance. Applications consume that evidence in their own
 receipt/reconciliation operations. Missing or ambiguous evidence stays unresolved.
 
+Application-specific adapters are deployable serializers, not semantic workers.
+For applications 076, 092, 097 and 098, each closed effect kind maps to one
+stable topic and one receiver operation. The adapter preserves the full checked
+effect as payload and derives a bounded key from application, kind and the
+effect's original domain identity. It does not reconstruct inputs, choose an
+action, or contact the receiver. Explicit deployment configuration installs a
+particular adapter for a particular application interface and maps each topic
+to its receiver endpoint.
+
 ## Verification boundary
 
 Tests exercise actual native child calls with a scripted engineering driver,

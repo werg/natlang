@@ -79,14 +79,14 @@ export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySe
 
 export type CaseStageSet = { normalizeBids: StageResultBidScope; mapRequirements: StageResultScopeCoverage; identifySeams: StageResultScopeInterface; runClarifications: StageResultScopeClarification; freezeMatrix: StageResultResponsibilityMatrix; };
 
-export type TenderComparisonDossier = { caseId: ID; bidScopes: BidScope[]; requirements: TenderRequirement[]; bidRevisions: TenderRevision[]; clarifications: TenderClarification[]; interfacePairs: TradeInterface[]; commissioningRequirements: ID[]; evidence: Evidence[] };
+export type TenderComparisonDossier = { caseId: ID; bidScopes: BidScope[]; requirements: TenderRequirement[]; bidRevisions: TenderRevision[]; clarifications: TenderClarification[]; interfacePairs: TradeInterface[]; commissioningRequirements: ID[]; evidence: Evidence[]; comparisonState?: TenderComparisonState };
 export type TenderRequirement = { requirementId: ID; function: string; tradeId: ID; revision: string; mandatory: boolean; evidenceRef: Ref };
 export type TenderRevision = { bidderId: ID; revisionId: ID; receivedAt: string; removedInclusions: ID[]; changedExclusions: ID[]; supersedes: ID | null };
 export type TenderClarification = { clarificationId: ID; bidderId: ID; requirementId: ID; response: string; issuedAt: string; authorityRef: Ref; affectsInterfaceIds: ID[] };
 export type TradeInterface = { interfaceId: ID; tradeA: ID; tradeB: ID; connection: string; acceptanceOwner: ID | null; acceptanceEvidence: Ref | null };
 export type TenderCoverageCell = { bidderId: ID; requirementId: ID; status: string; priceBasis: string; revisionId: ID; evidenceRefs: Ref[] };
 export type TenderSeam = { interfaceId: ID; responsibleBidderId: ID | null; acceptanceTask: string; gap: string; supportingCellIds: ID[]; unresolvedBoundary: string };
-export type TenderComparison = { cells: TenderCoverageCell[]; seams: TenderSeam[]; uncertainAllowanceIds: ID[]; functionalOmissions: ID[]; invalidatedCellIds: ID[]; rankable: boolean; blockers: string[] };
+export type TenderComparison = { cells: TenderCoverageCell[]; seams: TenderSeam[]; uncertainAllowanceIds: ID[]; functionalOmissions: ID[]; invalidatedCellIds: ID[]; rankable: boolean; blockers: string[]; comparisonState: TenderComparisonState };
 export type ClassifiedBidCells = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; blockers: string[]; revisionPins: BidRevisionPin[]; allowanceAudit: AllowanceAssessment[] };
 export type ClarificationResult = { cells: TenderCoverageCell[]; uncertainAllowanceIds: ID[]; invalidatedCellIds: ID[]; blockers: string[]; appliedClarificationIds: ID[] };
 
@@ -94,3 +94,5 @@ export type BidRevisionPin = { bidderId: ID; currentRevisionId: ID | null; super
 export type AllowanceAssessment = { bidderId: ID; requirementId: ID; allowanceId: ID; quantityBasis: string; firmCoverage: boolean; uncertainty: string };
 export type TradeBoundaryAssessment = { interfaceId: ID; bidderAssumptions: string[]; ownerCandidateIds: ID[]; unassigned: boolean };
 export type ClarificationInvalidation = { invalidatedCellIds: ID[]; affectedClarificationIds: ID[]; staleRevisionIds: ID[] };
+export type TenderComparisonRevision = { sourceKey: string; revision: number; tenderCaseId: ID; bidRevisionPins: BidRevisionPin[]; cells: TenderCoverageCell[]; seams: TenderSeam[]; clarificationIds: ID[]; invalidatedCellIds: ID[]; commissioningRequirementIds: ID[]; functionalOmissions: ID[]; blockers: string[]; rankable: boolean };
+export type TenderComparisonState = { revision: number; currentSourceKey: string | null; revisions: TenderComparisonRevision[]; cellLineage: TenderCoverageCell[]; supersededRevisionIds: ID[] };

@@ -114,11 +114,29 @@ for (const item of inventory) {
     if (ancestry.has(path)) return 'cycle';
     return '(' + (adjacency.get(path) ?? []).map(child => shape(child, new Set([...ancestry, path]))).sort().join('') + ')';
   }
+  function depth(path, ancestry = new Set()) {
+    if (ancestry.has(path)) throw new Error(`cyclic potential native call graph in ${name}: ${path}`);
+    const children = adjacency.get(path) ?? [];
+    return children.length ? 1 + Math.max(...children.map(child => depth(child, new Set([...ancestry, path])))) : 0;
+  }
+  const entrypointDepths = manifest.interfaces.map(iface => ({ path: iface.path, depth: depth(iface.path) }));
+  const sourceBytes = { natlang: 0, type_declarations: 0, typescript_mechanisms: 0 };
+  for (const path of manifest.source_files) {
+    const bytes = await readFile(join(REPO, SOURCE_ROOT, name, path));
+    if (path.endsWith('.nl')) sourceBytes.natlang += bytes.length;
+    else if (path.endsWith('.ts')) sourceBytes[path.endsWith('/types.ts') || path === 'types.ts'
+      ? 'type_declarations' : 'typescript_mechanisms'] += bytes.length;
+  }
   const signature = manifest.interfaces.map(iface => shape(iface.path)).sort().join('|');
   const group = shapeGroups.get(signature) ?? []; group.push(item.application_id); shapeGroups.set(signature, group);
   architecture.push({ application_id: item.application_id, title: item.title, source_sha256: item.source_sha256,
     interface_sha256: sha256(manifestBytes), public_operations: manifest.interfaces.map(iface => ({ name: iface.name, path: iface.path, purpose: iface.purpose })),
     native_functions: item.native_functions, potential_edges: graph.edges.length, unreferenced: graph.unreferenced,
+    max_potential_native_depth: Math.max(...entrypointDepths.map(item => item.depth)), entrypoint_depths: entrypointDepths,
+    state_bindings: manifest.interfaces.filter(iface => iface.stateParameter !== undefined || iface.stateResultPath !== undefined)
+      .map(iface => ({ operation: iface.name, state_key: iface.stateKey ?? iface.name,
+        input: iface.stateParameter === undefined ? null : [iface.stateParameter, ...(iface.stateInputPath ?? [])],
+        output: iface.stateResultPath ?? [] })), source_bytes: sourceBytes,
     source_topology_fingerprint: sha256(signature), decomposition: `${SOURCE_ROOT}/${name}/DECOMPOSITION.md` });
 }
 const review = { schema: 'natlang.design-brief-architecture-review/1', release: RELEASE,

@@ -7,7 +7,11 @@
     {
       "name": "assembleChangeOrder",
       "path": "assembleChangeOrder.nl",
-      "purpose": "Separate instruction authority from actual events, isolate drawing scope, traverse explicit dependencies, analyze available float, and prevent duplicate change-cost attribution."
+      "purpose": "Separate instruction authority from actual events, isolate drawing scope, traverse explicit dependencies, analyze available float, and prevent duplicate change-cost attribution.",
+      "stateParameter": "dossier",
+      "stateInputPath": ["state"],
+      "stateResultPath": ["state"],
+      "stateKey": "change-order-edition-ledger"
     }
   ],
   "coverage": {
@@ -87,10 +91,15 @@
   "source_files": [
     "assembleChangeOrder.nl",
     "assembleChangeOrder/isolateChangedDrawingAreas.nl",
+    "assembleChangeOrder/isolateChangedDrawingAreas/assessDrawingRevision.nl",
     "assembleChangeOrder/reconcileInstructionAuthority.nl",
+    "assembleChangeOrder/reconcileInstructionAuthority/auditConfirmationScope.nl",
     "assembleChangeOrder/removeDuplicateChangeAttribution.nl",
+    "assembleChangeOrder/removeDuplicateChangeAttribution/matchCostToFieldEvents.nl",
     "assembleChangeOrder/testAvailableFloat.nl",
+    "assembleChangeOrder/testAvailableFloat/assessActivityFloatPath.nl",
     "assembleChangeOrder/traceChangeDependencies.nl",
+    "assembleChangeOrder/traceChangeDependencies/qualifyDependencyEdge.nl",
     "qualification/reconstructInstruction.nl",
     "types.ts"
   ]

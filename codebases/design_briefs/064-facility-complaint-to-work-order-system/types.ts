@@ -88,13 +88,17 @@ export type VisitAccessPermission = { locationId: ID; permittedWindows: string[]
 export type FacilityRepairHistory = { issueId: ID; locationId: ID; mechanism: string; priorWorkOrder: ID; verifiedResult: string; recurrenceEvidence: Ref[] };
 export type OccupantReport = { reportId: ID; locationId: ID; issueDescription: string; reporterId: ID; shareScope: string; evidenceRef: Ref };
 export type PrivacyUpdatePreference = { recipientId: ID; permittedFields: string[]; caseAlias: string; consentRef: Ref };
-export type FacilityDispatchPacket = { caseId: ID; officialLocationId: ID | null; locationBlockers: string[]; linkedIssueIds: ID[]; workOrderTasks: string[]; visitWindow: string[]; accessBlockers: string[]; observationPlan: string[]; privateUpdatePackets: string[]; mechanismEscalation: string[]; dispatchAllowed: boolean; commitAllowed: boolean };
+export type FacilityDispatchPacket = { caseId: ID; officialLocationId: ID | null; locationBlockers: string[]; linkedIssueIds: ID[]; workOrderTasks: string[]; visitWindow: string[]; accessBlockers: string[]; observationPlan: string[]; privateUpdatePackets: string[]; mechanismEscalation: string[]; workBlockers: string[]; dispatchAllowed: boolean; commitAllowed: boolean };
 export type FacilityLocationResolution = { locationId: ID | null; alias: string; blockers: string[]; candidates: ID[] };
 
 export type FacilityIssueCluster = { issueIds: ID[]; sharedMechanism: string; reporterPartitions: string[]; unresolvedLinks: string[] };
 export type ConsentedVisitPlan = { windows: string[]; blockers: string[]; failedAttemptRecord: string };
-export type FacilityWorkOrderPlan = { tasks: string[]; observationPlan: string[]; escalation: string[] };
+export type FacilityWorkOrderPlan = { tasks: string[]; observationPlan: string[]; escalation: string[]; blockers: string[] };
 export type FacilityVisitReceipt = { receiptId: ID; caseId: ID; locationId: ID; issueIds: ID[]; accessWindow: string; outcome: "completed" | "no-access" | "cancelled" | "partial" | "unknown"; occurredAt: DateTime; consentRef: Ref | null; completedWorkOrderIds: ID[]; completedCheckIds: ID[]; technicianEvidence: Ref[]; occupantResponse: Ref | null; residualSymptom: string };
 export type FacilityVisitLedger = { revision: number; attempts: FacilityVisitReceipt[]; consumedReceiptIds: ID[] };
 export type FacilityVisitReconciliation = { ledger: FacilityVisitLedger; outcome: "recorded" | "replayed" | "held"; resolution: "resolved" | "monitor-recurrence" | "access-retry-needed" | "consent-needed" | "unknown"; nextActions: string[] };
 export type FacilityVisitAssessment = { binding: "valid" | "mismatch" | "unknown"; resolution: "resolved" | "monitor-recurrence" | "access-retry-needed" | "consent-needed" | "unknown"; missingCheckIds: ID[]; reasons: string[]; nextActions: string[] };
+
+export type FacilityRecurrenceFinding = { issueId: ID; relationship: "recurrence" | "compatible" | "different" | "unknown"; mechanism: string; priorWorkOrderId: ID; evidenceRefs: Ref[]; blockers: string[] };
+export type FacilityReportLink = { reportId: ID; compatibleIssueIds: ID[]; relation: "same-mechanism" | "separate" | "unresolved"; blockers: string[]; shareScope: string };
+export type FacilityObservationGate = { observationPlan: string[]; blockers: string[] };

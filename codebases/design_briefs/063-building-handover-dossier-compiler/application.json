@@ -108,6 +108,9 @@
     "qualification/recoverRequirements.nl",
     "reconcileHandoverAcceptance.nl",
     "reconcileHandoverAcceptance/assessReceiptCoverage.nl",
-    "types.ts"
+    "types.ts",
+    "compileBuildingDossier/matchCertificatesByExactAsset/interpretCertificateObligation.nl",
+    "compileBuildingDossier/selectInstalledVariantManuals/inspectVariantManual.nl",
+    "reconcileHandoverAcceptance/assessReceiptCoverage/traceDeliverableAcceptance.nl"
   ]
 }

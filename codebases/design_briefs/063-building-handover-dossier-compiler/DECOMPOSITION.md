@@ -5,3 +5,8 @@ The compiler binds artifacts to installed asset identity and variant, not to a f
 The package is ready for human acceptance only when each required artifact and continuing obligation has a supported match. Archive, conversion, and follow-up actions remain proposals until the facility host records their completion.
 
 The acceptance desk records the recipient's signed receipt against the exact dossier edition and required deliverable IDs. Partial handovers accumulate only within that edition, while receipts with unknown roles, mismatched editions, exceptions, or missing evidence remain visible but do not count as accepted coverage. A complete receipt confirms dossier receipt only, not asset operation or closure of temporary arrangements.
+
+
+## Nested evidence interpretation (2026-10-26)
+
+Certificate acceptance now interprets each actual handover obligation against one installed asset and one certificate. Manual selection separately evaluates variant-specific sections. Receiver coverage is assembled per required deliverable from same-edition, already validated receipt identities; no generic stage controller supplies those decisions.

@@ -97,3 +97,7 @@ export type HandoverAcceptanceReceipt = { receiptId: ID; caseId: ID; dossierVers
 export type HandoverAcceptanceBook = { revision: number; receipts: HandoverAcceptanceReceipt[]; validReceiptIds: ID[]; consumedReceiptIds: ID[] };
 export type HandoverAcceptanceReview = { book: HandoverAcceptanceBook; outcome: "accepted" | "partial" | "held" | "replayed"; missingDeliverableIds: ID[]; nextTasks: string[] };
 export type HandoverAcceptanceAssessment = { disposition: "complete" | "partial" | "held"; missingDeliverableIds: ID[]; unexpectedDeliverableIds: ID[]; exceptionItems: string[]; reasons: string[] };
+
+export type CertificateObligationFinding = { requirementId: ID; applicability: "yes" | "no" | "unknown"; acceptable: boolean; reasons: string[]; evidenceRefs: Ref[] };
+export type VariantManualFinding = { manualId: ID; applicable: boolean; relevantSections: ID[]; blockers: string[] };
+export type DeliverableAcceptanceTrace = { deliverableId: ID; covered: boolean; receiptIds: ID[]; blockers: string[] };

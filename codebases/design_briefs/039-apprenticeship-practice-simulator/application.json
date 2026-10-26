@@ -7,7 +7,11 @@
     {
       "name": "simulateApprenticeshipTurn",
       "path": "simulateApprenticeshipTurn.nl",
-      "purpose": "Interpret one learner turn and advance a bounded, resumable training simulation."
+      "purpose": "Interpret one learner turn and advance a bounded, resumable training simulation.",
+      "stateParameter": "turn",
+      "stateInputPath": ["checkpoint"],
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "apprenticeship-simulation-session"
     },
     {
       "name": "compareObservedProcedure",

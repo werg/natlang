@@ -108,6 +108,55 @@ an adapter was installed. Undeclared domain plans remain data, not inferred send
 Reusing an effect key with byte-identical topic/payload retains its existing
 delivery state; different content under that key fails the entire transaction.
 
+### Installed application adapters
+
+These pure serializers are shipped with the host. Install only the adapter for
+the declared application interface in `effectAdapters`; paths are resolved
+relative to the deployment configuration file. For a configuration at the
+repository root:
+
+```json
+{
+  "effectAdapters": {
+    "076": { "manageReferralPacket": "./applications/design-briefs-host/adapters/076-referral-packet-transfer.mjs" },
+    "092": { "prepareDocumentaryDelivery": "./applications/design-briefs-host/adapters/092-documentary-delivery.mjs" },
+    "097": { "prepareLiveEventEffects": "./applications/design-briefs-host/adapters/097-live-event-effects.mjs" },
+    "098": { "prepareWorldActionEffects": "./applications/design-briefs-host/adapters/098-persistent-world-actions.mjs" }
+  }
+}
+```
+
+Each adapter reads only the checked `result.effects` array, maps the closed
+`kind` to its topic, hashes the application/kind/domain identity into a bounded
+outbox key, and stores the original effect unchanged as `payload`. The key
+distinguishes send from status-read, reserve from acknowledgement, and
+publication from other operations. It does not include payload contents, so
+reusing the same domain identity with different content fails the store's
+`effect_identity_conflict` check.
+
+| Application kind | Outbox topic | Configured receiver operation |
+| --- | --- | --- |
+| 076 `send-referral-packet` | `076.referral.packet.send` | Transmit the exact authorized packet revision to its named recipient service. |
+| 076 `read-recipient-status` | `076.referral.status.read` | Return recipient status for the exact packet, patient, and episode scope. |
+| 092 `deliver-documentary-package` | `092.documentary.package.deliver` | Receive the exact assembly revision, digest, deliverables, and clearance references. |
+| 092 `read-documentary-delivery-status` | `092.documentary.delivery.status.read` | Return delivery status for the exact assembly revision and digest. |
+| 097 `reserve-event-resources` | `097.live-event.resources.reserve` | Reserve the listed resources for the supplied event revision and venue. |
+| 097 `request-role-acknowledgements` | `097.live-event.roles.acknowledge` | Request the listed role acknowledgements for the supplied event revision. |
+| 097 `publish-event-revision` | `097.live-event.revision.publish` | Publish the supplied event revision to its configured event receiver. |
+| 098 `apply-player-actions` | `098.persistent-world.actions.apply` | Apply the supplied player actions against the exact world revision and rule version. |
+| 098 `read-action-status` | `098.persistent-world.action.status.read` | Return simulator status for the supplied world and client action identity. |
+
+Configure one `deliveryRoutes[applicationId][topic]` endpoint per receiver
+operation, with any receiver credentials in that route's configured headers.
+Each receiver must enforce idempotency for the scoped `idempotency-key` HTTP
+header and accept the common request envelope
+`{idempotencyKey, caseId, payload}`. It returns
+`{status:"delivered", idempotencyKey, receiptId}`, echoing the envelope key
+exactly. `payload` is the unchanged application effect object and therefore
+retains its original semantic IDs, revision, recipient, and domain idempotency
+key. Delivery acknowledgment records only transport receipt; the application
+still reconciles domain outcomes through its own typed operation.
+
 Delivery routes bind application ID and topic to a configured endpoint. Run one
 bounded dispatch pass with:
 
@@ -137,6 +186,7 @@ outcomes by asserting their own evidence.
 ```sh
 node applications/design-briefs-host/store.test.mjs
 node applications/design-briefs-host/service.test.mjs
+node applications/design-briefs-host/adapters.test.mjs
 node ts-host/scripts/design-briefs/check.test.mjs
 ```
 

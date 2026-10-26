@@ -7,7 +7,11 @@
     {
       "name": "resolveTenderScope",
       "path": "resolveTenderScope.nl",
-      "purpose": "Compare bidder coverage by current revision, preserve allowances as uncertain, assign unresolved trade seams, apply clarifications with invalidation, and expose commissioning omissions."
+      "purpose": "Compare bidder coverage by current revision, preserve allowances as uncertain, assign unresolved trade seams, apply clarifications with invalidation, and expose commissioning omissions.",
+      "stateParameter": "tender",
+      "stateInputPath": ["comparisonState"],
+      "stateResultPath": ["comparisonState"],
+      "stateKey": "tender-addendum-lineage"
     }
   ],
   "coverage": {

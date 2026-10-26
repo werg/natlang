@@ -98,20 +98,24 @@
     ]
   },
   "source_files": [
-    "planPortfolio.nl",
-    "types.ts",
     "natlang.json",
-    "runCase/reconstructNeeds/audit/qualify.nl",
-    "portfolioCore/framePortfolioDecision.nl",
-    "portfolioCore/selectPortfolioPolicy.nl",
-    "portfolioCore/forkPriorityScenario.nl",
-    "portfolioCore/selectDecisionTestForMechanism.nl",
-    "runCase/reconstructNeeds/separateUnderlyingNeed.nl",
-    "runCase/generateInterventions/proposeDistinctMechanisms.nl",
-    "runCase/estimateDependencies/decomposeOpportunityWork.nl",
-    "runCase/estimateDependencies/identifySharedPortfolioWork.nl",
-    "portfolioCore/reviewExactPortfolioReceipt.nl",
+    "planPortfolio.nl",
+    "planPortfolio/reconcilePortfolioCheckpoint.nl",
     "portfolioCore/compareReceiptedOptions.nl",
-    "planPortfolio/reconcilePortfolioCheckpoint.nl"
+    "portfolioCore/forkPriorityScenario.nl",
+    "portfolioCore/framePortfolioDecision.nl",
+    "portfolioCore/reviewExactPortfolioReceipt.nl",
+    "portfolioCore/selectDecisionTestForMechanism.nl",
+    "portfolioCore/selectPortfolioPolicy.nl",
+    "runCase/estimateDependencies/decomposeOpportunityWork.nl",
+    "runCase/estimateDependencies/decomposeOpportunityWork/attributeWorkPackage.nl",
+    "runCase/estimateDependencies/decomposeOpportunityWork/attributeWorkPackage/reviewWorkCostBasis.nl",
+    "runCase/estimateDependencies/identifySharedPortfolioWork.nl",
+    "runCase/estimateDependencies/identifySharedPortfolioWork/compareSharedDependency.nl",
+    "runCase/estimateDependencies/identifySharedPortfolioWork/compareSharedDependency/qualifyDependencyEvidence.nl",
+    "runCase/generateInterventions/proposeDistinctMechanisms.nl",
+    "runCase/reconstructNeeds/audit/qualify.nl",
+    "runCase/reconstructNeeds/separateUnderlyingNeed.nl",
+    "types.ts"
   ]
 }

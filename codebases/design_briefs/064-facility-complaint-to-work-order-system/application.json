@@ -106,6 +106,9 @@
     "triageFacilityIssue/groupByRecurringMechanism.nl",
     "triageFacilityIssue/negotiateConsentBoundVisit.nl",
     "triageFacilityIssue/resolveOfficialFacilityLocation.nl",
-    "types.ts"
+    "types.ts",
+    "triageFacilityIssue/groupByRecurringMechanism/assessPriorRepairMechanism.nl",
+    "triageFacilityIssue/groupByRecurringMechanism/compareOccupantMechanism.nl",
+    "triageFacilityIssue/formMechanismAwareWorkOrder/selectSymptomObservation.nl"
   ]
 }

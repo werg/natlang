@@ -7,7 +7,11 @@
     {
       "name": "directProjectCycle",
       "path": "directProjectCycle.nl",
-      "purpose": "Map required goals to learner-owned demonstrations, sequence a feasible project, adapt support without substitution, and rehearse late changes."
+      "purpose": "Map required goals to learner-owned demonstrations, sequence a feasible project, adapt support without substitution, and rehearse late changes.",
+      "stateParameter": "project",
+      "stateInputPath": ["prior"],
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "project-learning-checkpoint"
     }
   ],
   "coverage": {

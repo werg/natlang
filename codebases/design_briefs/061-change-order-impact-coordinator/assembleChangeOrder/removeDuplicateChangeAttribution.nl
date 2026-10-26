@@ -2,4 +2,4 @@
 args: { items: ChangeCostItem[], events: WorkEvent[] }
 returns: CostDeduplication
 ---
-Compare work-package, quantity, rate, overlap group, and contemporaneous event evidence. Accept one supported attribution for the same work and list duplicate cost IDs; do not erase actual work solely because the authorization is disputed.
+Bind matches = items.map(item => matchCostToFieldEvents(item, events)). Group only matches with the same work package, quantity-rate basis, overlap group, and event evidence. Keep one supported attribution per evidenced work item, classify later duplicate claims as duplicates, and leave conflicting or unsubstantiated claims unresolved. Disputed authorization does not erase actual work evidence.

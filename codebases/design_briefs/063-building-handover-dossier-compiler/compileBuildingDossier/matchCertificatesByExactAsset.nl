@@ -1,5 +1,7 @@
 ---
-args: { assets: InstalledAssetVariant[], certificates: AssetCertificate[] }
+args: { assets: InstalledAssetVariant[], certificates: AssetCertificate[], requirements: HandoverRequirement[] }
 returns: CertificateMatch[]
 ---
-Accept a certificate only when its namedAssetId equals the official installed asset ID and its status and revision satisfy the requirement. Similar model number or location cannot repair an asset identity mismatch.
+Start an empty CertificateMatch list. For each supplied certificate, locate the installed asset whose assetId exactly equals certificate.namedAssetId. If that identity is absent or duplicated, append {certificateId: certificate.certificateId, assetId: certificate.namedAssetId, accepted: false, reason: the exact missing or ambiguous asset binding}; a model number or nearby location cannot repair it.
+
+For the unique asset, call interpretCertificateObligation(asset, certificate, requirement) separately for every actual handover requirement. Keep the returned applicability and evidence judgments separate. Accept the certificate only when at least one applicable obligation is satisfied, every applicable obligation is acceptable, no relevant applicability is unknown, and the certificate's evidence reference identifies this exact asset and revision. Append CertificateMatch with the actual certificateId and assetId, that accepted value, and a reason built from those child findings. If no obligation is established, preserve the certificate as unqualified evidence rather than guessing which acceptance condition it fulfills. Return the full list, including rejected certificates; missing certificates remain detectable by requirements reconciliation.

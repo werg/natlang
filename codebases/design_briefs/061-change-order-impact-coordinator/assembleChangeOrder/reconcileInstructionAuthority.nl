@@ -1,5 +1,5 @@
 ---
-args: { instruction: SiteInstruction, confirmations: InstructionConfirmation[], events: WorkEvent[] }
+args: { instruction: SiteInstruction, confirmations: InstructionConfirmation[], events: WorkEvent[], evidence: Evidence[] }
 returns: AuthorityFinding
 ---
-Require formal confirmation by an authorized signer whose scope covers the instruction. Keep disputed verbal directions visible as disputed and list work performed before approval as factual events without backdating permission.
+For each written confirmation bind audit = auditConfirmationScope(instruction, confirmation, events, evidence). Count authority only when audit.signerAuthorized, audit.scopeCoversInstruction, audit.confirmsExactInstruction, and audit.authorityEvidenceCurrent are all true. Preserve every disputed confirmation and audit.preApprovalEventIds as factual work without permission. Return confirmed only when a current exact-scope confirmation exists and no competing dispute remains; return every audit missingEvidence and disputed instruction reference.

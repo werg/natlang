@@ -101,22 +101,28 @@
     ]
   },
   "source_files": [
-    "studyAnalysis.nl",
-    "types.ts",
     "natlang.json",
-    "runCase/frameInquiry/audit/qualify.nl",
+    "researchCore/assessQuotationRisk.nl",
+    "researchCore/constructCodebook.nl",
+    "researchCore/constructCodebook/reviewCodeBoundary.nl",
+    "researchCore/constructCodebook/reviewCodeBoundary/assessBoundaryExample.nl",
     "researchCore/frameResearchQuestion.nl",
     "researchCore/selectResearchPolicy.nl",
-    "researchCore/constructCodebook.nl",
-    "researchCore/assessQuotationRisk.nl",
+    "runCase/codeAndReconcile/alignTranslationPassages.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders/reviewOneCoderDisagreement.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders/reviewOneCoderDisagreement/qualifyCoderEvidence.nl",
+    "runCase/frameInquiry/audit/qualify.nl",
     "runCase/frameInquiry/decomposeDecisionQuestion.nl",
     "runCase/frameInquiry/enumerateRivalExplanations.nl",
     "runCase/selectSample/defineInquiryStrata.nl",
     "runCase/selectSample/freezeSamplingManifest.nl",
-    "runCase/codeAndReconcile/alignTranslationPassages.nl",
-    "runCase/codeAndReconcile/compareIndependentCoders.nl",
     "runCase/synthesizeFindings/searchCounterevidence.nl",
+    "runCase/synthesizeFindings/searchCounterevidence/searchOneMechanism.nl",
+    "runCase/synthesizeFindings/searchCounterevidence/searchOneMechanism/classifyCounterexample.nl",
+    "studyAnalysis.nl",
     "studyAnalysis/compareStudyRevision.nl",
-    "studyAnalysis/reconcileStudyCheckpoint.nl"
+    "studyAnalysis/reconcileStudyCheckpoint.nl",
+    "types.ts"
   ]
 }

@@ -32,6 +32,13 @@ cover per-caller cancellation of coalesced requests, Node worker startup and
 terminal EOF. These engineering tests add no sampled trajectories or semantic
 qualification; the above measurement debt remains open.
 
+The follow-through pass binds previously unbound learning, repair, construction
+and reuse state, corrects planned-versus-verified repair completion, and adds
+nested domain judgments in the remaining shallow analysis trees. The optional
+host now ships exact configured adapters for the declared referral, documentary,
+live-event and world-simulator intentions. Adapter/storage tests use engineering
+inputs only, without authentic external receipts, teacher calls or admission.
+
 ### 2026-10-18 — terminal Neuralese text results are written as typed values
 
 A final assistant text reply to a function declared as `Neuralese<string>` is

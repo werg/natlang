@@ -7,7 +7,11 @@
     {
       "name": "reviewLearnerPortfolio",
       "path": "reviewLearnerPortfolio.nl",
-      "purpose": "Assess an evidence portfolio against a versioned competency standard and prepare an assessor-bound recommendation."
+      "purpose": "Assess an evidence portfolio against a versioned competency standard and prepare an assessor-bound recommendation.",
+      "stateParameter": "portfolio",
+      "stateInputPath": ["assessmentState"],
+      "stateResultPath": ["assessmentState"],
+      "stateKey": "learner-portfolio-assessment-ledger"
     },
     {
       "name": "rehearAttributionCorrection",

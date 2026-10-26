@@ -6,6 +6,8 @@ This application builds an argument from the requested deviation, continuing con
 
 The durable register separates granted scope, pending recommendations, source policy edition and prior valid actions. Reworded requests keep identity while changed facts are reconsidered. Missing expiry is a governance defect. Signing is blocked when the governing policy changes. Revocation is a separate operation that identifies dependent owners and future reliance without rewriting valid historical actions or claiming a notification was delivered.
 
+Conditional policy-trial results are initialized as null when the supplied independent history does not establish a test. The complete hearing result and carried register preserve that absence without reading an unbound trial value or inventing a policy-owner question.
+
 ## Verification boundary
 
 The original domain records, five semantic gates, five operational scenarios, and independent finite gate answers remain the contract. Public operations and checkpoints belong to this application. Native loading and source-call inspection do not prove learned execution quality. Effect intent is distinct from an authorized receiver receipt.

@@ -116,6 +116,7 @@
     "directOnboarding/replanOnboardingDependencies.nl",
     "runCase/clarifyOutcomes/audit/qualify.nl",
     "types.ts",
-    "directOnboarding/reconcileOnboardingCheckpoint.nl"
+    "directOnboarding/reconcileOnboardingCheckpoint.nl",
+    "directOnboarding/measureEvidenceBackedProgress/verifyOneTaskCompletion.nl"
   ]
 }

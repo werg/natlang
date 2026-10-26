@@ -114,6 +114,7 @@
     "coordinatedExit/reconcileActualExitState.nl",
     "runCase/interpretIntent/audit/qualify.nl",
     "types.ts",
-    "coordinatedExit/reconcileExitCheckpoint.nl"
+    "coordinatedExit/reconcileExitCheckpoint.nl",
+    "coordinatedExit/reconcileSubscriptionOperations/reconcileOneSubscriptionOperation.nl"
   ]
 }

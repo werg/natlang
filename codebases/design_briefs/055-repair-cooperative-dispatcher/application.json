@@ -7,7 +7,11 @@
     {
       "name": "dispatchRepairCase",
       "path": "dispatchRepairCase.nl",
-      "purpose": "Separate reported symptoms from causes, route hazardous checks, qualify consensual repair assignments, and capture recurrence-aware outcomes."
+      "purpose": "Separate reported symptoms from causes, route hazardous checks, qualify consensual repair assignments, and capture recurrence-aware outcomes.",
+      "stateParameter": "repair",
+      "stateInputPath": ["priorState"],
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "cooperative-repair-case-ledger"
     }
   ],
   "coverage": {

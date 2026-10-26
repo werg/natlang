@@ -7,7 +7,11 @@
     {
       "name": "evaluateReuseOptions",
       "path": "evaluateReuseOptions.nl",
-      "purpose": "Reconcile current survey facts with retained historic drawings, recheck constraints when use changes, gate structural assumptions, expose enabling-work omissions, and test temporary public circulation by phase."
+      "purpose": "Reconcile current survey facts with retained historic drawings, recheck constraints when use changes, gate structural assumptions, expose enabling-work omissions, and test temporary public circulation by phase.",
+      "stateParameter": "dossier",
+      "stateInputPath": ["state"],
+      "stateResultPath": ["state"],
+      "stateKey": "adaptive-reuse-feasibility-history"
     }
   ],
   "coverage": {

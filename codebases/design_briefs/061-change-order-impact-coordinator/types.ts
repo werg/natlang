@@ -80,7 +80,7 @@ export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySe
 
 export type CaseStageSet = { reconstructInstruction: StageResultSiteInstruction; compareScope: StageResultScopeDifference; traceDependencies: StageResultConstructionImpact; formOptions: StageResultChangeOption; assembleChange: StageResultChangePackage; };
 
-export type ChangeOrderDossier = { caseId: ID; instruction: SiteInstruction; writtenConfirmations: InstructionConfirmation[]; fieldReports: WorkEvent[]; drawingRevisions: LocalDrawingRevision[]; schedule: ScheduleActivity[]; costItems: ChangeCostItem[]; dependencies: ScopeDependency[]; evidence: Evidence[] };
+export type ChangeOrderDossier = { caseId: ID; instruction: SiteInstruction; writtenConfirmations: InstructionConfirmation[]; fieldReports: WorkEvent[]; drawingRevisions: LocalDrawingRevision[]; schedule: ScheduleActivity[]; costItems: ChangeCostItem[]; dependencies: ScopeDependency[]; evidence: Evidence[]; state?: ChangeOrderState };
 export type InstructionConfirmation = { instructionRef: Ref; receivedAt: string; signer: ID; scope: string; authorityRef: Ref | null; disputed: boolean };
 export type WorkEvent = { eventId: ID; workPackageId: ID; observedAt: string; description: string; actualCost: string; evidenceRef: Ref };
 export type LocalDrawingRevision = { drawingId: ID; revision: string; changedAreas: ID[]; unchangedAreas: ID[]; referenceOnly: boolean; evidenceRef: Ref };
@@ -88,7 +88,15 @@ export type ScheduleActivity = { activityId: ID; predecessorIds: ID[]; plannedSt
 export type ChangeCostItem = { costId: ID; workPackageId: ID; changeId: ID; quantity: string; rate: string; evidenceRef: Ref; overlapGroup: ID | null };
 export type ScopeDependency = { sourceArea: ID; targetPackage: ID; dependency: string; evidenceRef: Ref };
 export type AuthorityFinding = { confirmed: boolean; disputedInstructionRefs: Ref[]; preApprovalEventIds: ID[]; newScopeRefs: Ref[] };
-export type ChangeOrderImpactPacket = { caseId: ID; authority: AuthorityFinding; affectedAreas: ID[]; unaffectedAreas: ID[]; dependencies: ID[]; floatAnalysis: string[]; nonDuplicatedCostItems: ID[]; excludedDuplicateCostIds: ID[]; proposalStatus: string; commitAllowed: boolean };
+export type ChangeOrderImpactPacket = { caseId: ID; authority: AuthorityFinding; affectedAreas: ID[]; unaffectedAreas: ID[]; scopeBlockers: ID[]; dependencies: ID[]; dependencyBlockers: ID[]; floatAnalysis: string[]; nonDuplicatedCostItems: ID[]; excludedDuplicateCostIds: ID[]; costBlockers: ID[]; proposalStatus: string; state: ChangeOrderState; commitAllowed: boolean };
 export type ScopePartition = { affectedAreas: ID[]; unaffectedAreas: ID[]; documentationOnly: boolean; unresolvedAreas: ID[] };
 export type ScheduleImpact = { findings: string[]; blockers: string[]; affectedActivityIds: ID[] };
 export type CostDeduplication = { acceptedIds: ID[]; duplicateIds: ID[]; unresolvedIds: ID[] };
+export type ChangeOrderEdition = { sourceKey: string; version: number; instruction: SiteInstruction; confirmations: InstructionConfirmation[]; fieldReports: WorkEvent[]; drawingRevisions: LocalDrawingRevision[]; schedule: ScheduleActivity[]; costItems: ChangeCostItem[]; dependencies: ScopeDependency[]; evidence: Evidence[]; authority: AuthorityFinding; affectedAreas: ID[]; unaffectedAreas: ID[]; scopeBlockers: ID[]; dependencyIds: ID[]; dependencyBlockers: ID[]; unresolvedDependencyEdges: DependencyEdgeFinding[]; floatAnalysis: string[]; nonDuplicatedCostItems: ID[]; excludedDuplicateCostIds: ID[]; costBlockers: ID[]; proposalStatus: string };
+export type ChangeOrderState = { revision: number; currentSourceKey: string | null; editions: ChangeOrderEdition[]; attributedCostIds: ID[]; unresolvedCostIds: ID[] };
+export type ConfirmationScopeAudit = { signerAuthorized: boolean; scopeCoversInstruction: boolean; confirmsExactInstruction: boolean; authorityEvidenceCurrent: boolean; preApprovalEventIds: ID[]; disputed: boolean; missingEvidence: string[] };
+export type DrawingRevisionFinding = { drawingId: ID; revision: string; affectedAreas: ID[]; preservedAreas: ID[]; documentationOnly: boolean; evidenceRef: Ref; unresolvedAreas: ID[] };
+export type DependencyEdgeFinding = { targetPackage: ID; sourceArea: ID; supported: boolean; evidenceRef: Ref; reachesUnchangedScope: boolean; blocker: string };
+export type ActivityFloatFinding = { activityId: ID; affectedByChange: boolean; predecessorClosure: ID[]; predecessorGaps: ID[]; floatOutcome: "absorbed" | "consumed" | "delay-risk" | "unknown"; remainingFloat: string; findings: string[] };
+export type CostEventMatch = { costId: ID; workPackageId: ID; eventIds: ID[]; overlapGroup: ID | null; quantityRateBasis: string; evidenceMatch: boolean; disposition: "supported" | "duplicate-candidate" | "unresolved"; reasons: string[] };
+export type DependencyTrace = { reachablePackageIds: ID[]; traversedEdges: DependencyEdgeFinding[]; unresolvedEdges: DependencyEdgeFinding[] };

@@ -11,7 +11,8 @@
       "stateParameter": "book",
       "stateResultPath": [
         "book"
-      ]
+      ],
+      "stateKey": "supplier-negotiation-book"
     }
   ],
   "source_files": [
