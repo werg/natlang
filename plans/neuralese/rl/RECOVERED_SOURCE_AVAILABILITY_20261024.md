@@ -575,3 +575,29 @@ SHA01a064539ac8aa43b7d431866359e00be70ebd627530f0d46a83f7d2f6d9ce03.
 Cloud pin cleanup is temporarily stopped while its long hash/decode work is moved
 outside the publication lease; the corrected mechanism passes its concurrency
 fixtures and retains exact revalidation under the brief deletion transaction.
+
+2026-10-26 05:05 Berlin: the corrected integrated runtime passed the full check
+at04:14 (2,752 general Python checks plus6 subtests,4,926 Neuralese CPU checks,
+17 GPU checks and2,177 TypeScript checks). Shared bounded checkpoint writes and
+foundation restoration are published through76d30e30c. LFM adopted R2 from its
+actual37935 child, qualified the original26,312/26,312 communication cohort, and
+saved current-weight runtime/gradient/task receipts. The supervisor then rejected
+that valid zero-update qualification. Its real saved result was validated through
+the existing readiness validator and published under the actual owner/controller
+leases, without crediting additional SGD or completing outstanding full-SFT debt.
+The resumed DPO optimizer has advanced to37960. The37935 qualified full state is
+independently exported and verified locally; newer numerical exports continue.
+The permanent shared supervisor fix is b06d4ba8b;53 focused tests pass and its full
+check is running. Protected task checks remain0/2 with budget exhaustion; these
+qualification and optimization facts do not establish held capability lift.
+
+Mellum completed its cycle2 DPO at36047, which is privately exported and fully
+read back. The workstation mirror has35817 and is downloading36047. Its next
+whole-graph RL round failed the actual learner capacity check with GPU OOM before
+any saved update. The old controller was a zombie; the waiting cutover process
+was not useful training. Exact owner43350/start1311589 now resumes the same saved
+round1 collection and actual36047 parent with the existing file-backed widened
+cotangent accumulator. No graph is split, exposure credited, optimizer reset or
+episode recollected by that correction. R2 foundation cutover is rearmed after
+the real RL boundary; Mellum has not yet earned R2 foundation readiness. Actual
+learner progress, export custody and allocation expiry remain separately checked.
