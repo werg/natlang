@@ -160,6 +160,10 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
         with pytest.raises(RuntimeError,match='publication interrupted'):production.run(config,rounds=1)
         first=production.run(config,rounds=1)
         assert first['round']==1 and first['trained_rounds']==1 and len(learned)==1
+        audit=first['last_completed_update']
+        assert audit['operation_receipt']['scope']=='native-coefficient-policy'
+        assert audit['completion_report']['path']==str((Path(learned[0])/'report.json').resolve())
+        assert audit['operation_receipt']['sha256']==audit['completion_report']['sha256']
         second=production.run(config,rounds=1)
         assert second['round']==2 and second['trained_rounds']==2 and len(learned)==2
         assert len(collected)==2 and collected[0]!=collected[1]

@@ -103,7 +103,8 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
 
 
 @pytest.mark.parametrize('shared_parent',[True,False])
-def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent, *, parent_setup=None, extra_args=()):
+def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent, *, parent_setup=None, extra_args=(),
+        preserve_first_operation_report=False):
     """Actual tiny LFM full trainer; fixture reward is NOT an environment result."""
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, SHARED_CHECKPOINT_SCHEMA
@@ -178,6 +179,8 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
             'sha256':'0'*64,'bytes':1}), *extra_args]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
+    first_report=(tmp_path/'learner/report.json').read_bytes()
+    first_receipt=(tmp_path/'learner/native-training-receipt.json').read_bytes()
     state = torch.load(slot, map_location='cpu', weights_only=False)
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
@@ -208,6 +211,12 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     prior_sha = sha256_file_hex(slot)
     assert main(argv) == 0
     assert sha256_file_hex(slot) == prior_sha  # no repeated update/checkpoint rewrite
+    if preserve_first_operation_report:
+        # This fixture feeds the real operation into the production controller.
+        # Keep the report from the invocation that actually updated; the later
+        # idempotence run has zero new updates and is not an RL credit source.
+        (tmp_path/'learner/report.json').write_bytes(first_report)
+        (tmp_path/'learner/native-training-receipt.json').write_bytes(first_receipt)
 
 
 def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,monkeypatch):
@@ -234,8 +243,10 @@ def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,mo
         _,coverage,_=held_selection(source.entries,source_sha256=source.file_sha256,token_budget=1,graph_budget=2)
         saved['training']['metrics']={'held_coverage':coverage,'held':{'loss':-999,'scope':'full'}}
     test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,False,
-        parent_setup=setup,extra_args=['--held-eval-tokens','1','--held-eval-graphs','2'])
+        parent_setup=setup,extra_args=['--held-eval-tokens','1','--held-eval-graphs','2'],
+        preserve_first_operation_report=True)
     report=json.loads((tmp_path/'learner/report.json').read_text())
+    assert report['continuation_boundary']['new_optimizer_updates']>0
     state=torch.load(tmp_path/'learner/checkpoint.pt',weights_only=False)
     held=state['training']['metrics']['held']
     assert held['scope']=='cadence-subset' and held['examples']==2 and held['source_graphs']==6

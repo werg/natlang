@@ -272,6 +272,16 @@ def test_actual_relay_preflights_joint_assets_before_it_can_arm_any_owner(tmp_pa
         path=Path(host['raw_state']);path.parent.mkdir(parents=True)
         write(path,{'owner':process_owner(),'released':False,'models':{}})
     io=FileProtocolIO(plans);io.config=relay['provider']
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    collector_assets={}
+    for role,host in relay['hosts'].items():
+        runtime=Path(relay['provider']['sandboxes'][host['source_host_id']]['runtime'])
+        collector=runtime/'scripts/run_bonsai_queue.py'
+        collector.parent.mkdir(parents=True,exist_ok=True)
+        collector.write_text('# fixture collector bound to the prepared runtime\n')
+        collector_assets[role]={'kind':'task-source-file','path':str(collector),
+            'bytes':collector.stat().st_size,'sha256':sha256_file_hex(collector)}
+    relay['task_eval_collector_assets']=collector_assets
     checked=[]
     def preflight(sid,request):checked.append((sid,request));return {'files':[],'assets':[]}
     monkeypatch.setattr(io,'dependency_closure',preflight)

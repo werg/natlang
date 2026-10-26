@@ -55,24 +55,139 @@ def complete_update_audit(state, *, checkpoint):
     if not isinstance(report_ref,dict):
         raise ValueError('completed whole-graph update has no exact native learner report binding')
     report_path=_bound(report_ref);report=json.loads(report_path.read_text())
-    if (progress.get('completed') is not True or progress.get('checkpoint_sha256')!=checkpoint.get('sha256')
-            or report.get('completed') is not True or report.get('numerics_ok') is not True
-            or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
-            or not (report.get('progress_numerics')or{}).get('passed')):
-        raise ValueError('completed whole-graph update report does not bind its exact published checkpoint')
+    if report_path.stat().st_size!=report_ref.get('bytes'):
+        raise ValueError('completed learner report size differs from its exact binding')
     report_binding={'path':str(report_path),'sha256':sha256_file_hex_cached(report_path),
         'bytes':report_path.stat().st_size}
-    round_directory = Path(str(active.get('active_update_round', '')))
+    from ..train.native_operation_report import control_progress
+    if control_progress(report,report_path)!=progress:
+        raise ValueError('compact learner progress differs from its exact bound report')
+    operation_receipt=None
+    round_directory=Path(str(active.get('active_update_round',''))).resolve(strict=True)
+    if round_directory not in report_path.parents:
+        raise ValueError('completed learner report escaped its exact active round directory')
+    if report.get('schema')=='natlang.native-coefficient-training-report/1':
+        parent_policy=active.get('update_coefficient_policy')
+        policy_ref=report.get('policy') or {}
+        evaluation=report.get('evaluation') or {}
+        exposure=report.get('exposure') or {}
+        checkpoint_ref=report.get('checkpoint') or {}
+        policy_path=_bound(policy_ref) if isinstance(policy_ref,dict) else None
+        checkpoint_path=_bound(checkpoint_ref) if isinstance(checkpoint_ref,dict) else None
+        if (not isinstance(parent_policy,dict) or not _bound(parent_policy).is_file()
+                or report.get('completed') is not True
+                or report.get('stage_kind')!='native-coefficient-policy'
+                or report.get('base_checkpoint_unchanged') is not True
+                or report.get('qualification_complete') is not True
+                or type(report.get('this_stage_updates')) is not int or report['this_stage_updates']<=0
+                or exposure.get('original_obligations_complete') is not True
+                or exposure.get('cancelled_uncredited_episodes')!=0
+                or checkpoint_path is None or round_directory not in checkpoint_path.parents
+                or checkpoint_ref.get('sha256')!=sha256_file_hex_cached(checkpoint_path)
+                or policy_path is None or round_directory not in policy_path.parents
+                or sha256_file_hex_cached(policy_path)!=policy_ref.get('sha256')
+                or not (evaluation.get('passed') is True and evaluation.get('final') is True
+                    and evaluation.get('coefficient_policy_sha256')==report.get('coefficient_policy_sha256'))):
+            raise ValueError('coefficient learner report lacks exact checkpoint, policy, exposure or task qualification')
+        from ..model.native_coefficient_policy import policy_core,actor_policy_sha256
+        policy=json.loads(policy_path.read_text());core=policy_core(policy)
+        parent=policy_core(json.loads(_bound(parent_policy).read_text()))
+        if (actor_policy_sha256(policy)!=report.get('coefficient_policy_sha256')
+                or core.get('base_checkpoint',{}).get('sha256')!=checkpoint.get('sha256')
+                or core.get('base_native_identity',{}).get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or parent.get('base_checkpoint',{}).get('sha256')!=checkpoint.get('sha256')
+                or parent.get('base_native_identity',{}).get('checkpoint_sha256')!=checkpoint.get('sha256')):
+            raise ValueError('coefficient output policy is not bound to the unchanged current native checkpoint')
+        if core.get('training_state'):_bound(core['training_state'])
+        operation_receipt={**report_binding,'scope':'native-coefficient-policy'}
+    elif report.get('completion_scope')=='policy-operation':
+        if (progress.get('completed') is not True or progress.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or report.get('completed') is not True or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or not (report.get('progress_numerics')or{}).get('passed')):
+            raise ValueError('completed policy operation report does not bind its exact published checkpoint')
+        receipt_path=report_path.parent/'native-training-receipt.json'
+        if not receipt_path.is_file():
+            raise ValueError('completed policy operation has no exact native training receipt')
+        receipt=json.loads(receipt_path.read_text())
+        receipt_report=receipt.get('training_receipt') or {}
+        boundary=receipt.get('continuation_boundary') or {}
+        exposure=receipt.get('exposure') or {}
+        receipt_checkpoint=receipt.get('checkpoint') or {}
+        receipt_report_path=_bound(receipt_report) if isinstance(receipt_report,dict) else None
+        receipt_checkpoint_path=Path(receipt_checkpoint.get('path','')).resolve(strict=True)
+        if (receipt.get('schema')!='natlang.native-training-readiness/1'
+                or receipt.get('policy_operation_completed') is not True
+                or receipt.get('completed') is not False
+                or receipt_checkpoint.get('sha256')!=checkpoint.get('sha256')
+                or sha256_file_hex_cached(receipt_checkpoint_path)!=checkpoint.get('sha256')
+                or receipt_checkpoint_path.stat().st_size!=checkpoint.get('bytes')
+                or receipt.get('native_identity',{}).get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or receipt_report.get('sha256')!=report_binding['sha256']
+                or receipt_report_path.stat().st_size!=report_binding['bytes']
+                or receipt.get('continuation')!=report.get('continuation')
+                or boundary!=report.get('continuation_boundary')
+                or boundary.get('kind')!='semantic-refresh'
+                or boundary.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or type(boundary.get('new_optimizer_updates')) is not int
+                or boundary['new_optimizer_updates']<=0):
+            raise ValueError('completed policy operation receipt does not bind its exact update/checkpoint')
+        operation_receipt={'path':str(receipt_path.resolve()),'sha256':sha256_file_hex_cached(receipt_path),
+            'bytes':receipt_path.stat().st_size,'scope':'policy-operation'}
+    elif active.get('update_mode')=='seed':
+        # A bounded native seed SFT is an independently audited supervised
+        # operation. It may intentionally leave the complete recipe source
+        # obligations open; that receipt records the real update without
+        # claiming it trained any collected RL task or completed the recipe.
+        if (progress.get('schema')!='natlang.neuralese-native-sft-report/1'
+                or report.get('numerics_ok') is not True
+                or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or not (report.get('progress_numerics')or{}).get('passed')):
+            raise ValueError('completed seed SFT report does not bind its exact checkpoint and finite update')
+        receipt_path=report_path.parent/'native-training-receipt.json'
+        if not receipt_path.is_file():
+            raise ValueError('completed seed SFT has no exact native training receipt')
+        receipt=json.loads(receipt_path.read_text())
+        receipt_report=receipt.get('training_receipt') or {}
+        boundary=receipt.get('continuation_boundary') or {}
+        exposure=receipt.get('exposure') or {}
+        receipt_checkpoint=receipt.get('checkpoint') or {}
+        receipt_report_path=_bound(receipt_report) if isinstance(receipt_report,dict) else None
+        receipt_checkpoint_path=Path(receipt_checkpoint.get('path','')).resolve(strict=True)
+        if (receipt.get('schema')!='natlang.native-training-readiness/1'
+                or receipt.get('completed') is not report.get('completed')
+                or receipt.get('mandatory_sft')!=report.get('mandatory_sft')
+                or receipt_checkpoint.get('sha256')!=checkpoint.get('sha256')
+                or sha256_file_hex_cached(receipt_checkpoint_path)!=checkpoint.get('sha256')
+                or receipt_checkpoint_path.stat().st_size!=checkpoint.get('bytes')
+                or receipt.get('native_identity',{}).get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or receipt_report.get('sha256')!=report_binding['sha256']
+                or receipt_report_path.stat().st_size!=report_binding['bytes']
+                or boundary!=report.get('continuation_boundary')
+                or type(boundary.get('new_optimizer_updates')) is not int
+                or boundary['new_optimizer_updates']<=0
+                or type(exposure.get('consumed_updates')) is not int or exposure['consumed_updates']<=0
+                or type(exposure.get('supervised_token_visits')) is not int or exposure['supervised_token_visits']<=0):
+            raise ValueError('seed SFT receipt does not bind its exact checkpoint and optimizer exposure')
+        operation_receipt={'path':str(receipt_path.resolve()),'sha256':sha256_file_hex_cached(receipt_path),
+            'bytes':receipt_path.stat().st_size,'scope':'seed-supervised-exposure'}
+    else:
+        if (progress.get('completed') is not True or progress.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or report.get('completed') is not True or report.get('numerics_ok') is not True
+                or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
+                or not (report.get('progress_numerics')or{}).get('passed')):
+            raise ValueError('completed whole-graph update report does not bind its exact published checkpoint')
     rollout_path = Path(str(active.get('update_rollouts', '')))
-    rollouts = None
-    if rollout_path.is_file():
-        rollouts = {'path': str(rollout_path.resolve()), 'sha256': sha256_file_hex_cached(rollout_path),
-            'bytes': rollout_path.stat().st_size}
+    rollout_path=rollout_path.resolve(strict=True)
+    if not rollout_path.is_file()or round_directory not in rollout_path.parents:
+        raise ValueError('completed whole-graph update lacks its exact active round rollout source')
+    rollouts={'path':str(rollout_path),'sha256':sha256_file_hex_cached(rollout_path),
+        'bytes':rollout_path.stat().st_size}
     record = {'schema': 'natlang.rl-production-completed-update/1', 'round': max(0, state.get('round', 0)-1),
         'round_directory': str(round_directory), 'mode': active.get('update_mode'),
         'rollouts': rollouts, 'stages': active.get('update_stages'),
         'coefficient_policy': active.get('update_coefficient_policy'), 'checkpoint': checkpoint,
-        'completion_report':report_binding}
+        'completion_report':report_binding,
+        **({'operation_receipt':operation_receipt} if operation_receipt is not None else {})}
     history = state.setdefault('completed_update_history', [])
     if not history or history[-1] != record:
         history.append(record)
@@ -87,6 +202,10 @@ def normalize_legacy_completed_update(state, state_path):
     """Clear a legacy active marker only when the current committed result proves completion."""
     active_keys=('active_update_round','update_mode','update_rollouts','update_stages','update_coefficient_policy')
     if not any(key in state for key in active_keys):return False
+    # Known active phases are retriable work, not stale residue. Let the normal
+    # state machine reopen the exact round/stage and validate its report,
+    # checkpoint, source bindings and publication step before committing it.
+    if state.get('phase') in {'updating','publishing','learner_pending','awaiting_semantic_refresh'}:return False
     if (state.get('phase')!='collect' or type(state.get('round'))is not int or state['round']<1
             or type(state.get('trained_rounds'))is not int or state['trained_rounds']<1
             or any(key in state for key in ('pending_native_checkpoint','pending_native_round_dir',

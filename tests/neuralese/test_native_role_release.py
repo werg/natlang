@@ -254,7 +254,7 @@ class FileProtocolIO:
         self.config={'sandboxes':{}}
         self.collector_assets={}
         for name,row in rows.items():
-            runtime=Path(row['plan_path']).parent/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
+            runtime=Path(row['path']).parent/'runtime';script=runtime/'scripts/run_bonsai_queue.py'
             script.parent.mkdir(parents=True,exist_ok=True);script.write_text('# fixture collector\n')
             self.config['sandboxes'][name+'-actual-sid']={'runtime':str(runtime)}
             self.collector_assets[name]={'path':str(script),'kind':'task-source-file',
