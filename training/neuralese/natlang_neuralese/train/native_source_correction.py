@@ -47,22 +47,28 @@ def _pending_communication_class(training, pending_item, row_id, prior_receipt):
     history = (training.get('options') or {}).get('source_correction_history') or []
     if not isinstance(history, list) or any(not isinstance(item, dict) for item in history):
         raise ValueError('pending source correction history is malformed')
-    matching = [item for item in history
+    matching = [(index, item) for index, item in enumerate(history)
                 if item.get('proof_sha256') == origin_ref['sha256']
                 and Path(str(item.get('proof_path', ''))).resolve() == Path(str(origin_ref['path'])).resolve()]
-    if len(matching) != 1 or row_id not in set(matching[0].get('deferred_rows') or []):
+    if len(matching) != 1:
+        raise ValueError('pending source row classification proof is absent or ambiguous in saved history: ' + row_id)
+    _, origin_record = matching[0]
+    if row_id not in set(origin_record.get('deferred_rows') or []):
         raise ValueError('pending source row is not deferred by its authenticated correction history: ' + row_id)
-    if _binding(matching[0].get('current_source')) != _binding(prior_receipt):
-        raise ValueError('pending source row correction lineage does not end at the loaded source: ' + row_id)
-    if (_binding(origin.get('source_receipt')) != _binding(matching[0].get('prior_source'))
-            or origin.get('model_id') != matching[0].get('model_id')
-            or origin.get('stage_id') != matching[0].get('stage_id')):
+    pinned_classes = origin_record.get('deferred_row_classes')
+    if (not isinstance(pinned_classes, dict)
+            or type(pinned_classes.get(row_id)) is not bool
+            or pinned_classes[row_id] is not pending_item['communication']):
+        raise ValueError('pending source row class differs from its saved deferral record: ' + row_id)
+    if (_binding(origin.get('source_receipt')) != _binding(origin_record.get('prior_source'))
+            or origin.get('model_id') != origin_record.get('model_id')
+            or origin.get('stage_id') != origin_record.get('stage_id')):
         raise ValueError('pending source row classification is detached from its source lineage: ' + row_id)
     dependencies = source_correction_dependencies(origin_ref)
     proof_path = Path(origin_ref['path']).resolve(strict=True)
     proof = json.loads(proof_path.read_text())
-    if (_binding(proof.get('current_source')) != _binding(prior_receipt)
-            or _binding(proof.get('prior_source')) != _binding(origin.get('source_receipt'))
+    if (_binding(proof.get('current_source')) != _binding(origin_record.get('current_source'))
+            or _binding(proof.get('prior_source')) != _binding(origin_record.get('prior_source'))
             or proof.get('stage_id') != origin.get('stage_id')
             or proof.get('model_id') != origin.get('model_id')):
         raise ValueError('pending source row origin proof differs from its saved lineage: ' + row_id)
@@ -373,7 +379,7 @@ def _apply_protected_held_correction(result, training, proof, held, proof_path):
 def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_receipt,
         current_receipt, prior_bindings, current_bindings, current_order,
         current_communication_ids, corrected, deferred, added, pending,
-        protected_held=None):
+        protected_held=None, proof=None, proof_path=None):
     """Rebind other saved SFT cursors that consumed the exact prior source.
 
     A checkpoint can carry several independently resumable supervised-stage
@@ -387,8 +393,6 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
     current_ids = set(current_bindings)
     prior_ids = set(prior_bindings)
     communication_ids = set(current_communication_ids)
-    protected_prior = (_binding(protected_held['prior_receipt'])
-                       if protected_held is not None else None)
     protected_current = (_binding(protected_held['current_receipt'])
                          if protected_held is not None else None)
     transitions = []
@@ -443,7 +447,9 @@ def _propagate_source_correction_to_carried_frames(progress, *, stage_id, prior_
                 options[option_key] = [key for key in current_order if key in communication_ids]
         frame['options'] = options
 
-        if protected_held is not None and len(receipts) > 1 and _binding(receipts[1]) == protected_prior:
+        if (protected_held is not None and len(receipts) > 1
+                and _receipt_matches_with_staged_relocation(
+                    protected_held['prior_receipt'], receipts[1], proof or {}, proof_path)):
             held_bindings = dict(protected_held['current_bindings'])
             if frame.get('held_row_bindings') != protected_held['prior_bindings']:
                 raise ValueError('carried frame held source differs from exact protected predecessor: '+frame_id)
@@ -529,7 +535,17 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         raise ValueError('source correction needs complete earned row bindings and order')
     old_origins = _origins(prior_receipt, old_order)
     new_origins = _origins(current_source_receipt, current_order)
-    pending = dict(training.get('pending_source_rows') or {})
+    progress_before = training.get('sft_progress') or {}
+    source_frame = progress_before.get(stage_id) or {}
+    top_pending = dict(training.get('pending_source_rows') or {})
+    frame_pending = dict(source_frame.get('pending_source_rows') or {})
+    if frame_pending and not _receipt_matches_with_staged_relocation(
+            proof.get('prior_source'), (source_frame.get('source_receipts') or [{}])[0], proof, path):
+        raise ValueError('pending source rows belong to a different saved stage source')
+    for row_id, item in top_pending.items():
+        if row_id in frame_pending and frame_pending[row_id] != item:
+            raise ValueError('top-level and stage-frame pending source rows differ: ' + row_id)
+    pending = {**frame_pending, **top_pending}
     row_path = _proof_file(path, proof.get('row_bindings_path', ''))
     if sha256_file_hex_cached(row_path) != proof.get('row_bindings_sha256'):
         raise ValueError('source correction row ledger digest differs')
@@ -544,8 +560,13 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
                 rows[row_id] = row
     corrected, deferred, added = set(), set(), set()
     changes = []
-    counts = training.get('exposure_counts') or {}
+    counts = dict(training.get('exposure_counts') or {})
     quotas = dict(training.get('required_visits') or {})
+    for row_id in pending:
+        if row_id not in counts and row_id in (source_frame.get('exposure_counts') or {}):
+            counts[row_id] = source_frame['exposure_counts'][row_id]
+        if row_id not in quotas and row_id in (source_frame.get('required_visits') or {}):
+            quotas[row_id] = source_frame['required_visits'][row_id]
     options = training.get('options') or {}
     prior_communication = set(options.get('_communication_ids') or [])
     current_communication = set(current_communication_ids)
@@ -692,6 +713,8 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         'prior_source': prior_ref, 'current_source': current_ref,
         'stage_id': stage_id, 'corrected_rows': changes,
         'deferred_rows': sorted(deferred), 'added_rows': sorted(added),
+        'deferred_row_classes': {row_id:(pending.get(row_id) or {}).get('communication')
+            for row_id in sorted(deferred)},
         'old_target_exposure_retired': True,
         'optimizer_rng_weights': 'preserved',
         'at_global_step': int(training.get('global_step', training.get('step', 0))),
@@ -813,7 +836,7 @@ def apply_source_correction(training, proof_path, *, model_id, stage_id,
         current_bindings=current_bindings, current_order=current_order,
         current_communication_ids=current_communication_ids, corrected=corrected,
         deferred=deferred, added=added, pending=pending,
-        protected_held=protected_held)
+        protected_held=protected_held, proof=proof, proof_path=path)
     if carried_transitions:
         result['sft_progress'] = progress
         result['options']['source_correction_history'][-1]['carried_frame_transitions'] = carried_transitions

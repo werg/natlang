@@ -265,6 +265,74 @@ def test_pending_ordinary_row_cannot_be_reclassified_as_communication(tmp_path):
             current_order=['ordinary',old_id],current_communication_ids=[old_id])
 
 
+def test_pending_communication_class_survives_source_append_and_redeferral(tmp_path):
+    import torch
+
+    edge = 'edge:late'
+    source_a = _receipt('/a/train.json', 'source-a', ['ordinary', edge], ['sha-o', 'sha-edge'])
+    source_b = _receipt('/b/train.json', 'source-b', ['ordinary'], ['sha-o'])
+    training = {'source_receipts':[source_a],
+        'source_row_bindings':{'ordinary':{'h':'o'},edge:{'h':'edge'}},
+        'source_row_order':['ordinary',edge], 'exposure_counts':{'ordinary':2,edge:3},
+        'required_visits':{'ordinary':4,edge:5}, 'pending_source_rows':{},
+        'options':{'stage_id':'native_full_sft','epochs':1,'_communication_ids':[edge]},
+        'sft_progress':{'native_full_sft':{'source_receipts':[source_a],
+            'source_row_bindings':{'ordinary':{'h':'o'},edge:{'h':'edge'}},
+            'source_row_order':['ordinary',edge], 'exposure_counts':{'ordinary':2,edge:3},
+            'required_visits':{'ordinary':4,edge:5},
+            'options':{'stage_id':'native_full_sft','epochs':1,'_communication_ids':[edge]}}},
+        'optimizer':{'state':{'moment':torch.tensor([1.25])}},
+        'rng':{'cpu':torch.arange(4,dtype=torch.uint8)},'weights':{'w':torch.tensor([2.5])},
+        'global_step':11}
+    proof1 = _write_proof(tmp_path, source_a, source_b,[
+        _row(edge,{'h':'edge'},None,'sha-edge',None,'deferred','source still under repair',True)],
+        model_id='mellum:inventory',name='defer-one')
+    training,_=apply_source_correction(training,proof1,model_id='mellum:inventory',
+        stage_id='native_full_sft',current_source_receipt=source_b,
+        current_bindings={'ordinary':{'h':'o'}},current_order=['ordinary'],current_communication_ids=[])
+    original_pending=copy.deepcopy(training['pending_source_rows'][edge])
+    source_c = _receipt('/c/train.json','source-c',['ordinary','append:1'],['sha-o','sha-append'])
+    proof2 = _write_proof(tmp_path,source_b,source_c,[
+        _row(edge,{'h':'edge'},None,'sha-edge',None,'deferred','source still under repair',True),
+        _row('append:1',None,{'h':'append'},None,'sha-append','added')],
+        model_id='mellum:inventory',name='append-and-redefer')
+    tampered=copy.deepcopy(training)
+    tampered['pending_source_rows'][edge]['communication']=False
+    with pytest.raises(ValueError,match='class differs from its saved deferral record'):
+        apply_source_correction(tampered,proof2,model_id='mellum:inventory',
+            stage_id='native_full_sft',current_source_receipt=source_c,
+            current_bindings={'ordinary':{'h':'o'},'append:1':{'h':'append'}},
+            current_order=['ordinary','append:1'],current_communication_ids=[])
+    training,_=apply_source_correction(training,proof2,model_id='mellum:inventory',
+        stage_id='native_full_sft',current_source_receipt=source_c,
+        current_bindings={'ordinary':{'h':'o'},'append:1':{'h':'append'}},
+        current_order=['ordinary','append:1'],current_communication_ids=[])
+    assert training['pending_source_rows'][edge]==original_pending
+    # A real serialization boundary preserves the proof lineage used by the
+    # later correction, while the active communication list excludes the row.
+    slot=tmp_path/'lineage.pt';torch.save(training,slot)
+    training=torch.load(slot,map_location='cpu',weights_only=False)
+    source_d = _receipt('/d/train.json','source-d',
+        ['ordinary','append:1',edge],['sha-o','sha-append','sha-edge-fixed'])
+    proof3 = _write_proof(tmp_path,source_c,source_d,[
+        _row(edge,{'h':'edge'},{'h':'edge-fixed'},'sha-edge','sha-edge-fixed','corrected',
+             old_communication=True)],model_id='mellum:inventory',name='reintroduce-after-append')
+    result,summary=apply_source_correction(training,proof3,model_id='mellum:inventory',
+        stage_id='native_full_sft',current_source_receipt=source_d,
+        current_bindings={'ordinary':{'h':'o'},'append:1':{'h':'append'},edge:{'h':'edge-fixed'}},
+        current_order=['ordinary','append:1',edge],current_communication_ids=[edge])
+    assert summary['corrected_rows']==1
+    assert result['pending_source_rows']=={}
+    assert result['exposure_counts'][edge]==0
+    assert result['required_visits'][edge]==1
+    assert result['options']['_communication_ids']==[edge]
+    assert len(result['options']['source_correction_history'])==3
+    assert result['options']['source_correction_history'][-1]['corrected_rows'][0]['prior_exposure']==3
+    assert torch.equal(result['optimizer']['state']['moment'],training['optimizer']['state']['moment'])
+    assert torch.equal(result['rng']['cpu'],training['rng']['cpu'])
+    assert torch.equal(result['weights']['w'],training['weights']['w'])
+
+
 @pytest.mark.parametrize('mutate', ['ordinary-change', 'missing-proof-row', 'reordered'])
 def test_source_correction_rejects_unproved_changes(tmp_path, mutate):
     prior = _receipt('/old/train.json', 'old', ['keep', 'edge'], ['sha-keep', 'sha-edge'])
@@ -525,6 +593,62 @@ def test_protected_held_coverage_rebinds_only_after_exact_same_class_rows():
            {'id':'h2','binding':'same','communication':False}]
     with pytest.raises(ValueError,match='class membership/order'):
         rebind_held_coverage_after_exact_correction(previous,moved,coverage,source_sha256='new-source')
+
+
+def test_carried_held_correction_accepts_only_exact_authenticated_source_relocation(tmp_path):
+    from natlang_neuralese.train.native_source_correction import _propagate_source_correction_to_carried_frames
+    from natlang_neuralese.train.native_held import held_selection
+
+    staged=tmp_path/'staged-held.jsonl';staged.write_bytes(b'held\n')
+    logical='/work/native-production/data/held.jsonl'
+    source_map=tmp_path/'source-map.json'
+    source_map.write_text(json.dumps({'schema':'natlang.staged-source-map/1',
+        'paths':{logical:str(staged.resolve())}},sort_keys=True))
+    held_sha=_sha(staged)
+    map_sha=_sha(source_map)
+    proof=tmp_path/'correction-with-relocation.json'
+    proof.write_text(json.dumps({'schema':SCHEMA,
+        'source_map':{'path':str(source_map),'sha256':map_sha},
+        'prior_held_relocation':{'schema':'natlang.staged-receipt-relocation/1',
+            'logical_path':logical,'staged_path':str(staged.resolve()),
+            'sha256':held_sha,'source_map_path':str(source_map.resolve()),
+            'source_map_sha256':map_sha}},sort_keys=True))
+    prior_train=_receipt('/old/train.json','train-old',['edge'],['sha-edge'])
+    current_train=_receipt('/new/train.json','train-new',['edge'],['sha-edge-new'])
+    prior_held={'path':str(staged.resolve()),'sha256':held_sha,'rows':1,
+        'sources':[{'path':str(staged.resolve()),'sha256':held_sha,'rows':1,'id':'held:a'}]}
+    current_held=_receipt('/new/held.json','held-new',['held:a'],['sha-held-new'])
+    prior_entries=[{'id':'held:a','binding':{'target':'old'},'groups':['world:a'],
+        'communication':False,'forward_tokens':3}]
+    current_entries=[{'id':'held:a','binding':{'target':'new'},'groups':['world:a'],
+        'communication':False,'forward_tokens':3}]
+    _,coverage,_=held_selection(prior_entries,source_sha256=held_sha,final=True)
+    carried={'source_receipts':[prior_train,{'path':logical,'sha256':held_sha}],
+        'source_row_bindings':{'edge':{'graph':'old'}},'source_row_order':['edge'],
+        'exposure_counts':{'edge':1},'required_visits':{'edge':2},
+        'held_row_bindings':{'held:a':prior_entries[0]['binding']},
+        'metrics':{'held_coverage':coverage},
+        'options':{'epochs':1,'_communication_ids':['edge']}}
+    unrelated_held={**carried,'source_receipts':[prior_train,{'path':'/other/held.json','sha256':'other'}],
+        'held_row_bindings':{'held:a':{'target':'other'}}}
+    progress={'carried':carried,'different-held-source':unrelated_held}
+    protected={'prior_receipt':prior_held,'current_receipt':current_held,
+        'prior_bindings':{'held:a':prior_entries[0]['binding']},
+        'current_bindings':{'held:a':current_entries[0]['binding']},
+        'prior_entries':prior_entries,'current_entries':current_entries}
+    transitions=_propagate_source_correction_to_carried_frames(progress,stage_id='native_full_sft',
+        prior_receipt=prior_train,current_receipt=current_train,
+        prior_bindings={'edge':{'graph':'old'}},current_bindings={'edge':{'graph':'new'}},
+        current_order=['edge'],current_communication_ids=['edge'],corrected={'edge'},deferred=set(),
+        added=set(),pending={},protected_held=protected,proof=json.loads(proof.read_text()),proof_path=proof)
+    assert transitions[0]['stage_id']=='carried'
+    assert progress['carried']['source_receipts'][1]==current_held
+    assert progress['carried']['held_row_bindings']=={'held:a':{'target':'new'}}
+    rebound=progress['carried']['metrics']['held_coverage']
+    assert rebound['classes']['ordinary']['visits']==[0]
+    assert rebound['forward_token_visits']==0
+    assert progress['different-held-source']['source_receipts'][1]['path']=='/other/held.json'
+    assert progress['different-held-source']['held_row_bindings']=={'held:a':{'target':'other'}}
 
 
 def test_source_correction_uses_fractional_epoch_schedule_for_fresh_rows(tmp_path):
