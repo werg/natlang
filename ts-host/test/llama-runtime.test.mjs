@@ -9,16 +9,17 @@ import { join } from 'node:path';
 import { discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion } from '../dist/model/index.js';
 
-function fakeServer(path, version = '0.4.1', build = 10964) {
+function fakeServer(path, version = '0.5.0', build = 11146) {
   writeFileSync(path, `#!${process.execPath}\nconsole.log('version: ${version} (build ${build}, commit b29c606e2)');\n`);
   chmodSync(path, 0o755);
 }
 
 test('llama.cpp compatibility checks version and build boundaries', () => {
-  assert.equal(isCompatibleLlamaVersion('0.4.1', 10964), true);
-  assert.equal(isCompatibleLlamaVersion('0.4.1-dev', 10964), true);
-  assert.equal(isCompatibleLlamaVersion('0.4.1', 10963), false);
-  assert.equal(isCompatibleLlamaVersion('0.5.0', 20000), false);
+  assert.equal(isCompatibleLlamaVersion('0.5.0', 11146), true);
+  assert.equal(isCompatibleLlamaVersion('0.5.0-dev', 11146), true);
+  assert.equal(isCompatibleLlamaVersion('0.5.0', 11145), false);
+  assert.equal(isCompatibleLlamaVersion('0.4.1', 10964), false);
+  assert.equal(isCompatibleLlamaVersion('0.6.0', 20000), false);
 });
 
 test('runtime discovery validates explicit and PATH executables', () => {
@@ -38,7 +39,7 @@ test('runtime discovery validates explicit and PATH executables', () => {
 test('managed runtime downloads, verifies, extracts, and is rediscovered', { skip: process.platform === 'win32' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-install-'));
   const payload = join(root, 'payload'), binaryDirectory = join(payload, 'build', 'bin');
-  mkdirSync(binaryDirectory, { recursive: true }); fakeServer(join(binaryDirectory, 'llama-server'));
+  mkdirSync(binaryDirectory, { recursive: true }); fakeServer(join(binaryDirectory, 'llama-server'), '0.4.1', 10964);
   const archive = join(root, 'runtime.tar.gz');
   execFileSync('tar', ['-czf', archive, '-C', payload, '.']);
   const bytes = readFileSync(archive), sha256 = createHash('sha256').update(bytes).digest('hex');
