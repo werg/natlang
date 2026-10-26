@@ -396,6 +396,8 @@ def capacity_identity(config,args,backend):
                 beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None))
         objective={'objective':value.binding()}
     return {**objective,
+        **({'optimizer_state_storage':args.optimizer_state_storage}
+           if getattr(args,'optimizer_state_storage','device')=='cpu' else {}),
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
            if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,

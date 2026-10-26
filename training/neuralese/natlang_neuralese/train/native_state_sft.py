@@ -1026,6 +1026,8 @@ def build_parser():
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
     parser.add_argument('--objective-spec', type=Path, default=None)
+    parser.add_argument('--optimizer-state-storage',choices=('device','cpu'),default=None,
+                        help='Keep MuonSR history on device or page each complete matrix update from CPU storage.')
     parser.add_argument('--preference-beta',type=float)
     parser.add_argument('--preference-margin',type=float)
     return parser
@@ -1279,6 +1281,18 @@ def _main(argv=None, *, requested_refresh):
             saved_options.get('cotangent_accumulator_history') or [])
     checkpoint_options['cotangent_accumulator_backend'] = args.cotangent_accumulator_backend
     model.native_cotangent_accumulator_backend = args.cotangent_accumulator_backend
+    previous_state_storage=saved_options.get('optimizer_state_storage','device')
+    args.optimizer_state_storage=args.optimizer_state_storage or previous_state_storage
+    if args.optimizer_state_storage not in ('device','cpu'):
+        raise ValueError('native checkpoint declares unknown optimizer state storage')
+    storage_history=list(saved_options.get('optimizer_state_storage_history')or[])
+    if saved_training and args.optimizer_state_storage!=previous_state_storage:
+        storage_history.append({'from':previous_state_storage,'to':args.optimizer_state_storage,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+            'weights_optimizer_rng_exposure':'preserved',
+            'capacity_request':_cotangent_transition_capacity_request(args)})
+    checkpoint_options['optimizer_state_storage']=args.optimizer_state_storage
+    checkpoint_options['optimizer_state_storage_history']=storage_history
     previous_recipe=(saved_training.get('options') or {}).get('recipe_binding')
     if previous_recipe is not None:
         old_recipe=json.loads(previous_recipe) if isinstance(previous_recipe,str) else previous_recipe
@@ -1484,6 +1498,7 @@ def _main(argv=None, *, requested_refresh):
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
                 'cotangent_accumulator_backend': args.cotangent_accumulator_backend,
+                'optimizer_state_storage':args.optimizer_state_storage,
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
@@ -1778,6 +1793,9 @@ def _main(argv=None, *, requested_refresh):
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
+    if optimizer.latent is None or not callable(getattr(optimizer.latent,'set_state_storage',None)):
+        raise ValueError('native MuonSR optimizer omitted its explicit history storage mechanism')
+    optimizer.latent.set_state_storage(args.optimizer_state_storage)
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
