@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "075",
+  "title": "Community Agreement Mediator",
+  "entrypoint": "mediateAgreement.nl",
+  "interfaces": [
+    {
+      "name": "mediateAgreement",
+      "path": "mediateAgreement.nl",
+      "purpose": "Prepare bounded agreement options and trials while preserving participant-specific accounts, consent and outcomes.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "community-agreement-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverAgreements",
+        "paths": [
+          "mediateAgreement/recoverAgreementHistory.nl",
+          "mediateAgreement/recoverAgreementHistory/compareAgreementAccounts.nl",
+          "mediateAgreement/verifyExistingAgreement.nl"
+        ]
+      },
+      {
+        "stage": "mapPositions",
+        "paths": [
+          "mediateAgreement/mapParticipantPositions.nl"
+        ]
+      },
+      {
+        "stage": "identifyOptions",
+        "paths": [
+          "mediateAgreement/findBoundedOptions.nl"
+        ]
+      },
+      {
+        "stage": "designTrial",
+        "paths": [
+          "mediateAgreement/designReversibleTrial.nl",
+          "mediateAgreement/designReversibleTrial/qualifyTrialAcceptance.nl"
+        ]
+      },
+      {
+        "stage": "reviewOutcome",
+        "paths": [
+          "mediateAgreement/reviewTrialEvidence.nl",
+          "mediateAgreement/reviewTrialEvidence/compareTrialOutcomes.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "mediateAgreement/recoverAgreementHistory.nl",
+          "mediateAgreement/designReversibleTrial/qualifyTrialAcceptance.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "mediateAgreement/recoverAgreementHistory.nl",
+          "mediateAgreement/recoverAgreementHistory/compareAgreementAccounts.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "mediateAgreement/reviewTrialEvidence.nl",
+          "mediateAgreement/reviewTrialEvidence/compareTrialOutcomes.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "mediateAgreement/designReversibleTrial.nl",
+          "mediateAgreement/reviewTrialEvidence.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "mediateAgreement/findBoundedOptions.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "mediateAgreement.nl",
+    "mediateAgreement/designReversibleTrial.nl",
+    "mediateAgreement/designReversibleTrial/qualifyTrialAcceptance.nl",
+    "mediateAgreement/findBoundedOptions.nl",
+    "mediateAgreement/mapParticipantPositions.nl",
+    "mediateAgreement/recoverAgreementHistory.nl",
+    "mediateAgreement/recoverAgreementHistory/compareAgreementAccounts.nl",
+    "mediateAgreement/reviewTrialEvidence.nl",
+    "mediateAgreement/reviewTrialEvidence/compareTrialOutcomes.nl",
+    "mediateAgreement/verifyExistingAgreement.nl",
+    "types.ts"
+  ]
+}

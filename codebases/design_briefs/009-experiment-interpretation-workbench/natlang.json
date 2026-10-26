@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/design-brief-009-experiment-interpreter","version":"0.1.0","description":"Versioned experiment design, instrumentation audit, result interpretation, and follow-up work orders.","engines":{"natlang":">=0.1.0"}}

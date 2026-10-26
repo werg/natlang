@@ -1,0 +1,50 @@
+{
+  "application_id": "090",
+  "title": "Archive Research Commission Manager",
+  "source_relative_path": "applications/18-archives-museums-and-cultural-heritage/090-archive-research-commission-manager.md",
+  "source_sha256": "2c9279061efd71859527c257efb64e0a3decc5b7e317fae38ea63e27291b244a",
+  "domain_id": "18",
+  "stages": [
+    {
+      "name": "frameCommission",
+      "output_type": "ResearchCommissionScope",
+      "algorithm": "Interpret the requester’s goal and decompose it into answerable historical questions. Identify what available collections could establish, distinguish factual lookup from interpretive synthesis, and agree a bounded effort and stopping rule before searching indefinitely.",
+      "gate": "Each subquestion has a plausible evidence path and an explicit inferential limit."
+    },
+    {
+      "name": "planSearch",
+      "output_type": "ArchiveSearchPlan",
+      "algorithm": "Select collections and search strategies using catalog structure, terminology variants, dates, and known access limits. Include negative search paths and record why a collection is relevant rather than relying only on keyword matches.",
+      "gate": "Search plan distinguishes accessible, inaccessible, unsearched, and exhausted collections."
+    },
+    {
+      "name": "followEvidence",
+      "output_type": "ArchiveLead",
+      "algorithm": "Read retrieved records in context, extract relevant evidence, and formulate bounded follow-up leads. Distinguish direct evidence from references to missing sources, avoid circular citation chains, and stop low-value leads under the agreed effort budget.",
+      "gate": "Every lead has a question-specific rationale and source provenance."
+    },
+    {
+      "name": "reconcileFindings",
+      "output_type": "ArchiveFinding",
+      "algorithm": "Compare evidence across sources while preserving chronology, attribution, and disagreement. State what was found and what remains uncertain, and do not turn an unsuccessful search in limited collections into proof that an event never occurred.",
+      "gate": "Conclusions remain within actual evidence and search coverage."
+    },
+    {
+      "name": "assembleDossier",
+      "output_type": "ResearchDossier",
+      "algorithm": "Produce an evidence dossier with findings, source references, search history, unresolved leads, and reuse restrictions. Tailor the narrative to the commission while preserving methodological limits and separating the researcher’s interpretation from quoted or recorded facts.",
+      "gate": "Another researcher can reproduce the searched scope and distinguish evidence from inference."
+    }
+  ],
+  "operational_details": [
+    "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+    "A collection is temporarily closed: preserve the coverage limitation.",
+    "Historical terminology differs from the request: maintain query variants and their results.",
+    "A promising lead exceeds budget: present a scoped extension decision instead of continuing silently.",
+    "A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image."
+  ],
+  "scenario": {
+    "representative_episode": "A client asks whether a local organization influenced an event, but available collections are incomplete and several sources cite one missing document.",
+    "independent_truth": "Fictional archives, known source contents, access restrictions, search coverage, and supported versus unsupported historical claims."
+  }
+}

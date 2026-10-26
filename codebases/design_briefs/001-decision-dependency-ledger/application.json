@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "001",
+  "title": "Decision-dependency ledger",
+  "entrypoint": "reopenDecisionLedger.nl",
+  "interfaces": [
+    {
+      "name": "reopenDecisionLedger",
+      "path": "reopenDecisionLedger.nl",
+      "purpose": "Reopen only supported changed premise regions and route exact versioned questions to accountable owners.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "decision-ledger"
+    },
+    {
+      "name": "resolveLedgerQuestion",
+      "path": "resolveLedgerQuestion.nl",
+      "purpose": "Record a signed owner response against its exact pending question and current decision revisions.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "decision-ledger"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reopenDecisionLedger.nl",
+    "reopenDecisionLedger/comparePremiseCorrections.nl",
+    "reopenDecisionLedger/discoverDecisionPremises.nl",
+    "reopenDecisionLedger/discoverDecisionPremises/testCounterfactualDependence.nl",
+    "reopenDecisionLedger/projectRestrictedLedger.nl",
+    "reopenDecisionLedger/reconstructAdoptions.nl",
+    "reopenDecisionLedger/recoverMeetingActs.nl",
+    "reopenDecisionLedger/recoverMeetingActs/classifyMeetingActs.nl",
+    "reopenDecisionLedger/routeCurrentReviewOwners.nl",
+    "reopenDecisionLedger/walkReconsiderationFrontier.nl",
+    "reopenDecisionLedger/walkReconsiderationFrontier/groupPremiseQuestions.nl",
+    "resolveLedgerQuestion.nl",
+    "resolveLedgerQuestion/verifyOwnerResolution.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractDecisions",
+        "paths": [
+          "reopenDecisionLedger/reconstructAdoptions.nl"
+        ]
+      },
+      {
+        "stage": "bindAssumptions",
+        "paths": [
+          "reopenDecisionLedger/discoverDecisionPremises/testCounterfactualDependence.nl"
+        ]
+      },
+      {
+        "stage": "assessChange",
+        "paths": [
+          "reopenDecisionLedger/comparePremiseCorrections.nl"
+        ]
+      },
+      {
+        "stage": "planReconsideration",
+        "paths": [
+          "reopenDecisionLedger/walkReconsiderationFrontier.nl"
+        ]
+      },
+      {
+        "stage": "recordResolution",
+        "paths": [
+          "resolveLedgerQuestion/verifyOwnerResolution.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "reopenDecisionLedger/routeCurrentReviewOwners.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "reopenDecisionLedger/projectRestrictedLedger.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "resolveLedgerQuestion/verifyOwnerResolution.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "reopenDecisionLedger/reconstructAdoptions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reopenDecisionLedger/comparePremiseCorrections.nl"
+        ]
+      }
+    ]
+  }
+}

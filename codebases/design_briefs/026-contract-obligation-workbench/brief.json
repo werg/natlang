@@ -1,0 +1,49 @@
+{
+  "application_id": "026",
+  "title": "Contract obligation workbench",
+  "source_relative_path": "applications/06-contracts-policies-and-information-governance/026-contract-obligation-workbench.md",
+  "program_root": "codebases/design_briefs/026-contract-obligation-workbench",
+  "source_sha256": "31e60e2c3a8e0be91263c1ca1a25da83c8601128327df1fd7c03171d1b4dd33d",
+  "domain_id": "06",
+  "stages": [
+    {
+      "name": "parseObligations",
+      "output_type": "ContractObligation",
+      "algorithm": "Extract atomic obligations with actor, beneficiary, trigger, deadline, and exceptions. Separate descriptions and aspirations from operative provisions, retain cross-references, and preserve unknown roles rather than assigning responsibility from nearby names.",
+      "gate": "Each obligation retains all material conditions and supporting clause spans."
+    },
+    {
+      "name": "resolveInteractions",
+      "output_type": "ObligationRelation",
+      "algorithm": "Interpret cross-references and interactions among provisions under the supplied authority hierarchy. Distinguish a narrow exception from replacement of an entire obligation and preserve unresolved conflicts for qualified review instead of guessing a priority rule.",
+      "gate": "Every relation has scope and source support; conflict is not silently converted into supersession."
+    },
+    {
+      "name": "assessEvents",
+      "output_type": "TriggerFinding",
+      "algorithm": "Compare incoming operational events with contractual triggers and conditions. Distinguish an allegation that a trigger occurred from established evidence, and request the smallest missing fact when activation would materially change a duty or deadline.",
+      "gate": "Trigger activation requires evidence under the selected interpretation version."
+    },
+    {
+      "name": "planPerformance",
+      "output_type": "ObligationTask",
+      "algorithm": "Turn active obligations into bounded tasks with ownership, dependencies, and exact computed dates. Preserve legal interpretation separately from operational scheduling and identify impossible or conflicting task requirements before issuing commitments.",
+      "gate": "No unowned active obligation; dates use the configured calendar and explicit deadline rule."
+    },
+    {
+      "name": "verifyDischarge",
+      "output_type": "ObligationStatus",
+      "algorithm": "Compare completed actions with the actual duty and any acceptance condition. Distinguish performance from waiver or settlement, record reviewer-approved interpretations, and keep disputed discharge visible rather than closing on an internal completion flag.",
+      "gate": "Satisfaction is supported; waivers require their own scoped authority evidence."
+    }
+  ],
+  "operational_details": [
+    "A deadline uses business days: store the agreed calendar rather than assuming local weekends.",
+    "A party changes its legal name: preserve identity and do not treat it as a new counterparty automatically.",
+    "A notice is sent to the wrong address: separate dispatch from contractually effective notice.",
+    "A clause is disputed: display alternative operational consequences pending review.",
+    "A confidential clause supports a shared task: expose only the minimum necessary instruction."
+  ],
+  "representative_episode": "An agreement requires notice after a verified outage, with a narrow emergency exception that changes timing but not the notice obligation.",
+  "independent_truth_basis": "Generated contracts with explicit trigger truth, exception scope, event histories, and exact expected obligation states."
+}

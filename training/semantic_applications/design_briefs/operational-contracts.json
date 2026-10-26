@@ -1,0 +1,1006 @@
+{
+  "schema": "natlang.design-brief-operational-contracts/1",
+  "source_section": "9. Five details that matter in actual use",
+  "applications": {
+    "001": {
+      "source_sha256": "5a2770d0b379fcfa81b85ad9e7b3226d45846de368286bf23dd3658984bf014c",
+      "details": [
+        "A decision owner leaves: retain the historical author and route new reviews through an explicit successor assignment.",
+        "A private source supports a public decision: expose a restricted-evidence marker, never a revealing excerpt.",
+        "Two reviews finish concurrently: reject the stale resolution and show the intervening change rather than overwriting.",
+        "A renamed project receives copied notes: keep identity mapping separate from evidence independence.",
+        "A meeting correction arrives late: retain both recorded and effective dates and reopen only the affected interval."
+      ]
+    },
+    "002": {
+      "source_sha256": "a897b1a9ac04dd4ca7c4c28323514f45f9fb6c2721bece250b47c5522ed42a78",
+      "details": [
+        "A page is edited during review: rebase only nonconflicting sections and require renewed approval for changed meaning.",
+        "A translated page lags its source: flag edition mismatch rather than calling the translation false.",
+        "A link points to an archived policy: preserve the archive but redirect current guidance explicitly.",
+        "A denied source vanishes from search: invalidate derived claims without leaking its title.",
+        "A release partially fails: retain a repair queue and do not mark the bundle fully published."
+      ]
+    },
+    "003": {
+      "source_sha256": "99514843910d5d0b0cc352c797c30c8a5af29f1c5b19fd9f92ba1afab00661ea",
+      "details": [
+        "An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail.",
+        "A successor accepts only part of a project: split obligations before acknowledging ownership.",
+        "An external customer expects a named person: draft a reviewed introduction and record delivery.",
+        "A recurring task has no written deadline: derive a proposed cadence but require owner confirmation.",
+        "A personal note contains useful context: request selective sharing rather than exporting the whole notebook."
+      ]
+    },
+    "004": {
+      "source_sha256": "20a5029c1e329691a53ab9fdb2f654db36ac1ceeddff534d67ff20746fffda3b",
+      "details": [
+        "The same acronym names different systems: require context-bound expansion in merged search results.",
+        "A former organization must remain searchable: retain aliases and provenance rather than rewriting history.",
+        "A merger team lacks personnel access: use role-level representations with restricted identity resolution.",
+        "Cutover is postponed: shift execution dates without rewriting already effective decisions.",
+        "A team rejects a shared definition: preserve the disagreement and its operational boundary."
+      ]
+    },
+    "005": {
+      "source_sha256": "c323caff81ed58a217c1c2ba9a478ee4eeb2c8eb161a60653d0264f2ff24323c",
+      "details": [
+        "An exception has no expiry: flag a governance defect rather than interpreting it as perpetual.",
+        "A private precedent applies: disclose the rationale only to authorized reviewers.",
+        "The policy changes while approval waits: re-evaluate applicability before signing.",
+        "A rejected request is resubmitted with new wording: link identity without assuming unchanged facts.",
+        "A waiver is revoked: notify dependent owners and preserve prior valid actions in history."
+      ]
+    },
+    "006": {
+      "source_sha256": "d150081d5174b60294b16baeeb09b7942a45097edc259a99823f8ece5e30b98b",
+      "details": [
+        "A single outage creates thousands of tickets: separate event volume from independent problem discovery.",
+        "A survey channel disappears: mark trend comparability as broken rather than reporting improvement.",
+        "Consent is withdrawn: remove attributable quotations and recompute restricted derivatives.",
+        "Customer IDs change after account migration: version identity mappings before updating counts.",
+        "A topic is renamed: preserve stable concept IDs so dashboards do not reset history."
+      ]
+    },
+    "007": {
+      "source_sha256": "7093631f8b130a0857c0473b4acbf0a391f804a3be4f73351cbe07a7ede499ee",
+      "details": [
+        "A participant switches language mid-interview: retain original passages alongside reviewed translations.",
+        "A code changes after half the corpus is processed: recompute affected records, not only future ones.",
+        "A quotation may identify its speaker indirectly: preview re-identification risk before export.",
+        "Two researchers disagree productively: preserve minority interpretation in the synthesis packet.",
+        "The study stops early: publish achieved coverage and unmet stopping conditions."
+      ]
+    },
+    "008": {
+      "source_sha256": "39fa127844d267a31b0df9b5cd819c61500e54e9ab2af78462458b331b4329d6",
+      "details": [
+        "A sponsor changes priorities mid-cycle: fork the scenario and preserve the approved baseline.",
+        "Two projects claim the same benefit: identify overlap instead of summing both estimates.",
+        "A dependency estimate is missing: show a contingent portfolio, not false feasibility.",
+        "A customer quote supports several needs: preserve one source and avoid multiplying evidence strength.",
+        "An experiment is inconclusive: retain the uncertainty rather than treating it as a failed idea."
+      ]
+    },
+    "009": {
+      "source_sha256": "8e6a40c8260a377ade4135294f37a7ded5fc25b069789d229067bd9e656e21ff",
+      "details": [
+        "An event name changes halfway through: bind metrics to schema versions before aggregation.",
+        "A subgroup looks exceptional after many searches: label it exploratory and preserve the search history.",
+        "Assignment is by team but rows are users: reject analyses with the wrong independence unit.",
+        "A result arrives after the decision meeting: version the recommendation rather than silently editing minutes.",
+        "A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction."
+      ]
+    },
+    "010": {
+      "source_sha256": "e2c7c1eb622305dab9cd5cc030b3c3755b192d626b9372fc39d0aa92f165ad83",
+      "details": [
+        "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
+        "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
+        "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+        "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
+        "Delivery is phased: tag each requirement with the release in which it becomes binding."
+      ]
+    },
+    "011": {
+      "source_sha256": "9da44a0b5c5bf7afd1d3831a2a565c06c8ff730087ede5985c9c10d2c99af333",
+      "details": [
+        "A refund succeeds but the network response is lost: reconcile by operation ID before any retry.",
+        "A replacement goes out of stock during consent: expire the reservation and renegotiate the promise.",
+        "A supervisor grants an exception: bind it to this customer, issue, amount, and expiry.",
+        "The customer changes channels: preserve one case state while respecting contact preferences.",
+        "One issue resolves early: communicate partial completion without hiding the remaining obligation."
+      ]
+    },
+    "012": {
+      "source_sha256": "567f681cd1aec6bb950d9cf03c7db33e0abe478f85b710ad08aca933f24eca03",
+      "details": [
+        "Two identical items have different serial numbers: block accidental swapping during repair intake.",
+        "Personal data remains on a device: quarantine resale until approved erasure is verified.",
+        "A customer disputes transit damage: preserve each custody observation and the dispute separately.",
+        "A part substitution is proposed: require compatibility evidence before updating the repair plan.",
+        "A return label expires: regenerate the logistics artifact without creating a duplicate return entitlement."
+      ]
+    },
+    "013": {
+      "source_sha256": "d43a4656336847949042774f0ee223e36d2624e50ca1de55dd5a8088ef5baf1d",
+      "details": [
+        "A seller edits the listing after purchase: bind review to the transaction-time edition.",
+        "One party uploads the other’s address publicly: restrict it without deleting evidentiary provenance.",
+        "A deadline falls during a service outage: apply the configured extension rule and notify both parties.",
+        "A payment reversal occurs externally: reconcile the ledger before recommending an additional remedy.",
+        "An appeal contains new evidence: reopen only affected findings and preserve the original decision."
+      ]
+    },
+    "014": {
+      "source_sha256": "d6c572234d8e8a0217219f5eabf3b05d904906f309d04b207b509a0b22b5b7e4",
+      "details": [
+        "A customer administrator leaves: transfer task ownership without reusing their credentials.",
+        "Sample data works but production data differs: stage a representative validation before full import.",
+        "A vendor integration is unavailable: offer a documented temporary path without pretending the original scope is complete.",
+        "Training attendees differ from system owners: record who can actually perform required tasks.",
+        "A launch date changes: preserve contractual dates separately from internal targets."
+      ]
+    },
+    "015": {
+      "source_sha256": "f8083c67f5c1ffb593662e98792524ed22923d144cbef19dce91608f50e9d7de",
+      "details": [
+        "A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule.",
+        "One product is managed by a reseller: expose the separate required action rather than claiming full cancellation.",
+        "A customer changes their mind before execution: invalidate the old consent token.",
+        "A refund is pending: do not hide it behind a closed subscription status.",
+        "A shared workspace has other owners: require the appropriate authority before changing their access."
+      ]
+    },
+    "016": {
+      "source_sha256": "f4821f2edd71003096f8a67ccfddb896ac3e6b519c5382d9be99cb591197c51b",
+      "details": [
+        "An addendum arrives after drafting: compute its impact and invalidate only affected approvals.",
+        "The portal limits filenames or file sizes: validate before the deadline rather than during submission.",
+        "A certificate expires before contract start: disclose the timing and require an approved renewal commitment.",
+        "Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule.",
+        "A portal upload times out: inspect submission status before sending a duplicate response."
+      ]
+    },
+    "017": {
+      "source_sha256": "d60a408104eb75e0bb1f1bda2b4d9df9818a63a7c4e04fac3c440be3b4916eef",
+      "details": [
+        "A supplier silently changes a revision: invalidate compatibility findings tied to the old revision.",
+        "Units differ across catalogs: use exact conversions and preserve original values.",
+        "A sample passes but production lots vary: require the approved lot-level acceptance rule.",
+        "A cheaper candidate needs an adapter: include adapter cost, lead time, and interface risk.",
+        "A substitution is approved for one machine: prevent its approval from propagating to unrelated uses."
+      ]
+    },
+    "018": {
+      "source_sha256": "42f0201e79352d15b8694065ce146a51d1ae5ab3586db1a6197c88072f653320",
+      "details": [
+        "A supplier renumbers a lot: retain alias mapping and original traceability evidence.",
+        "An order is split across affected and unaffected stock: release only the verified portion.",
+        "The supplier misses a response deadline: escalate without automatically accepting the proposed explanation.",
+        "A recurrence occurs after closure: link it to the prior causal claim and reopen the relevant verification.",
+        "A customer notification is corrected: preserve delivery history and issue a reviewed amendment."
+      ]
+    },
+    "019": {
+      "source_sha256": "d1b0a7134fd4b9804703d862c39c2d07d987bd0fdb093f0d603c1efa34770c28",
+      "details": [
+        "A requester splits one purchase into several small requests: aggregate related commitments for threshold checks.",
+        "A discount depends on a bundle: recalculate when one item is removed.",
+        "An affiliate uses the parent’s contract: require explicit entity coverage.",
+        "A catalog description changes: retain the version used for approval.",
+        "A contract expires while approval waits: revalidate before releasing the order."
+      ]
+    },
+    "020": {
+      "source_sha256": "7d12452f70c678d85c518bb5a0c0674498f226d645f68a38c397ed822ee7dfe8",
+      "details": [
+        "One supplier’s discount requires exclusivity: invalidate split-supply packages using that discount.",
+        "An offer expires overnight: revalidate before presenting it as available.",
+        "A salesperson accepts only verbally: retain provisional status pending the configured evidence.",
+        "A currency rate changes: freeze the approved conversion basis and show sensitivity separately.",
+        "A buyer changes the mandate: stop outstanding unapproved offers and review their external status."
+      ]
+    },
+    "021": {
+      "source_sha256": "b51da6a727d4f3afa34e986549dc7d5b6d429cb7c99e58eee0432856f96f8c9e",
+      "details": [
+        "A supplier sends a corrected invoice with the same number: version documents without assuming a second liability.",
+        "A receipt is reused across invoices: reserve its allocatable quantity transactionally.",
+        "A credit arrives after approval: invalidate the affected payment amount before release.",
+        "Currencies differ: require an explicit authorized conversion basis.",
+        "The period closes during review: preserve original service dates and route posting-period changes for approval."
+      ]
+    },
+    "022": {
+      "source_sha256": "97376406e83d56f30f9523106f4a79e505ea0e58d2243c3de89640f9e685ee5c",
+      "details": [
+        "A customer accepts only one phase: allocate partial billing without marking the entire project complete.",
+        "A milestone is renamed in project software: preserve the contract identity.",
+        "Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message.",
+        "An amendment changes future rates: retain prior earned amounts under their effective schedule.",
+        "An invoice is voided: release consumed billing capacity only after authoritative confirmation."
+      ]
+    },
+    "023": {
+      "source_sha256": "a91ba9a4b02180626100db1da258d42abbfa46d0ae77e13d0c3bb70553607f17",
+      "details": [
+        "A receipt includes a personal companion: apply explicit allocation rather than rejecting the whole trip.",
+        "A tax tip or fee is separate: preserve line-level amounts and the relevant rule.",
+        "A claimant resubmits a rejected receipt: link the appeal without creating duplicate reimbursement.",
+        "The policy changes during a trip: evaluate the supplied effective-date rule.",
+        "A manager is also the claimant: route approval to an independent authority."
+      ]
+    },
+    "024": {
+      "source_sha256": "51b534c088fa49e5367a10e8efd3ca2920fa08d05fe6dcd0d752c1ad3e8075ab",
+      "details": [
+        "A late journal changes one account: reopen only dependent workpapers and show the exact delta.",
+        "A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone.",
+        "A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly.",
+        "A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes.",
+        "A deadline is missed: record the unresolved state rather than backdating sign-off."
+      ]
+    },
+    "025": {
+      "source_sha256": "b5217140553752b33f8d91ffc9fe465c8e8f2a66ea5bf6ef80cb9f132e68d571",
+      "details": [
+        "A cost spans two reporting periods: allocate using the approved basis and preserve service dates.",
+        "A grant amendment arrives late: distinguish retroactive permission from future-only changes.",
+        "The same activity supports two grants: prevent duplicate attribution while allowing documented shared funding.",
+        "A funder requests personal participant data: route disclosure through the consent and authority check.",
+        "A report is corrected after submission: issue a traceable amended version."
+      ]
+    },
+    "026": {
+      "source_sha256": "31e60e2c3a8e0be91263c1ca1a25da83c8601128327df1fd7c03171d1b4dd33d",
+      "details": [
+        "A deadline uses business days: store the agreed calendar rather than assuming local weekends.",
+        "A party changes its legal name: preserve identity and do not treat it as a new counterparty automatically.",
+        "A notice is sent to the wrong address: separate dispatch from contractually effective notice.",
+        "A clause is disputed: display alternative operational consequences pending review.",
+        "A confidential clause supports a shared task: expose only the minimum necessary instruction."
+      ]
+    },
+    "027": {
+      "source_sha256": "2232f5287491c1e16c536942520a803801a5777de972360951be30ec788ff50a",
+      "details": [
+        "An amendment references an old section number: resolve by the executed edition and flag ambiguity.",
+        "A retroactive amendment arrives after billing: propose a reviewed correction rather than rewriting history.",
+        "Two amendments overlap: construct a precedence question instead of assuming upload order.",
+        "A task is approved before cutover but executes after it: revalidate applicable scope at commit time.",
+        "An unaffected exception disappears in drafting: block release with a preservation test."
+      ]
+    },
+    "028": {
+      "source_sha256": "168937c330620d96b8600a11e0b14b4aa1a47b53d43a2e024bd82a2a4b0ccdae",
+      "details": [
+        "A defined term changes globally: re-evaluate every consumer, not only the edited clause.",
+        "Internal fallback notes are in comments: strip and verify them before external export.",
+        "A counterparty accepts one clause conditionally: preserve the condition in the package state.",
+        "An approver signs an earlier draft: reject release of the newer hash.",
+        "A compromise introduces an undefined term: block the draft before circulation."
+      ]
+    },
+    "029": {
+      "source_sha256": "bee260b16b2f822b4ef705926852f8584cc2eba3e7565c55b807694c8c778903",
+      "details": [
+        "Historical cases lack a new required field: report indeterminate outcomes rather than imputing it.",
+        "A policy owner edits the candidate mid-run: fork the simulation snapshot.",
+        "A rare exception disappears: preserve its regression case even if aggregate scores improve.",
+        "Outcome counts change due to deduplication: separate data changes from policy effects.",
+        "A policy is adopted: retain the tested version and explicitly revalidate subsequent edits."
+      ]
+    },
+    "030": {
+      "source_sha256": "3872e912794b5083a82d243790b1ecbd3fe228643f71cb98b445c945b8a8101d",
+      "details": [
+        "A PDF contains hidden OCR text: sanitize all text layers and verify extraction after rendering.",
+        "A filename contains a restricted identity: rename the export and remove embedded metadata.",
+        "A recipient changes after approval: invalidate delivery authorization.",
+        "A redaction removes a necessary qualifier: revise the surrounding permitted text without inventing meaning.",
+        "A disclosure is challenged: retain an auditable mapping from released artifacts to reviewed source spans."
+      ]
+    },
+    "031": {
+      "source_sha256": "11c2d91b1907bdefa361acce66452a81c107a6c4c01f6b6be7c9ad75da41a859",
+      "details": [
+        "A preprint becomes a journal article: link versions instead of counting a new study.",
+        "A table uses different outcome units: preserve originals and require an approved conversion.",
+        "Full text is inaccessible: record the limitation rather than infer its results from an abstract.",
+        "A paper is retracted: invalidate dependent claims and notify review owners.",
+        "Eligibility changes mid-review: re-screen affected records under an explicit new version."
+      ]
+    },
+    "032": {
+      "source_sha256": "4c194bd8011a241561cab55dd814ad519f05f1fc97eea03dd36170c0e65ef4c1",
+      "details": [
+        "A zero is a valid response in one study but missing in another: preserve distinct missingness semantics.",
+        "A category combines two concepts: do not invent a finer split without evidence.",
+        "A unit changes within a dataset: bind transformations to row-level collection versions.",
+        "Participant overlap exists across studies: retain linkage uncertainty for downstream analysis.",
+        "A mapping is revised: invalidate only derived slices using that rule."
+      ]
+    },
+    "033": {
+      "source_sha256": "c843b753daab03d553a614e73a94b6854afb0e4ec63bd80aee0aad8b47f48833",
+      "details": [
+        "A dependency version is unavailable: label the substitute as an adaptation and preserve the original requirement.",
+        "A random seed is omitted: run a preregistered sensitivity set rather than choosing a favorable seed.",
+        "A dataset has changed: record the mismatch and do not claim exact replication.",
+        "A job crashes after producing partial outputs: verify completeness before reuse.",
+        "A paper’s prose and code disagree: retain both interpretations for review."
+      ]
+    },
+    "034": {
+      "source_sha256": "9e887da7fab28aa895d2362c1a6448ab43a040d8d8a5cfef0423242eaa25871e",
+      "details": [
+        "An instrument is available but calibration has expired: block readiness without deleting its booking.",
+        "A sample’s usable window shrinks: prioritize explicit protocol constraints rather than calendar convenience.",
+        "Two projects share an operator: schedule the person as a constrained resource.",
+        "A substitute instrument changes measurement behavior: require investigator review.",
+        "A cancellation occurs after preparation: record consumed materials and downstream consequences."
+      ]
+    },
+    "035": {
+      "source_sha256": "5b9d07694ad108fd23e6d59bb0b8aae344a0b78db40e50952388eabfeaaee1ab",
+      "details": [
+        "An experiment was abandoned before measurement: label it incomplete rather than negative.",
+        "A later success uses different conditions: narrow the earlier lesson instead of deleting it.",
+        "A researcher fears reputational exposure: support restricted attribution with authorized methodological access.",
+        "Several failures share one broken instrument: link the common process issue without multiplying scientific evidence.",
+        "A follow-up changes three variables: flag its weak discriminating power before execution."
+      ]
+    },
+    "036": {
+      "source_sha256": "b82152acac77cc5ca1f3a2eae8a8b468ae78ac721b4fd1c66f41ad3b3ed38613",
+      "details": [
+        "A learner gives a correct unconventional solution: assess its meaning rather than matching wording.",
+        "A task contains ambiguous language: repair the task before diagnosing the learner.",
+        "A session is interrupted: resume from the last completed task without revealing hidden diagnostic labels.",
+        "An accommodation changes presentation: preserve the competency being assessed.",
+        "Repeated failure causes frustration: offer a bounded instructor handoff rather than an endless loop."
+      ]
+    },
+    "037": {
+      "source_sha256": "14b5b23a5dc0e57c8af28fe616d67f4756023be182ab62cf5c95b242e2a1f94d",
+      "details": [
+        "An item leaks online: retire its use for new assessments without deleting historical scoring evidence.",
+        "A rubric changes after grading: identify every affected response before applying corrections.",
+        "A learner uses an unexpected valid method: route it to semantic review rather than automatic rejection.",
+        "A timed assessment needs an accommodation: preserve content equivalence and separate timing policy.",
+        "A model answer contains an error: block release or trigger a controlled regrade."
+      ]
+    },
+    "038": {
+      "source_sha256": "87551fe95c80a58243d3b42f25a611492fa2fc9564707e75f7aa1c0d8f425fbc",
+      "details": [
+        "One learner misses a milestone: redistribute logistics without erasing individual evidence requirements.",
+        "A required material becomes unavailable: propose an equivalent route preserving the learning goal.",
+        "A group produces polished work with unclear authorship: request individual demonstrations.",
+        "A complication arrives near the deadline: validate remaining feasibility before release.",
+        "A learner uses a creative alternative: assess the competency rather than adherence to the sample solution."
+      ]
+    },
+    "039": {
+      "source_sha256": "44b45faff848562d8af36e36324b10f3a93e8eb6ffd78ba62ecd3bad5d5c36e8",
+      "details": [
+        "A learner asks an unexpected useful question: answer from world facts rather than rejecting it for not matching a script.",
+        "A network interruption occurs mid-turn: resume without duplicating the action.",
+        "An unsafe action is proposed: simulate refusal or consequences within the approved training policy, not real execution.",
+        "A scenario is reused: vary surface details while preserving its learning objective.",
+        "A learner succeeds by chance: distinguish final outcome from procedural competence."
+      ]
+    },
+    "040": {
+      "source_sha256": "c4e01da118e9a0d487804ef3b8c078a02d1127079286299ebe3a4de29797d3d0",
+      "details": [
+        "A group project lacks contribution records: request an individual demonstration rather than assuming equal authorship.",
+        "Evidence is old but relevant: apply the supplied recency rule rather than an invented cutoff.",
+        "A supervisor comment conflicts with the artifact: preserve both and request clarification.",
+        "An accommodation changes the form of evidence: assess the same competency through an approved alternative.",
+        "A learner appeals an attribution error: version the finding and reassess affected competencies."
+      ]
+    },
+    "041": {
+      "source_sha256": "68b1b838bfcb0d3bd036ed859a2dfc5a2afc8a8ccd6c1169d184149ecc3666b7",
+      "details": [
+        "A flaky test fails only under load: preserve timing evidence and avoid hiding it through unlimited retries.",
+        "A requirement changes after a test is approved: invalidate affected assertions explicitly.",
+        "A test uses production credentials: block execution before sandbox launch.",
+        "A generated fixture contains personal data: replace it with approved synthetic records.",
+        "A patch makes tests pass by deleting an assertion: require independent coverage review."
+      ]
+    },
+    "042": {
+      "source_sha256": "76f114748f03ac4b83348e39dc238e9f810a73dda2f093a8243d6f9bcab9feb5",
+      "details": [
+        "A default changes without a schema change: include default-dependent consumer scenarios.",
+        "An integration is unowned: block risky migration and escalate ownership.",
+        "A customer pins an old version: preserve its supported behavior and migration window.",
+        "Rollback would lose newly written data: require an explicit data-compatibility plan.",
+        "Documentation publishes early: label the applicable release and prevent misleading current guidance."
+      ]
+    },
+    "043": {
+      "source_sha256": "a7eaa0c07c624b7a62923c2aedee076d9943a89377727254f989315f9962e500",
+      "details": [
+        "A diagnostic query would overload the database: enforce resource budgets in the query service.",
+        "A rollback succeeds but data remains inconsistent: keep the incident open with a separate repair plan.",
+        "An action times out after execution: reconcile its actual state before retrying.",
+        "The commander changes mid-incident: transfer authority explicitly and preserve approvals.",
+        "A model proposes an unapproved shell command: reject it and request an authorized runbook extension."
+      ]
+    },
+    "044": {
+      "source_sha256": "c7607452ec5f9ba6f73c20eeabd08e357e7c21a2a187066e605c443d2c921f3a",
+      "details": [
+        "An example depends on a deprecated service: mark its environment and provide a reviewed replacement.",
+        "A translated page lags the source: track edition mismatch separately from mistranslation.",
+        "A behavior bug is fixed later: retain the earlier documentation decision in history.",
+        "A code sample includes a secret: block export and rotate any exposed credential through operations.",
+        "A page is edited during review: rebase and revalidate changed claims."
+      ]
+    },
+    "045": {
+      "source_sha256": "b87b1cb10cdce1af4e650c6b20d9ba54d32630c0b72dc220ee14e8c1ce986620",
+      "details": [
+        "A cleanup removes an undocumented integration: require consumer discovery before deletion.",
+        "A campaign spans teams: assign interface ownership and acceptance explicitly.",
+        "A metric improves because usage fell: preserve exposure and workload denominators.",
+        "A package grows during discovery: rebaseline scope rather than hiding an expanding rewrite.",
+        "A workaround is retired: verify all dependent runbooks and alerts are updated."
+      ]
+    },
+    "046": {
+      "source_sha256": "9028abc984eafd76e6c4eaa1ddc7e94c612a8b6aea4c9cf4e3fe42d5da9af56e",
+      "details": [
+        "A request says after without a time window: surface the consequential ambiguity rather than choosing one silently.",
+        "A one-to-many join inflates counts: enforce declared grain and cardinality checks.",
+        "A record is inaccessible to the requester: exclude it before model exposure and explain coverage without leaking it.",
+        "A rubric changes mid-run: pin the old run and create a targeted reclassification plan.",
+        "A user changes only the grouping: reuse qualified row judgments and recompute exact aggregation."
+      ]
+    },
+    "047": {
+      "source_sha256": "3df48b6e162061b5b8ef307604e3e4ae266d9e75abb78f271c48c0864a10c703",
+      "details": [
+        "A source system reuses identifiers: include system and historical validity in identity keys.",
+        "A null has several meanings: preserve explicit missing-state categories in the target.",
+        "Source data changes during migration: capture and replay deltas against the approved mapping version.",
+        "A target constraint cannot represent a valid source case: propose a schema extension or quarantine, not fabricated data.",
+        "Rollback would overwrite new target work: use an explicit reconciliation plan."
+      ]
+    },
+    "048": {
+      "source_sha256": "35e57664c70448ace4570a48a7f473d7bdff73a28715e376e88bbabaaa714b5f",
+      "details": [
+        "A category is renamed without semantic change: retain its ID and avoid unnecessary reclassification.",
+        "A split cannot be reconstructed historically: report a coarser comparable series.",
+        "A downstream system accepts only one label: expose incompatibility with a new multi-label rule.",
+        "A rare concept is important despite low frequency: allow evidence-based exceptions to frequency heuristics.",
+        "Two stewards edit related branches: detect semantic boundary conflicts before merging."
+      ]
+    },
+    "049": {
+      "source_sha256": "29f3d17da111ca4b0a320d09bf9e935ba4dcf87d7cd97e67f27fc17d056f509c",
+      "details": [
+        "A parent and subsidiary share an address: represent their relationship without merging identities.",
+        "Two people share a name and employer: require stronger evidence before linking.",
+        "A merge is later reversed: propagate the split to dependent records and preserve audit history.",
+        "A record has a recycled identifier: bind identity to its validity interval.",
+        "A source is revoked: remove its contribution from canonical values and reassess dependent links."
+      ]
+    },
+    "050": {
+      "source_sha256": "a0f57946b71859c90ab3c71127bfeef6d7a02a16b55ad839264e6aab97d4d4ef",
+      "details": [
+        "A source license permits research but not redistribution: enforce the release boundary.",
+        "Near-duplicate records cross train and test: group by underlying source before splitting.",
+        "A label requires information not present: revise the task or mark it unobservable.",
+        "A coverage target is met through copied examples: count independent mechanisms and sources.",
+        "Consent is withdrawn after release: maintain traceable removal and downstream notification obligations."
+      ]
+    },
+    "051": {
+      "source_sha256": "7ca56c30d09b6e9b13f35f240507c94ec3130965c04e216044693eeb95e95be7",
+      "details": [
+        "A carrier accepts a booking but later rejects the item class: retain a recovery task and retract unsupported promises.",
+        "A shipment has several delivery deadlines: preserve each dependent appointment.",
+        "A route reopens partially: re-evaluate only eligible shipment classes.",
+        "Two planners reserve the same capacity: use transactional reservation and fencing.",
+        "A customer cannot accept split delivery: keep that preference as a hard constraint once confirmed."
+      ]
+    },
+    "052": {
+      "source_sha256": "664671115ac9da8cf6824d21656b050cc04877aa9238ce78fa9867a853fa5702",
+      "details": [
+        "A scanner is offline: queue signed observations with device sequence numbers and reconcile on sync.",
+        "Two identical cartons have different lots: preserve lot-level identity through relabeling.",
+        "A recount is performed by the original picker: require the configured independent verification for adjustments.",
+        "A damaged item is still physically present: change availability without deleting quantity.",
+        "A late receipt arrives after a shortage adjustment: detect the potential double count."
+      ]
+    },
+    "053": {
+      "source_sha256": "77980837c353219f532038e625470a74984fb767e18e4a2918e7764ec44bd39f",
+      "details": [
+        "A material is offered by weight but needed by volume: require density evidence before exact conversion.",
+        "An offer is withdrawn after matching: invalidate dependent exchange legs before confirming them.",
+        "Equipment has unknown maintenance history: require qualification rather than assuming operability.",
+        "A recipient accepts only part of a lot: release remaining quantity back to availability.",
+        "A creative reuse requires specialist approval: keep the match provisional until that approval exists."
+      ]
+    },
+    "054": {
+      "source_sha256": "a7ef45d1c35dc61a003deac483ddcb6ed3140c8ef1736d587fbba75d600678c7",
+      "details": [
+        "A donor changes the quantity on collection day: recompute affected allocations without hiding unmet needs.",
+        "A recipient cannot store a large bundle: split delivery or propose a suitable alternative.",
+        "A donor requests private recipient details: provide only consented information.",
+        "A recipient declines an item: preserve dignity and reallocate without penalizing future need.",
+        "An item has a recall or handling restriction: quarantine it under the supplied safety policy."
+      ]
+    },
+    "055": {
+      "source_sha256": "334d3e548f79c0e1d1a8f39916f151245f651ed12aa276602f89176d5a1735b7",
+      "details": [
+        "A volunteer’s qualification expires: block assignment requiring it while retaining unrelated skills.",
+        "A donated spare part has uncertain compatibility: request evidence before use.",
+        "The customer’s budget changes: reapprove scope before additional work.",
+        "A repair temporarily masks the symptom: keep a monitoring or recurrence record.",
+        "An item is unsafe to handle in the workshop: route it through the approved specialist process."
+      ]
+    },
+    "056": {
+      "source_sha256": "2de8b1a4b9096d2d1233a92b7492b15bb2e5adeb0fb530a6ce625159de966af9",
+      "details": [
+        "A lot was reworked under a different process: preserve both histories in exposure tracing.",
+        "Inspection methods changed: avoid treating changed detection rates as changed defect rates.",
+        "An operator is named in a report: do not infer blame from correlation.",
+        "A hold is lifted for only part of a lot: maintain unit-level release scope.",
+        "A defect recurs after closure: reopen the causal claim and effectiveness test."
+      ]
+    },
+    "057": {
+      "source_sha256": "84739c82d80d3b9b53cd1bd18caa23b8854d72905902efecde20ca11d78099bd",
+      "details": [
+        "A printed instruction remains on the floor: include version identifiers and a withdrawal task.",
+        "A local term names two controls: require unambiguous equipment references.",
+        "A translation shortens a warning: verify semantic preservation before release.",
+        "A procedure is interrupted mid-step: specify restart and re-verification conditions.",
+        "A local exception waives a queue but not an inspection: preserve the inspection guard explicitly."
+      ]
+    },
+    "058": {
+      "source_sha256": "3aaf1a7a871fd0cdbd7567d5e5eeea768a2165824ad896251b5cb9b24bc04f74",
+      "details": [
+        "A technician reports done but the verification is missing: keep the task incomplete.",
+        "A spare part has a different revision: require compatibility review before installation.",
+        "A shift ends during isolation: carry the exact state and required checks into handover.",
+        "A recurring fault disappears temporarily: retain its history and approved monitoring requirement.",
+        "An asset identifier is ambiguous: verify identity before dispatching work."
+      ]
+    },
+    "059": {
+      "source_sha256": "a16b927aec9fed5cc3df5222499143ad0c975e8a8224a356df3d5985c80fdc36",
+      "details": [
+        "Old and new parts coexist in inventory: enforce configuration-specific selection rather than blanket replacement.",
+        "A supplier has already shipped the old revision: decide disposition explicitly.",
+        "A fielded unit is grandfathered: preserve its approved configuration and maintenance guidance.",
+        "A drawing reference changes numbering only: avoid unnecessary operational churn.",
+        "A retrofit is partially completed: track mixed-state constraints until verification."
+      ]
+    },
+    "060": {
+      "source_sha256": "9f18443ff3d1fa89a35b79c336d4430cf9a7f5f6cdecfbb8650786f6b49e4a17",
+      "details": [
+        "A customer supplies approximate dimensions: label the quote provisional until confirmed measurements arrive.",
+        "A finish sample differs from a screen rendering: require acceptance of the physical or approved reference.",
+        "Material prices expire: revalidate the quote before commitment.",
+        "A design change affects tooling: update route and cost together.",
+        "The shop lacks a required certification: disclose the limit and route specialist work appropriately."
+      ]
+    },
+    "061": {
+      "source_sha256": "0575a66190c63f702ad7c3af38840a0367a7849158279b591f41f21d06089a12",
+      "details": [
+        "A verbal instruction is later disputed: preserve contemporaneous evidence and request formal confirmation.",
+        "A drawing revision changes only one area: avoid applying it to the whole project.",
+        "Work began before commercial approval: record actual events without backdating authority.",
+        "A delay claim ignores available float: use exact schedule analysis and explicit assumptions.",
+        "Two changes affect the same work: prevent duplicate cost attribution."
+      ]
+    },
+    "062": {
+      "source_sha256": "877173fe784b717d984e9473809481f0afa16956c0f41e685ad1c3bae1901842",
+      "details": [
+        "A bidder’s price includes an allowance rather than a firm quantity: preserve uncertainty in comparison.",
+        "A clarification changes an exclusion: update all affected interface cells.",
+        "Two trades each assume the other supplies a connection: create a named acceptance task.",
+        "A late bid revision removes an inclusion: invalidate the previous coverage finding.",
+        "A lower total omits commissioning: show functional incompleteness rather than ranking by price alone."
+      ]
+    },
+    "063": {
+      "source_sha256": "33500c97e0c67e0998ec85805f3c28899858191aa6158e3689f07db0d169d0fc",
+      "details": [
+        "A manual covers several variants: mark the installed variant and relevant sections.",
+        "A certificate names the wrong asset: block matching despite a familiar model number.",
+        "A contractor portal link will expire: archive permitted deliverables with durable hashes.",
+        "Facilities staff cannot open a file format: provide an approved accessible export.",
+        "A temporary arrangement expires after handover: transfer the follow-up obligation explicitly."
+      ]
+    },
+    "064": {
+      "source_sha256": "ea373054f3f320e21aebfca69edc889e8b81bec5682cbe75affd9e986c0f705b",
+      "details": [
+        "A room has an informal name: maintain aliases without changing the official asset location.",
+        "A technician cannot gain access: record the failed visit and renegotiate consented access.",
+        "Noise occurs only at certain times: schedule observation under the relevant conditions.",
+        "Several occupants report one issue: send privacy-preserving updates without exposing identities.",
+        "A repair recurs repeatedly: escalate the mechanism investigation rather than opening disconnected tickets."
+      ]
+    },
+    "065": {
+      "source_sha256": "e6d2599ccaea5c00798fcced990117be91a92f2a9ae66a8e2999230bcface2d3",
+      "details": [
+        "A historic drawing conflicts with a recent survey: preserve both and prioritize verified current evidence.",
+        "A concept depends on an untested structural assumption: mark it contingent and commission qualified review.",
+        "A stakeholder changes the intended use: re-evaluate affected constraints and investigations.",
+        "A budget estimate excludes enabling works: expose the missing scope.",
+        "A phased opening creates access conflicts: include temporary circulation and operational constraints."
+      ]
+    },
+    "066": {
+      "source_sha256": "0834b9c77e772de5be96a714cc0789c6c04ffc091b28c1882c831d05823e4f0f",
+      "details": [
+        "A sensitive species location is recorded: restrict exact coordinates in public and volunteer views.",
+        "A survey is conducted in a different season: flag comparability before interpreting change.",
+        "Land access permission expires: stop affected field tasks immediately.",
+        "An intervention has an unexpected effect: preserve the observation and trigger expert review.",
+        "Volunteer effort varies: record sampling effort alongside observations."
+      ]
+    },
+    "067": {
+      "source_sha256": "632d2791c13ebe10c8bcc87c80eae685c76e5c3f3b6fa51260b3cf112fee8286",
+      "details": [
+        "A grower revises expected quantity: preserve the prior estimate and recompute affected allocations.",
+        "Two varieties share a common name: retain exact variety and quality requirements.",
+        "Equipment is available but an operator is not: treat both as constrained resources.",
+        "A customer rejects a substitution: keep the original unmet commitment visible.",
+        "Actual yield differs from plan: reconcile harvested, stored, and delivered quantities separately."
+      ]
+    },
+    "068": {
+      "source_sha256": "22c7f8cd4ed6559e6a6274b869a6e2a2cb54897918e9c1f6cb0ef89ee50f5352",
+      "details": [
+        "A rare report looks implausible: request evidence instead of deleting it as an outlier.",
+        "A device records the wrong timezone: preserve original timestamps and apply a reviewed correction.",
+        "A sensitive location is precise: generalize public coordinates while retaining restricted provenance.",
+        "One observer submits several photos of one event: group media without inflating event counts.",
+        "An expert changes an identification: version the interpretation and notify affected analyses."
+      ]
+    },
+    "069": {
+      "source_sha256": "cb228bdabd7359b12664a1cb6ba36fc7c697bb29d99296ceefdd77f1809db992",
+      "details": [
+        "A contractor reports an activity already in internal records: deduplicate the physical event before aggregation.",
+        "A meter is replaced mid-period: preserve calibration and continuity assumptions.",
+        "An estimate becomes a measurement later: version and restate affected results explicitly.",
+        "Organizational scope changes: separate boundary effects from operational improvement.",
+        "A public claim exceeds the report’s evidence: block publication until qualified or substantiated."
+      ]
+    },
+    "070": {
+      "source_sha256": "b2a5aa8e182c4e940487a94f880998798710ab0b253f60324b9c7a233bcbb4fd",
+      "details": [
+        "A member becomes unavailable: renegotiate duties instead of silently assigning them to someone else.",
+        "A shared tool breaks: replan affected tasks and preserve reservations awaiting repair.",
+        "A plot’s condition is uncertain: request appropriate assessment before consequential changes.",
+        "A trial allocation succeeds: seek explicit agreement before making it permanent.",
+        "A member leaves mid-season: transfer care and harvest rights through a documented agreement."
+      ]
+    },
+    "071": {
+      "source_sha256": "e724b9479b576637be6f93dc03df0f28372b4522665cd753190d5c6f79ed5312",
+      "details": [
+        "A campaign produces many identical submissions: report participation volume and shared argument structure separately.",
+        "A submission supports one part and opposes another: preserve both scoped positions.",
+        "A quoted example reveals a private circumstance: anonymize with consent-aware review.",
+        "A late submission is accepted under an exception: record its inclusion basis.",
+        "A report is challenged for omission: trace the concern back to coverage and revise transparently."
+      ]
+    },
+    "072": {
+      "source_sha256": "6e19f006d2bcf8830837ff3d1edc01267b08449e3513b79efa42188d99a98eac",
+      "details": [
+        "Two proposals share enabling work: count its cost once and expose the dependency.",
+        "A revised estimate exceeds the budget: reopen portfolio feasibility before voting or approval.",
+        "A merged proposal changes one group’s intent: require explicit proposer review.",
+        "A project is location-sensitive: show the relevant supplied constraints without profiling residents.",
+        "A selected project changes during delivery: record the scope change and applicable community approval rule."
+      ]
+    },
+    "073": {
+      "source_sha256": "536de2d7cf6f64aa4ec5b8a5a1084458253a72bb0097fba8823c7f04c40f09a4",
+      "details": [
+        "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+        "A service rule changes mid-application: revalidate the affected pathway and explain the change.",
+        "A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer.",
+        "A submission receipt is delayed: reconcile status before resubmitting.",
+        "A helper acts for the applicant: verify delegated consent and restrict access accordingly."
+      ]
+    },
+    "074": {
+      "source_sha256": "631d100557bf787a6d01b1b516e74192db7b64c9a571754ea62b90d98d9d4361",
+      "details": [
+        "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+        "A qualification expires: remove only assignments requiring it and notify the coordinator.",
+        "A role changes from remote to on-site: obtain fresh consent and check practical constraints.",
+        "A team member needs private access information: disclose it only for the accepted assignment window.",
+        "A trainee is assigned: preserve the required supervisor relationship."
+      ]
+    },
+    "075": {
+      "source_sha256": "e6be8801330bd01a9ba82628bde5c2348228c6addf2a5a8c9273a8ac4bdf86f7",
+      "details": [
+        "One participant does not respond: keep consent pending rather than assuming acceptance.",
+        "A prior agreement is disputed: preserve competing accounts and seek evidence.",
+        "A trial works for some but not all: report divergent outcomes instead of averaging them away.",
+        "A participant withdraws consent: apply the agreed exit process promptly.",
+        "A proposal concerns legal rights or immediate safety: route it to appropriate qualified support rather than mediating beyond scope."
+      ]
+    },
+    "076": {
+      "source_sha256": "7a222ffc9216fbdae3b2549770ac858785e051156714df3f312b1ad6e53fed08",
+      "details": [
+        "Two patients share a name: require approved identity evidence before matching documents.",
+        "A receiving service changes its checklist: revalidate only affected pending packets.",
+        "A document is present but unsigned: retain the gap rather than marking complete.",
+        "A clinician changes priority: preserve the authoritative change without independently re-triaging.",
+        "A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records."
+      ]
+    },
+    "077": {
+      "source_sha256": "a0376d9df0bca2e58b9681c90397564c602bccc1541ef91d6b6897c8d437e672",
+      "details": [
+        "Equipment is booked but not delivered: keep the dependent transition step blocked.",
+        "A caregiver cannot accept the role: escalate responsibility rather than assuming availability.",
+        "Transport timing changes: recheck downstream appointments and access windows.",
+        "A proposed substitution affects clinical requirements: obtain clinician review before proceeding.",
+        "A receiving organization has not acknowledged the plan: preserve the unresolved handoff."
+      ]
+    },
+    "078": {
+      "source_sha256": "d798596c1a4210359d7a6f3ce4af675986e5a62258fb9be16a4468cf6ad6421d",
+      "details": [
+        "An appointment time changes: recompute exact relative timings and reissue the affected checklist.",
+        "A translated phrase changes an exception: block release pending fidelity review.",
+        "A patient reports conflicting instructions: route to staff rather than choosing one.",
+        "A representative receives messages: verify current consent and scope.",
+        "A message is undelivered: use approved fallback contact rather than assuming receipt."
+      ]
+    },
+    "079": {
+      "source_sha256": "deff23886b70ac4000e2161a29b68d8a78e6e6f3471672884c18533523c77bb7",
+      "details": [
+        "Authorization expires while review is pending: revalidate before delivery.",
+        "A record contains information about another person: route targeted review rather than releasing the whole document automatically.",
+        "A request covers only one episode: prevent unrelated history from entering the packet.",
+        "An export contains hidden metadata: sanitize and verify it after rendering.",
+        "A corrected record arrives after disclosure: create a controlled amendment and notification obligation."
+      ]
+    },
+    "080": {
+      "source_sha256": "4ee0691410c635293de18dba16e0266de43c8ae178fe036c1cafb9f740b12ac5",
+      "details": [
+        "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+        "Call volume falls because a channel closes: do not report that as improved access.",
+        "A small group faces severe barriers: preserve its experience despite aggregate improvement.",
+        "Feedback consent is withdrawn: remove attributable material and reassess derivatives.",
+        "An experiment shifts work to another team: measure the downstream burden before adoption."
+      ]
+    },
+    "081": {
+      "source_sha256": "a0c1098e93a1bb19f335e159fb3a614b947e9be2498546e30ae177ba191c0294",
+      "details": [
+        "The same word labels both an action and a status: keep separate context keys.",
+        "A placeholder moves grammatically: allow reordering while enforcing exact identity and multiplicity.",
+        "A source edit changes only punctuation: assess semantic impact before invalidating all translations.",
+        "One locale is delayed: apply an explicit fallback rather than mixing old and new critical instructions.",
+        "A glossary term changes: re-evaluate only segments using the affected concept and sense."
+      ]
+    },
+    "082": {
+      "source_sha256": "a332056cc42d9c86798938c3e2541e4fe6e755688ca76ac6d265e2c72f2f57b0",
+      "details": [
+        "A summary removes a crucial unless clause: block release through a boundary-case test.",
+        "An example sounds like a new rule: label and revise it to preserve scope.",
+        "A technical term has no safe plain synonym: retain it with an explanation.",
+        "The source changes after review: invalidate only affected meaning units and approvals.",
+        "Readers use assistive technology: verify headings, reading order, and link descriptions."
+      ]
+    },
+    "083": {
+      "source_sha256": "93248ae5383c3a4a81db2b70dd3444c28c366e29c72ed5994b8c5841fd9f9a80",
+      "details": [
+        "An edit shifts later scenes: retime affected segments using stable scene identities.",
+        "A visual clue matters only later: describe what is visible without revealing its future meaning.",
+        "Dialogue leaves no description gap: propose an approved alternative channel or edit review.",
+        "A speaker is off-screen: identify them only when supported by the source.",
+        "A delivery platform interprets captions differently: validate the actual target format and player."
+      ]
+    },
+    "084": {
+      "source_sha256": "239d2e4093fd8d44f6a26a5540657cf0ef49b27679409e949c74f04f04a48231",
+      "details": [
+        "An analogy is unfamiliar but the concept is essential: replace the analogy, not the objective.",
+        "A reviewer disagrees with an audience assumption: preserve the disagreement and narrow the adaptation scope.",
+        "A scenario becomes easier after adaptation: restore the relevant decision complexity.",
+        "A local example could reinforce a stereotype: revise using supplied context rather than group generalization.",
+        "The source curriculum changes: revalidate affected adapted mechanisms."
+      ]
+    },
+    "085": {
+      "source_sha256": "52c18c12cacc8563e7aa64caf997cd13549752e229b767b8caf11f199445e3e6",
+      "details": [
+        "A term has two meanings in one product: bind terminology to concept and context.",
+        "A regional variant is required: preserve its scope rather than declaring it inconsistent.",
+        "A term changes grammatical form: generate context-aware inflections and review them.",
+        "Experts disagree on the concept boundary: keep the issue open instead of choosing the most common word.",
+        "A glossary decision affects released content: stage a versioned migration and avoid mixed terminology in one workflow."
+      ]
+    },
+    "086": {
+      "source_sha256": "b8538ccf4f55b91e78ee0e3d943d16d4d98130b0cc1867444971dc1ce5d9b9c4",
+      "details": [
+        "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+        "A label exceeds the available space: shorten without removing a crucial qualification.",
+        "A community restriction limits display: enforce it across images, labels, and online previews.",
+        "A conservation condition changes: re-evaluate duration and placement.",
+        "A visitor skips a zone: ensure later labels do not require inaccessible prior context."
+      ]
+    },
+    "087": {
+      "source_sha256": "42947977dcf4cb4de85e99ac3ee05d508442eb25ab98a216ae4b2a25c3566367",
+      "details": [
+        "A participant withdraws one anecdote: invalidate its quotations and derived summaries without deleting unrelated consented material.",
+        "Two speakers use different dates for one event: preserve both with context.",
+        "A nickname refers to several people: retain candidate identities.",
+        "A transcript correction changes attribution: re-evaluate dependent narratives.",
+        "A restricted interview supports a public summary: ensure the summary does not reveal protected details indirectly."
+      ]
+    },
+    "088": {
+      "source_sha256": "09f918b53fa9b3dc29a7a920e07df15af1b9dcd708d4dc417b1c3a44576e9d6e",
+      "details": [
+        "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+        "A date is approximate: use intervals in chronology checks.",
+        "A family reuses names across generations: require relationship and timing evidence.",
+        "A transcription is corrected: invalidate dependent links selectively.",
+        "A researcher merges entities prematurely: support a reversible split with downstream impact tracking."
+      ]
+    },
+    "089": {
+      "source_sha256": "3efc7160b2498ee76e2386c08f2ebad028dda6e04c649d746bc6c29b711dc304",
+      "details": [
+        "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+        "A license allows print but not online use: prevent automatic web publication.",
+        "Consent is time-limited: schedule expiry review and removal obligations.",
+        "A derivative combines several items: check every relevant permission.",
+        "Attribution changes after a name correction: update affected publications through a traceable process."
+      ]
+    },
+    "090": {
+      "source_sha256": "2c9279061efd71859527c257efb64e0a3decc5b7e317fae38ea63e27291b244a",
+      "details": [
+        "A catalog entry points to missing material: record the lead and absence without inventing contents.",
+        "A collection is temporarily closed: preserve the coverage limitation.",
+        "Historical terminology differs from the request: maintain query variants and their results.",
+        "A promising lead exceeds budget: present a scoped extension decision instead of continuing silently.",
+        "A source cannot be reproduced publicly: provide an authorized citation or description rather than the restricted image."
+      ]
+    },
+    "091": {
+      "source_sha256": "f4113fa692d5f21e34fd25e533db59c9c7164d32d118f6a50f9148a73250c429",
+      "details": [
+        "A character learns a secret in one draft but not another: bind knowledge to the approved edition.",
+        "An unreliable narrator states a falsehood: preserve it as narration, not canon.",
+        "A late twist changes earlier scenes: show the full seeding and revision footprint.",
+        "A minor character returns after many installments: retrieve their established voice and history.",
+        "A deliberate contradiction is part of the plot: record the author-approved rationale and reveal plan."
+      ]
+    },
+    "092": {
+      "source_sha256": "d7d36f39d4e3db776179367f6b27490bddd23e76405ddd3a5c2f4e5ef0e10adc",
+      "details": [
+        "A short quote loses its qualifier: restore context or reject the cut.",
+        "Two adjacent clips imply causation: require evidence or revise the transition.",
+        "Archive rights expire before release: obtain renewal or replace the asset.",
+        "A speaker corrects a factual statement: preserve the correction in editorial review.",
+        "A late edit shifts duration: update captions, descriptions, and clearance references together."
+      ]
+    },
+    "093": {
+      "source_sha256": "ce2077bfa9e1fe90a11831bf871cd3ec208a09b2f49cfd4998ba4e6d62c7cf78",
+      "details": [
+        "A contributor loses access to a key source: revise the commission rather than pretending the reporting plan still holds.",
+        "Two pieces cover the same angle: negotiate differentiation before drafting duplicates.",
+        "A headline overstates the article: include it in factual review.",
+        "A late withdrawal leaves a section gap: use a prequalified contingency piece.",
+        "A photo credit changes: update print, web, and promotional assets consistently."
+      ]
+    },
+    "094": {
+      "source_sha256": "191c13875725ff3bb7da8cfa865ad63da1e4addd6b2c316e9d701a01f03ea470",
+      "details": [
+        "A slogan implies a capability the product lacks: reject or qualify it despite creative appeal.",
+        "A name may conflict with existing rights: route clearance rather than claiming availability.",
+        "Error messages inherit promotional tone inappropriately: define context-specific voice rules.",
+        "The product changes: invalidate affected claims and assets, not the entire visual direction.",
+        "A client approves one asset but not the system: preserve the narrower approval scope."
+      ]
+    },
+    "095": {
+      "source_sha256": "c006bab4bdb38f87b4797bd98f7db53209c26a526977f1f1663d84eac79912b1",
+      "details": [
+        "A supplier substitutes an ingredient: recheck verified allergen and dietary data before use.",
+        "Yield differs from the estimate: update exact batch quantities and cost.",
+        "Two dishes need the same equipment simultaneously: replan service rather than assuming unlimited capacity.",
+        "A tasting change affects a shared sauce: propagate it to every dish and disclosure.",
+        "A menu label claims allergen-free preparation: require the venue’s verified controls and qualified approval."
+      ]
+    },
+    "096": {
+      "source_sha256": "79d484ef31392b994c96c227e5b435de229764287c69bae6f861033dddad3af1",
+      "details": [
+        "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+        "A prop is lost or broken: provide an approved staff recovery path without trapping participants.",
+        "A reset misses one item: detect it through a pre-session checklist and state verification.",
+        "A participant declines a sensory element: offer an equivalent accessible route.",
+        "A clue has two reasonable answers: repair the artifact or accept both when consistent with the design."
+      ]
+    },
+    "097": {
+      "source_sha256": "ced01667f62e29611dde958bd0458105af100eba13e429be99fc4ddc85302db6",
+      "details": [
+        "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+        "A technical fallback lacks accessibility support: reject it or add an approved equivalent.",
+        "Staff receive conflicting schedule versions: show revision IDs and require acknowledgment.",
+        "A sponsor commitment changes: route commercial approval separately from stage coordination.",
+        "An emergency occurs: suspend generated replanning and defer to the approved emergency command process."
+      ]
+    },
+    "098": {
+      "source_sha256": "4eda27fc62a69a6cae89201f03b07cfedf2c3ea1f86b135e3e98159a71d505e0",
+      "details": [
+        "A player disconnects mid-action: commit or reject once using the action identity.",
+        "Two characters spend the same resource: serialize the exact world transaction.",
+        "A character hears a rumor: store it as a belief rather than world truth.",
+        "A participant changes content boundaries: apply the restriction immediately to future generation.",
+        "A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes."
+      ]
+    },
+    "099": {
+      "source_sha256": "87d23fece83eb93503a8e04fab48bcebecb15e97e1179e1a6d5d0421f4c239f6",
+      "details": [
+        "A participant makes an ambiguous conditional offer: clarify before updating commitments.",
+        "A role exceeds its authority: reject the simulated commitment and retain the learning event.",
+        "An instructor changes difficulty mid-session: preserve the original hidden world or create an explicit new episode.",
+        "A participant withdraws an offer: apply the scenario’s exact acceptance timing rules.",
+        "Debrief materials reveal private scores: release them only under the exercise’s approved debrief policy."
+      ]
+    },
+    "100": {
+      "source_sha256": "5178fac921e07a15752e1798f54e9ad49a78485babd6f1786011a851cb99b965",
+      "details": [
+        "An audience member declines participation: switch to an equivalent nonparticipatory path without pressure.",
+        "A cast member becomes unavailable: select a prequalified variant or obtain approval for a bounded rewrite.",
+        "A prop fails mid-scene: use an approved narrative recovery, never an improvised hazardous mechanism.",
+        "Two audience groups learn different facts: maintain separate knowledge state for later scenes.",
+        "A stop signal is given: halt relevant activity immediately under the production’s safety protocol."
+      ]
+    }
+  }
+}

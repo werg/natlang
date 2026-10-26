@@ -1,0 +1,5 @@
+# Multi-Issue Service Recovery Desk
+
+A customer case is an issue-dependency ledger over an append-only interaction timeline. Failures split only when they can close independently; promises whose value depends on a later event remain linked. Entitlements are resolved per issue using the original purchase date, applicable policy edition and exact exception scope. Mandatory remedies and discretionary gestures are kept in different classes.
+
+Recovery bundles are evaluated jointly: duplicate credit for one loss is excluded, while separate obligations remain intact. Scarce inventory is reserved before date promises and the customer's exact choice is attached to the option. Each irreversible action carries a stable operation ID; confirmed, failed, unknown and expired-reservation outcomes remain distinct. An unknown refund receipt is reconciled by operation ID before any retry. Closure is issue-by-issue against actual receipts and accepted alternatives, leaving unresolved work and earlier promises visible.

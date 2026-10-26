@@ -1,0 +1,708 @@
+[
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-gate-supported",
+    "root": "coordinateHarvest/verifyReadiness.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "lotId": "quality-lot-Q67",
+          "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+          "qualityEvidence": [
+            "buyer size-range inspection flags 60 kg out of range"
+          ],
+          "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+          "uncertainty": "vehicle fault changed capacity from 500 kg",
+          "caseId": "case-67"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "uncertainty",
+            "evidenceIds": [
+              "067-agricultural-cooperative-harvest-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "grower harvest windows and collection capacity",
+        "evidence": [
+          {
+            "id": "067-agricultural-cooperative-harvest-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Grower G67 offers 420 kg by 09:00; 60 kg fails size range and vehicle V67 capacity falls to 350 kg after refrigeration fault. Case case-67; current first-stage record values: {\"lotId\": \"quality-lot-Q67\", \"observedMaturity\": \"grower G67 reports harvest-ready 420 kg by 09:00\", \"qualityEvidence\": [\"buyer size-range inspection flags 60 kg out of range\"], \"readinessWindow\": \"grower collection by 09:00; refrigerated vehicle capacity 350 kg\", \"uncertainty\": \"vehicle fault changed capacity from 500 kg\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Replan collection around usable quality, the updated vehicle limit, and each grower window."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "uncertainty",
+          "value": "vehicle fault changed capacity from 500 kg",
+          "evidenceIds": [
+            "067-agricultural-cooperative-harvest-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "grower harvest windows and collection capacity: Grower G-67 has 420 kg ready by 09:00; quality lot Q-67 has 60 kg outside the buyer size range. Vehicle V-67 capacity drops from 500 kg to 350 kg after a refrigeration fault. Apply the first-stage gate to the record and source versions; Replan collection around usable quality, the updated vehicle limit, and each grower window.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-gate-contradictory",
+    "root": "coordinateHarvest/verifyReadiness.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "lotId": "quality-lot-Q67",
+          "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+          "qualityEvidence": [
+            "buyer size-range inspection flags 60 kg out of range"
+          ],
+          "readinessWindow": "collect all 420 kg in one 500 kg refrigerated trip by 09:00",
+          "uncertainty": "vehicle fault changed capacity from 500 kg",
+          "caseId": "case-67"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "uncertainty",
+            "evidenceIds": [
+              "067-agricultural-cooperative-harvest-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "grower harvest windows and collection capacity",
+        "evidence": [
+          {
+            "id": "067-agricultural-cooperative-harvest-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Grower G67 offers 420 kg by 09:00; 60 kg fails size range and vehicle V67 capacity falls to 350 kg after refrigeration fault. Case case-67; current first-stage record values: {\"lotId\": \"quality-lot-Q67\", \"observedMaturity\": \"grower G67 reports harvest-ready 420 kg by 09:00\", \"qualityEvidence\": [\"buyer size-range inspection flags 60 kg out of range\"], \"readinessWindow\": \"grower collection by 09:00; refrigerated vehicle capacity 350 kg\", \"uncertainty\": \"vehicle fault changed capacity from 500 kg\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Replan collection around usable quality, the updated vehicle limit, and each grower window."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "readinessWindow",
+          "value": "collect all 420 kg in one 500 kg refrigerated trip by 09:00",
+          "evidenceIds": [
+            "067-agricultural-cooperative-harvest-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "grower harvest windows and collection capacity: Grower G-67 has 420 kg ready by 09:00; quality lot Q-67 has 60 kg outside the buyer size range. Vehicle V-67 capacity drops from 500 kg to 350 kg after a refrigeration fault. Apply the first-stage gate to the record and source versions; Replan collection around usable quality, the updated vehicle limit, and each grower window.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-gate-missing",
+    "root": "coordinateHarvest/verifyReadiness.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-67"
+        },
+        "missingFields": [
+          "uncertainty"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes uncertainty?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "grower harvest windows and collection capacity",
+        "evidence": [],
+        "missing": [
+          "uncertainty"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Replan collection around usable quality, the updated vehicle limit, and each grower window."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "grower harvest windows and collection capacity: Grower G-67 has 420 kg ready by 09:00; quality lot Q-67 has 60 kg outside the buyer size range. Vehicle V-67 capacity drops from 500 kg to 350 kg after a refrigeration fault. Apply the first-stage gate to the record and source versions; Replan collection around usable quality, the updated vehicle limit, and each grower window.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-operational-1",
+    "root": "coordinateHarvest.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "desk": {
+        "round": {
+          "id": "067-agricultural-cooperative-harvest-coordinator-operational-1:round",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "growerIds": [],
+          "cropLotIds": [
+            "quality-lot-Q67"
+          ],
+          "deliveryCommitmentIds": [],
+          "coordinatorId": "accountable reviewer",
+          "planningWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg"
+        },
+        "priorLots": [
+          {
+            "lotId": "quality-lot-Q67",
+            "priorEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "revisedEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "sourceVersion": "v1",
+            "exactVariety": "",
+            "qualityState": "buyer size-range inspection flags 60 kg out of range",
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertain": true
+          }
+        ],
+        "readiness": [
+          {
+            "id": "067-prior-harvestreadiness-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "067-agricultural-cooperative-harvest-coordinator-operational-1",
+            "lotId": "quality-lot-Q67",
+            "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "qualityEvidence": [
+              "buyer size-range inspection flags 60 kg out of range"
+            ],
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertainty": "vehicle fault changed capacity from 500 kg"
+          }
+        ],
+        "commitments": [],
+        "matches": [],
+        "plans": [],
+        "movementReceipts": [],
+        "changedSourceIds": [
+          "067-operational-detail-1-source-v2"
+        ],
+        "revision": "v1"
+      },
+      "change": {
+        "changedLotIds": [
+          "quality-lot-Q67"
+        ],
+        "observedEvidence": [
+          {
+            "id": "067-operational-detail-1-source-v2",
+            "source": "Agricultural cooperative harvest coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R067 Agricultural steward; event version verified for this case",
+            "observedAt": "2026-10-12T07:00:00Z",
+            "text": "R067 Agricultural steward records: Grower G67 revises lot Q67 expected harvest from 420 kg to 310 kg at 06:30 on Oct 12. Prior estimate v1 remains linked to commitments C67-1 and C67-2; allocation worksheet still uses 420 kg. This current event is source 067-operational-detail-1-source-v2 v2, observed 2026-10-12T07:00:00Z, for case 067-agricultural-cooperative-harvest-coordinator-operational-1. The supplied typed prior 067-prior-harvestreadiness-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Grower G67 revises lot Q67 expected harvest from 420 kg to 310 kg at 06:30 on Oct 12. Prior estimate v1 remains linked to commitments C67-1 and C67-2; allocation worksheet still uses 420 kg."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "rejectedSubstitutionIds": [],
+        "physicalReceipts": []
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 067-agricultural-cooperative-harvest-coordinator-operational-1 against this factual event: Grower G67 revises lot Q67 expected harvest from 420 kg to 310 kg at 06:30 on Oct 12. Prior estimate v1 remains linked to commitments C67-1 and C67-2; allocation worksheet still uses 420 kg. Original §9 detail: A grower revises expected quantity: preserve the prior estimate and recompute affected allocations. Correct handling applies “preserve the prior estimate and recompute affected allocations.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Grower G67 revises lot Q67 expected harvest from 420 kg to 310 kg at 06:30 on Oct 12. Prior estimate v1 remains linked to commitments C67-1 and C67-2; allocation worksheet still uses 420 kg.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A grower revises expected quantity: preserve the prior estimate and recompute affected allocations.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Grower G67 revises lot Q67 expected harvest from 420 kg to 310 kg at 06:30 on Oct 12. Prior estimate v1 remains linked to commitments C67-1 and C67-2; allocation worksheet still uses 420 kg. It links source 067-operational-detail-1-source-v2 v2 with prior typed HarvestReadiness record 067-prior-harvestreadiness-detail-1-v1 v1 and keeps unresolved scope visible for G67, Q67, C67-1, C67-2.",
+      "durable_state": "The proposal retains prior record 067-prior-harvestreadiness-detail-1-v1 v1 and versions only the affected state for G67, Q67, C67-1, C67-2 against source 067-operational-detail-1-source-v2 v2; it applies “preserve the prior estimate and recompute affected allocations.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to G67, Q67, C67-1, C67-2 and the scope supported by source 067-operational-detail-1-source-v2 v2; it represents “preserve the prior estimate and recompute affected allocations.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-operational-2",
+    "root": "coordinateHarvest.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "desk": {
+        "round": {
+          "id": "067-agricultural-cooperative-harvest-coordinator-operational-2:round",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "growerIds": [],
+          "cropLotIds": [
+            "quality-lot-Q67"
+          ],
+          "deliveryCommitmentIds": [],
+          "coordinatorId": "accountable reviewer",
+          "planningWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg"
+        },
+        "priorLots": [
+          {
+            "lotId": "quality-lot-Q67",
+            "priorEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "revisedEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "sourceVersion": "v1",
+            "exactVariety": "",
+            "qualityState": "buyer size-range inspection flags 60 kg out of range",
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertain": true
+          }
+        ],
+        "readiness": [
+          {
+            "id": "067-prior-harvestreadiness-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "067-agricultural-cooperative-harvest-coordinator-operational-2",
+            "lotId": "quality-lot-Q67",
+            "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "qualityEvidence": [
+              "buyer size-range inspection flags 60 kg out of range"
+            ],
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertainty": "vehicle fault changed capacity from 500 kg"
+          }
+        ],
+        "commitments": [],
+        "matches": [],
+        "plans": [],
+        "movementReceipts": [],
+        "changedSourceIds": [
+          "067-operational-detail-2-source-v2"
+        ],
+        "revision": "v1"
+      },
+      "change": {
+        "changedLotIds": [
+          "quality-lot-Q67"
+        ],
+        "observedEvidence": [
+          {
+            "id": "067-operational-detail-2-source-v2",
+            "source": "Agricultural cooperative harvest coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R067 Agricultural steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R067 Agricultural steward records: Growers G67 and G68 both call their crop “Golden Star,” but seed certificates list variety IDs GS-4 and GS-9 with different size and firmness ranges. Buyer B67 contract specifies GS-4 only. This current event is source 067-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 067-agricultural-cooperative-harvest-coordinator-operational-2. The supplied typed prior 067-prior-harvestreadiness-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Growers G67 and G68 both call their crop “Golden Star,” but seed certificates list variety IDs GS-4 and GS-9 with different size and firmness ranges. Buyer B67 contract specifies GS-4 only."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "rejectedSubstitutionIds": [],
+        "physicalReceipts": []
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 067-agricultural-cooperative-harvest-coordinator-operational-2 against this factual event: Growers G67 and G68 both call their crop “Golden Star,” but seed certificates list variety IDs GS-4 and GS-9 with different size and firmness ranges. Buyer B67 contract specifies GS-4 only. Original §9 detail: Two varieties share a common name: retain exact variety and quality requirements. Correct handling applies “retain exact variety and quality requirements.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Growers G67 and G68 both call their crop “Golden Star,” but seed certificates list variety IDs GS-4 and GS-9 with different size and firmness ranges. Buyer B67 contract specifies GS-4 only.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Two varieties share a common name: retain exact variety and quality requirements.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Growers G67 and G68 both call their crop “Golden Star,” but seed certificates list variety IDs GS-4 and GS-9 with different size and firmness ranges. Buyer B67 contract specifies GS-4 only. It links source 067-operational-detail-2-source-v2 v2 with prior typed HarvestReadiness record 067-prior-harvestreadiness-detail-2-v1 v1 and keeps unresolved scope visible for G67, G68, GS-4, GS-9, B67.",
+      "durable_state": "The proposal retains prior record 067-prior-harvestreadiness-detail-2-v1 v1 and versions only the affected state for G67, G68, GS-4, GS-9, B67 against source 067-operational-detail-2-source-v2 v2; it applies “retain exact variety and quality requirements.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to G67, G68, GS-4, GS-9, B67 and the scope supported by source 067-operational-detail-2-source-v2 v2; it represents “retain exact variety and quality requirements.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-operational-3",
+    "root": "coordinateHarvest.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "desk": {
+        "round": {
+          "id": "067-agricultural-cooperative-harvest-coordinator-operational-3:round",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "growerIds": [],
+          "cropLotIds": [
+            "quality-lot-Q67"
+          ],
+          "deliveryCommitmentIds": [],
+          "coordinatorId": "accountable reviewer",
+          "planningWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg"
+        },
+        "priorLots": [
+          {
+            "lotId": "quality-lot-Q67",
+            "priorEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "revisedEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "sourceVersion": "v1",
+            "exactVariety": "",
+            "qualityState": "buyer size-range inspection flags 60 kg out of range",
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertain": true
+          }
+        ],
+        "readiness": [
+          {
+            "id": "067-prior-harvestreadiness-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "067-agricultural-cooperative-harvest-coordinator-operational-3",
+            "lotId": "quality-lot-Q67",
+            "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "qualityEvidence": [
+              "buyer size-range inspection flags 60 kg out of range"
+            ],
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertainty": "vehicle fault changed capacity from 500 kg"
+          }
+        ],
+        "commitments": [],
+        "matches": [],
+        "plans": [],
+        "movementReceipts": [],
+        "changedSourceIds": [
+          "067-operational-detail-3-source-v2"
+        ],
+        "revision": "v1"
+      },
+      "change": {
+        "changedLotIds": [
+          "quality-lot-Q67"
+        ],
+        "observedEvidence": [
+          {
+            "id": "067-operational-detail-3-source-v2",
+            "source": "Agricultural cooperative harvest coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R067 Agricultural steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R067 Agricultural steward records: Forklift F67 is available from 07:00 to 10:00, but qualified operator O67 is unavailable until 09:00. Harvest lot Q67 has a 08:00 loading window and requires both equipment and an operator. This current event is source 067-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 067-agricultural-cooperative-harvest-coordinator-operational-3. The supplied typed prior 067-prior-harvestreadiness-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Forklift F67 is available from 07:00 to 10:00, but qualified operator O67 is unavailable until 09:00. Harvest lot Q67 has a 08:00 loading window and requires both equipment and an operator."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "rejectedSubstitutionIds": [],
+        "physicalReceipts": []
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 067-agricultural-cooperative-harvest-coordinator-operational-3 against this factual event: Forklift F67 is available from 07:00 to 10:00, but qualified operator O67 is unavailable until 09:00. Harvest lot Q67 has a 08:00 loading window and requires both equipment and an operator. Original §9 detail: Equipment is available but an operator is not: treat both as constrained resources. Correct handling applies “treat both as constrained resources.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Forklift F67 is available from 07:00 to 10:00, but qualified operator O67 is unavailable until 09:00. Harvest lot Q67 has a 08:00 loading window and requires both equipment and an operator.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Equipment is available but an operator is not: treat both as constrained resources.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Forklift F67 is available from 07:00 to 10:00, but qualified operator O67 is unavailable until 09:00. Harvest lot Q67 has a 08:00 loading window and requires both equipment and an operator. It links source 067-operational-detail-3-source-v2 v2 with prior typed HarvestReadiness record 067-prior-harvestreadiness-detail-3-v1 v1 and keeps unresolved scope visible for F67, O67, Q67.",
+      "durable_state": "The proposal retains prior record 067-prior-harvestreadiness-detail-3-v1 v1 and versions only the affected state for F67, O67, Q67 against source 067-operational-detail-3-source-v2 v2; it applies “treat both as constrained resources.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to F67, O67, Q67 and the scope supported by source 067-operational-detail-3-source-v2 v2; it represents “treat both as constrained resources.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-operational-4",
+    "root": "coordinateHarvest.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "desk": {
+        "round": {
+          "id": "067-agricultural-cooperative-harvest-coordinator-operational-4:round",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "growerIds": [],
+          "cropLotIds": [
+            "quality-lot-Q67"
+          ],
+          "deliveryCommitmentIds": [],
+          "coordinatorId": "accountable reviewer",
+          "planningWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg"
+        },
+        "priorLots": [
+          {
+            "lotId": "quality-lot-Q67",
+            "priorEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "revisedEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "sourceVersion": "v1",
+            "exactVariety": "",
+            "qualityState": "buyer size-range inspection flags 60 kg out of range",
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertain": true
+          }
+        ],
+        "readiness": [
+          {
+            "id": "067-prior-harvestreadiness-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "067-agricultural-cooperative-harvest-coordinator-operational-4",
+            "lotId": "quality-lot-Q67",
+            "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "qualityEvidence": [
+              "buyer size-range inspection flags 60 kg out of range"
+            ],
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertainty": "vehicle fault changed capacity from 500 kg"
+          }
+        ],
+        "commitments": [],
+        "matches": [],
+        "plans": [],
+        "movementReceipts": [],
+        "changedSourceIds": [
+          "067-operational-detail-4-source-v2"
+        ],
+        "revision": "v1"
+      },
+      "change": {
+        "changedLotIds": [
+          "quality-lot-Q67"
+        ],
+        "observedEvidence": [
+          {
+            "id": "067-operational-detail-4-source-v2",
+            "source": "Agricultural cooperative harvest coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R067 Agricultural steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R067 Agricultural steward records: Customer C67 rejects substitute variety GS-9 in message C67-88 and reaffirms contracted GS-4. Delivery plan currently replaces 60 kg of GS-4 with GS-9 and marks the original commitment fulfilled. This current event is source 067-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 067-agricultural-cooperative-harvest-coordinator-operational-4. The supplied typed prior 067-prior-harvestreadiness-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C67 rejects substitute variety GS-9 in message C67-88 and reaffirms contracted GS-4. Delivery plan currently replaces 60 kg of GS-4 with GS-9 and marks the original commitment fulfilled."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "rejectedSubstitutionIds": [],
+        "physicalReceipts": []
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 067-agricultural-cooperative-harvest-coordinator-operational-4 against this factual event: Customer C67 rejects substitute variety GS-9 in message C67-88 and reaffirms contracted GS-4. Delivery plan currently replaces 60 kg of GS-4 with GS-9 and marks the original commitment fulfilled. Original §9 detail: A customer rejects a substitution: keep the original unmet commitment visible. Correct handling applies “keep the original unmet commitment visible.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Customer C67 rejects substitute variety GS-9 in message C67-88 and reaffirms contracted GS-4. Delivery plan currently replaces 60 kg of GS-4 with GS-9 and marks the original commitment fulfilled.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A customer rejects a substitution: keep the original unmet commitment visible.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Customer C67 rejects substitute variety GS-9 in message C67-88 and reaffirms contracted GS-4. Delivery plan currently replaces 60 kg of GS-4 with GS-9 and marks the original commitment fulfilled. It links source 067-operational-detail-4-source-v2 v2 with prior typed HarvestReadiness record 067-prior-harvestreadiness-detail-4-v1 v1 and keeps unresolved scope visible for C67, GS-9, C67-88, GS-4.",
+      "durable_state": "The proposal retains prior record 067-prior-harvestreadiness-detail-4-v1 v1 and versions only the affected state for C67, GS-9, C67-88, GS-4 against source 067-operational-detail-4-source-v2 v2; it applies “keep the original unmet commitment visible.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C67, GS-9, C67-88, GS-4 and the scope supported by source 067-operational-detail-4-source-v2 v2; it represents “keep the original unmet commitment visible.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "067-agricultural-cooperative-harvest-coordinator-operational-5",
+    "root": "coordinateHarvest.nl",
+    "split_group": "067-agricultural-cooperative-harvest-coordinator",
+    "inputs": {
+      "desk": {
+        "round": {
+          "id": "067-agricultural-cooperative-harvest-coordinator-operational-5:round",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "growerIds": [],
+          "cropLotIds": [
+            "quality-lot-Q67"
+          ],
+          "deliveryCommitmentIds": [],
+          "coordinatorId": "accountable reviewer",
+          "planningWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg"
+        },
+        "priorLots": [
+          {
+            "lotId": "quality-lot-Q67",
+            "priorEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "revisedEstimate": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "sourceVersion": "v1",
+            "exactVariety": "",
+            "qualityState": "buyer size-range inspection flags 60 kg out of range",
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertain": true
+          }
+        ],
+        "readiness": [
+          {
+            "id": "067-prior-harvestreadiness-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "067-agricultural-cooperative-harvest-coordinator-operational-5",
+            "lotId": "quality-lot-Q67",
+            "observedMaturity": "grower G67 reports harvest-ready 420 kg by 09:00",
+            "qualityEvidence": [
+              "buyer size-range inspection flags 60 kg out of range"
+            ],
+            "readinessWindow": "grower collection by 09:00; refrigerated vehicle capacity 350 kg",
+            "uncertainty": "vehicle fault changed capacity from 500 kg"
+          }
+        ],
+        "commitments": [],
+        "matches": [],
+        "plans": [],
+        "movementReceipts": [],
+        "changedSourceIds": [
+          "067-operational-detail-5-source-v2"
+        ],
+        "revision": "v1"
+      },
+      "change": {
+        "changedLotIds": [
+          "quality-lot-Q67"
+        ],
+        "observedEvidence": [
+          {
+            "id": "067-operational-detail-5-source-v2",
+            "source": "Agricultural cooperative harvest coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R067 Agricultural steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R067 Agricultural steward records: Harvest plan H67 estimated 310 kg. Scale receipt shows 280 kg harvested, 40 kg rejected, 210 kg stored, and 30 kg delivered; the reconciliation sheet sums planned quantity against delivered only. This current event is source 067-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 067-agricultural-cooperative-harvest-coordinator-operational-5. The supplied typed prior 067-prior-harvestreadiness-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Harvest plan H67 estimated 310 kg. Scale receipt shows 280 kg harvested, 40 kg rejected, 210 kg stored, and 30 kg delivered; the reconciliation sheet sums planned quantity against delivered only."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "rejectedSubstitutionIds": [],
+        "physicalReceipts": []
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 067-agricultural-cooperative-harvest-coordinator-operational-5 against this factual event: Harvest plan H67 estimated 310 kg. Scale receipt shows 280 kg harvested, 40 kg rejected, 210 kg stored, and 30 kg delivered; the reconciliation sheet sums planned quantity against delivered only. Original §9 detail: Actual yield differs from plan: reconcile harvested, stored, and delivered quantities separately. Correct handling applies “reconcile harvested, stored, and delivered quantities separately.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Harvest plan H67 estimated 310 kg. Scale receipt shows 280 kg harvested, 40 kg rejected, 210 kg stored, and 30 kg delivered; the reconciliation sheet sums planned quantity against delivered only.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Actual yield differs from plan: reconcile harvested, stored, and delivered quantities separately.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Harvest plan H67 estimated 310 kg. Scale receipt shows 280 kg harvested, 40 kg rejected, 210 kg stored, and 30 kg delivered; the reconciliation sheet sums planned quantity against delivered only. It links source 067-operational-detail-5-source-v2 v2 with prior typed HarvestReadiness record 067-prior-harvestreadiness-detail-5-v1 v1 and keeps unresolved scope visible for H67.",
+      "durable_state": "The proposal retains prior record 067-prior-harvestreadiness-detail-5-v1 v1 and versions only the affected state for H67 against source 067-operational-detail-5-source-v2 v2; it applies “reconcile harvested, stored, and delivered quantities separately.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to H67 and the scope supported by source 067-operational-detail-5-source-v2 v2; it represents “reconcile harvested, stored, and delivered quantities separately.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

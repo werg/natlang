@@ -1,0 +1,49 @@
+{
+  "application_id": "019",
+  "title": "Contract-to-purchasing conformance desk",
+  "source_relative_path": "applications/04-procurement-and-supplier-management/019-contract-to-purchasing-conformance-desk.md",
+  "program_root": "codebases/design_briefs/019-contract-to-purchasing-conformance-desk",
+  "source_sha256": "d1b0a7134fd4b9804703d862c39c2d07d987bd0fdb093f0d603c1efa34770c28",
+  "domain_id": "04",
+  "stages": [
+    {
+      "name": "interpretRequest",
+      "output_type": "PurchaseIntent",
+      "algorithm": "Read item descriptions with the requester’s purpose and supporting documents. Distinguish a legitimate functional need from a preferred brand or category label, and identify ambiguity that changes contract coverage or approval authority.",
+      "gate": "Quantity and purpose are explicit; missing critical scope is not guessed."
+    },
+    {
+      "name": "selectAgreement",
+      "output_type": "AgreementScope",
+      "algorithm": "Resolve the applicable contract, schedules, amendments, and purchasing entity. Interpret coverage under dates, territory, and intended use; do not apply a parent agreement to an affiliate or service category without supporting terms.",
+      "gate": "Exact temporal and entity scope plus supported semantic category match."
+    },
+    {
+      "name": "judgeConformance",
+      "output_type": "ConformanceFinding",
+      "algorithm": "Compare each requested line with contract inclusions, exclusions, and conditions. Separate commercial price compliance from functional scope and preserve conditions such as minimum quantities, required bundles, or approved use limitations.",
+      "gate": "A catalog listing alone does not establish contractual coverage."
+    },
+    {
+      "name": "proposeAlternatives",
+      "output_type": "PurchasingOption",
+      "algorithm": "Construct alternatives that satisfy the underlying need within the applicable agreement. Explain changed capabilities and total costs, and offer an exception route where compliant options would not meet essential requirements rather than silently weakening the request.",
+      "gate": "Alternatives preserve confirmed essential constraints and exact commercial limits."
+    },
+    {
+      "name": "routeApproval",
+      "output_type": "PurchaseDisposition",
+      "algorithm": "Build a review packet with scope evidence, pricing, alternatives, and unresolved conditions. Route to the correct authority based on cumulative commitment and exception type; recheck terms and request versions immediately before order release.",
+      "gate": "No split-order circumvention of thresholds; current scoped approval required."
+    }
+  ],
+  "operational_details": [
+    "A requester splits one purchase into several small requests: aggregate related commitments for threshold checks.",
+    "A discount depends on a bundle: recalculate when one item is removed.",
+    "An affiliate uses the parent’s contract: require explicit entity coverage.",
+    "A catalog description changes: retain the version used for approval.",
+    "A contract expires while approval waits: revalidate before releasing the order."
+  ],
+  "representative_episode": "A team requests a service sold by an approved supplier but outside the negotiated category and for an uncovered affiliate.",
+  "independent_truth_basis": "Generated contract scope predicates, request functions, exact price schedules, and approval thresholds."
+}

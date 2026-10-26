@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "052",
+  "title": "Warehouse exception controller",
+  "entrypoint": "reconcileWarehouseJournal.nl",
+  "interfaces": [
+    {
+      "name": "reconcileWarehouseJournal",
+      "path": "reconcileWarehouseJournal.nl",
+      "purpose": "Reconcile signed device observation sequences, physical stock identity and independently verified exception work without inventing inventory.",
+      "stateParameter": "journal",
+      "stateResultPath": [
+        "journal"
+      ],
+      "stateKey": "warehouse-journal"
+    },
+    {
+      "name": "reconcileInventoryReceipt",
+      "path": "reconcileInventoryReceipt.nl",
+      "purpose": "Apply actual movement and adjustment receipts once after lot-level conservation checks.",
+      "stateParameter": "journal",
+      "stateResultPath": [
+        "journal"
+      ],
+      "stateKey": "warehouse-journal"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reconcileInventoryReceipt.nl",
+    "reconcileInventoryReceipt/checkCustodyConservation.nl",
+    "reconcileWarehouseJournal.nl",
+    "reconcileWarehouseJournal/challengeLateReceiptDoubleCount.nl",
+    "reconcileWarehouseJournal/classifyPhysicalDifference.nl",
+    "reconcileWarehouseJournal/establishLotIdentity.nl",
+    "reconcileWarehouseJournal/establishLotIdentity/compareLotSerialEvidence.nl",
+    "reconcileWarehouseJournal/reconcileDeviceOrder.nl",
+    "reconcileWarehouseJournal/reconcileDeviceOrder/checkSignedObservation.nl",
+    "reconcileWarehouseJournal/sequenceWarehouseWork.nl",
+    "reconcileWarehouseJournal/sequenceWarehouseWork/verifyRecountIndependence.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "reconstructStock",
+        "paths": [
+          "reconcileWarehouseJournal/reconcileDeviceOrder/checkSignedObservation.nl"
+        ]
+      },
+      {
+        "stage": "matchIdentity",
+        "paths": [
+          "reconcileWarehouseJournal/establishLotIdentity/compareLotSerialEvidence.nl"
+        ]
+      },
+      {
+        "stage": "classifyException",
+        "paths": [
+          "reconcileWarehouseJournal/classifyPhysicalDifference.nl"
+        ]
+      },
+      {
+        "stage": "planResolution",
+        "paths": [
+          "reconcileWarehouseJournal/sequenceWarehouseWork/verifyRecountIndependence.nl"
+        ]
+      },
+      {
+        "stage": "reconcileInventory",
+        "paths": [
+          "reconcileInventoryReceipt/checkCustodyConservation.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "reconcileWarehouseJournal/reconcileDeviceOrder.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "reconcileWarehouseJournal/establishLotIdentity/compareLotSerialEvidence.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "reconcileWarehouseJournal/sequenceWarehouseWork/verifyRecountIndependence.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "reconcileWarehouseJournal/classifyPhysicalDifference.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reconcileWarehouseJournal/challengeLateReceiptDoubleCount.nl"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/design-brief-011-service-recovery","version":"0.1.0","description":"Multi-issue customer recovery with entitlement, operation, and closure tracking.","engines":{"natlang":">=0.1.0"}}

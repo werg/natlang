@@ -19,6 +19,24 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 4. Define event ordering and commit points with ordinary code or `EventLoop` (`KeyedEventLoop` for one loop per user or document). Persist operation identities and observations for effects that must not repeat.
 5. Test the actual engine and transport, success and partial failure. Make general fixes in the shared runtime, not as app-local workarounds.
 
+## Preserve each application's domain interface
+
+An application host may provide exact authentication, storage transactions, source binding, version checks, and delivery receipts. Those facilities must accept the program's actual named parameters and checked return type. They must not reshape unrelated programs into one semantic request/result protocol or choose their policy, decomposition, or next domain action. Design each public operation around a real user task, and keep private helpers private.
+
+When persisting a native checkpoint, declare exactly which returned value becomes which next-call parameter; use `stateInputPath` for a nested state field without replacing new evidence in the enclosing dossier. Verify compatibility with every operation sharing that state key. Keep source identity and the previous state version with the checkpoint. Run native reasoning on a snapshot outside the transaction, then atomically save its checked result, checkpoint, decided effects and actor-bound invocation receipt. Reject stale results after input refresh or intervening commit. A repeated request returns its durable receipt before inference. Domain-specific approval, refusal and recovery belong in the application's Natlang operations, not a mandatory host-wide proposal/approve/commit lifecycle.
+
+Authorize native operations by their own capability names. For `state_override`, reread the saved state and supply only the new event/evidence rather than overwriting its checkpoint. For `arguments_required`, provide the selected operation's actual parameters. For `effect_adapter_required`, install that application's exact serialization adapter before retrying; a nonempty declared effect array cannot silently disappear. An adapter receives frozen checked values and performs no I/O or semantic action selection. Keep actual attempts, transport acknowledgments, domain acceptance and physical verification distinct in the application’s types; a booking or published checklist does not prove readiness, arrival, execution or a completed reset. `effect_identity_conflict` requires reconciling the original domain operation identity, not minting a new key to force a duplicate action. `receipt_mismatch` requires evidence for the exact delivered key and receiver receipt; an HTTP success alone cannot close it.
+
+External effects need an application-specific adapter or scoped service with an actual receiver contract. A model's intention, a queued action, an approval, and a confirmed delivery are distinct observations. An unconfirmed delivery remains unresolved until evidence establishes delivery or establishes that no send occurred. Test crash recovery, stale updates, permission boundaries, and the application's domain-specific resume behavior. Do not claim external deployment or live-model qualification when only the source and controlled engineering drivers have been exercised.
+
+For independently authored training applications, keep optional host mechanisms outside model-visible source snapshots. Package every application's own native interfaces and callable paths, including a package boundary used by `uses:` imports. Report structural coverage and measured execution separately; source counts, uniform scaffolding, and fixture replay are not evidence of semantic diversity or production behavior.
+
+Check crisp module visibility against the native loader's actual callable scope. A named TypeScript export requires its qualified module binding, while a default export may supply the bare callable; neither is made available merely by appearing in `source_files`. On a missing export or argument-count diagnostic, repair the packaged module/import relationship and pass the declared parameters rather than adding a second host implementation. A regression should load the real Natlang source and exercise the actual exact helper. Keep such scripted engineering evidence separate from learned execution and external delivery qualification.
+
+Potential-call reports must follow qualified namespace children by their loader identities and reject a bare call to a namespace. Review unreachable packaged helpers against actual public operations and independent fixture roots. A type-valid source inventory can still contain a disconnected reasoning tree; source ownership alone does not prove that a parent can consume its result.
+
+Relative module imports, including erased type imports, must resolve inside the frozen package after a helper moves. Domain-level replay needs the complete bound result and must preserve later checkpoint history; returning a prior transition while rerunning downstream selection is not result-idempotent. Conflicting input under the same domain ID and legacy IDs without complete result evidence remain distinct unresolved recovery cases.
+
 ## Operational commitments
 
 For a selected semantic executor, install `installSelectedSemanticEnvironment`
@@ -624,3 +642,18 @@ self-hosted teacher; it does not change ordinary runtime or compiler semantics.
 When the declared result is `Neuralese<string>`, route a terminal plain-text assistant reply through the existing typed Neuralese writer before completing the invocation. Keep the target as the original assistant text and bind the writer receipt to that exact model turn, body hash, and captured invocation result. A no-call reply followed by another turn in the same invocation is not a completed result.
 
 A completed reply cut off before any executable action consumes an explicitly configured repair budget. Recover with the existing instruction to take the next step with one tool call; return the actual typed result when ready. `model_incomplete: truncated_without_action` records exhausted repairs, separately from transport errors. Successful executed actions/results can establish progress; an emitted rejected proposal cannot. One still-pending long decode is not a failed continuation.
+
+
+### Invocation cancellation and complete application results
+
+Identical in-flight native requests may share one execution, but each caller owns its cancellation. An aborted waiter receives `invocation_cancelled`; other waiters remain attached. When the final waiter cancels, abort the execution, reject a later result before commit and release the in-flight key so the caller can retry. An already committed request is recoverable by its durable invocation identity; read its receipt before deciding whether an outside-world effect needs reconciliation. Cancellation alone supplies no external delivery evidence.
+
+Validate domain checkpoints and complete return records on all branches, including blocked discovery and partial execution. Keep source-native result construction and branch decisions in Natlang. Host tests with scripted engineering drivers exercise persistence, isolation, cancellation and transport; they do not qualify model behavior or real external adapters.
+
+The shipped referral, documentary, live-event and world-action adapters accept only their declared native effect kinds and serialize the checked intention unchanged. Configure their fixed topics explicitly. `invalid_effect_adapter` requires correcting the declared effect shape or adapter registration; do not route an unknown kind to a generic fallback. Transport receipt IDs establish delivery custody, while the program reconciles actual recipient, simulator or physical outcomes in its next native operation.
+
+Register `effectsPath` and the exact adapter on every public operation that can
+return effects, including parent roots that call preparation helpers. The
+`effect_adapter_required` error means the result has outgoing intentions without
+a configured serializer: register that operation's adapter and retry its durable
+invocation. Do not advance a pending checkpoint separately from its outbox write.

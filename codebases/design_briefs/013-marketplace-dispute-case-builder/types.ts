@@ -1,0 +1,37 @@
+
+export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
+
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+
+export type Question = { question: string; respondent: string; evidenceNeeded: string };
+
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+
+export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type DisputeCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; buyerId: string; sellerId: string; transactionId: string; disputedOutcome: string; reviewerId: string };
+export type DisputeEvent = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; actorId: string; happenedAt: string; eventKind: string; assertedFact: string };
+export type DisputedQuestion = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; proposition: string; positions: string[]; decisiveEvidence: string; burdenRule: string };
+export type EvidenceFinding = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; questionId: string; supportingRefs: Ref[]; opposingRefs: Ref[]; sufficiency: 'enough'|'insufficient'|'conflicted' };
+export type DisputeRecommendation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; questionIds: string[]; ruleIds: string[]; proposedOutcome: string; unresolvedFacts: string[] };
+export type ReviewDossier = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; recommendationId: string; partyResponseIds: string[]; appealDeadline: string; redactedArtifactIds: string[] };
+export type DraftDisputeEvent = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; actorId?: string; happenedAt?: string; eventKind?: string; assertedFact?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
+
+export type DisputeBuildRequest = { caseId: string; parties: string[]; requestedBy: string; disputedOutcome: string; transactionId: string; requiredDisclosures: string[]; expectedVersion: string };
+export type DisputeRecordSet = { caseRecords: DisputeCase[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; transactionListingEditRefs: string[]; paymentReversalRefs: string[]; outageDeadlineRefs: string[]; publicAddressRefs: string[]; appealEvidenceRefs: string[] };
+
+export type DisputeProgramResult = { caseId: string; scope: DisputeScope; rules: ApplicableDisputeRules; chronology: DisputeChronology; questions: DispositiveQuestionSet; evidence: QuestionEvidenceLedger; disposition: ConditionalDisposition; dossier: BalancedDossierAssembly; commitAllowed: boolean };
+export type DisputeCaseCheckpoint = { caseId: string; revision: number; transactionVersion: string; reviewEditions: DisputeProgramResult[]; partyResponseRefs: string[]; appealEvidenceRefs: string[]; reopenedFindings: string[]; unresolvedReviewerQuestions: string[]; adjudicationReceipts: string[] };
+export type DisputeReviewRun = { review: DisputeProgramResult; checkpoint: DisputeCaseCheckpoint; newlyMaterialEvidenceRefs: string[]; preservedFindings: string[]; paymentEffectsPending: string[] };
+export type DisputeScope = { caseId: string; transactionId: string; parties: string[]; disputedOutcome: string; requiredDisclosures: string[]; expectedVersion: string; blockers: string[] };
+export type ApplicableDisputeRules = { selectedEditions: PolicyCandidate[]; precedenceQuestions: string[]; effectiveTransactionDate: string; authorityBasis: string[] };
+export type DisputeChronology = { events: DisputeEvent[]; assertedClaims: string[]; independentRecords: string[]; conflicts: string[]; transactionListingEdition: string; missingPartitions: string[]; evidenceRefs: string[] };
+export type DispositiveQuestionSet = { questions: Question[]; immaterialDisagreements: string[]; decisionChangingAlternatives: string[]; burdenRuleRefs: string[] };
+export type QuestionEvidenceLedger = { findings: EvidenceFinding[]; duplicateCopyGroups: string[]; independentCorroboration: string[]; authenticityUnverified: string[]; semanticSupportUnresolved: string[]; evidenceRefs: string[] };
+export type ConditionalDisposition = { recommendation: DisputeRecommendation[]; outcomeBranches: string[]; unresolvedPremises: string[]; escalationReasons: string[]; evidenceRefs: string[] };
+export type BalancedDossierAssembly = { dossier: ReviewDossier[]; partyPositionRefs: string[]; responseWindows: string[]; redactionRefs: string[]; reviewerDispositionRefs: string[]; appealScope: string[]; blockers: string[] };

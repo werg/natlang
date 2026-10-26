@@ -1,0 +1,91 @@
+{
+  "application_id": "054",
+  "title": "Donation redistribution coordinator",
+  "source_relative_path": "applications/11-logistics-redistribution-and-circular-economy/054-donation-redistribution-coordinator.md",
+  "source_sha256": "a7ef45d1c35dc61a003deac483ddcb6ed3140c8ef1736d587fbba75d600678c7",
+  "domain_id": "11",
+  "stages": [
+    {
+      "name": "normalizeDonations",
+      "output_type": "DonationOffer",
+      "algorithm": "Interpret offers and condition evidence, distinguishing available items from tentative promises. Record quantities, collection constraints, and any permitted-use restrictions; request missing information that changes suitability rather than accepting vague offers into inventory.",
+      "gate": "Only confirmed quantities enter allocatable stock."
+    },
+    {
+      "name": "interpretNeeds",
+      "output_type": "RecipientNeed",
+      "algorithm": "Recover recipient needs from descriptions and prior confirmations without inferring sensitive circumstances. Distinguish necessary features from preferences, record accessibility and timing constraints explicitly supplied by recipients, and preserve consent for contact or delivery.",
+      "gate": "Suitability criteria are recipient-grounded and not based on stereotypes."
+    },
+    {
+      "name": "constructBundles",
+      "output_type": "DonationBundle",
+      "algorithm": "Assemble useful combinations rather than allocating isolated items that cannot serve the recipient’s purpose. Propose acceptable substitutions, identify missing components, and ensure the bundle’s condition and practical requirements match the confirmed need.",
+      "gate": "Bundle is usable under the recipient’s stated constraints."
+    },
+    {
+      "name": "applyAllocation",
+      "output_type": "DonationAllocation",
+      "algorithm": "Apply supplied fairness and priority principles to feasible bundles, using exact inventory and transport constraints. Explain tradeoffs and preserve unmet needs without inventing deservingness criteria or optimizing only the easiest deliveries.",
+      "gate": "Exact conservation and consistent application of the approved allocation policy."
+    },
+    {
+      "name": "coordinateDelivery",
+      "output_type": "DonationDelivery",
+      "algorithm": "Arrange consented collection or delivery, verify availability before dispatch, and track actual recipient acceptance. Reallocate declined or unavailable items through the same policy rather than informal side agreements, and preserve privacy in donor communications.",
+      "gate": "Delivery and acceptance are distinct; recipient details are shared only as needed."
+    }
+  ],
+  "operational_details": [
+    "A donor changes the quantity on collection day: recompute affected allocations without hiding unmet needs.",
+    "A recipient cannot store a large bundle: split delivery or propose a suitable alternative.",
+    "A donor requests private recipient details: provide only consented information.",
+    "A recipient declines an item: preserve dignity and reallocate without penalizing future need.",
+    "An item has a recall or handling restriction: quarantine it under the supplied safety policy."
+  ],
+  "domain_records": {
+    "DonationRound": [
+      "offerIds: ID[]",
+      "recipientNeedIds: ID[]",
+      "coordinatorId: ID",
+      "allocationRuleId: ID",
+      "distributionWindow: string"
+    ],
+    "DonationOffer": [
+      "caseId: ID",
+      "donorId: ID",
+      "itemDescription: string",
+      "quantity: Quantity",
+      "condition: string",
+      "availabilityWindow: string"
+    ],
+    "RecipientNeed": [
+      "caseId: ID",
+      "recipientId: ID",
+      "desiredOutcome: string",
+      "essentialConstraints: string[]",
+      "acceptableSubstitutions: string[]"
+    ],
+    "DonationBundle": [
+      "caseId: ID",
+      "offerIds: ID[]",
+      "recipientId: ID",
+      "intendedUse: string",
+      "missingComponents: string[]"
+    ],
+    "DonationAllocation": [
+      "caseId: ID",
+      "bundleIds: ID[]",
+      "reservedQuantities: Quantity[]",
+      "ruleBasis: string",
+      "unmetNeedIds: ID[]"
+    ],
+    "DonationDelivery": [
+      "caseId: ID",
+      "allocationId: ID",
+      "logisticsTaskIds: ID[]",
+      "acceptanceRef: Ref",
+      "declinedItems: ID[]"
+    ]
+  }
+}

@@ -871,11 +871,70 @@ def _archive_apply(policy, budget_bytes, protected_paths, expected):
         if isinstance(candidate, dict) and 'moved_files' in candidate:
             summary = candidate
             break
+    # The archiver prints one success event only after verified_copy completed,
+    # the source was atomically replaced by its destination symlink, and the
+    # corresponding manifest record was appended. Preserve those successes if
+    # a later candidate fails and the process exits before its final summary.
+    archived_records = _verified_archive_events(result.stdout, policy)
+    moved_files = max(int((summary or {}).get('moved_files', 0)), len(archived_records))
+    if archived_records:
+        moved_bytes = sum(record['bytes'] for record in archived_records)
+    else:
+        moved_bytes = int(float((summary or {}).get('moved_gb', 0)) * GIB)
     return {'executed': True, 'returncode': result.returncode,
-            'moved_files': (summary or {}).get('moved_files', 0),
-            'moved_bytes': int(float((summary or {}).get('moved_gb', 0)) * GIB),
+            'moved_files': moved_files,
+            'moved_bytes': moved_bytes,
+            'verified_archived_records': archived_records,
             'summary': summary,
             'command': command, 'stdout': result.stdout[-20000:], 'stderr': result.stderr[-5000:]}
+
+
+def _verified_archive_events(stdout, policy):
+    """Return exact manifest-backed archive events that remain linked in place."""
+    archive_value = policy.get('archive_destination')
+    if not isinstance(archive_value, str) or not archive_value:
+        return []
+    manifest = Path(archive_value) / 'manifest.jsonl'
+    try:
+        entries = [json.loads(line) for line in manifest.read_text().splitlines() if line.strip()]
+    except (OSError, ValueError):
+        return []
+    by_source = {}
+    for entry in entries:
+        if isinstance(entry, dict) and isinstance(entry.get('source'), str):
+            by_source.setdefault(entry['source'], []).append(entry)
+    verified = {}
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        source_value = event.get('archived') if isinstance(event, dict) else None
+        if not isinstance(source_value, str) or source_value in verified:
+            continue
+        source = Path(source_value)
+        try:
+            if not source.is_symlink():
+                continue
+            target = source.resolve(strict=True)
+            stat_result = target.stat()
+            if not target.is_file():
+                continue
+        except OSError:
+            continue
+        for entry in by_source.get(str(source), []):
+            try:
+                recorded_target = Path(entry['dest']).resolve(strict=True)
+                size = int(entry['bytes'])
+                digest = entry['sha256']
+            except (KeyError, TypeError, ValueError, OSError):
+                continue
+            if (recorded_target == target and size == stat_result.st_size
+                    and isinstance(digest, str) and re.fullmatch(r'[0-9a-f]{64}', digest)):
+                verified[source_value] = {'source': source_value, 'dest': str(target),
+                                          'bytes': size, 'sha256': digest}
+                break
+    return list(verified.values())
 
 
 def _lfm_retention_reference(policy, selected_sha256, owner):

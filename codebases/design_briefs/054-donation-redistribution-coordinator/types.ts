@@ -1,0 +1,78 @@
+export type ID = string; export type Ref = string; export type Decimal = string; export type Ratio = { numerator: string; denominator: string }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number }; export type LocalDate = string; export type DateTime = string; export type SpanRef = string;
+export type Evidence = { id: string; source: string; version: string; authority: string; observedAt: string; text: string; supports: string[]; contradicts: string[]; status: "current" | "superseded" | "uncertain" };
+
+export type PreparedEvidence = { subject: string; evidence: Evidence[]; missing: string[]; conflicts: string[]; alternatives: string[] };
+export type DecisionAtom = { field: string; value: string; evidenceIds: string[]; authority: string; status: "established" | "disputed" | "unknown" | "inapplicable"; alternative: string };
+export type Qualification = "pass" | "fail" | "needs-review";
+
+export type FieldConflict = { field: string; alternatives: string[]; evidenceIds: string[] };
+export type EvidenceBinding = { field: string; evidenceIds: string[]; sourceVersions: string[]; authority: string; status: "established" | "disputed" | "unknown" | "inapplicable" };
+
+export type Question = { id: string; question: string; respondent: string; acceptableEvidence: string[] };
+
+export type RecordMeta = { id: ID; version: string; createdAt: DateTime; updatedAt: DateTime };
+export type DonationRound = RecordMeta & {
+  offerIds: ID[];
+  recipientNeedIds: ID[];
+  coordinatorId: ID;
+  allocationRuleId: ID;
+  distributionWindow: string;
+};
+export type DonationOffer = RecordMeta & {
+  caseId: ID;
+  donorId: ID;
+  itemDescription: string;
+  quantity: Quantity;
+  condition: string;
+  availabilityWindow: string;
+};
+export type RecipientNeed = RecordMeta & {
+  caseId: ID;
+  recipientId: ID;
+  desiredOutcome: string;
+  essentialConstraints: string[];
+  acceptableSubstitutions: string[];
+};
+export type DonationBundle = RecordMeta & {
+  caseId: ID;
+  offerIds: ID[];
+  recipientId: ID;
+  intendedUse: string;
+  missingComponents: string[];
+};
+export type DonationAllocation = RecordMeta & {
+  caseId: ID;
+  bundleIds: ID[];
+  reservedQuantities: Quantity[];
+  ruleBasis: string;
+  unmetNeedIds: ID[];
+};
+export type DonationDelivery = RecordMeta & {
+  caseId: ID;
+  allocationId: ID;
+  logisticsTaskIds: ID[];
+  acceptanceRef: Ref;
+  declinedItems: ID[];
+};
+export type DraftDonationOffer = { values: { caseId?: ID; donorId?: ID; itemDescription?: string; quantity?: Quantity; condition?: string; availabilityWindow?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };
+
+export type DonationRoundRequest = { roundId: ID; offerEvidence: Evidence[]; recipientEvidence: Evidence[]; offeredLots: DonationOffer[]; allocationRules: string[]; authorityStatus: 'authorized' | 'unclear' | 'unauthorized'; confirmedNeeds: RecipientNeed[]; transportCapacity: string[]; priorAllocations: FairDonationAllocation[]; collectionDayUpdates: DonationOfferUpdate[]; recipientConsents: RecipientConsent[]; deliveryMode: string; recallRules: string[] };
+export type ConfirmedDonationStock = { offerId: ID; donorId: ID; item: string; confirmedQuantity: string; condition: string; availabilityWindow: string; restrictions: string[]; status: 'confirmed' | 'pending' };
+export type RecipientNeedProfile = { recipientId: ID; purpose: string; essentials: string[]; acceptableSubstitutions: string[]; timing: string; storageLimit: string; accessibilityNeeds: string[]; contactConsent: string; evidenceRefs: ID[] };
+export type PurposeFitDonationBundle = { recipientId: ID; offerIds: ID[]; purpose: string; missingComponents: string[]; substitutionEvidence: string[]; feasible: boolean; storageFit: boolean };
+export type FairDonationAllocation = { allocationVersion: string; recipientId: ID; bundleIds: ID[]; reservedQuantities: string[]; policyRuleRefs: ID[]; unmetNeeds: string[]; deliveryCapacity: string };
+export type DonationOfferUpdate = { offerId: ID; confirmedQuantity: string; observedAt: string; evidenceRef: ID };
+export type ChangedReservationSet = { changedOfferIds: ID[]; affectedBundleIds: ID[]; newlyUnmetNeeds: string[]; preservedPriorVersion: string };
+export type RecipientConsent = { recipientId: ID; permittedRecipientFields: string[]; collectionOrDelivery: string; expiresAt: string };
+export type DeliveryDisclosure = { recipientId: ID; fieldsShared: string[]; consentRefs: ID[]; coordinatorMediated: boolean };
+export type DonationDeliveryPlan = { recipientId: ID; bundleIds: ID[]; mode: string; availabilityRecheck: string; disclosure: DeliveryDisclosure; status: 'planned' | 'pending-consent' | 'declined' | 'accepted' };
+export type DonationSafetyHold = { offerId: ID; lotRef: string; heldQuantity: string; policyRef: ID; releaseCondition: string; released: boolean };
+export type DonationSafetyAssessment = { eligibleOfferIds: ID[]; holds: DonationSafetyHold[]; unresolvedLotRefs: ID[]; policyRefs: ID[] };
+export type DonationRoundProposal = { roundId: ID; offers: ConfirmedDonationStock[]; needs: RecipientNeedProfile[]; bundles: PurposeFitDonationBundle[]; allocation: FairDonationAllocation[]; delivery: DonationDeliveryPlan[]; safety: DonationSafetyAssessment; commitAllowed: boolean };
+export type DonationFulfillmentReceipt = { receiptId: ID; roundId: ID; offerId: ID; bundleId: ID; recipientId: ID; quantity: string; stage: "reserved" | "collected" | "delivered" | "accepted" | "declined" | "returned" | "unknown"; donorAvailability: "confirmed" | "withdrawn" | "unknown"; consentStatus: "current" | "expired" | "unknown"; consentRef: ID | null; stockReconciliation: "conserved" | "mismatch" | "unknown"; evidenceRefs: ID[]; occurredAt: DateTime };
+export type DonationFulfillmentState = { offerId: ID; bundleId: ID; recipientId: ID; quantity: string; status: "reserved" | "in-transit" | "delivered" | "accepted" | "declined" | "returned" | "quarantined" | "unknown"; receiptIds: ID[]; blockers: string[] };
+export type DonationFulfillmentBook = { revision: number; roundId: ID; allocations: DonationFulfillmentState[]; receipts: DonationFulfillmentReceipt[]; consumedReceiptIds: ID[] };
+export type DonationFulfillmentAssessment = { acceptedTransition: boolean; state: "reserved" | "in-transit" | "delivered" | "accepted" | "declined" | "returned" | "quarantined" | "unknown"; reallocationRequired: boolean; reasons: string[] };
+export type DonationFulfillmentReview = { book: DonationFulfillmentBook; outcome: "recorded" | "replayed" | "held"; offerStatus: string; reallocationRequired: boolean; followUp: string[] };
+export type DonationAllocationMatch = { allocationExists: boolean; safeBundle: boolean; reasons: string[] };
+export type DonationConsentAndStockReview = { validForStage: boolean; quarantined: boolean; reallocationRequired: boolean; reasons: string[] };

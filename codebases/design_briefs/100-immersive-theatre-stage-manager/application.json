@@ -1,0 +1,151 @@
+{
+  "schema": "natlang.application/1",
+  "id": "100",
+  "title": "Immersive Theatre Stage Manager",
+  "entrypoint": "controlPerformance.nl",
+  "interfaces": [
+    {
+      "name": "controlPerformance",
+      "path": "controlPerformance.nl",
+      "purpose": "Classify one show incident and return the incident-specific scene, resource, cue or safety-hold proposal.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "performance-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "modelDramaturgy",
+        "paths": [
+          "controlPerformance/modelDramaturgy.nl",
+          "controlPerformance/modelDramaturgy/traceSceneReveals.nl",
+          "controlPerformance/modelDramaturgy/traceSceneReveals/extractRevealEdges.nl",
+          "controlPerformance/modelDramaturgy/advanceKnowledgeByRoute.nl",
+          "controlPerformance/modelDramaturgy/gatherSceneEvidence.nl",
+          "controlPerformance/modelDramaturgy/draftSceneFromKnowledge.nl",
+          "controlPerformance/modelDramaturgy/auditScene.nl",
+          "controlPerformance/modelDramaturgy/auditScene/qualify.nl"
+        ]
+      },
+      {
+        "stage": "modelProduction",
+        "paths": [
+          "controlPerformance/modelProduction.nl",
+          "controlPerformance/modelProduction/buildResourceWindows.nl",
+          "controlPerformance/modelProduction/findOverlappingReservations.nl",
+          "controlPerformance/modelProduction/verifyConsentPath.nl"
+        ]
+      },
+      {
+        "stage": "selectSceneVariants",
+        "paths": [
+          "controlPerformance/selectSceneVariants.nl",
+          "controlPerformance/selectSceneVariants/compareRehearsedRoutes.nl",
+          "controlPerformance/selectSceneVariants/verifyBeatAndKnowledge.nl"
+        ]
+      },
+      {
+        "stage": "coordinatePerformance",
+        "paths": [
+          "controlPerformance/coordinatePerformance.nl",
+          "controlPerformance/coordinatePerformance/orderCueDependencies.nl",
+          "controlPerformance/coordinatePerformance/verifyCueOwners.nl"
+        ]
+      },
+      {
+        "stage": "recoverContinuity",
+        "paths": [
+          "controlPerformance/recoverContinuity.nl",
+          "controlPerformance/recoverContinuity/replayObservedCueReceipts.nl",
+          "controlPerformance/recoverContinuity/advanceAudienceKnowledgeAtCheckpoint.nl",
+          "controlPerformance/recoverContinuity/reconcileCheckpointAuthority.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "controlPerformance/inspectShowEvent.nl",
+          "controlPerformance/modelProduction/verifyConsentPath.nl",
+          "controlPerformance/selectSceneVariants.nl",
+          "controlPerformance/selectSceneVariants/verifyBeatAndKnowledge.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "controlPerformance/inspectShowEvent.nl",
+          "controlPerformance/modelProduction.nl",
+          "controlPerformance/modelProduction/buildResourceWindows.nl",
+          "controlPerformance/selectSceneVariants.nl",
+          "controlPerformance/coordinatePerformance.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "controlPerformance/inspectShowEvent.nl",
+          "controlPerformance/modelProduction.nl",
+          "controlPerformance/selectSceneVariants.nl",
+          "controlPerformance/recoverContinuity.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "controlPerformance/modelDramaturgy/traceSceneReveals.nl",
+          "controlPerformance/modelDramaturgy/traceSceneReveals/extractRevealEdges.nl",
+          "controlPerformance/modelDramaturgy/advanceKnowledgeByRoute.nl",
+          "controlPerformance/selectSceneVariants/verifyBeatAndKnowledge.nl",
+          "controlPerformance/recoverContinuity/advanceAudienceKnowledgeAtCheckpoint.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "controlPerformance/inspectShowEvent.nl",
+          "controlPerformance/holdForSafety.nl",
+          "controlPerformance/holdForSafety/matchStopProcedure.nl",
+          "controlPerformance/holdForSafety/freezeAffectedCues.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "controlPerformance.nl",
+    "controlPerformance/coordinatePerformance.nl",
+    "controlPerformance/coordinatePerformance/orderCueDependencies.nl",
+    "controlPerformance/coordinatePerformance/verifyCueOwners.nl",
+    "controlPerformance/holdForSafety.nl",
+    "controlPerformance/holdForSafety/freezeAffectedCues.nl",
+    "controlPerformance/holdForSafety/matchStopProcedure.nl",
+    "controlPerformance/inspectShowEvent.nl",
+    "controlPerformance/inspectShowEvent/classifyShowSignals.nl",
+    "controlPerformance/modelDramaturgy.nl",
+    "controlPerformance/modelDramaturgy/advanceKnowledgeByRoute.nl",
+    "controlPerformance/modelDramaturgy/auditScene.nl",
+    "controlPerformance/modelDramaturgy/auditScene/qualify.nl",
+    "controlPerformance/modelDramaturgy/draftSceneFromKnowledge.nl",
+    "controlPerformance/modelDramaturgy/gatherSceneEvidence.nl",
+    "controlPerformance/modelDramaturgy/traceSceneReveals.nl",
+    "controlPerformance/modelDramaturgy/traceSceneReveals/extractRevealEdges.nl",
+    "controlPerformance/modelProduction.nl",
+    "controlPerformance/modelProduction/buildResourceWindows.nl",
+    "controlPerformance/modelProduction/findOverlappingReservations.nl",
+    "controlPerformance/modelProduction/findOverlappingReservations/compareIntervals.ts",
+    "controlPerformance/modelProduction/verifyConsentPath.nl",
+    "controlPerformance/recoverContinuity.nl",
+    "controlPerformance/recoverContinuity/advanceAudienceKnowledgeAtCheckpoint.nl",
+    "controlPerformance/recoverContinuity/reconcileCheckpointAuthority.nl",
+    "controlPerformance/recoverContinuity/replayObservedCueReceipts.nl",
+    "controlPerformance/selectSceneVariants.nl",
+    "controlPerformance/selectSceneVariants/compareRehearsedRoutes.nl",
+    "controlPerformance/selectSceneVariants/verifyBeatAndKnowledge.nl",
+    "natlang.json",
+    "types.ts"
+  ]
+}

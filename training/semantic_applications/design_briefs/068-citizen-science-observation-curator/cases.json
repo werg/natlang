@@ -1,0 +1,759 @@
+[
+  {
+    "id": "068-citizen-science-observation-curator-gate-supported",
+    "root": "curateObservations/verifyNormalizedObservation.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "observerId": "observer-O1",
+          "observedAt": "2026-10-01T08:14:00Z",
+          "locationRef": "plot-coordinate-68A",
+          "description": "rare bird report; image is low-light and field marks are unresolved",
+          "method": "observer field note plus low-light image; older common name used",
+          "caseId": "case-68"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "method",
+            "evidenceIds": [
+              "068-citizen-science-observation-curator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "citizen-science observations and image metadata",
+        "evidence": [
+          {
+            "id": "068-citizen-science-observation-curator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "O1 and O2 report a rare bird 180 m apart within six minutes; one uses an older name and low-light images do not show field marks. Case case-68; current first-stage record values: {\"description\": \"rare bird report; image is low-light and field marks are unresolved\", \"locationRef\": \"plot-coordinate-68A\", \"method\": \"observer field note plus low-light image; older common name used\", \"observedAt\": \"2026-10-01T08:14:00Z\", \"observerId\": \"observer-O1\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Preserve both reports, assess possible duplication, and retain taxonomic uncertainty."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "method",
+          "value": "observer field note plus low-light image; older common name used",
+          "evidenceIds": [
+            "068-citizen-science-observation-curator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "citizen-science observations and image metadata: Observers O-1 and O-2 report a rare bird 180 metres apart within six minutes. O-1 uses an older common name; O-2’s low-light image cannot resolve the field marks. Apply the first-stage gate to the record and source versions; Preserve both reports, assess possible duplication, and retain taxonomic uncertainty.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "068-citizen-science-observation-curator-gate-contradictory",
+    "root": "curateObservations/verifyNormalizedObservation.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "observerId": "observer-O1",
+          "observedAt": "2026-10-01T08:14:00Z",
+          "locationRef": "plot-coordinate-68A",
+          "description": "image clearly confirms species A field marks",
+          "method": "observer field note plus low-light image; older common name used",
+          "caseId": "case-68"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "method",
+            "evidenceIds": [
+              "068-citizen-science-observation-curator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "citizen-science observations and image metadata",
+        "evidence": [
+          {
+            "id": "068-citizen-science-observation-curator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "O1 and O2 report a rare bird 180 m apart within six minutes; one uses an older name and low-light images do not show field marks. Case case-68; current first-stage record values: {\"description\": \"rare bird report; image is low-light and field marks are unresolved\", \"locationRef\": \"plot-coordinate-68A\", \"method\": \"observer field note plus low-light image; older common name used\", \"observedAt\": \"2026-10-01T08:14:00Z\", \"observerId\": \"observer-O1\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Preserve both reports, assess possible duplication, and retain taxonomic uncertainty."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "description",
+          "value": "image clearly confirms species A field marks",
+          "evidenceIds": [
+            "068-citizen-science-observation-curator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "citizen-science observations and image metadata: Observers O-1 and O-2 report a rare bird 180 metres apart within six minutes. O-1 uses an older common name; O-2’s low-light image cannot resolve the field marks. Apply the first-stage gate to the record and source versions; Preserve both reports, assess possible duplication, and retain taxonomic uncertainty.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "068-citizen-science-observation-curator-gate-missing",
+    "root": "curateObservations/verifyNormalizedObservation.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-68"
+        },
+        "missingFields": [
+          "method"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes method?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "citizen-science observations and image metadata",
+        "evidence": [],
+        "missing": [
+          "method"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Preserve both reports, assess possible duplication, and retain taxonomic uncertainty."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "citizen-science observations and image metadata: Observers O-1 and O-2 report a rare bird 180 metres apart within six minutes. O-1 uses an older common name; O-2’s low-light image cannot resolve the field marks. Apply the first-stage gate to the record and source versions; Preserve both reports, assess possible duplication, and retain taxonomic uncertainty.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "068-citizen-science-observation-curator-operational-1",
+    "root": "curateObservations.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "collection": {
+        "review": {
+          "id": "068-prior-fieldobservation-detail-1-v1:review",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "collectionId": "",
+          "projectId": "",
+          "observationType": "observer field note plus low-light image; older common name used",
+          "curatorId": "accountable reviewer",
+          "disclosurePolicyId": ""
+        },
+        "vocabulary": [],
+        "disclosureRule": "",
+        "restrictedPrecision": "as supplied",
+        "publicPrecision": "generalized"
+      },
+      "request": {
+        "submissions": [
+          {
+            "observation": {
+              "id": "068-prior-fieldobservation-detail-1-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "068-citizen-science-observation-curator-operational-1",
+              "observerId": "observer-O1",
+              "observedAt": "2026-10-12T08:14:00Z",
+              "locationRef": "plot-coordinate-68A",
+              "description": "rare bird report; image is low-light and field marks are unresolved",
+              "method": "observer field note plus low-light image; older common name used"
+            },
+            "originalText": "rare bird report; image is low-light and field marks are unresolved",
+            "originalTimestamp": "2026-10-12T08:14:00Z",
+            "declaredTimezone": "unknown",
+            "locationPrecision": "as supplied",
+            "mediaHashes": [],
+            "evidence": [
+              {
+                "id": "068-operational-detail-1-source-v2",
+                "source": "Citizen-science observation curator operational event log",
+                "version": "v2",
+                "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+                "observedAt": "2026-10-12T08:30:00Z",
+                "text": "R068 Citizen-science steward records: Observer Observation O68 occurred at plot P68 on 2026-10-12 at 08:14 and reports a rare bird at an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later. This current event is source 068-operational-detail-1-source-v2 v2, observed 2026-10-12T08:30:00Z, for case 068-citizen-science-observation-curator-operational-1. The supplied typed prior 068-prior-fieldobservation-detail-1-v1 v1 is preserved for comparison.",
+                "supports": [
+                  "Observer O68 reports a rare bird at plot P68, an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later."
+                ],
+                "contradicts": [],
+                "status": "current"
+              }
+            ]
+          }
+        ],
+        "corrections": [],
+        "answerEvidence": [
+          {
+            "id": "068-operational-detail-1-source-v2",
+            "source": "Citizen-science observation curator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+            "observedAt": "2026-10-12T08:30:00Z",
+            "text": "R068 Citizen-science steward records: Observer Observation O68 occurred at plot P68 on 2026-10-12 at 08:14 and reports a rare bird at an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later. This current event is source 068-operational-detail-1-source-v2 v2, observed 2026-10-12T08:30:00Z, for case 068-citizen-science-observation-curator-operational-1. The supplied typed prior 068-prior-fieldobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Observer O68 reports a rare bird at plot P68, an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requestedObservationIds": [
+          "068-prior-fieldobservation-detail-1-v1"
+        ]
+      },
+      "checkpoint": {
+        "revision": "v1",
+        "submissions": [],
+        "interpretations": [],
+        "links": [],
+        "questions": [],
+        "curated": [],
+        "correctionHistory": [],
+        "invalidatedDerivativeIds": []
+      },
+      "curator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 068-citizen-science-observation-curator-operational-1 against this factual event: Observer O68 reports a rare bird at plot P68, an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later. Original §9 detail: A rare report looks implausible: request evidence instead of deleting it as an outlier. Correct handling applies “request evidence instead of deleting it as an outlier.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Observation O68 occurred at plot P68 on 2026-10-12 at 08:14 and reports a rare bird at an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A rare report looks implausible: request evidence instead of deleting it as an outlier.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Observer O68 reports a rare bird at plot P68, an unusual location for the species. Attached image I68 is low light but shows a wing mark; observer notebook records a second observation 12 minutes later. It links source 068-operational-detail-1-source-v2 v2 with prior typed FieldObservation record 068-prior-fieldobservation-detail-1-v1 v1 and keeps unresolved scope visible for O68, P68, I68.",
+      "durable_state": "The proposal retains prior record 068-prior-fieldobservation-detail-1-v1 v1 and versions only the affected state for O68, P68, I68 against source 068-operational-detail-1-source-v2 v2; it applies “request evidence instead of deleting it as an outlier.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O68, P68, I68 and the scope supported by source 068-operational-detail-1-source-v2 v2; it represents “request evidence instead of deleting it as an outlier.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "068-citizen-science-observation-curator-operational-2",
+    "root": "curateObservations.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "collection": {
+        "review": {
+          "id": "068-prior-fieldobservation-detail-2-v1:review",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "collectionId": "",
+          "projectId": "",
+          "observationType": "observer field note plus low-light image; older common name used",
+          "curatorId": "accountable reviewer",
+          "disclosurePolicyId": ""
+        },
+        "vocabulary": [],
+        "disclosureRule": "",
+        "restrictedPrecision": "as supplied",
+        "publicPrecision": "generalized"
+      },
+      "request": {
+        "submissions": [
+          {
+            "observation": {
+              "id": "068-prior-fieldobservation-detail-2-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "068-citizen-science-observation-curator-operational-2",
+              "observerId": "observer-O1",
+              "observedAt": "2026-10-12T07:15:00+03:00",
+              "locationRef": "plot-coordinate-68A",
+              "description": "rare bird report; image is low-light and field marks are unresolved",
+              "method": "observer field note plus low-light image; older common name used"
+            },
+            "originalText": "rare bird report; image is low-light and field marks are unresolved",
+            "originalTimestamp": "2026-10-12T07:15:00+03:00",
+            "declaredTimezone": "unknown",
+            "locationPrecision": "as supplied",
+            "mediaHashes": [],
+            "evidence": [
+              {
+                "id": "068-operational-detail-2-source-v2",
+                "source": "Citizen-science observation curator operational event log",
+                "version": "v2",
+                "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+                "observedAt": "2026-10-12T08:00:00Z",
+                "text": "R068 Citizen-science steward records: Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists. This current event is source 068-operational-detail-2-source-v2 v2, observed 2026-10-12T08:00:00Z, for case 068-citizen-science-observation-curator-operational-2. The supplied typed prior 068-prior-fieldobservation-detail-2-v1 v1 is preserved for comparison.",
+                "supports": [
+                  "Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists."
+                ],
+                "contradicts": [],
+                "status": "current"
+              }
+            ]
+          }
+        ],
+        "corrections": [],
+        "answerEvidence": [
+          {
+            "id": "068-operational-detail-2-source-v2",
+            "source": "Citizen-science observation curator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+            "observedAt": "2026-10-12T08:00:00Z",
+            "text": "R068 Citizen-science steward records: Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists. This current event is source 068-operational-detail-2-source-v2 v2, observed 2026-10-12T08:00:00Z, for case 068-citizen-science-observation-curator-operational-2. The supplied typed prior 068-prior-fieldobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requestedObservationIds": [
+          "068-prior-fieldobservation-detail-2-v1"
+        ]
+      },
+      "checkpoint": {
+        "revision": "v1",
+        "submissions": [],
+        "interpretations": [],
+        "links": [],
+        "questions": [],
+        "curated": [],
+        "correctionHistory": [],
+        "invalidatedDerivativeIds": []
+      },
+      "curator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 068-citizen-science-observation-curator-operational-2 against this factual event: Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists. Original §9 detail: A device records the wrong timezone: preserve original timestamps and apply a reviewed correction. Correct handling applies “preserve original timestamps and apply a reviewed correction.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A device records the wrong timezone: preserve original timestamps and apply a reviewed correction.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Device D68 stores observation time 2026-10-12 07:15 with timezone UTC+3, but the upload gateway interpreted it as UTC. Original EXIF remains 07:15+03:00; no reviewed correction record exists. It links source 068-operational-detail-2-source-v2 v2 with prior typed FieldObservation record 068-prior-fieldobservation-detail-2-v1 v1 and keeps unresolved scope visible for D68.",
+      "durable_state": "The proposal retains prior record 068-prior-fieldobservation-detail-2-v1 v1 and versions only the affected state for D68 against source 068-operational-detail-2-source-v2 v2; it applies “preserve original timestamps and apply a reviewed correction.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D68 and the scope supported by source 068-operational-detail-2-source-v2 v2; it represents “preserve original timestamps and apply a reviewed correction.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "068-citizen-science-observation-curator-operational-3",
+    "root": "curateObservations.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "collection": {
+        "review": {
+          "id": "068-prior-fieldobservation-detail-3-v1:review",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "collectionId": "",
+          "projectId": "",
+          "observationType": "observer field note plus low-light image; older common name used",
+          "curatorId": "accountable reviewer",
+          "disclosurePolicyId": ""
+        },
+        "vocabulary": [],
+        "disclosureRule": "",
+        "restrictedPrecision": "as supplied",
+        "publicPrecision": "generalized"
+      },
+      "request": {
+        "submissions": [
+          {
+            "observation": {
+              "id": "068-prior-fieldobservation-detail-3-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "068-citizen-science-observation-curator-operational-3",
+              "observerId": "observer-O1",
+              "observedAt": "2026-10-04T09:10:00Z",
+              "locationRef": "plot-coordinate-68-sensitive-2",
+              "description": "rare bird report; image is low-light and field marks are unresolved",
+              "method": "observer field note plus low-light image; older common name used"
+            },
+            "originalText": "rare bird report; image is low-light and field marks are unresolved",
+            "originalTimestamp": "2026-10-04T09:10:00Z",
+            "declaredTimezone": "unknown",
+            "locationPrecision": "as supplied",
+            "mediaHashes": [],
+            "evidence": [
+              {
+                "id": "068-operational-detail-3-source-v2",
+                "source": "Citizen-science observation curator operational event log",
+                "version": "v2",
+                "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+                "observedAt": "2026-10-04T09:20:00Z",
+                "text": "R068 Citizen-science steward records: Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading. This current event is source 068-operational-detail-3-source-v2 v2, observed 2026-10-04T09:20:00Z, for case 068-citizen-science-observation-curator-operational-3. The supplied typed prior 068-prior-fieldobservation-detail-3-v1 v1 is preserved for comparison.",
+                "supports": [
+                  "Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading."
+                ],
+                "contradicts": [],
+                "status": "current"
+              }
+            ]
+          }
+        ],
+        "corrections": [],
+        "answerEvidence": [
+          {
+            "id": "068-operational-detail-3-source-v2",
+            "source": "Citizen-science observation curator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+            "observedAt": "2026-10-04T09:20:00Z",
+            "text": "R068 Citizen-science steward records: Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading. This current event is source 068-operational-detail-3-source-v2 v2, observed 2026-10-04T09:20:00Z, for case 068-citizen-science-observation-curator-operational-3. The supplied typed prior 068-prior-fieldobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requestedObservationIds": [
+          "068-prior-fieldobservation-detail-3-v1"
+        ]
+      },
+      "checkpoint": {
+        "revision": "v1",
+        "submissions": [],
+        "interpretations": [],
+        "links": [],
+        "questions": [],
+        "curated": [],
+        "correctionHistory": [],
+        "invalidatedDerivativeIds": []
+      },
+      "curator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 068-citizen-science-observation-curator-operational-3 against this factual event: Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading. Original §9 detail: A sensitive location is precise: generalize public coordinates while retaining restricted provenance. Correct handling applies “generalize public coordinates while retaining restricted provenance.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A sensitive location is precise: generalize public coordinates while retaining restricted provenance.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Observation O68-2 includes exact coordinate 41.20287,-72.88112 for a sensitive nest. Public export X68 includes that coordinate; restricted archive retains the original GPS reading. It links source 068-operational-detail-3-source-v2 v2 with prior typed FieldObservation record 068-prior-fieldobservation-detail-3-v1 v1 and keeps unresolved scope visible for O68-2, X68.",
+      "durable_state": "The proposal retains prior record 068-prior-fieldobservation-detail-3-v1 v1 and versions only the affected state for O68-2, X68 against source 068-operational-detail-3-source-v2 v2; it applies “generalize public coordinates while retaining restricted provenance.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O68-2, X68 and the scope supported by source 068-operational-detail-3-source-v2 v2; it represents “generalize public coordinates while retaining restricted provenance.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "068-citizen-science-observation-curator-operational-4",
+    "root": "curateObservations.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "collection": {
+        "review": {
+          "id": "068-prior-fieldobservation-detail-4-v1:review",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "collectionId": "",
+          "projectId": "",
+          "observationType": "observer field note plus low-light image; older common name used",
+          "curatorId": "accountable reviewer",
+          "disclosurePolicyId": ""
+        },
+        "vocabulary": [],
+        "disclosureRule": "",
+        "restrictedPrecision": "as supplied",
+        "publicPrecision": "generalized"
+      },
+      "request": {
+        "submissions": [
+          {
+            "observation": {
+              "id": "068-prior-fieldobservation-detail-4-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "068-citizen-science-observation-curator-operational-4",
+              "observerId": "observer-O1",
+              "observedAt": "2026-10-05T11:00:00Z",
+              "locationRef": "plot-coordinate-68-event-1",
+              "description": "one bird encounter documented by observer O68 in three photos",
+              "method": "observer field note plus low-light image; older common name used"
+            },
+            "originalText": "one bird encounter documented by observer O68 in three photos",
+            "originalTimestamp": "2026-10-05T11:00:00Z",
+            "declaredTimezone": "unknown",
+            "locationPrecision": "as supplied",
+            "mediaHashes": [],
+            "evidence": [
+              {
+                "id": "068-operational-detail-4-source-v2",
+                "source": "Citizen-science observation curator operational event log",
+                "version": "v2",
+                "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+                "observedAt": "2026-10-05T11:20:00Z",
+                "text": "R068 Citizen-science steward records: Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time. This current event is source 068-operational-detail-4-source-v2 v2, observed 2026-10-05T11:20:00Z, for case 068-citizen-science-observation-curator-operational-4. The supplied typed prior 068-prior-fieldobservation-detail-4-v1 v1 is preserved for comparison.",
+                "supports": [
+                  "Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time."
+                ],
+                "contradicts": [],
+                "status": "current"
+              }
+            ]
+          }
+        ],
+        "corrections": [],
+        "answerEvidence": [
+          {
+            "id": "068-operational-detail-4-source-v2",
+            "source": "Citizen-science observation curator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+            "observedAt": "2026-10-05T11:20:00Z",
+            "text": "R068 Citizen-science steward records: Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time. This current event is source 068-operational-detail-4-source-v2 v2, observed 2026-10-05T11:20:00Z, for case 068-citizen-science-observation-curator-operational-4. The supplied typed prior 068-prior-fieldobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requestedObservationIds": [
+          "068-prior-fieldobservation-detail-4-v1"
+        ]
+      },
+      "checkpoint": {
+        "revision": "v1",
+        "submissions": [],
+        "interpretations": [],
+        "links": [],
+        "questions": [],
+        "curated": [],
+        "correctionHistory": [],
+        "invalidatedDerivativeIds": []
+      },
+      "curator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 068-citizen-science-observation-curator-operational-4 against this factual event: Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time. Original §9 detail: One observer submits several photos of one event: group media without inflating event counts. Correct handling applies “group media without inflating event counts.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "One observer submits several photos of one event: group media without inflating event counts.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Observer O68 submits photos I68-1, I68-2 and I68-3 within six minutes at the same location; image hashes differ but field notes describe one bird encounter and one observation time. It links source 068-operational-detail-4-source-v2 v2 with prior typed FieldObservation record 068-prior-fieldobservation-detail-4-v1 v1 and keeps unresolved scope visible for O68, I68-1, I68-2, I68-3.",
+      "durable_state": "The proposal retains prior record 068-prior-fieldobservation-detail-4-v1 v1 and versions only the affected state for O68, I68-1, I68-2, I68-3 against source 068-operational-detail-4-source-v2 v2; it applies “group media without inflating event counts.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O68, I68-1, I68-2, I68-3 and the scope supported by source 068-operational-detail-4-source-v2 v2; it represents “group media without inflating event counts.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "068-citizen-science-observation-curator-operational-5",
+    "root": "curateObservations.nl",
+    "split_group": "068-citizen-science-observation-curator",
+    "inputs": {
+      "collection": {
+        "review": {
+          "id": "068-prior-fieldobservation-detail-5-v1:review",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "collectionId": "",
+          "projectId": "",
+          "observationType": "observer field note plus low-light image; older common name used",
+          "curatorId": "accountable reviewer",
+          "disclosurePolicyId": ""
+        },
+        "vocabulary": [],
+        "disclosureRule": "",
+        "restrictedPrecision": "as supplied",
+        "publicPrecision": "generalized"
+      },
+      "request": {
+        "submissions": [
+          {
+            "observation": {
+              "id": "068-prior-fieldobservation-detail-5-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "068-citizen-science-observation-curator-operational-5",
+              "observerId": "observer-O1",
+              "observedAt": "2026-10-01T08:14:00Z",
+              "locationRef": "plot-coordinate-68A",
+              "description": "rare bird report; image is low-light and field marks are unresolved",
+              "method": "observer field note plus low-light image; older common name used"
+            },
+            "originalText": "rare bird report; image is low-light and field marks are unresolved",
+            "originalTimestamp": "2026-10-01T08:14:00Z",
+            "declaredTimezone": "unknown",
+            "locationPrecision": "as supplied",
+            "mediaHashes": [],
+            "evidence": [
+              {
+                "id": "068-operational-detail-5-source-v2",
+                "source": "Citizen-science observation curator operational event log",
+                "version": "v2",
+                "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+                "observedAt": "2026-10-12T12:00:00Z",
+                "text": "R068 Citizen-science steward records: Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1. This current event is source 068-operational-detail-5-source-v2 v2, observed 2026-10-12T12:00:00Z, for case 068-citizen-science-observation-curator-operational-5. The supplied typed prior 068-prior-fieldobservation-detail-5-v1 v1 is preserved for comparison.",
+                "supports": [
+                  "Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1."
+                ],
+                "contradicts": [],
+                "status": "current"
+              }
+            ]
+          }
+        ],
+        "corrections": [],
+        "answerEvidence": [
+          {
+            "id": "068-operational-detail-5-source-v2",
+            "source": "Citizen-science observation curator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R068 Citizen-science steward; event version verified for this case",
+            "observedAt": "2026-10-12T12:00:00Z",
+            "text": "R068 Citizen-science steward records: Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1. This current event is source 068-operational-detail-5-source-v2 v2, observed 2026-10-12T12:00:00Z, for case 068-citizen-science-observation-curator-operational-5. The supplied typed prior 068-prior-fieldobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requestedObservationIds": [
+          "068-prior-fieldobservation-detail-5-v1"
+        ]
+      },
+      "checkpoint": {
+        "revision": "v1",
+        "submissions": [],
+        "interpretations": [],
+        "links": [],
+        "questions": [],
+        "curated": [],
+        "correctionHistory": [],
+        "invalidatedDerivativeIds": []
+      },
+      "curator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 068-citizen-science-observation-curator-operational-5 against this factual event: Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1. Original §9 detail: An expert changes an identification: version the interpretation and notify affected analyses. Correct handling applies “version the interpretation and notify affected analyses.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "An expert changes an identification: version the interpretation and notify affected analyses.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Expert Ana Ruiz changes identification of observation O68 from “common finch” to “rare finch species” after review on Oct 12. Two downstream trend reports still use interpretation version 1. It links source 068-operational-detail-5-source-v2 v2 with prior typed FieldObservation record 068-prior-fieldobservation-detail-5-v1 v1 and keeps unresolved scope visible for O68.",
+      "durable_state": "The proposal retains prior record 068-prior-fieldobservation-detail-5-v1 v1 and versions only the affected state for O68 against source 068-operational-detail-5-source-v2 v2; it applies “version the interpretation and notify affected analyses.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O68 and the scope supported by source 068-operational-detail-5-source-v2 v2; it represents “version the interpretation and notify affected analyses.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

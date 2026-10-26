@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "072",
+  "title": "Participatory Budgeting Facilitator",
+  "entrypoint": "facilitateBudgetRound.nl",
+  "interfaces": [
+    {
+      "name": "facilitateBudgetRound",
+      "path": "facilitateBudgetRound.nl",
+      "purpose": "Compose rule-bound project portfolios with shared work counted once and prepare a traceable deliberation packet.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "participatory-budgeting-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretProposals",
+        "paths": [
+          "facilitateBudgetRound/interpretProposalIntent.nl",
+          "facilitateBudgetRound/verifyProposalIntent.nl"
+        ]
+      },
+      {
+        "stage": "assessOverlap",
+        "paths": [
+          "facilitateBudgetRound/reconcileEnablingWork.nl",
+          "facilitateBudgetRound/reconcileEnablingWork/identifySharedWork.nl"
+        ]
+      },
+      {
+        "stage": "qualifyFeasibility",
+        "paths": [
+          "facilitateBudgetRound/qualifyBudgetFeasibility.nl"
+        ]
+      },
+      {
+        "stage": "constructPortfolios",
+        "paths": [
+          "facilitateBudgetRound/constructRuleBoundPortfolios.nl",
+          "facilitateBudgetRound/constructRuleBoundPortfolios/sumPortfolioCosts.nl"
+        ]
+      },
+      {
+        "stage": "prepareDeliberation",
+        "paths": [
+          "facilitateBudgetRound/prepareDeliberationPacket.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "facilitateBudgetRound/reconcileEnablingWork.nl",
+          "facilitateBudgetRound/reconcileEnablingWork/identifySharedWork.nl",
+          "facilitateBudgetRound/constructRuleBoundPortfolios.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "facilitateBudgetRound/qualifyBudgetFeasibility.nl",
+          "facilitateBudgetRound/constructRuleBoundPortfolios.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "facilitateBudgetRound/reconcileEnablingWork.nl",
+          "facilitateBudgetRound/interpretProposalIntent.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "facilitateBudgetRound/qualifyBudgetFeasibility.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "facilitateBudgetRound/prepareDeliberationPacket.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "facilitateBudgetRound.nl",
+    "facilitateBudgetRound/constructRuleBoundPortfolios.nl",
+    "facilitateBudgetRound/constructRuleBoundPortfolios/sumPortfolioCosts.nl",
+    "facilitateBudgetRound/interpretProposalIntent.nl",
+    "facilitateBudgetRound/prepareDeliberationPacket.nl",
+    "facilitateBudgetRound/qualifyBudgetFeasibility.nl",
+    "facilitateBudgetRound/reconcileEnablingWork.nl",
+    "facilitateBudgetRound/reconcileEnablingWork/identifySharedWork.nl",
+    "facilitateBudgetRound/verifyProposalIntent.nl",
+    "types.ts",
+    "natlang.json",
+    "facilitateBudgetRound/constructRuleBoundPortfolios/sumPortfolioCosts/exactMoneySum.ts"
+  ]
+}

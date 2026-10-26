@@ -1,0 +1,559 @@
+[
+  {
+    "id": "053-industrial-surplus-exchange-gate-supported",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "draft": {
+        "values": {
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ],
+          "caseId": "case-53"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "condition",
+            "evidenceIds": [
+              "053-industrial-surplus-exchange-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "surplus pump listing and recipient specification",
+        "evidence": [
+          {
+            "id": "053-industrial-surplus-exchange-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P53 is listed as stainless; recipient requires food-contact certification, but the serial plate is unreadable and certificate is absent. Case case-53; current first-stage record values: {\"condition\": \"serial plate unreadable; no material certificate\", \"materialFunction\": \"stainless pump offered for transfer; food-contact use requested\", \"ownerId\": \"surplus-owner-53\", \"quantity\": {\"unit\": \"pump\", \"value\": \"1\"}, \"transferRestrictions\": [\"do not reserve for food-contact use before certification\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Material compatibility and ownership must be verified before a reservation becomes a transfer."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "condition",
+          "value": "serial plate unreadable; no material certificate",
+          "evidenceIds": [
+            "053-industrial-surplus-exchange-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "surplus pump listing and recipient specification: Surplus lot P-53 is described as a stainless pump. Recipient R-53 requires food-contact certification; the listing has no material certificate and the serial plate is unreadable. Apply the first-stage gate to the record and source versions; Material compatibility and ownership must be verified before a reservation becomes a transfer.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "053-industrial-surplus-exchange-gate-contradictory",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "draft": {
+        "values": {
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "food-contact certificate is verified for the offered serial",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ],
+          "caseId": "case-53"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "condition",
+            "evidenceIds": [
+              "053-industrial-surplus-exchange-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "surplus pump listing and recipient specification",
+        "evidence": [
+          {
+            "id": "053-industrial-surplus-exchange-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Pump P53 is listed as stainless; recipient requires food-contact certification, but the serial plate is unreadable and certificate is absent. Case case-53; current first-stage record values: {\"condition\": \"serial plate unreadable; no material certificate\", \"materialFunction\": \"stainless pump offered for transfer; food-contact use requested\", \"ownerId\": \"surplus-owner-53\", \"quantity\": {\"unit\": \"pump\", \"value\": \"1\"}, \"transferRestrictions\": [\"do not reserve for food-contact use before certification\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Material compatibility and ownership must be verified before a reservation becomes a transfer."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "condition",
+          "value": "food-contact certificate is verified for the offered serial",
+          "evidenceIds": [
+            "053-industrial-surplus-exchange-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "surplus pump listing and recipient specification: Surplus lot P-53 is described as a stainless pump. Recipient R-53 requires food-contact certification; the listing has no material certificate and the serial plate is unreadable. Apply the first-stage gate to the record and source versions; Material compatibility and ownership must be verified before a reservation becomes a transfer.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "053-industrial-surplus-exchange-gate-missing",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-53"
+        },
+        "missingFields": [
+          "condition"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes condition?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "surplus pump listing and recipient specification",
+        "evidence": [],
+        "missing": [
+          "condition"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Material compatibility and ownership must be verified before a reservation becomes a transfer."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "surplus pump listing and recipient specification: Surplus lot P-53 is described as a stainless pump. Recipient R-53 requires food-contact certification; the listing has no material certificate and the serial plate is unreadable. Apply the first-stage gate to the record and source versions; Material compatibility and ownership must be verified before a reservation becomes a transfer.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "053-industrial-surplus-exchange-operational-1",
+    "root": "assembleReuseExchange.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-1",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-1; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-1",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
+          {
+            "id": "053-operational-detail-1-source-v2",
+            "source": "Industrial surplus exchange operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R053 Industrial steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R053 Industrial steward records: Owner O53 offers 900 kg of wood chips; recipient R53 requests 2.0 cubic metres for a mulch plan. No density or moisture test is attached, and the offer states only weight. This current event is source 053-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 053-industrial-surplus-exchange-operational-1. The supplied typed prior 053-prior-surplusoffer-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Owner O53 offers 900 kg of wood chips; recipient R53 requests 2.0 cubic metres for a mulch plan. No density or moisture test is attached, and the offer states only weight."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedMaterialIds": [
+          "053-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 053-industrial-surplus-exchange-operational-1 against this factual event: Owner O53 offers 900 kg of wood chips; recipient R53 requests 2.0 cubic metres for a mulch plan. No density or moisture test is attached, and the offer states only weight. Original §9 detail: A material is offered by weight but needed by volume: require density evidence before exact conversion. Correct handling applies “require density evidence before exact conversion.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Owner O53 offers 900 kg of wood chips; recipient R53 requests 2.0 cubic metres for a mulch plan. No density or moisture test is attached, and the offer states only weight.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A material is offered by weight but needed by volume: require density evidence before exact conversion.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Owner O53 offers 900 kg of wood chips; recipient R53 requests 2.0 cubic metres for a mulch plan. No density or moisture test is attached, and the offer states only weight. It links source 053-operational-detail-1-source-v2 v2 with prior typed SurplusOffer record 053-prior-surplusoffer-detail-1-v1 v1 and keeps unresolved scope visible for O53, R53.",
+      "durable_state": "The proposal retains prior record 053-prior-surplusoffer-detail-1-v1 v1 and versions only the affected state for O53, R53 against source 053-operational-detail-1-source-v2 v2; it applies “require density evidence before exact conversion.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to O53, R53 and the scope supported by source 053-operational-detail-1-source-v2 v2; it represents “require density evidence before exact conversion.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "053-industrial-surplus-exchange-operational-2",
+    "root": "assembleReuseExchange.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-2",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-2; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-2",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
+          {
+            "id": "053-operational-detail-2-source-v2",
+            "source": "Industrial surplus exchange operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R053 Industrial steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R053 Industrial steward records: Offer OF53-14 was matched to exchange legs X53-1 and X53-2. Owner O53 withdrew it at 14:00 before confirmation; both legs remain marked ready and one receiving slot is reserved. This current event is source 053-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 053-industrial-surplus-exchange-operational-2. The supplied typed prior 053-prior-surplusoffer-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Offer OF53-14 was matched to exchange legs X53-1 and X53-2. Owner O53 withdrew it at 14:00 before confirmation; both legs remain marked ready and one receiving slot is reserved."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "unclear",
+        "changedMaterialIds": [
+          "053-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 053-industrial-surplus-exchange-operational-2 against this factual event: Offer OF53-14 was matched to exchange legs X53-1 and X53-2. Owner O53 withdrew it at 14:00 before confirmation; both legs remain marked ready and one receiving slot is reserved. Original §9 detail: An offer is withdrawn after matching: invalidate dependent exchange legs before confirming them. Correct handling applies “invalidate dependent exchange legs before confirming them.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Offer OF53-14 was matched to exchange legs X53-1 and X53-2. Owner O53 withdrew it at 14:00 before confirmation; both legs remain marked ready and one receiving slot is reserved.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "An offer is withdrawn after matching: invalidate dependent exchange legs before confirming them.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Offer OF53-14 was matched to exchange legs X53-1 and X53-2. Owner O53 withdrew it at 14:00 before confirmation; both legs remain marked ready and one receiving slot is reserved. It links source 053-operational-detail-2-source-v2 v2 with prior typed SurplusOffer record 053-prior-surplusoffer-detail-2-v1 v1 and keeps unresolved scope visible for OF53-14, X53-1, X53-2, O53.",
+      "durable_state": "The proposal retains prior record 053-prior-surplusoffer-detail-2-v1 v1 and versions only the affected state for OF53-14, X53-1, X53-2, O53 against source 053-operational-detail-2-source-v2 v2; it applies “invalidate dependent exchange legs before confirming them.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to OF53-14, X53-1, X53-2, O53 and the scope supported by source 053-operational-detail-2-source-v2 v2; it represents “invalidate dependent exchange legs before confirming them.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "053-industrial-surplus-exchange-operational-3",
+    "root": "assembleReuseExchange.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-3",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-3; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-3",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
+          {
+            "id": "053-operational-detail-3-source-v2",
+            "source": "Industrial surplus exchange operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R053 Industrial steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R053 Industrial steward records: Equipment EQ53-2 is offered for reuse, but its maintenance log has a 20-month gap and a missing safety inspection. Recipient asks to operate it next week; qualification record is absent. This current event is source 053-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 053-industrial-surplus-exchange-operational-3. The supplied typed prior 053-prior-surplusoffer-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Equipment EQ53-2 is offered for reuse, but its maintenance log has a 20-month gap and a missing safety inspection. Recipient asks to operate it next week; qualification record is absent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedMaterialIds": [
+          "053-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 053-industrial-surplus-exchange-operational-3 against this factual event: Equipment EQ53-2 is offered for reuse, but its maintenance log has a 20-month gap and a missing safety inspection. Recipient asks to operate it next week; qualification record is absent. Original §9 detail: Equipment has unknown maintenance history: require qualification rather than assuming operability. Correct handling applies “require qualification rather than assuming operability.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Equipment EQ53-2 is offered for reuse, but its maintenance log has a 20-month gap and a missing safety inspection. Recipient asks to operate it next week; qualification record is absent.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Equipment has unknown maintenance history: require qualification rather than assuming operability.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Equipment EQ53-2 is offered for reuse, but its maintenance log has a 20-month gap and a missing safety inspection. Recipient asks to operate it next week; qualification record is absent. It links source 053-operational-detail-3-source-v2 v2 with prior typed SurplusOffer record 053-prior-surplusoffer-detail-3-v1 v1 and keeps unresolved scope visible for EQ53-2.",
+      "durable_state": "The proposal retains prior record 053-prior-surplusoffer-detail-3-v1 v1 and versions only the affected state for EQ53-2 against source 053-operational-detail-3-source-v2 v2; it applies “require qualification rather than assuming operability.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to EQ53-2 and the scope supported by source 053-operational-detail-3-source-v2 v2; it represents “require qualification rather than assuming operability.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "053-industrial-surplus-exchange-operational-4",
+    "root": "assembleReuseExchange.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-4",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-4; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-4",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
+          {
+            "id": "053-operational-detail-4-source-v2",
+            "source": "Industrial surplus exchange operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R053 Industrial steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R053 Industrial steward records: Recipient R53 accepts 40 of the 65 units in lot LOT-53. The transfer receipt records the accepted quantity as 40; inventory still shows all 65 reserved for the recipient. This current event is source 053-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 053-industrial-surplus-exchange-operational-4. The supplied typed prior 053-prior-surplusoffer-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Recipient R53 accepts 40 of the 65 units in lot LOT-53. The transfer receipt records the accepted quantity as 40; inventory still shows all 65 reserved for the recipient."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedMaterialIds": [
+          "053-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 053-industrial-surplus-exchange-operational-4 against this factual event: Recipient R53 accepts 40 of the 65 units in lot LOT-53. The transfer receipt records the accepted quantity as 40; inventory still shows all 65 reserved for the recipient. Original §9 detail: A recipient accepts only part of a lot: release remaining quantity back to availability. Correct handling applies “release remaining quantity back to availability.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Recipient R53 accepts 40 of the 65 units in lot LOT-53. The transfer receipt records the accepted quantity as 40; inventory still shows all 65 reserved for the recipient.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A recipient accepts only part of a lot: release remaining quantity back to availability.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Recipient R53 accepts 40 of the 65 units in lot LOT-53. The transfer receipt records the accepted quantity as 40; inventory still shows all 65 reserved for the recipient. It links source 053-operational-detail-4-source-v2 v2 with prior typed SurplusOffer record 053-prior-surplusoffer-detail-4-v1 v1 and keeps unresolved scope visible for R53, LOT-53.",
+      "durable_state": "The proposal retains prior record 053-prior-surplusoffer-detail-4-v1 v1 and versions only the affected state for R53, LOT-53 against source 053-operational-detail-4-source-v2 v2; it applies “release remaining quantity back to availability.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R53, LOT-53 and the scope supported by source 053-operational-detail-4-source-v2 v2; it represents “release remaining quantity back to availability.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "053-industrial-surplus-exchange-operational-5",
+    "root": "assembleReuseExchange.nl",
+    "split_group": "053-industrial-surplus-exchange",
+    "inputs": {
+      "desk": {
+        "exchangeId": "053-industrial-surplus-exchange-operational-5",
+        "coordinatorRequest": "Review the Industrial surplus exchange evidence for case 053-industrial-surplus-exchange-operational-5; return a traceable proposal from the supplied records.",
+        "suppliedOffer": {
+          "id": "053-prior-surplusoffer-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "053-industrial-surplus-exchange-operational-5",
+          "ownerId": "surplus-owner-53",
+          "materialFunction": "stainless pump offered for transfer; food-contact use requested",
+          "quantity": {
+            "value": "1",
+            "unit": "pump"
+          },
+          "condition": "serial plate unreadable; no material certificate",
+          "transferRestrictions": [
+            "do not reserve for food-contact use before certification"
+          ]
+        },
+        "materialEvents": [
+          {
+            "id": "053-operational-detail-5-source-v2",
+            "source": "Industrial surplus exchange operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R053 Industrial steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R053 Industrial steward records: Reuse proposal RP53 would convert a solvent tank to potable-water storage. The proposed use requires specialist chemical-residue signoff; the specialist review has not been scheduled. This current event is source 053-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 053-industrial-surplus-exchange-operational-5. The supplied typed prior 053-prior-surplusoffer-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Reuse proposal RP53 would convert a solvent tank to potable-water storage. The proposed use requires specialist chemical-residue signoff; the specialist review has not been scheduled."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedMaterialIds": [
+          "053-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer"
+      },
+      "exchange": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 053-industrial-surplus-exchange-operational-5 against this factual event: Reuse proposal RP53 would convert a solvent tank to potable-water storage. The proposed use requires specialist chemical-residue signoff; the specialist review has not been scheduled. Original §9 detail: A creative reuse requires specialist approval: keep the match provisional until that approval exists. Correct handling applies “keep the match provisional until that approval exists.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Reuse proposal RP53 would convert a solvent tank to potable-water storage. The proposed use requires specialist chemical-residue signoff; the specialist review has not been scheduled.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A creative reuse requires specialist approval: keep the match provisional until that approval exists.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Reuse proposal RP53 would convert a solvent tank to potable-water storage. The proposed use requires specialist chemical-residue signoff; the specialist review has not been scheduled. It links source 053-operational-detail-5-source-v2 v2 with prior typed SurplusOffer record 053-prior-surplusoffer-detail-5-v1 v1 and keeps unresolved scope visible for RP53.",
+      "durable_state": "The proposal retains prior record 053-prior-surplusoffer-detail-5-v1 v1 and versions only the affected state for RP53 against source 053-operational-detail-5-source-v2 v2; it applies “keep the match provisional until that approval exists.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to RP53 and the scope supported by source 053-operational-detail-5-source-v2 v2; it represents “keep the match provisional until that approval exists.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

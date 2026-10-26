@@ -88,6 +88,28 @@ def test_reviewed_plan_validates_runtime_tree_and_all_identity_pins(reviewed_pla
     assert [row['index'] for row in identity['cases']] == [0, 1, 2]
 
 
+def test_judged_workflows_require_and_preserve_independent_judge_binding(reviewed_plan):
+    plan_path, _, _, plan = reviewed_plan
+    source = Path(plan['source'])
+    rows = [json.loads(line) for line in source.read_text().splitlines()]
+    rows[1]['semantics'] = {'oracle': {'level': 'judged', 'rubric': 'Check the actual outcome.'}}
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    plan['source_sha256'] = plan['artifact_hashes'][str(source)] = dispatcher.digest(source)
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    with pytest.raises(ValueError, match='independent judge_model'):
+        dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+    plan['judge_model'] = {'model_id': 'actual-independent-judge', 'provider': 'openai-codex'}
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    validated, identity = dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+    entry, _, _, _, _, payload = dispatcher._claim_queue(validated, identity, 1, identity['cases'][1])
+    assert entry['judge_model'] == plan['judge_model']
+    assert json.loads(payload)['judge_model'] == plan['judge_model']
+    plan['judge_model']['model_id'] = 'gpt-6-luna'
+    plan_path.write_text(json.dumps(plan, sort_keys=True))
+    with pytest.raises(ValueError, match='distinct actual model_id'):
+        dispatcher.validate_plan(plan_path, dispatcher.digest(plan_path))
+
+
 def test_reviewed_plan_requires_explicit_nonnegative_retry_budget(reviewed_plan):
     plan_path, _, _, plan = reviewed_plan
     for value in (None, True, -1, '0'):

@@ -1,0 +1,50 @@
+{
+  "application_id": "077",
+  "title": "Care Transition Logistics Coordinator",
+  "source_relative_path": "applications/16-healthcare-administration-and-care-logistics/077-care-transition-logistics-coordinator.md",
+  "source_sha256": "a0376d9df0bca2e58b9681c90397564c602bccc1541ef91d6b6897c8d437e672",
+  "domain_id": "16",
+  "stages": [
+    {
+      "name": "extractLogistics",
+      "output_type": "TransitionRequirement",
+      "algorithm": "Read the approved plan to identify logistical tasks and dependencies, preserving its wording for clinical requirements. Separate administrative coordination from treatment decisions and route any ambiguous clinical instruction back to the authorized team.",
+      "gate": "No generated change to clinical content or priority."
+    },
+    {
+      "name": "mapParticipants",
+      "output_type": "TransitionParticipant",
+      "algorithm": "Identify transport providers, equipment suppliers, caregivers, and receiving services with their actual responsibilities. Distinguish availability from acceptance, verify representation and information-sharing authority, and avoid assuming family relationships imply consent or capacity.",
+      "gate": "Every responsibility has explicit acceptance and permitted information scope."
+    },
+    {
+      "name": "constructSequence",
+      "output_type": "TransitionTask",
+      "algorithm": "Build an exact dependency plan for equipment, access, transport, appointments, and acknowledgments. Identify conditions that must be ready before transfer and expose impossible timing or missing ownership rather than quietly relaxing the approved plan.",
+      "gate": "All logistical prerequisites are feasible and traceable to the approved plan."
+    },
+    {
+      "name": "resolveConflicts",
+      "output_type": "TransitionOption",
+      "algorithm": "Propose permitted logistical alternatives when providers or times change, explaining consequences for the approved plan. Escalate any alternative that could alter clinical requirements and keep the transition blocked until the appropriate team resolves the conflict.",
+      "gate": "Administrative replanning never substitutes for clinical approval."
+    },
+    {
+      "name": "verifyReadiness",
+      "output_type": "TransitionReadiness",
+      "algorithm": "Recheck actual delivery, provider acceptance, access, and participant acknowledgments before the transition. Distinguish scheduled from completed prerequisites and record the authorized release decision separately from the program’s readiness summary.",
+      "gate": "No transition-ready claim while a required logistical prerequisite is unverified."
+    }
+  ],
+  "operational_details": [
+    "Equipment is booked but not delivered: keep the dependent transition step blocked.",
+    "A caregiver cannot accept the role: escalate responsibility rather than assuming availability.",
+    "Transport timing changes: recheck downstream appointments and access windows.",
+    "A proposed substitution affects clinical requirements: obtain clinician review before proceeding.",
+    "A receiving organization has not acknowledged the plan: preserve the unresolved handoff."
+  ],
+  "scenario": {
+    "representative_episode": "Transport is available, but required equipment has not arrived and a caregiver has not accepted the planned responsibility.",
+    "independent_truth": "Synthetic approved plans, exact logistics dependencies, participant consent, provider events, and readiness prerequisites."
+  }
+}

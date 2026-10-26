@@ -1,0 +1,90 @@
+{
+  "schema": "natlang.design-brief-packet/1",
+  "release": "design-briefs-100-native-20261025-v1",
+  "source_manifest_sha256": "d870bbb02d1b91df81b644741f5d0caadf7f7dbe9f925fee62f8f9e399f8a63a",
+  "applications": 100,
+  "domain_contracts_sha256": "28c606fe827369da986bc471431f9ebcbaf4afa09c4f527e94c3efae00206910",
+  "operational_contracts_sha256": "9ea9d5c0e061f06919e0fc2b15367347909936b99ede558d91219a9dedaf1d15",
+  "domains": 20,
+  "domain_stages": 500,
+  "native_functions": 4100,
+  "tasks": 800,
+  "split_policy": "whole-application: first-three-train-fourth-dev-fifth-test-in-each-domain",
+  "split_applications": {
+    "train": 60,
+    "dev": 20,
+    "test": 20
+  },
+  "files": [
+    {
+      "path": "train.gates.ir.jsonl",
+      "bytes": 14524540,
+      "sha256": "d6f5b1d2b48c7d091111faaaf440a53e3e72920cf04ea712c89c128ed14ef5f1",
+      "rows": 180,
+      "split": "train",
+      "oracle": "exact"
+    },
+    {
+      "path": "train.workflows.ir.jsonl",
+      "bytes": 26323769,
+      "sha256": "dc7cc88091dbbb982195ca1817673585816a2abcbb079a20d61bd621ecb95029",
+      "rows": 300,
+      "split": "train",
+      "oracle": "independent-review-required"
+    },
+    {
+      "path": "dev.gates.ir.jsonl",
+      "bytes": 4850832,
+      "sha256": "3d96d1e7b8803f26a889916fdcd8fc29d924adc88d740ee891ce257b9d05fb9e",
+      "rows": 60,
+      "split": "dev",
+      "oracle": "exact"
+    },
+    {
+      "path": "dev.workflows.ir.jsonl",
+      "bytes": 8777541,
+      "sha256": "cf804f53e7a74a1642d9d94d8a8a662905cf1f878cd5415d48fb7ec835065d32",
+      "rows": 100,
+      "split": "dev",
+      "oracle": "independent-review-required"
+    },
+    {
+      "path": "test.gates.ir.jsonl",
+      "bytes": 4816629,
+      "sha256": "bc79f270a8f2d046954b4edf14ed6f8a97edcdb643d00504f5366ffe71e9ac7b",
+      "rows": 60,
+      "split": "test",
+      "oracle": "exact"
+    },
+    {
+      "path": "test.workflows.ir.jsonl",
+      "bytes": 8729921,
+      "sha256": "d97522f5d17f51100ad75ad8d29e091b517e5cd4d2f1adf2aea31a9851253329",
+      "rows": 100,
+      "split": "test",
+      "oracle": "independent-review-required"
+    },
+    {
+      "path": "inventory.json",
+      "bytes": 118962,
+      "sha256": "02dff8bd1ef66154b2e161629eb66beff34a30a6ce55c009743375a05d8c2956"
+    }
+  ],
+  "training_admission": false,
+  "validation": {
+    "native_loader": true,
+    "typed_inputs": true,
+    "exact_expected_types": true,
+    "unique_ids": true,
+    "application_split_closure": true,
+    "original_brief_hashes": true,
+    "original_domain_fields_and_types": true,
+    "original_operational_details_and_workflow_mapping": true,
+    "view_durable_state_and_effect_proposal_assertions": true,
+    "named_helper_scope": true,
+    "compiler": "run check.mjs separately",
+    "live_model": false,
+    "teacher_trajectories": 0,
+    "rl_rollouts": 0
+  }
+}

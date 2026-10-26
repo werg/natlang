@@ -1,0 +1,1478 @@
+[
+  {
+    "id": "024-frameReconciliation-supported",
+    "root": "runCase/frameReconciliation/audit/qualify.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "CLOSE-24",
+          "accountIds": [
+            "4100"
+          ],
+          "sourceSnapshotIds": [
+            "GL-24",
+            "BANK-24"
+          ],
+          "assertion": "Cash balance as of 2026-09-30",
+          "materialityRule": "Investigate differences over $500",
+          "tenantId": "tenant-024",
+          "id": "ReconciliationScope-024",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-024",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-024"
+          ],
+          "retentionPolicyId": "retention-024"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "tenantId": "tenant-024",
+        "id": "CLOSE-4100",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-024",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-024"
+        ],
+        "retentionPolicyId": "retention-024"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "024-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "supported concrete evidence case for frameReconciliation: A reconciliation appears balanced after offsetting errors, then a late journal changes one previously signed workpaper.",
+    "difficulty": "supported"
+  },
+  {
+    "id": "024-frameReconciliation-contradictory",
+    "root": "runCase/frameReconciliation/audit/qualify.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "CLOSE-24",
+          "accountIds": [
+            "4100"
+          ],
+          "sourceSnapshotIds": [
+            "GL-24-September",
+            "BANK-24-October"
+          ],
+          "assertion": "September ledger fully reconciles to October bank snapshot",
+          "materialityRule": "Investigate differences over $500",
+          "tenantId": "tenant-024",
+          "id": "ReconciliationScope-024",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-024",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-024"
+          ],
+          "retentionPolicyId": "retention-024"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "tenantId": "tenant-024",
+        "id": "CLOSE-4100",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-024",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-024"
+        ],
+        "retentionPolicyId": "retention-024"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "024-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The September ledger is being compared with an October bank snapshot; a $300 timing item remains unreconciled, so those records cannot establish a complete September reconciliation."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "contradictory concrete evidence case for frameReconciliation: A reconciliation appears balanced after offsetting errors, then a late journal changes one previously signed workpaper.",
+    "difficulty": "contradictory"
+  },
+  {
+    "id": "024-frameReconciliation-missing",
+    "root": "runCase/frameReconciliation/audit/qualify.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "draft": {
+        "value": {
+          "caseId": "CLOSE-24",
+          "accountIds": [
+            "4100"
+          ],
+          "sourceSnapshotIds": [
+            "GL-24",
+            "BANK-24"
+          ],
+          "assertion": "Cash balance as of 2026-09-30",
+          "materialityRule": "Investigate differences over $500",
+          "tenantId": "tenant-024",
+          "id": "ReconciliationScope-024",
+          "version": 1,
+          "schemaVersion": "1",
+          "state": "proposed",
+          "createdAt": "2026-10-01T00:00:00Z",
+          "updatedAt": "2026-10-01T00:00:00Z",
+          "createdBy": "owner-024",
+          "sourceRefs": [],
+          "decisionRefs": [],
+          "sensitivity": [
+            "internal"
+          ],
+          "purposeIds": [
+            "purpose-024"
+          ],
+          "retentionPolicyId": "retention-024"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceRefs": [
+          "E1"
+        ]
+      },
+      "candidate": {
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "tenantId": "tenant-024",
+        "id": "CLOSE-4100",
+        "version": 1,
+        "schemaVersion": "1",
+        "state": "proposed",
+        "createdAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+        "createdBy": "owner-024",
+        "sourceRefs": [],
+        "decisionRefs": [],
+        "sensitivity": [
+          "internal"
+        ],
+        "purposeIds": [
+          "purpose-024"
+        ],
+        "retentionPolicyId": "retention-024"
+      },
+      "evidence": [
+        {
+          "evidence": [
+            {
+              "id": "E1",
+              "source": "024-case-file-1",
+              "version": "v1",
+              "observedAt": "2026-10-10",
+              "authority": "named case owner",
+              "scope": "one named case, current period",
+              "text": "The reconciliation workpaper names account 4100 but no source snapshot date or materiality rule."
+            }
+          ],
+          "searchedPartition": "case-folder-2026",
+          "complete": true
+        }
+      ],
+      "policy": {
+        "selected": [
+          "case-owner authority rule"
+        ],
+        "precedenceQuestions": [],
+        "applicableScope": "one named case, current period"
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "missing concrete evidence case for frameReconciliation: A reconciliation appears balanced after offsetting errors, then a late journal changes one previously signed workpaper.",
+    "difficulty": "missing"
+  },
+  {
+    "id": "024-workflow-01",
+    "root": "coordinateClose.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-024-01",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "expectedVersion": "v1"
+      },
+      "books": {
+        "workpapers": [
+          {
+            "entityId": "ENTITY-24",
+            "period": "2026-09",
+            "accountIds": [
+              "4100"
+            ],
+            "preparerId": "P-24",
+            "reviewerId": "R-24",
+            "tenantId": "tenant-024",
+            "id": "CLOSE-4100",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-024",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-024"
+            ],
+            "retentionPolicyId": "retention-024"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-024",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Late journal J-24 debits account 4100 by $2,400 on Sep 30; only workpapers W-4100 and W-cash reference that account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact ledger and source records with planted offsetting errors, evidence gaps, and dependency-aware sign-off invalidation.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A late journal changes one account: reopen only dependent workpapers and show the exact delta. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A late journal changes one account: reopen only dependent workpapers and show the exact delta. Use only the facts in caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—reopen only dependent workpapers and show the exact delta.—as a versioned proposal against caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (reopen only dependent workpapers and show the exact delta.) against caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A late journal changes one account: reopen only dependent workpapers and show the exact delta.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A late journal changes one account: reopen only dependent workpapers and show the exact delta.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A late journal changes one account: reopen only dependent workpapers and show the exact delta. Use only the facts in caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—reopen only dependent workpapers and show the exact delta.—as a versioned proposal against caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (reopen only dependent workpapers and show the exact delta.) against caseId=SYN-024-01, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "024-workflow-02",
+    "root": "coordinateClose.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-024-02",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "expectedVersion": "v1"
+      },
+      "books": {
+        "workpapers": [
+          {
+            "entityId": "ENTITY-24",
+            "period": "2026-09",
+            "accountIds": [
+              "4100"
+            ],
+            "preparerId": "P-24",
+            "reviewerId": "R-24",
+            "tenantId": "tenant-024",
+            "id": "CLOSE-4100",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-024",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-024"
+            ],
+            "retentionPolicyId": "retention-024"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-024",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Report hash H-24A and H-24B have equal totals but line 18 changes from $500 to $5,000."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact ledger and source records with planted offsetting errors, evidence gaps, and dependency-aware sign-off invalidation.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone. Use only the facts in caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—compare content hashes, not totals alone.—as a versioned proposal against caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (compare content hashes, not totals alone.) against caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A source report is regenerated with identical totals but changed lines: compare content hashes, not totals alone. Use only the facts in caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—compare content hashes, not totals alone.—as a versioned proposal against caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (compare content hashes, not totals alone.) against caseId=SYN-024-02, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "024-workflow-03",
+    "root": "coordinateClose.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-024-03",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "expectedVersion": "v1"
+      },
+      "books": {
+        "workpapers": [
+          {
+            "entityId": "ENTITY-24",
+            "period": "2026-09",
+            "accountIds": [
+              "4100"
+            ],
+            "preparerId": "P-24",
+            "reviewerId": "R-24",
+            "tenantId": "tenant-024",
+            "id": "CLOSE-4100",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-024",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-024"
+            ],
+            "retentionPolicyId": "retention-024"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-024",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preparer P-24's role ended Oct 2; task ledger assigns unfinished workpaper W-24 to reviewer R-24."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact ledger and source records with planted offsetting errors, evidence gaps, and dependency-aware sign-off invalidation.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly. Use only the facts in caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—preserve authorship and reassign outstanding tasks explicitly.—as a versioned proposal against caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (preserve authorship and reassign outstanding tasks explicitly.) against caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A preparer leaves mid-close: preserve authorship and reassign outstanding tasks explicitly. Use only the facts in caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—preserve authorship and reassign outstanding tasks explicitly.—as a versioned proposal against caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (preserve authorship and reassign outstanding tasks explicitly.) against caseId=SYN-024-03, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "024-workflow-04",
+    "root": "coordinateClose.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-024-04",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "expectedVersion": "v1"
+      },
+      "books": {
+        "workpapers": [
+          {
+            "entityId": "ENTITY-24",
+            "period": "2026-09",
+            "accountIds": [
+              "4100"
+            ],
+            "preparerId": "P-24",
+            "reviewerId": "R-24",
+            "tenantId": "tenant-024",
+            "id": "CLOSE-4100",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-024",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-024"
+            ],
+            "retentionPolicyId": "retention-024"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-024",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Spreadsheet formula F-24 returns #REF!; downstream balance B-24 is computed from that cell and is quarantined."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact ledger and source records with planted offsetting errors, evidence gaps, and dependency-aware sign-off invalidation.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes. Use only the facts in caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—quarantine its computed outputs until exact validation passes.—as a versioned proposal against caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (quarantine its computed outputs until exact validation passes.) against caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A spreadsheet formula is broken: quarantine its computed outputs until exact validation passes. Use only the facts in caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—quarantine its computed outputs until exact validation passes.—as a versioned proposal against caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (quarantine its computed outputs until exact validation passes.) against caseId=SYN-024-04, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  },
+  {
+    "id": "024-workflow-05",
+    "root": "coordinateClose.nl",
+    "split_group": "design-brief-app-024",
+    "inputs": {
+      "request": {
+        "caseId": "SYN-024-05",
+        "entityId": "ENTITY-24",
+        "period": "2026-09",
+        "accountIds": [
+          "4100"
+        ],
+        "preparerId": "P-24",
+        "reviewerId": "R-24",
+        "expectedVersion": "v1"
+      },
+      "books": {
+        "workpapers": [
+          {
+            "entityId": "ENTITY-24",
+            "period": "2026-09",
+            "accountIds": [
+              "4100"
+            ],
+            "preparerId": "P-24",
+            "reviewerId": "R-24",
+            "tenantId": "tenant-024",
+            "id": "CLOSE-4100",
+            "version": 1,
+            "schemaVersion": "1",
+            "state": "proposed",
+            "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-01T00:00:00Z",
+            "createdBy": "owner-024",
+            "sourceRefs": [],
+            "decisionRefs": [],
+            "sensitivity": [
+              "internal"
+            ],
+            "purposeIds": [
+              "purpose-024"
+            ],
+            "retentionPolicyId": "retention-024"
+          }
+        ],
+        "evidencePages": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policyCandidates": [
+          {
+            "id": "POL-024",
+            "authority": "named case owner",
+            "scope": "one named case",
+            "effectiveFrom": "2026-01-01",
+            "effectiveTo": "2026-12-31",
+            "supersedes": [],
+            "clauses": [
+              "owner authority and evidence scope"
+            ]
+          }
+        ],
+        "searchedPartitions": [
+          "case-folder-2026"
+        ],
+        "lateJournalReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "reportRegenerations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "preparerTransfers": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "formulaValidationReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "deadlineEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "024-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close team freezes ledger snapshot GL-24 and bank statement BANK-24 for account 4100 as of 2026-09-30; materiality threshold is $500."
+              },
+              {
+                "id": "E2",
+                "source": "024-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Close deadline Sep 30 was missed; sign-off record has no timestamp and must not be backdated."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "priorSignoffs": []
+      }
+    },
+    "expected": {
+      "commitAllowed": false
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Review the proposed stage outputs against the independently specified truth basis: Exact ledger and source records with planted offsetting errors, evidence gaps, and dependency-aware sign-off invalidation.. Check every domain acceptance gate, preserve unresolved evidence and authority conflicts, and do not claim a production effect. Independently assess the original brief requirement: A deadline is missed: record the unresolved state rather than backdating sign-off. Confirm that the proposed stage outcomes satisfy this requirement using the named records, actors, dates, scopes, and versions in the supplied inputs. Assess the separately specified view, durable-state proposal, and effect-ledger proposal assertions below; these are judged outside model-visible inputs. View assertion: For the required user or reviewer view, make the disposition of this original condition explicit: A deadline is missed: record the unresolved state rather than backdating sign-off. Use only the facts in caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there. Durable-state assertion: For durable-state proposals, represent the required outcome—record the unresolved state rather than backdating sign-off.—as a versioned proposal against caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write. Effects assertion: For the effect ledger, propose only a concrete next step needed for this condition (record the unresolved state rather than backdating sign-off.) against caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect. Apply the app's acceptance gates, preserve unsupported or conflicting evidence as unresolved, and do not claim a production effect."
+    },
+    "scenario": "A deadline is missed: record the unresolved state rather than backdating sign-off.",
+    "difficulty": "operational-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A deadline is missed: record the unresolved state rather than backdating sign-off.",
+    "boundary_assertions": {
+      "view": "For the required user or reviewer view, make the disposition of this original condition explicit: A deadline is missed: record the unresolved state rather than backdating sign-off. Use only the facts in caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; preserve any restriction, uncertainty, or unresolved approval shown there.",
+      "durable_state": "For durable-state proposals, represent the required outcome—record the unresolved state rather than backdating sign-off.—as a versioned proposal against caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2; retain prior provenance and unaffected history, and do not treat this review as a committed write.",
+      "effects": "For the effect ledger, propose only a concrete next step needed for this condition (record the unresolved state rather than backdating sign-off.) against caseId=SYN-024-05, expectedVersion=v1, version=v1, id=CLOSE-4100, version=1, id=E1, source=024-source-1, id=E2, with authority and approval checks only when supplied; leave persistence, delivery, and external dispatch pending and claim no completed effect."
+    }
+  }
+]

@@ -1,0 +1,1071 @@
+[
+  {
+    "id": "086-first-gate-pass",
+    "root": "curateExhibition/verifyCuratorialEvidence.nl",
+    "split_group": "world-086-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+        "candidateIds": [
+          "086-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "086-first-e1",
+            "source": "primary case record MUSE-86",
+            "version": "v1",
+            "text": "Primary domain record for case MUSE-86 states: caseId=\"MUSE-86\"; artifactId=\"OBJ-86\"; supportedInterpretation=\"Vessel used for household water storage.\"; provenanceLimit=\"Donor record names town but not maker or exact date.\"; displayConstraint=\"State uncertainty; do not name a maker.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "086-case-record",
+          "caseId": "MUSE-86",
+          "sourceRefs": [
+            "086-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CuratorialEvidence",
+          "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "artifactId": "OBJ-86",
+          "supportedInterpretation": "Vessel used for household water storage.",
+          "provenanceLimit": "Donor record names town but not maker or exact date.",
+          "displayConstraint": "State uncertainty; do not name a maker."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "086-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "086-first-gate-fail",
+    "root": "curateExhibition/verifyCuratorialEvidence.nl",
+    "split_group": "world-086-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+        "candidateIds": [
+          "086-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "086-first-e1",
+            "source": "primary case record MUSE-86",
+            "version": "v1",
+            "text": "Primary domain record for case MUSE-86 states: caseId=\"MUSE-86\"; artifactId=\"OBJ-86\"; supportedInterpretation=\"Vessel used for household water storage.\"; provenanceLimit=\"Donor record names town but not maker or exact date.\"; displayConstraint=\"State uncertainty; do not name a maker.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "086-case-record",
+          "caseId": "MUSE-86",
+          "sourceRefs": [
+            "086-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CuratorialEvidence",
+          "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "artifactId": "OBJ-86",
+          "supportedInterpretation": "Made by artisan Ilyan in 1842.",
+          "provenanceLimit": "Donor record names town but not maker or exact date.",
+          "displayConstraint": "State uncertainty; do not name a maker."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "086-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "086-first-gate-needs-review",
+    "root": "curateExhibition/verifyCuratorialEvidence.nl",
+    "split_group": "world-086-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+        "candidateIds": [
+          "086-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "086-first-e1",
+            "source": "primary case record MUSE-86",
+            "version": "v1",
+            "text": "Primary domain record for case MUSE-86 states: caseId=\"MUSE-86\"; artifactId=\"OBJ-86\"; provenanceLimit=\"Donor record names town but not maker or exact date.\"; displayConstraint=\"State uncertainty; do not name a maker.\". No current value is present for supportedInterpretation.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "supportedInterpretation"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "086-case-record",
+          "sourceRefs": [
+            "086-first-e1"
+          ],
+          "state": "draft",
+          "kind": "CuratorialEvidence",
+          "subject": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "provenanceLimit": "Donor record names town but not maker or exact date.",
+          "displayConstraint": "State uncertainty; do not name a maker.",
+          "caseId": "MUSE-86",
+          "artifactId": "OBJ-86"
+        },
+        "missingFields": [
+          "supportedInterpretation"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "086-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "086-workflow-1",
+    "root": "curateExhibition.nl",
+    "split_group": "world-086-workflow-1",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "086-workflow-1-record",
+          "caseId": "086-workflow-1",
+          "sourceRefs": [
+            "086-event-1"
+          ],
+          "state": "draft",
+          "kind": "ExhibitionProject",
+          "subject": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "086-event-1",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "OBJ-86",
+            "OBJ-91"
+          ],
+          "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+          "audience": "General visitors and local community reviewers.",
+          "curatorId": "CUR-6",
+          "venueConstraintIds": [
+            "ROOM-2-CAPACITY",
+            "LABEL-90-WORDS"
+          ]
+        },
+        "evidence": [],
+        "arguments": [],
+        "zones": [],
+        "labels": [],
+        "releases": [],
+        "sources": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "086-workflow-1-record",
+          "project": {
+            "id": "086-workflow-1-record",
+            "caseId": "086-workflow-1",
+            "sourceRefs": [
+              "086-event-1"
+            ],
+            "state": "draft",
+            "kind": "ExhibitionProject",
+            "subject": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "candidate",
+            "evidenceIds": [
+              "086-event-1"
+            ],
+            "fields": {
+              "sourceArtifact": "086-event-1",
+              "sourceVersion": "v1"
+            },
+            "collectionIds": [
+              "OBJ-86",
+              "OBJ-91"
+            ],
+            "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+            "audience": "General visitors and local community reviewers.",
+            "curatorId": "CUR-6",
+            "venueConstraintIds": [
+              "ROOM-2-CAPACITY",
+              "LABEL-90-WORDS"
+            ]
+          },
+          "objectConstraints": [],
+          "arguments": [],
+          "narrativeSupport": [],
+          "zones": [],
+          "contextEdges": [],
+          "labels": [],
+          "release": null,
+          "invalidatedPlacements": [],
+          "derivativeRestrictionRefs": []
+        }
+      },
+      "change": {
+        "loanUpdates": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "conservationUpdates": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "communityRestrictions": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "visitorPathTests": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "labelFeedback": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "onlineRenditions": [
+          {
+            "id": "086-event-1",
+            "source": "current domain record 086-E1",
+            "version": "v1",
+            "text": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Museum Exhibition Curator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A conservation condition changes: re-evaluate duration and placement. Use observation Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks. as the source of truth. The proposal should preserve source-linked record 086-workflow-1-record and make a recipient-facing distinction grounded in 086-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A conservation condition changes: re-evaluate duration and placement.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 086-workflow-1-record must accurately preserve observation 086-event-1 (v1): Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks. Apply brief requirement A conservation condition changes: re-evaluate duration and placement. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExhibitionProject record 086-workflow-1-record and its source link to 086-event-1 version v1, with a disposition matching this observed state: Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks. Carry requirement A conservation condition changes: re-evaluate duration and placement. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 086-workflow-1-record based on 086-event-1 (v1) and observation Conservation report CR-86 v3 changes the permitted light exposure for object OBJ-86 from 50 lux to 30 lux and reduces display duration from 12 weeks to 6. The room-5 placement plan still uses 50 lux for 12 weeks. Apply requirement A conservation condition changes: re-evaluate duration and placement. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "086-workflow-2",
+    "root": "curateExhibition.nl",
+    "split_group": "world-086-workflow-2",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "086-workflow-2-record",
+          "caseId": "086-workflow-2",
+          "sourceRefs": [
+            "086-event-2"
+          ],
+          "state": "draft",
+          "kind": "ExhibitionProject",
+          "subject": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "086-event-2",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "OBJ-86",
+            "OBJ-91"
+          ],
+          "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+          "audience": "General visitors and local community reviewers.",
+          "curatorId": "CUR-6",
+          "venueConstraintIds": [
+            "ROOM-2-CAPACITY",
+            "LABEL-90-WORDS"
+          ]
+        },
+        "evidence": [],
+        "arguments": [],
+        "zones": [],
+        "labels": [],
+        "releases": [],
+        "sources": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "086-workflow-2-record",
+          "project": {
+            "id": "086-workflow-2-record",
+            "caseId": "086-workflow-2",
+            "sourceRefs": [
+              "086-event-2"
+            ],
+            "state": "draft",
+            "kind": "ExhibitionProject",
+            "subject": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "candidate",
+            "evidenceIds": [
+              "086-event-2"
+            ],
+            "fields": {
+              "sourceArtifact": "086-event-2",
+              "sourceVersion": "v1"
+            },
+            "collectionIds": [
+              "OBJ-86",
+              "OBJ-91"
+            ],
+            "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+            "audience": "General visitors and local community reviewers.",
+            "curatorId": "CUR-6",
+            "venueConstraintIds": [
+              "ROOM-2-CAPACITY",
+              "LABEL-90-WORDS"
+            ]
+          },
+          "objectConstraints": [],
+          "arguments": [],
+          "narrativeSupport": [],
+          "zones": [],
+          "contextEdges": [],
+          "labels": [],
+          "release": null,
+          "invalidatedPlacements": [],
+          "derivativeRestrictionRefs": []
+        }
+      },
+      "change": {
+        "loanUpdates": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "conservationUpdates": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "communityRestrictions": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "visitorPathTests": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "labelFeedback": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "onlineRenditions": [
+          {
+            "id": "086-event-2",
+            "source": "current domain record 086-E2",
+            "version": "v1",
+            "text": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Museum Exhibition Curator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A visitor skips a zone: ensure later labels do not require inaccessible prior context. Use observation Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route. as the source of truth. The proposal should preserve source-linked record 086-workflow-2-record and make a recipient-facing distinction grounded in 086-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A visitor skips a zone: ensure later labels do not require inaccessible prior context.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 086-workflow-2-record must accurately preserve observation 086-event-2 (v1): Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route. Apply brief requirement A visitor skips a zone: ensure later labels do not require inaccessible prior context. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExhibitionProject record 086-workflow-2-record and its source link to 086-event-2 version v1, with a disposition matching this observed state: Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route. Carry requirement A visitor skips a zone: ensure later labels do not require inaccessible prior context. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 086-workflow-2-record based on 086-event-2 (v1) and observation Visitor-route study V-86 records that many visitors skip Zone 2 before entering Zone 3. The Zone 3 label says “as explained in the previous gallery” and contains a required date not repeated anywhere on the route. Apply requirement A visitor skips a zone: ensure later labels do not require inaccessible prior context. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "086-workflow-3",
+    "root": "curateExhibition.nl",
+    "split_group": "world-086-workflow-3",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "086-workflow-3-record",
+          "caseId": "086-workflow-3",
+          "sourceRefs": [
+            "086-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "ExhibitionProject",
+          "subject": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 122 words; case ROOM-5 allows 90.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "086-wf-3-source",
+            "sourceVersion": "v2"
+          },
+          "collectionIds": [
+            "OBJ-86",
+            "OBJ-91"
+          ],
+          "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+          "audience": "General visitors and local community reviewers.",
+          "curatorId": "CUR-6",
+          "venueConstraintIds": [
+            "ROOM-2-CAPACITY",
+            "LABEL-90-WORDS"
+          ]
+        },
+        "evidence": [],
+        "arguments": [],
+        "zones": [],
+        "labels": [],
+        "releases": [],
+        "sources": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "086-workflow-3-record",
+          "project": {
+            "id": "086-workflow-3-record",
+            "caseId": "086-workflow-3",
+            "sourceRefs": [
+              "086-wf-3-source"
+            ],
+            "state": "draft",
+            "kind": "ExhibitionProject",
+            "subject": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 122 words; case ROOM-5 allows 90.",
+            "status": "candidate",
+            "evidenceIds": [
+              "086-wf-3-source"
+            ],
+            "fields": {
+              "sourceArtifact": "086-wf-3-source",
+              "sourceVersion": "v2"
+            },
+            "collectionIds": [
+              "OBJ-86",
+              "OBJ-91"
+            ],
+            "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+            "audience": "General visitors and local community reviewers.",
+            "curatorId": "CUR-6",
+            "venueConstraintIds": [
+              "ROOM-2-CAPACITY",
+              "LABEL-90-WORDS"
+            ]
+          },
+          "objectConstraints": [],
+          "arguments": [],
+          "narrativeSupport": [],
+          "zones": [],
+          "contextEdges": [],
+          "labels": [],
+          "release": null,
+          "invalidatedPlacements": [],
+          "derivativeRestrictionRefs": []
+        }
+      },
+      "change": {
+        "loanUpdates": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "conservationUpdates": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "communityRestrictions": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "visitorPathTests": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "labelFeedback": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "onlineRenditions": [
+          {
+            "id": "086-wf-3-source",
+            "source": "current exhibition label L-86 and room limit ROOM-5",
+            "version": "v2",
+            "text": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Museum Exhibition Curator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A label exceeds the available space: shorten without removing a crucial qualification.  Use the supplied evidence as the source of truth, preserve record 086-workflow-3-record and source 086-wf-3-source version v2, and keep persistence and external effects at the host boundary. Preserve the uncertainty about maker/date while proposing a version within the 90-word limit; do not invent attribution."
+    },
+    "scenario": "The current label text is: “This water vessel is made of red clay with a rounded body, narrow neck, and repaired rim. It was donated by a Riverside family and displayed beside other household water containers. A catalogue card gives no maker or date. An earlier draft attributed it to artisan Ilyan and dated it to 1842, but neither claim appears in the provenance register. The vessel may have been used for household water storage, though no record identifies its owner or exact purpose. Similar shapes occur in several neighboring settlements. The label describes visible features and limits of current research; it does not establish where the clay was collected or who formed the vessel. Community reviewers are examining the family history; any new attribution awaits evidence review.” The text is 123 words; case ROOM-5 allows 90.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A label exceeds the available space: shorten without removing a crucial qualification.",
+    "boundary_assertions": {
+      "view": "The view quotes or precisely identifies the current 123-word label and 90-word limit, retains that the Ilyan/1842 attribution is not documented, and shows a shortened draft or a blocker pending one.",
+      "durable_state": "Proposed label state keeps the provenance uncertainty and identifies the 90-word room constraint; any shortening is a candidate revision, not a published label.",
+      "effects": "Effect ledger may propose a reviewed under-90-word label retaining the attribution/date qualification. Publication remains pending curatorial approval and host receipt."
+    }
+  },
+  {
+    "id": "086-workflow-4",
+    "root": "curateExhibition.nl",
+    "split_group": "world-086-workflow-4",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "086-workflow-4-record",
+          "caseId": "086-workflow-4",
+          "sourceRefs": [
+            "086-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "ExhibitionProject",
+          "subject": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "086-wf-4-source",
+            "sourceVersion": "v2"
+          },
+          "collectionIds": [
+            "OBJ-86",
+            "OBJ-91",
+            "IMG-91A",
+            "IMG-91B"
+          ],
+          "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+          "audience": "General visitors and local community reviewers.",
+          "curatorId": "CUR-6",
+          "venueConstraintIds": [
+            "ROOM-2-CAPACITY",
+            "LABEL-90-WORDS"
+          ]
+        },
+        "evidence": [],
+        "arguments": [],
+        "zones": [],
+        "labels": [],
+        "releases": [],
+        "sources": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "086-workflow-4-record",
+          "project": {
+            "id": "086-workflow-4-record",
+            "caseId": "086-workflow-4",
+            "sourceRefs": [
+              "086-wf-4-source"
+            ],
+            "state": "draft",
+            "kind": "ExhibitionProject",
+            "subject": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "candidate",
+            "evidenceIds": [
+              "086-wf-4-source"
+            ],
+            "fields": {
+              "sourceArtifact": "086-wf-4-source",
+              "sourceVersion": "v2"
+            },
+            "collectionIds": [
+              "OBJ-86",
+              "OBJ-91",
+              "IMG-91A",
+              "IMG-91B"
+            ],
+            "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+            "audience": "General visitors and local community reviewers.",
+            "curatorId": "CUR-6",
+            "venueConstraintIds": [
+              "ROOM-2-CAPACITY",
+              "LABEL-90-WORDS"
+            ]
+          },
+          "objectConstraints": [],
+          "arguments": [],
+          "narrativeSupport": [],
+          "zones": [],
+          "contextEdges": [],
+          "labels": [],
+          "release": null,
+          "invalidatedPlacements": [],
+          "derivativeRestrictionRefs": []
+        }
+      },
+      "change": {
+        "loanUpdates": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "conservationUpdates": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "communityRestrictions": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "visitorPathTests": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "labelFeedback": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "onlineRenditions": [
+          {
+            "id": "086-wf-4-source",
+            "source": "community council protocol CP-86 and exhibition asset register",
+            "version": "v2",
+            "text": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Museum Exhibition Curator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A community restriction limits display: enforce it across images, labels, and online previews.  Use the supplied evidence as the source of truth, preserve record 086-workflow-4-record and source 086-wf-4-source version v2, and keep persistence and external effects at the host boundary. Apply CP-86 separately to OBJ-91, both images, label L-91, and preview OP-86; distinguish the named restriction from OBJ-86, which the protocol does not cover."
+    },
+    "scenario": "Community protocol CP-86 v2 applies to object OBJ-91, front image IMG-91A, detail image IMG-91B, label L-91, and online preview OP-86. The community council records OBJ-91 as used in a closed seasonal ceremony. CP-86 permits secure storage and review by named community custodians; it prohibits physical display of OBJ-91, photography or online display of IMG-91A/IMG-91B, and labels or previews that describe the ceremony. The restriction is scoped to OBJ-91 and its derived images; it does not name OBJ-86.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A community restriction limits display: enforce it across images, labels, and online previews.",
+    "boundary_assertions": {
+      "view": "View must identify OBJ-91, IMG-91A/IMG-91B, L-91 and OP-86 as affected; show that display, images and ceremony description are prohibited under CP-86, while not extending that restriction to unlisted OBJ-86.",
+      "durable_state": "Proposed catalogue state attaches CP-86 v2’s scope to OBJ-91 and its listed derivatives, preserving the separate status of OBJ-86; no change is persisted.",
+      "effects": "Effect ledger may propose holding the listed object/image/label/preview uses for community review; do not claim display removal or publication blocking has executed."
+    }
+  },
+  {
+    "id": "086-workflow-5",
+    "root": "curateExhibition.nl",
+    "split_group": "world-086-workflow-5",
+    "inputs": {
+      "dossier": {
+        "project": {
+          "id": "086-workflow-5-record",
+          "caseId": "086-workflow-5",
+          "sourceRefs": [
+            "086-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "ExhibitionProject",
+          "subject": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+          "status": "candidate",
+          "evidenceIds": [
+            "086-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "086-wf-5-source",
+            "sourceVersion": "v2"
+          },
+          "collectionIds": [
+            "OBJ-86",
+            "OBJ-91"
+          ],
+          "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+          "audience": "General visitors and local community reviewers.",
+          "curatorId": "CUR-6",
+          "venueConstraintIds": [
+            "ROOM-2-CAPACITY",
+            "LABEL-90-WORDS"
+          ]
+        },
+        "evidence": [],
+        "arguments": [],
+        "zones": [],
+        "labels": [],
+        "releases": [],
+        "sources": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "086-workflow-5-record",
+          "project": {
+            "id": "086-workflow-5-record",
+            "caseId": "086-workflow-5",
+            "sourceRefs": [
+              "086-wf-5-source"
+            ],
+            "state": "draft",
+            "kind": "ExhibitionProject",
+            "subject": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "candidate",
+            "evidenceIds": [
+              "086-wf-5-source"
+            ],
+            "fields": {
+              "sourceArtifact": "086-wf-5-source",
+              "sourceVersion": "v2"
+            },
+            "collectionIds": [
+              "OBJ-86",
+              "OBJ-91"
+            ],
+            "exhibitionBrief": "Domestic water storage vessels and provenance uncertainty.",
+            "audience": "General visitors and local community reviewers.",
+            "curatorId": "CUR-6",
+            "venueConstraintIds": [
+              "ROOM-2-CAPACITY",
+              "LABEL-90-WORDS"
+            ]
+          },
+          "objectConstraints": [],
+          "arguments": [],
+          "narrativeSupport": [],
+          "zones": [],
+          "contextEdges": [],
+          "labels": [],
+          "release": null,
+          "invalidatedPlacements": [],
+          "derivativeRestrictionRefs": []
+        }
+      },
+      "change": {
+        "loanUpdates": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "conservationUpdates": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "communityRestrictions": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "visitorPathTests": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "labelFeedback": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "onlineRenditions": [
+          {
+            "id": "086-wf-5-source",
+            "source": "loan notice LN-86, cargo ledger CL-14, and donor record for OBJ-86",
+            "version": "v2",
+            "text": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Museum Exhibition Curator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.  Use the supplied evidence as the source of truth, preserve record 086-workflow-5-record and source 086-wf-5-source version v2, and keep persistence and external effects at the host boundary. Preserve the argument role of OBJ-91 and the weaker evidence for OBJ-86; revise/narrow the trade claim or leave it blocked for curator review, never silently substitute."
+    },
+    "scenario": "Loan office notice LN-86 v2 withdrew OBJ-91 from the opening gallery on 2026-10-25. The curatorial argument compares household vessel forms with evidence of coastal trade; OBJ-91 is the only object linked to that trade by contemporaneous cargo ledger CL-14. Candidate OBJ-86 has a similar form, but its donor record names no maker, date, or trade context. The current plan still lists OBJ-91 and the draft argument cites CL-14.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "An artifact loan is withdrawn: revise the argument rather than silently substituting a weaker example.",
+    "boundary_assertions": {
+      "view": "View explains OBJ-91’s role in the coastal-trade argument, its withdrawal, and why OBJ-86’s similar form lacks trade evidence; show a revised/narrowed claim or a blocker.",
+      "durable_state": "Proposed exhibit state records OBJ-91 as withdrawn and preserves CL-14’s role; it does not treat OBJ-86 as equivalent evidence or claim a replacement is committed.",
+      "effects": "Effect ledger may propose revising the argument or seeking curator review; no installation change, object substitution, or publication is claimed."
+    }
+  }
+]

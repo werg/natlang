@@ -1,0 +1,130 @@
+{
+  "schema": "natlang.application/1",
+  "id": "060",
+  "title": "Custom fabrication quoting desk",
+  "entrypoint": "composeFabricationQuote.nl",
+  "interfaces": [
+    {
+      "name": "composeFabricationQuote",
+      "path": "composeFabricationQuote.nl",
+      "purpose": "Build a provisional fabrication quote from verified dimensions, accepted finish references, certified shop capability, and current material pricing."
+    },
+    {
+      "name": "reconcileFabricationQuoteResponse",
+      "path": "reconcileFabricationQuoteResponse.nl",
+      "purpose": "Reconcile customer acceptance, decline, or scope-change evidence against the exact issued quote revision and persist replay-safe commercial decision state.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "fabrication-quote-decisions"
+    },
+    {
+      "name": "recordFabricationQuoteIssue",
+      "path": "recordFabricationQuoteIssue.nl",
+      "purpose": "Persist an exact rendered and approved commercial quote revision without implying customer acceptance or production authorization.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "fabrication-quote-decisions"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverRequirements",
+        "paths": [
+          "composeFabricationQuote/qualifyShopMeasurements.nl"
+        ]
+      },
+      {
+        "stage": "generateConcepts",
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      },
+      {
+        "stage": "planProduction",
+        "paths": [
+          "composeFabricationQuote/matchCertifiedShopRoute.nl"
+        ]
+      },
+      {
+        "stage": "calculateQuote",
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "stage": "confirmScope",
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "composeFabricationQuote/qualifyShopMeasurements.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "composeFabricationQuote/matchCertifiedShopRoute.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "revisioned quote decision book keyed by issued quote identity",
+    "history": "customer responses and approval evidence are append-only; exact duplicate responses replay without a second revision",
+    "acceptance": "only an unexpired, fully approved, non-provisional quote with matching revision and term digest can become accepted; acceptance does not start production"
+  },
+  "effects": [
+    "scope confirmation request",
+    "specialist capability referral",
+    "quote refresh or approval task",
+    "production handoff only after separately authorized acceptance processing"
+  ],
+  "source_files": [
+    "composeFabricationQuote.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute/matchRequiredShopProcesses.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute/verifyRequiredCertificateScopes.nl",
+    "composeFabricationQuote/qualifyShopMeasurements.nl",
+    "composeFabricationQuote/qualifyShopMeasurements/testRequiredToleranceFit.nl",
+    "composeFabricationQuote/qualifyShopMeasurements/verifyMeasurementTraceability.nl",
+    "composeFabricationQuote/selectFabricationConcept.nl",
+    "composeFabricationQuote/selectFabricationConcept/confirmPhysicalFinishReference.nl",
+    "composeFabricationQuote/validateMaterialPricing.nl",
+    "composeFabricationQuote/validateMaterialPricing/reconcileToolingRevisionImpact.nl",
+    "composeFabricationQuote/validateMaterialPricing/separateCurrentMaterialOffers.nl",
+    "qualification/recoverRequirements.nl",
+    "reconcileFabricationQuoteResponse.nl",
+    "reconcileFabricationQuoteResponse/qualifyCustomerQuoteDecision.nl",
+    "recordFabricationQuoteIssue.nl",
+    "recordFabricationQuoteIssue/verifyQuoteIssueReadiness.nl",
+    "types.ts"
+  ]
+}

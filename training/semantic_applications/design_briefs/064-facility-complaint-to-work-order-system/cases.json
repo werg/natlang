@@ -1,0 +1,523 @@
+[
+  {
+    "id": "064-facility-complaint-to-work-order-system-gate-supported",
+    "root": "qualification/interpretComplaint.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather",
+          "caseId": "case-64"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "occurrencePattern",
+            "evidenceIds": [
+              "064-facility-complaint-to-work-order-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "occupant complaint and work-order history",
+        "evidence": [
+          {
+            "id": "064-facility-complaint-to-work-order-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "C64 reports leak near light fitting during heavy rain; prior patch was completed in dry weather and no electrical isolation record exists. Case case-64; current first-stage record values: {\"assetCandidateIds\": [\"light-fitting-L64\", \"roof-drain-R64\"], \"locationId\": \"ceiling-zone-C64\", \"occurrencePattern\": \"only reported during rain; prior patch occurred in dry weather\", \"symptom\": \"water leak after heavy rain near light fitting\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Coordinate a safe inspection and verify under the condition that caused the complaint."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "occurrencePattern",
+          "value": "only reported during rain; prior patch occurred in dry weather",
+          "evidenceIds": [
+            "064-facility-complaint-to-work-order-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "occupant complaint and work-order history: Complaint C-64 reports a ceiling leak near a light fitting after heavy rain. A patch order was closed during dry weather; no rain-event inspection or electrical isolation record exists. Apply the first-stage gate to the record and source versions; Coordinate a safe inspection and verify under the condition that caused the complaint.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-gate-contradictory",
+    "root": "qualification/interpretComplaint.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "leak occurs daily regardless of rainfall",
+          "caseId": "case-64"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "occurrencePattern",
+            "evidenceIds": [
+              "064-facility-complaint-to-work-order-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "occupant complaint and work-order history",
+        "evidence": [
+          {
+            "id": "064-facility-complaint-to-work-order-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "C64 reports leak near light fitting during heavy rain; prior patch was completed in dry weather and no electrical isolation record exists. Case case-64; current first-stage record values: {\"assetCandidateIds\": [\"light-fitting-L64\", \"roof-drain-R64\"], \"locationId\": \"ceiling-zone-C64\", \"occurrencePattern\": \"only reported during rain; prior patch occurred in dry weather\", \"symptom\": \"water leak after heavy rain near light fitting\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Coordinate a safe inspection and verify under the condition that caused the complaint."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "occurrencePattern",
+          "value": "leak occurs daily regardless of rainfall",
+          "evidenceIds": [
+            "064-facility-complaint-to-work-order-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "occupant complaint and work-order history: Complaint C-64 reports a ceiling leak near a light fitting after heavy rain. A patch order was closed during dry weather; no rain-event inspection or electrical isolation record exists. Apply the first-stage gate to the record and source versions; Coordinate a safe inspection and verify under the condition that caused the complaint.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-gate-missing",
+    "root": "qualification/interpretComplaint.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-64"
+        },
+        "missingFields": [
+          "occurrencePattern"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes occurrencePattern?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "occupant complaint and work-order history",
+        "evidence": [],
+        "missing": [
+          "occurrencePattern"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Coordinate a safe inspection and verify under the condition that caused the complaint."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "occupant complaint and work-order history: Complaint C-64 reports a ceiling leak near a light fitting after heavy rain. A patch order was closed during dry weather; no rain-event inspection or electrical isolation record exists. Apply the first-stage gate to the record and source versions; Coordinate a safe inspection and verify under the condition that caused the complaint.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-operational-1",
+    "root": "triageFacilityIssue.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "serviceCase": {
+        "caseId": "064-facility-complaint-to-work-order-system-operational-1",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-1",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
+        "evidence": [
+          {
+            "id": "064-operational-detail-1-source-v2",
+            "source": "Facility complaint-to-work-order system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R064 Facility steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R064 Facility steward records: Occupants call room R64 “the blue room,” while the official register identifies location RM-204. Work order W64 uses the informal name as its location and leaves the official asset-location field empty. This current event is source 064-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 064-facility-complaint-to-work-order-system-operational-1. The supplied typed prior 064-prior-facilityobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Occupants call room R64 “the blue room,” while the official register identifies location RM-204. Work order W64 uses the informal name as its location and leaves the official asset-location field empty."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 064-facility-complaint-to-work-order-system-operational-1 against this factual event: Occupants call room R64 “the blue room,” while the official register identifies location RM-204. Work order W64 uses the informal name as its location and leaves the official asset-location field empty. Original §9 detail: A room has an informal name: maintain aliases without changing the official asset location. Correct handling applies “maintain aliases without changing the official asset location.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Occupants call room R64 “the blue room,” while the official register identifies location RM-204. Work order W64 uses the informal name as its location and leaves the official asset-location field empty.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A room has an informal name: maintain aliases without changing the official asset location.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Occupants call room R64 “the blue room,” while the official register identifies location RM-204. Work order W64 uses the informal name as its location and leaves the official asset-location field empty. It links source 064-operational-detail-1-source-v2 v2 with prior typed FacilityObservation record 064-prior-facilityobservation-detail-1-v1 v1 and keeps unresolved scope visible for R64, RM-204, W64.",
+      "durable_state": "The proposal retains prior record 064-prior-facilityobservation-detail-1-v1 v1 and versions only the affected state for R64, RM-204, W64 against source 064-operational-detail-1-source-v2 v2; it applies “maintain aliases without changing the official asset location.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R64, RM-204, W64 and the scope supported by source 064-operational-detail-1-source-v2 v2; it represents “maintain aliases without changing the official asset location.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-operational-2",
+    "root": "triageFacilityIssue.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "serviceCase": {
+        "caseId": "064-facility-complaint-to-work-order-system-operational-2",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-2",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
+        "evidence": [
+          {
+            "id": "064-operational-detail-2-source-v2",
+            "source": "Facility complaint-to-work-order system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R064 Facility steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R064 Facility steward records: Technician T64 could not enter room RM-204 at the scheduled visit because occupant access was not available. Visit log records a failed attempt at 14:05; consented access window has not been renegotiated. This current event is source 064-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 064-facility-complaint-to-work-order-system-operational-2. The supplied typed prior 064-prior-facilityobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Technician T64 could not enter room RM-204 at the scheduled visit because occupant access was not available. Visit log records a failed attempt at 14:05; consented access window has not been renegotiated."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 064-facility-complaint-to-work-order-system-operational-2 against this factual event: Technician T64 could not enter room RM-204 at the scheduled visit because occupant access was not available. Visit log records a failed attempt at 14:05; consented access window has not been renegotiated. Original §9 detail: A technician cannot gain access: record the failed visit and renegotiate consented access. Correct handling applies “record the failed visit and renegotiate consented access.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Technician T64 could not enter room RM-204 at the scheduled visit because occupant access was not available. Visit log records a failed attempt at 14:05; consented access window has not been renegotiated.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A technician cannot gain access: record the failed visit and renegotiate consented access.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Technician T64 could not enter room RM-204 at the scheduled visit because occupant access was not available. Visit log records a failed attempt at 14:05; consented access window has not been renegotiated. It links source 064-operational-detail-2-source-v2 v2 with prior typed FacilityObservation record 064-prior-facilityobservation-detail-2-v1 v1 and keeps unresolved scope visible for T64, RM-204.",
+      "durable_state": "The proposal retains prior record 064-prior-facilityobservation-detail-2-v1 v1 and versions only the affected state for T64, RM-204 against source 064-operational-detail-2-source-v2 v2; it applies “record the failed visit and renegotiate consented access.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to T64, RM-204 and the scope supported by source 064-operational-detail-2-source-v2 v2; it represents “record the failed visit and renegotiate consented access.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-operational-3",
+    "root": "triageFacilityIssue.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "serviceCase": {
+        "caseId": "064-facility-complaint-to-work-order-system-operational-3",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-3",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
+        "evidence": [
+          {
+            "id": "064-operational-detail-3-source-v2",
+            "source": "Facility complaint-to-work-order system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R064 Facility steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R064 Facility steward records: Noise complaint N64 is reported between 06:00 and 07:00 during ventilation startup. Prior inspection occurred at 13:30 when the fan was already at steady state; no observation is scheduled in the reported window. This current event is source 064-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 064-facility-complaint-to-work-order-system-operational-3. The supplied typed prior 064-prior-facilityobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Noise complaint N64 is reported between 06:00 and 07:00 during ventilation startup. Prior inspection occurred at 13:30 when the fan was already at steady state; no observation is scheduled in the reported window."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 064-facility-complaint-to-work-order-system-operational-3 against this factual event: Noise complaint N64 is reported between 06:00 and 07:00 during ventilation startup. Prior inspection occurred at 13:30 when the fan was already at steady state; no observation is scheduled in the reported window. Original §9 detail: Noise occurs only at certain times: schedule observation under the relevant conditions. Correct handling applies “schedule observation under the relevant conditions.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Noise complaint N64 is reported between 06:00 and 07:00 during ventilation startup. Prior inspection occurred at 13:30 when the fan was already at steady state; no observation is scheduled in the reported window.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Noise occurs only at certain times: schedule observation under the relevant conditions.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Noise complaint N64 is reported between 06:00 and 07:00 during ventilation startup. Prior inspection occurred at 13:30 when the fan was already at steady state; no observation is scheduled in the reported window. It links source 064-operational-detail-3-source-v2 v2 with prior typed FacilityObservation record 064-prior-facilityobservation-detail-3-v1 v1 and keeps unresolved scope visible for N64.",
+      "durable_state": "The proposal retains prior record 064-prior-facilityobservation-detail-3-v1 v1 and versions only the affected state for N64 against source 064-operational-detail-3-source-v2 v2; it applies “schedule observation under the relevant conditions.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to N64 and the scope supported by source 064-operational-detail-3-source-v2 v2; it represents “schedule observation under the relevant conditions.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-operational-4",
+    "root": "triageFacilityIssue.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "serviceCase": {
+        "caseId": "064-facility-complaint-to-work-order-system-operational-4",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-4",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
+        "evidence": [
+          {
+            "id": "064-operational-detail-4-source-v2",
+            "source": "Facility complaint-to-work-order system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R064 Facility steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R064 Facility steward records: Occupants L64-1, L64-2 and L64-3 report the same leak. Their records include private phone numbers; building update group has authorization for status but not identity sharing. This current event is source 064-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 064-facility-complaint-to-work-order-system-operational-4. The supplied typed prior 064-prior-facilityobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Occupants L64-1, L64-2 and L64-3 report the same leak. Their records include private phone numbers; building update group has authorization for status but not identity sharing."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 064-facility-complaint-to-work-order-system-operational-4 against this factual event: Occupants L64-1, L64-2 and L64-3 report the same leak. Their records include private phone numbers; building update group has authorization for status but not identity sharing. Original §9 detail: Several occupants report one issue: send privacy-preserving updates without exposing identities. Correct handling applies “send privacy-preserving updates without exposing identities.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Occupants L64-1, L64-2 and L64-3 report the same leak. Their records include private phone numbers; building update group has authorization for status but not identity sharing.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "Several occupants report one issue: send privacy-preserving updates without exposing identities.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Occupants L64-1, L64-2 and L64-3 report the same leak. Their records include private phone numbers; building update group has authorization for status but not identity sharing. It links source 064-operational-detail-4-source-v2 v2 with prior typed FacilityObservation record 064-prior-facilityobservation-detail-4-v1 v1 and keeps unresolved scope visible for L64-1, L64-2, L64-3.",
+      "durable_state": "The proposal retains prior record 064-prior-facilityobservation-detail-4-v1 v1 and versions only the affected state for L64-1, L64-2, L64-3 against source 064-operational-detail-4-source-v2 v2; it applies “send privacy-preserving updates without exposing identities.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L64-1, L64-2, L64-3 and the scope supported by source 064-operational-detail-4-source-v2 v2; it represents “send privacy-preserving updates without exposing identities.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "064-facility-complaint-to-work-order-system-operational-5",
+    "root": "triageFacilityIssue.nl",
+    "split_group": "064-facility-complaint-to-work-order-system",
+    "inputs": {
+      "serviceCase": {
+        "caseId": "064-facility-complaint-to-work-order-system-operational-5",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-5",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
+        "evidence": [
+          {
+            "id": "064-operational-detail-5-source-v2",
+            "source": "Facility complaint-to-work-order system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R064 Facility steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R064 Facility steward records: Leak repair W64-3 was closed twice after sealant application and the symptom recurred within 48 hours each time. Tickets are separate; no common-cause inspection or mechanism investigation is linked. This current event is source 064-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 064-facility-complaint-to-work-order-system-operational-5. The supplied typed prior 064-prior-facilityobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Leak repair W64-3 was closed twice after sealant application and the symptom recurred within 48 hours each time. Tickets are separate; no common-cause inspection or mechanism investigation is linked."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 064-facility-complaint-to-work-order-system-operational-5 against this factual event: Leak repair W64-3 was closed twice after sealant application and the symptom recurred within 48 hours each time. Tickets are separate; no common-cause inspection or mechanism investigation is linked. Original §9 detail: A repair recurs repeatedly: escalate the mechanism investigation rather than opening disconnected tickets. Correct handling applies “escalate the mechanism investigation rather than opening disconnected tickets.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Leak repair W64-3 was closed twice after sealant application and the symptom recurred within 48 hours each time. Tickets are separate; no common-cause inspection or mechanism investigation is linked.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A repair recurs repeatedly: escalate the mechanism investigation rather than opening disconnected tickets.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Leak repair W64-3 was closed twice after sealant application and the symptom recurred within 48 hours each time. Tickets are separate; no common-cause inspection or mechanism investigation is linked. It links source 064-operational-detail-5-source-v2 v2 with prior typed FacilityObservation record 064-prior-facilityobservation-detail-5-v1 v1 and keeps unresolved scope visible for W64-3.",
+      "durable_state": "The proposal retains prior record 064-prior-facilityobservation-detail-5-v1 v1 and versions only the affected state for W64-3 against source 064-operational-detail-5-source-v2 v2; it applies “escalate the mechanism investigation rather than opening disconnected tickets.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to W64-3 and the scope supported by source 064-operational-detail-5-source-v2 v2; it represents “escalate the mechanism investigation rather than opening disconnected tickets.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

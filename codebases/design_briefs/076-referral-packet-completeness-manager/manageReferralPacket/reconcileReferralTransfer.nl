@@ -1,0 +1,10 @@
+---
+description: Advance packet transfer through authorization, dispatch and recipient acknowledgment without ambiguous resend.
+args: { dossier: ReferralDossier; change: PacketChange; identity: IdentityBinding; documents: DocumentFinding[]; requests: ReferralRequest[] }
+returns: TransferLedger
+---
+1. Start with dossier.checkpoint.transfer and the one current ReferralPacket whose caseId matches the referral. If no uniquely identified packet exists, keep the ledger prepared and return a blocker; never invent a packet ID, approval reference or document list.
+2. Reconcile only change.recipientReceipts for that exact packet, revision, recipient service and episode scope. An exact acknowledgment makes the ledger acknowledged and yields no effect. A rejection or a receipt for another version stays a conflict and cannot authorize a retry.
+3. If a prior dispatch may have reached the recipient but its outcome is absent or ambiguous, call readRecipientStatus(dossier, change). Preserve unknown state unless current recipient evidence proves either receipt or nonreceipt. Emit one read-recipient-status effect for the exact packet/version while status remains unknown; do not include a send effect on this branch.
+4. A new send effect is eligible only when identity.status is verified for the referral patient; the current packet has an approvalRef; every required document finding is present-valid; no referral gap is missing, expired or uncertain; no material request remains open; the checklist authority is current; and disclosureRefs bind this exact packet to its allowed episode. If any condition is absent, retain prepared or blocked with the exact missing binding and no send effect.
+5. Build a send-referral-packet effect with packet ID, checkpoint revision, patient, episode scope, receiving service, exact packet document IDs and approval reference. Set effectId to packet ID, revision and effect kind joined with colons so retries remain idempotent. Mark the ledger authorized and include the effect; do not mark it dispatched until a real transport result is supplied on a later call. Unknown delivery is never safe to resend.

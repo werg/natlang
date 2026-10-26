@@ -1,0 +1,5 @@
+# Documentary Assembly Studio
+
+The editorial object is a cut graph over immutable source segments, not a transcript summary. A segment binds exact source revision and inclusive time range to speaker, surrounding qualifier, use permission, and source claim. An assembly edge records adjacency and narration so the effect of a cut can be reviewed as its own proposition. Duration is accumulated from exact frame counts; no prose estimate can satisfy the runtime constraint.
+
+Each candidate structure carries an argument and evidence map. Cut review tests both quote context and the implication created by neighboring clips. A valid clip may still form a misleading sequence. Rights are checked at the source-range and distribution-channel level, with expiry and speaker correction routed into targeted clearance or fact-check work. Changes invalidate only dependent sequence, caption, description, and clearance artifacts. Release freezes an edit decision list and all deliverables against the same assembly digest; an ambiguous transmission receipt requires readback before retry.

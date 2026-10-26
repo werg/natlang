@@ -1,0 +1,37 @@
+
+export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
+
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+
+export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
+
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+
+export type GoalContract = { outcome: string; exclusions: string[]; entities: string[]; acceptanceEvidence: string[]; unresolvedScope: string[] };
+export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type ClauseNegotiation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; agreementDraftId: string; playbookId: string; stakeholderIds: string[]; negotiationOwnerId: string; mandateId: string };
+export type NegotiationPosition = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; issue: string; preferredOutcome: string; fallback: string; prohibitedConcession: string };
+export type ClauseDependency = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; clauseIds: string[]; interaction: string; consequence: string; affectedPositionIds: string[] };
+export type ClausePackage = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; clauseIds: string[]; packageText: string; concessions: string[]; retainedProtections: string[] };
+export type RedlineFinding = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; editRef: Ref; semanticChange: string; acceptedPositionIds: string[]; requiresEscalation: boolean };
+export type ClauseOffer = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; packageId: string; reviewerIds: string[]; approvedHash: string; unresolvedIssues: string[] };
+
+export type NegotiationPackageRequest = { caseId: string; parties: string[]; issues: string[]; targetVersion: string; requestedBy: string };
+export type ClauseTermVault = { checkpoint?: ClausePackageCheckpoint; negotiations: ClauseNegotiation[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; globalDefinitions: EvidencePage[]; commentNotes: EvidencePage[]; conditionalAcceptances: EvidencePage[]; draftApprovals: EvidencePage[]; undefinedTermChecks: EvidencePage[] };
+export type NegotiationGuardrail = { disposition: string; blockers: string[]; affectedClauseIds: string[]; evidenceRefs: string[]; proposedActions: ActionProposal[] };
+export type NegotiationPositionMap = { positions: NegotiationPosition[]; missingMandates: string[]; authorityConflicts: string[] };
+export type ClauseEffectGraph = { dependencies: ClauseDependency[]; consumerClauseIds: string[]; disputedInteractions: string[]; blockers: string[] };
+export type ClausePackageSet = { packages: ClausePackage[]; rejectedCombinations: string[]; blockers: string[] };
+export type RedlineReviewSet = { findings: RedlineFinding[]; conditionalIssues: string[]; escalations: string[] };
+export type ClauseOfferPlan = { offer: ClauseOffer | null; externalText: string; exactHash: string; blockers: string[]; circulationAuthorized: boolean };
+export type ClauseProgramResult = { caseId: string; positions: NegotiationPositionMap; dependencies: ClauseEffectGraph; packages: ClausePackageSet | null; redlines: RedlineReviewSet | null; offer: ClauseOfferPlan | null; guardrails: NegotiationGuardrail[]; checkpoint: ClausePackageCheckpoint; commitAllowed: boolean };
+
+export type DraftNegotiationPosition = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; issue?: string; preferredOutcome?: string; fallback?: string; prohibitedConcession?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
+
+export type ClausePackageCheckpoint={caseId:string;revision:number;mandateVersions:string[];clauseGraphEditions:ClauseEffectGraph[];packageEditions:ClausePackageSet[];redlineHashes:string[];conditionalAcceptanceRefs:string[];approvalHashes:string[];offerDispatchRefs:string[];staleApprovals:string[]};

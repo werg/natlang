@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.application/1",
+  "id": "079",
+  "title": "Health Record Request Fulfillment Workbench",
+  "entrypoint": "fulfillHealthRecordRequest.nl",
+  "interfaces": [
+    {
+      "name": "fulfillHealthRecordRequest",
+      "path": "fulfillHealthRecordRequest.nl",
+      "purpose": "Prepare an authorization-bounded record packet, review only affected disclosure spans, sanitize the rendered derivative and reconcile exact delivery.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "health-record-fulfillment-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretAuthorization",
+        "paths": [
+          "fulfillHealthRecordRequest/qualifyReleaseAuthorization.nl",
+          "fulfillHealthRecordRequest/verifyRecordAuthorization.nl"
+        ]
+      },
+      {
+        "stage": "locateRecords",
+        "paths": [
+          "fulfillHealthRecordRequest/locateEpisodeRecords.nl"
+        ]
+      },
+      {
+        "stage": "reviewContent",
+        "paths": [
+          "fulfillHealthRecordRequest/reviewResponsiveDocuments.nl"
+        ]
+      },
+      {
+        "stage": "assembleFulfillment",
+        "paths": [
+          "fulfillHealthRecordRequest/renderAndSanitizePacket.nl",
+          "fulfillHealthRecordRequest/renderAndSanitizePacket/scanRenderedArtifact.nl"
+        ]
+      },
+      {
+        "stage": "verifyDelivery",
+        "paths": [
+          "fulfillHealthRecordRequest/reconcileRecordDelivery.nl",
+          "fulfillHealthRecordRequest/reconcileRecordDelivery/verifyDeliveryBoundary.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "fulfillHealthRecordRequest/qualifyReleaseAuthorization.nl",
+          "fulfillHealthRecordRequest/reconcileRecordDelivery.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "fulfillHealthRecordRequest/reviewResponsiveDocuments.nl",
+          "fulfillHealthRecordRequest/renderAndSanitizePacket.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "fulfillHealthRecordRequest/locateEpisodeRecords.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "fulfillHealthRecordRequest/renderAndSanitizePacket.nl",
+          "fulfillHealthRecordRequest/renderAndSanitizePacket/scanRenderedArtifact.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "fulfillHealthRecordRequest/reconcileRecordDelivery.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "fulfillHealthRecordRequest.nl",
+    "fulfillHealthRecordRequest/locateEpisodeRecords.nl",
+    "fulfillHealthRecordRequest/qualifyReleaseAuthorization.nl",
+    "fulfillHealthRecordRequest/reconcileRecordDelivery.nl",
+    "fulfillHealthRecordRequest/reconcileRecordDelivery/verifyDeliveryBoundary.nl",
+    "fulfillHealthRecordRequest/renderAndSanitizePacket.nl",
+    "fulfillHealthRecordRequest/renderAndSanitizePacket/scanRenderedArtifact.nl",
+    "fulfillHealthRecordRequest/reviewResponsiveDocuments.nl",
+    "fulfillHealthRecordRequest/verifyRecordAuthorization.nl",
+    "types.ts"
+  ]
+}

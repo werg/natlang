@@ -1,0 +1,110 @@
+{
+  "schema": "natlang.application/1",
+  "id": "069",
+  "title": "Environmental reporting evidence assembler",
+  "entrypoint": "assembleEnvironmentalReport.nl",
+  "interfaces": [
+    {
+      "name": "assembleEnvironmentalReport",
+      "path": "assembleEnvironmentalReport.nl",
+      "purpose": "Assemble an immutable evidence-backed report edition with boundary-scoped measures, reconciled attribution and qualified claims.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "environmental-reporting-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretBoundaries",
+        "paths": [
+          "assembleEnvironmentalReport/interpretReportingBoundary.nl",
+          "assembleEnvironmentalReport/verifyReportingBoundary.nl"
+        ]
+      },
+      {
+        "stage": "mapMeasurements",
+        "paths": [
+          "assembleEnvironmentalReport/mapEnvironmentalMeasurements.nl",
+          "assembleEnvironmentalReport/mapEnvironmentalMeasurements/resolveMeterContinuity.nl"
+        ]
+      },
+      {
+        "stage": "reconcileAttribution",
+        "paths": [
+          "assembleEnvironmentalReport/reconcilePhysicalAttribution.nl",
+          "assembleEnvironmentalReport/reconcilePhysicalAttribution/linkPhysicalActivities.nl",
+          "assembleEnvironmentalReport/reconcilePhysicalAttribution/allocateSharedActivity.nl"
+        ]
+      },
+      {
+        "stage": "substantiateClaims",
+        "paths": [
+          "assembleEnvironmentalReport/testEnvironmentalClaims.nl"
+        ]
+      },
+      {
+        "stage": "assembleSubmission",
+        "paths": [
+          "assembleEnvironmentalReport/freezeReportEdition.nl",
+          "assembleEnvironmentalReport/freezeReportEdition/deriveRestatementBridge.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "assembleEnvironmentalReport/reconcilePhysicalAttribution/linkPhysicalActivities.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "assembleEnvironmentalReport/mapEnvironmentalMeasurements.nl",
+          "assembleEnvironmentalReport/mapEnvironmentalMeasurements/resolveMeterContinuity.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "assembleEnvironmentalReport/testEnvironmentalClaims.nl",
+          "assembleEnvironmentalReport/freezeReportEdition.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "assembleEnvironmentalReport/interpretReportingBoundary.nl",
+          "assembleEnvironmentalReport/freezeReportEdition/deriveRestatementBridge.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "assembleEnvironmentalReport/testEnvironmentalClaims.nl",
+          "assembleEnvironmentalReport/freezeReportEdition.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "assembleEnvironmentalReport.nl",
+    "assembleEnvironmentalReport/freezeReportEdition.nl",
+    "assembleEnvironmentalReport/freezeReportEdition/deriveRestatementBridge.nl",
+    "assembleEnvironmentalReport/interpretReportingBoundary.nl",
+    "assembleEnvironmentalReport/mapEnvironmentalMeasurements.nl",
+    "assembleEnvironmentalReport/mapEnvironmentalMeasurements/resolveMeterContinuity.nl",
+    "assembleEnvironmentalReport/reconcilePhysicalAttribution.nl",
+    "assembleEnvironmentalReport/reconcilePhysicalAttribution/allocateSharedActivity.nl",
+    "assembleEnvironmentalReport/reconcilePhysicalAttribution/linkPhysicalActivities.nl",
+    "assembleEnvironmentalReport/testEnvironmentalClaims.nl",
+    "assembleEnvironmentalReport/verifyReportingBoundary.nl",
+    "types.ts"
+  ]
+}

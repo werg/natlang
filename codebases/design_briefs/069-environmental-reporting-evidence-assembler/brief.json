@@ -1,0 +1,91 @@
+{
+  "application_id": "069",
+  "title": "Environmental reporting evidence assembler",
+  "source_relative_path": "applications/14-agriculture-ecology-and-environmental-stewardship/069-environmental-reporting-evidence-assembler.md",
+  "source_sha256": "cb228bdabd7359b12664a1cb6ba36fc7c697bb29d99296ceefdd77f1809db992",
+  "domain_id": "14",
+  "stages": [
+    {
+      "name": "interpretBoundaries",
+      "output_type": "ReportingBoundary",
+      "algorithm": "Read the supplied reporting framework, organizational boundary, and amendments to determine included activities and required measures. Distinguish ownership, operational control, and other supplied boundary concepts rather than choosing whichever yields a favorable result.",
+      "gate": "Boundary interpretation is explicit and approved before aggregation."
+    },
+    {
+      "name": "mapMeasurements",
+      "output_type": "EnvironmentalMeasure",
+      "algorithm": "Reconcile measurements, invoices, contractor statements, and field records with their actual methods and periods. Preserve estimates versus direct measurements, identify missing coverage, and retain original units and uncertainty for exact conversion services.",
+      "gate": "Every value has method, period, unit, and provenance."
+    },
+    {
+      "name": "reconcileAttribution",
+      "output_type": "EnvironmentalAllocation",
+      "algorithm": "Allocate shared activities using supplied rules and exact calculations, checking for duplicate records or overlapping contractor reports. Distinguish a transferred responsibility from a duplicated physical activity and preserve unresolved attribution rather than balancing by assumption.",
+      "gate": "Exact totals and no double-counting across reporting boundaries."
+    },
+    {
+      "name": "substantiateClaims",
+      "output_type": "EnvironmentalClaim",
+      "algorithm": "Compare proposed narrative claims with actual measured outcomes and activity evidence. Separate completion of an initiative from demonstrated environmental benefit, qualify estimated results, and reject persuasive claims unsupported by the reporting data.",
+      "gate": "Each quantitative and impact claim is supported at the stated scope."
+    },
+    {
+      "name": "assembleSubmission",
+      "output_type": "EnvironmentalSubmission",
+      "algorithm": "Build the required schedules, methodology notes, and narrative with consistent quantities and boundaries. Present gaps and restatements clearly, obtain responsible review, and preserve the exact submitted edition and subsequent corrections.",
+      "gate": "Narrative, calculations, methods, and approved boundary all agree."
+    }
+  ],
+  "operational_details": [
+    "A contractor reports an activity already in internal records: deduplicate the physical event before aggregation.",
+    "A meter is replaced mid-period: preserve calibration and continuity assumptions.",
+    "An estimate becomes a measurement later: version and restate affected results explicitly.",
+    "Organizational scope changes: separate boundary effects from operational improvement.",
+    "A public claim exceeds the report’s evidence: block publication until qualified or substantiated."
+  ],
+  "domain_records": {
+    "EnvironmentalReport": [
+      "organizationId: ID",
+      "reportingPeriod: string",
+      "requirementIds: ID[]",
+      "reviewerId: ID",
+      "boundaryDefinition: string"
+    ],
+    "ReportingBoundary": [
+      "caseId: ID",
+      "includedOperations: ID[]",
+      "excludedOperations: ID[]",
+      "measurementRules: string[]",
+      "effectiveScope: string"
+    ],
+    "EnvironmentalMeasure": [
+      "caseId: ID",
+      "operationId: ID",
+      "measureKind: string",
+      "value: Decimal",
+      "unit: string",
+      "methodRef: Ref"
+    ],
+    "EnvironmentalAllocation": [
+      "caseId: ID",
+      "measureIds: ID[]",
+      "boundaryId: ID",
+      "allocatedValue: Decimal",
+      "allocationBasis: string"
+    ],
+    "EnvironmentalClaim": [
+      "caseId: ID",
+      "statement: string",
+      "measureIds: ID[]",
+      "activityRefs: Ref[]",
+      "limitation: string"
+    ],
+    "EnvironmentalSubmission": [
+      "caseId: ID",
+      "claimIds: ID[]",
+      "scheduleArtifactIds: ID[]",
+      "unresolvedGaps: string[]",
+      "approvalRefs: Ref[]"
+    ]
+  }
+}

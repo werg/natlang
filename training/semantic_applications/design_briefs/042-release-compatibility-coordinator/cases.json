@@ -1,0 +1,632 @@
+[
+  {
+    "id": "042-release-compatibility-coordinator-gate-supported",
+    "root": "qualification/interpretChanges.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned",
+          "caseId": "case-42"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "affectedContract",
+            "evidenceIds": [
+              "042-release-compatibility-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "SDK release manifest and client contract",
+        "evidence": [
+          {
+            "id": "042-release-compatibility-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SDK 4.2 returns an empty owner string for anonymous records; client contract treats empty as unassigned and null as unknown. Case case-42; current first-stage record values: {\"affectedContract\": \"consumer distinguishes unknown from unassigned\", \"componentId\": \"sdk-4.2-owner-field\", \"newBehavior\": \"anonymous owner is empty string and means unassigned\", \"oldBehavior\": \"anonymous owner is null and means unknown\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The payload change is behaviorally incompatible despite a type-compatible field."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "affectedContract",
+          "value": "consumer distinguishes unknown from unassigned",
+          "evidenceIds": [
+            "042-release-compatibility-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "SDK release manifest and client contract: Release 4.2 changes a nullable `owner` field to an empty string for anonymous records. Consumer C-042 treats null as “unknown” and empty string as “unassigned”; the compatibility test checks only key presence. Apply the first-stage gate to the record and source versions; The payload change is behaviorally incompatible despite a type-compatible field.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "042-release-compatibility-coordinator-gate-contradictory",
+    "root": "qualification/interpretChanges.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "empty string means unknown, not unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned",
+          "caseId": "case-42"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "affectedContract",
+            "evidenceIds": [
+              "042-release-compatibility-coordinator-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "SDK release manifest and client contract",
+        "evidence": [
+          {
+            "id": "042-release-compatibility-coordinator-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SDK 4.2 returns an empty owner string for anonymous records; client contract treats empty as unassigned and null as unknown. Case case-42; current first-stage record values: {\"affectedContract\": \"consumer distinguishes unknown from unassigned\", \"componentId\": \"sdk-4.2-owner-field\", \"newBehavior\": \"anonymous owner is empty string and means unassigned\", \"oldBehavior\": \"anonymous owner is null and means unknown\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The payload change is behaviorally incompatible despite a type-compatible field."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "newBehavior",
+          "value": "empty string means unknown, not unassigned",
+          "evidenceIds": [
+            "042-release-compatibility-coordinator-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "SDK release manifest and client contract: Release 4.2 changes a nullable `owner` field to an empty string for anonymous records. Consumer C-042 treats null as “unknown” and empty string as “unassigned”; the compatibility test checks only key presence. Apply the first-stage gate to the record and source versions; The payload change is behaviorally incompatible despite a type-compatible field.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "042-release-compatibility-coordinator-gate-missing",
+    "root": "qualification/interpretChanges.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-42"
+        },
+        "missingFields": [
+          "affectedContract"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes affectedContract?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "SDK release manifest and client contract",
+        "evidence": [],
+        "missing": [
+          "affectedContract"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "The payload change is behaviorally incompatible despite a type-compatible field."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "SDK release manifest and client contract: Release 4.2 changes a nullable `owner` field to an empty string for anonymous records. Consumer C-042 treats null as “unknown” and empty string as “unassigned”; the compatibility test checks only key presence. Apply the first-stage gate to the record and source versions; The payload change is behaviorally incompatible despite a type-compatible field.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "042-release-compatibility-coordinator-operational-1",
+    "root": "coordinateReleaseTransition.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-1",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
+          {
+            "id": "042-operational-detail-1-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R042 Release steward records: SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent. This current event is source 042-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 042-release-compatibility-coordinator-operational-1. The supplied typed prior 042-prior-behavioralchange-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-1-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R042 Release steward records: SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent. This current event is source 042-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 042-release-compatibility-coordinator-operational-1. The supplied typed prior 042-prior-behavioralchange-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "042-operational-detail-1-source-v2"
+        ],
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-1",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 042-release-compatibility-coordinator-operational-1 against this factual event: SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent. Original §9 detail: A default changes without a schema change: include default-dependent consumer scenarios. Correct handling applies “include default-dependent consumer scenarios.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A default changes without a schema change: include default-dependent consumer scenarios.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent. It links source 042-operational-detail-1-source-v2 v2 with prior typed BehavioralChange record 042-prior-behavioralchange-detail-1-v1 v1 and keeps unresolved scope visible for C42-1, C42-2.",
+      "durable_state": "The proposal retains prior record 042-prior-behavioralchange-detail-1-v1 v1 and versions only the affected state for C42-1, C42-2 against source 042-operational-detail-1-source-v2 v2; it applies “include default-dependent consumer scenarios.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C42-1, C42-2 and the scope supported by source 042-operational-detail-1-source-v2 v2; it represents “include default-dependent consumer scenarios.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "042-release-compatibility-coordinator-operational-2",
+    "root": "coordinateReleaseTransition.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-2",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
+          {
+            "id": "042-operational-detail-2-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R042 Release steward records: Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager. This current event is source 042-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 042-release-compatibility-coordinator-operational-2. The supplied typed prior 042-prior-behavioralchange-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-2-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R042 Release steward records: Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager. This current event is source 042-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 042-release-compatibility-coordinator-operational-2. The supplied typed prior 042-prior-behavioralchange-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedRequirementIds": [
+          "042-operational-detail-2-source-v2"
+        ],
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-2",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 042-release-compatibility-coordinator-operational-2 against this factual event: Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager. Original §9 detail: An integration is unowned: block risky migration and escalate ownership. Correct handling applies “block risky migration and escalate ownership.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "An integration is unowned: block risky migration and escalate ownership.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager. It links source 042-operational-detail-2-source-v2 v2 with prior typed BehavioralChange record 042-prior-behavioralchange-detail-2-v1 v1 and keeps unresolved scope visible for I42, M42.",
+      "durable_state": "The proposal retains prior record 042-prior-behavioralchange-detail-2-v1 v1 and versions only the affected state for I42, M42 against source 042-operational-detail-2-source-v2 v2; it applies “block risky migration and escalate ownership.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to I42, M42 and the scope supported by source 042-operational-detail-2-source-v2 v2; it represents “block risky migration and escalate ownership.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "042-release-compatibility-coordinator-operational-3",
+    "root": "coordinateReleaseTransition.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-3",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
+          {
+            "id": "042-operational-detail-3-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R042 Release steward records: Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date. This current event is source 042-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 042-release-compatibility-coordinator-operational-3. The supplied typed prior 042-prior-behavioralchange-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-3-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R042 Release steward records: Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date. This current event is source 042-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 042-release-compatibility-coordinator-operational-3. The supplied typed prior 042-prior-behavioralchange-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "042-operational-detail-3-source-v2"
+        ],
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-3",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 042-release-compatibility-coordinator-operational-3 against this factual event: Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date. Original §9 detail: A customer pins an old version: preserve its supported behavior and migration window. Correct handling applies “preserve its supported behavior and migration window.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A customer pins an old version: preserve its supported behavior and migration window.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date. It links source 042-operational-detail-3-source-v2 v2 with prior typed BehavioralChange record 042-prior-behavioralchange-detail-3-v1 v1 and keeps unresolved scope visible for C42.",
+      "durable_state": "The proposal retains prior record 042-prior-behavioralchange-detail-3-v1 v1 and versions only the affected state for C42 against source 042-operational-detail-3-source-v2 v2; it applies “preserve its supported behavior and migration window.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C42 and the scope supported by source 042-operational-detail-3-source-v2 v2; it represents “preserve its supported behavior and migration window.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "042-release-compatibility-coordinator-operational-4",
+    "root": "coordinateReleaseTransition.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-4",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
+          {
+            "id": "042-operational-detail-4-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R042 Release steward records: Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only. This current event is source 042-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 042-release-compatibility-coordinator-operational-4. The supplied typed prior 042-prior-behavioralchange-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-4-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R042 Release steward records: Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only. This current event is source 042-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 042-release-compatibility-coordinator-operational-4. The supplied typed prior 042-prior-behavioralchange-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "042-operational-detail-4-source-v2"
+        ],
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-4",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 042-release-compatibility-coordinator-operational-4 against this factual event: Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only. Original §9 detail: Rollback would lose newly written data: require an explicit data-compatibility plan. Correct handling applies “require an explicit data-compatibility plan.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "Rollback would lose newly written data: require an explicit data-compatibility plan.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only. It links source 042-operational-detail-4-source-v2 v2 with prior typed BehavioralChange record 042-prior-behavioralchange-detail-4-v1 v1 and keeps unresolved scope visible for RB42.",
+      "durable_state": "The proposal retains prior record 042-prior-behavioralchange-detail-4-v1 v1 and versions only the affected state for RB42 against source 042-operational-detail-4-source-v2 v2; it applies “require an explicit data-compatibility plan.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to RB42 and the scope supported by source 042-operational-detail-4-source-v2 v2; it represents “require an explicit data-compatibility plan.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "042-release-compatibility-coordinator-operational-5",
+    "root": "coordinateReleaseTransition.nl",
+    "split_group": "042-release-compatibility-coordinator",
+    "inputs": {
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-5",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
+          {
+            "id": "042-operational-detail-5-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R042 Release steward records: As of 2026-10-06, documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 remains candidate with a decision date of Oct 24. Current page metadata labels the examples “current”. This current event is source 042-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 042-release-compatibility-coordinator-operational-5. The supplied typed prior 042-prior-behavioralchange-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 is still in candidate status with a decision date of Oct 24. Current page metadata labels the examples “current”."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-5-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R042 Release steward records: As of 2026-10-06, documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 remains candidate with a decision date of Oct 24. Current page metadata labels the examples “current”. This current event is source 042-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 042-release-compatibility-coordinator-operational-5. The supplied typed prior 042-prior-behavioralchange-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 is still in candidate status with a decision date of Oct 24. Current page metadata labels the examples “current”."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedRequirementIds": [
+          "042-operational-detail-5-source-v2"
+        ],
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-5",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 042-release-compatibility-coordinator-operational-5 against this factual event: Documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 is still in candidate status with a decision date of Oct 24. Current page metadata labels the examples “current”. Original §9 detail: Documentation publishes early: label the applicable release and prevent misleading current guidance. Correct handling applies “label the applicable release and prevent misleading current guidance.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "As of 2026-10-06, documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 remains candidate with a decision date of Oct 24. Current page metadata labels the examples “current”.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Documentation publishes early: label the applicable release and prevent misleading current guidance.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 is still in candidate status with a decision date of Oct 24. Current page metadata labels the examples “current”. It links source 042-operational-detail-5-source-v2 v2 with prior typed BehavioralChange record 042-prior-behavioralchange-detail-5-v1 v1 and keeps unresolved scope visible for D42, R42.",
+      "durable_state": "The proposal retains prior record 042-prior-behavioralchange-detail-5-v1 v1 and versions only the affected state for D42, R42 against source 042-operational-detail-5-source-v2 v2; it applies “label the applicable release and prevent misleading current guidance.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D42, R42 and the scope supported by source 042-operational-detail-5-source-v2 v2; it represents “label the applicable release and prevent misleading current guidance.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

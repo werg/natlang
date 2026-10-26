@@ -1,0 +1,119 @@
+{
+  "schema": "natlang.application/1",
+  "id": "006",
+  "title": "Continuous customer-problem observatory",
+  "entrypoint": "observeCustomerProblems.nl",
+  "interfaces": [
+    {
+      "name": "observeCustomerProblems",
+      "path": "observeCustomerProblems.nl",
+      "purpose": "Turn the supplied customer problem evidence, privacy changes, identity history and exposure frames into a deduplicated, comparable, provenance-preserving observatory proposal.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "customer-observatory"
+    }
+  ],
+  "persistence": [
+    "EpisodeRegister",
+    "IncidentDedupLedger",
+    "StableProblemMap",
+    "ComparableTrendSet",
+    "InvestigationQueue"
+  ],
+  "effects": [
+    "remove withdrawn attributable quotations and recompute restricted derivatives",
+    "block trend comparisons when channels, identity mappings or exposure definitions are incompatible"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractEpisodes",
+        "paths": [
+          "customerObservatory/extractCustomerSituations.nl",
+          "runCase/extractEpisodes/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "linkIncidents",
+        "paths": [
+          "customerObservatory/versionCustomerIdentity.nl",
+          "customerObservatory/deduplicateIncidentEvents.nl"
+        ]
+      },
+      {
+        "stage": "maintainProblemMap",
+        "paths": [
+          "customerObservatory/versionProblemConcepts.nl"
+        ]
+      },
+      {
+        "stage": "computeTrends",
+        "paths": [
+          "customerObservatory/compareTrendCoverage.nl",
+          "customerObservatory/bindTrendAggregates.nl"
+        ]
+      },
+      {
+        "stage": "commissionInvestigation",
+        "paths": [
+          "customerObservatory/commissionDiscriminatingInvestigation.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "customerObservatory/deduplicateIncidentEvents.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "customerObservatory/compareTrendCoverage.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "customerObservatory/revokeAttributionDerivatives.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "customerObservatory/versionCustomerIdentity.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "customerObservatory/versionProblemConcepts.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "observeCustomerProblems.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/extractEpisodes/audit/qualify.nl",
+    "customerObservatory/assembleRequest.nl",
+    "customerObservatory/assembleDossier.nl",
+    "customerObservatory/frameObservatoryQuestion.nl",
+    "customerObservatory/extractCustomerSituations.nl",
+    "customerObservatory/versionCustomerIdentity.nl",
+    "customerObservatory/deduplicateIncidentEvents.nl",
+    "customerObservatory/versionProblemConcepts.nl",
+    "customerObservatory/revokeAttributionDerivatives.nl",
+    "customerObservatory/compareTrendCoverage.nl",
+    "customerObservatory/bindTrendAggregates.nl",
+    "customerObservatory/commissionDiscriminatingInvestigation.nl",
+    "customerObservatory/compareObservatoryRevisions.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint/reconcileConsentEffects.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint/reconcileTrendLineage.nl"
+  ]
+}

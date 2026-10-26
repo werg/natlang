@@ -232,6 +232,27 @@ def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
             run_queue(queue, tmp_path / 'fresh.jsonl', TS_HOST, seconds=1)
 
 
+def test_independent_judge_reaches_collector_and_invalid_later_binding_starts_nothing(tmp_path, monkeypatch):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    entry = queue_entry(tmp_path)
+    entry['judge_model'] = {'model_id': 'actual-judge', 'provider': 'openai-codex'}
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, model_id='actual-teacher')
+    command = commands[0].command
+    assert command[command.index('--judge-model-id') + 1] == 'actual-judge'
+    assert command[command.index('--judge-provider') + 1] == 'openai-codex'
+    for judge in ({'model_id': 'actual-teacher', 'provider': 'openai-codex'},
+                  {'model_id': 'actual-judge'},
+                  {'model_id': 'actual-judge', 'provider': 'openai-codex', 'server': 'http://localhost'},
+                  {'model_id': 'actual-judge', 'provider': ''}):
+        queue.write_text(json.dumps(entry) + '\n' + json.dumps({**entry, 'key': 'later', 'judge_model': judge}) + '\n')
+        before = len(commands)
+        with pytest.raises(ValueError, match='judge_model'):
+            run_queue(queue, tmp_path / 'unstarted.jsonl', TS_HOST, seconds=1, model_id='actual-teacher')
+        assert len(commands) == before
+
+
 def test_entry_action_output_cap_is_passed_and_validated(tmp_path, monkeypatch):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
     entry = queue_entry(tmp_path, key='action-cap')

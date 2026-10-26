@@ -1,0 +1,11 @@
+---
+args: { tender: TenderComparisonDossier }
+returns: TenderComparison
+---
+1. Bind classified = classifyBidCoverage(tender.bidScopes, tender.requirements, tender.bidRevisions). Bind cells = classified.cells. Preserve classified.revisionPins so every cell stays bound to the active bidder edition. A price allowance remains uncertain and is not a firm quantity.
+2. Bind seams = assignTradeInterfaces(tender.interfacePairs, cells). If two trades each assume the other supplies a connection, create one explicit acceptance task with an unresolved owner.
+3. Bind amended = applyTenderClarifications(cells, tender.clarifications, tender.bidRevisions). A late revision removing an inclusion invalidates the prior coverage cell and every clarification result derived from it.
+4. Bind omissions = checkCommissioningCoverage(amended, tender.commissioningRequirements). A lower total with omitted commissioning is functionally incomplete and must not rank as complete.
+5. Bind rankable = omissions.length == 0 && seams.length == 0 && amended.blockers.length == 0. Bind comparison = { cells: amended.cells, seams, uncertainAllowanceIds: amended.uncertainAllowanceIds, functionalOmissions: omissions, invalidatedCellIds: amended.invalidatedCellIds, rankable, blockers: amended.blockers }.
+6. Bind sourceKey to tender case, current revision pin for each bidder, clarification IDs/revisions, requirement revisions, interface evidence refs, commissioning requirement IDs, and tender evidence IDs/versions. Restore state = tender.comparisonState or { revision: 0, currentSourceKey: null, revisions: [], cellLineage: [], supersededRevisionIds: [] }.
+7. If an exact sourceKey already exists, preserve the state revision and return its recorded comparison lineage. Otherwise create TenderComparisonRevision with revision state.revision + 1, the exact classified revision pins, current cells, seams, clarification IDs, invalidated cell IDs, commissioning requirements, omissions, blockers, and rankability. Extend cellLineage with each new bidder/requirement/revision cell while retaining prior cells; add only explicitly superseded bid revision IDs to supersededRevisionIds. Increment state.revision once and set currentSourceKey. Return { ...comparison, comparisonState: state }.

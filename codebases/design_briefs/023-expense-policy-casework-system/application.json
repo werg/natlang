@@ -1,0 +1,102 @@
+{
+  "schema": "natlang.application/1",
+  "id": "023",
+  "title": "Expense policy casework system",
+  "entrypoint": "adjudicateExpenseAppeal.nl",
+  "interfaces": [
+    {
+      "name": "adjudicateExpenseAppeal",
+      "path": "adjudicateExpenseAppeal.nl",
+      "purpose": "Resolve a receipt-level claim or appeal under its effective policy while preserving the original claim and preventing duplicate reimbursement.",
+      "stateParameter": "caseFile",
+      "stateResultPath": [
+        "caseFile"
+      ],
+      "stateKey": "expense-appeal-case"
+    }
+  ],
+  "source_files": [
+    "adjudicateExpenseAppeal.nl",
+    "adjudicateExpenseAppeal/evaluateDatedExpenseRule.nl",
+    "adjudicateExpenseAppeal/evaluateDatedExpenseRule/checkScopedException.nl",
+    "adjudicateExpenseAppeal/evaluateDatedExpenseRule/selectTripEffectiveRule.nl",
+    "adjudicateExpenseAppeal/findIndependentExpenseReviewer.nl",
+    "adjudicateExpenseAppeal/identifyReceiptLineage.nl",
+    "adjudicateExpenseAppeal/identifyReceiptLineage/identifyNewAppealEvidence.nl",
+    "adjudicateExpenseAppeal/interpretBusinessShare.nl",
+    "adjudicateExpenseAppeal/interpretBusinessShare/locatePurposeFacts.nl",
+    "adjudicateExpenseAppeal/minimizeClaimantQuestions.nl",
+    "adjudicateExpenseAppeal/separateReceiptComponents.nl",
+    "adjudicateExpenseAppeal/separateReceiptComponents/readReceiptArithmetic.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeClaim",
+        "paths": [
+          "adjudicateExpenseAppeal/separateReceiptComponents/readReceiptArithmetic.nl"
+        ]
+      },
+      {
+        "stage": "interpretPurpose",
+        "paths": [
+          "adjudicateExpenseAppeal/interpretBusinessShare.nl"
+        ]
+      },
+      {
+        "stage": "applyPolicy",
+        "paths": [
+          "adjudicateExpenseAppeal/evaluateDatedExpenseRule/selectTripEffectiveRule.nl"
+        ]
+      },
+      {
+        "stage": "requestResolution",
+        "paths": [
+          "adjudicateExpenseAppeal/minimizeClaimantQuestions.nl"
+        ]
+      },
+      {
+        "stage": "prepareExpenseDisposition",
+        "paths": [
+          "adjudicateExpenseAppeal/findIndependentExpenseReviewer.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "adjudicateExpenseAppeal/interpretBusinessShare.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "adjudicateExpenseAppeal/separateReceiptComponents/readReceiptArithmetic.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "adjudicateExpenseAppeal/identifyReceiptLineage.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "adjudicateExpenseAppeal/evaluateDatedExpenseRule/selectTripEffectiveRule.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "adjudicateExpenseAppeal/findIndependentExpenseReviewer.nl"
+        ]
+      }
+    ]
+  }
+}

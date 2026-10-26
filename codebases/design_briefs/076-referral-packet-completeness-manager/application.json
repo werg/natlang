@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "076",
+  "title": "Referral Packet Completeness Manager",
+  "entrypoint": "manageReferralPacket.nl",
+  "interfaces": [
+    {
+      "name": "manageReferralPacket",
+      "path": "manageReferralPacket.nl",
+      "purpose": "Reconcile an identity-bound referral against the recipient's current checklist and safe transfer state.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "referral-packet-checkpoint",
+      "effectsPath": [
+        "effects"
+      ]
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretRequirements",
+        "paths": [
+          "manageReferralPacket/applyRecipientChecklistDelta.nl",
+          "manageReferralPacket/verifyReferralRequirement.nl"
+        ]
+      },
+      {
+        "stage": "matchPatientRecords",
+        "paths": [
+          "manageReferralPacket/bindReferralIdentity.nl"
+        ]
+      },
+      {
+        "stage": "assessCompleteness",
+        "paths": [
+          "manageReferralPacket/inspectDocumentCompleteness.nl",
+          "manageReferralPacket/inspectDocumentCompleteness/classifyDocumentRequirements.nl"
+        ]
+      },
+      {
+        "stage": "requestMaterial",
+        "paths": [
+          "manageReferralPacket/requestMissingMaterial.nl"
+        ]
+      },
+      {
+        "stage": "releaseAndTrack",
+        "paths": [
+          "manageReferralPacket/reconcileReferralTransfer.nl",
+          "manageReferralPacket/reconcileReferralTransfer/readRecipientStatus.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "manageReferralPacket/bindReferralIdentity.nl",
+          "manageReferralPacket/inspectDocumentCompleteness.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "manageReferralPacket/applyRecipientChecklistDelta.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "manageReferralPacket/inspectDocumentCompleteness.nl",
+          "manageReferralPacket/inspectDocumentCompleteness/classifyDocumentRequirements.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "manageReferralPacket/reconcileReferralTransfer.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "manageReferralPacket/reconcileReferralTransfer.nl",
+          "manageReferralPacket/reconcileReferralTransfer/readRecipientStatus.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "manageReferralPacket.nl",
+    "manageReferralPacket/applyRecipientChecklistDelta.nl",
+    "manageReferralPacket/bindReferralIdentity.nl",
+    "manageReferralPacket/inspectDocumentCompleteness.nl",
+    "manageReferralPacket/inspectDocumentCompleteness/classifyDocumentRequirements.nl",
+    "manageReferralPacket/reconcileReferralTransfer.nl",
+    "manageReferralPacket/reconcileReferralTransfer/readRecipientStatus.nl",
+    "manageReferralPacket/requestMissingMaterial.nl",
+    "manageReferralPacket/verifyReferralRequirement.nl",
+    "types.ts"
+  ]
+}

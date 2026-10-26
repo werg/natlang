@@ -1,0 +1,49 @@
+{
+  "application_id": "012",
+  "title": "Returns, repair, and resale orchestrator",
+  "source_relative_path": "applications/03-customer-service-and-commercial-casework/012-returns-repair-and-resale-orchestrator.md",
+  "program_root": "codebases/design_briefs/012-returns-repair-and-resale-orchestrator",
+  "source_sha256": "567f681cd1aec6bb950d9cf03c7db33e0abe478f85b710ad08aca933f24eca03",
+  "domain_id": "03",
+  "stages": [
+    {
+      "name": "assessCondition",
+      "output_type": "ConditionAssessment",
+      "algorithm": "Reconcile customer descriptions, inspection notes, and supplied images or structured image annotations. Distinguish cosmetic damage, functional symptoms, and unverified allegations; preserve uncertainty and request evidence that changes routing rather than generic photo uploads.",
+      "gate": "No unsupported diagnosis or condition grade; evidence provenance remains visible."
+    },
+    {
+      "name": "selectPath",
+      "output_type": "ReturnDisposition",
+      "algorithm": "Apply purchase terms and approved product-handling rules to condition evidence and customer preference. Identify cases needing specialist inspection, compare repair and replacement options, and avoid promising a remedy before required checks are satisfied.",
+      "gate": "Route respects policy, customer consent, and approved handling restrictions."
+    },
+    {
+      "name": "planRepair",
+      "output_type": "RepairPlan",
+      "algorithm": "Translate the selected path into authorized inspection or repair tasks using supplied procedures. Check part compatibility and workshop capacity, preserve stop conditions, and create alternative plans when repair would exceed delegated cost or capability.",
+      "gate": "Exact parts and capacity feasibility; no improvised hazardous repair instruction."
+    },
+    {
+      "name": "reconcileCustody",
+      "output_type": "CustodyEvent",
+      "algorithm": "Track collection, receipt, repair transfer, and return as distinct custody events. Compare condition at each handoff and isolate new discrepancies rather than attributing all damage to the customer or overwriting the original inspection.",
+      "gate": "Inventory changes require a confirmed custody event; serial-number mismatches block transfer."
+    },
+    {
+      "name": "prepareResale",
+      "output_type": "ResaleDisclosure",
+      "algorithm": "Produce a truthful resale or disposal packet from verified work and remaining defects. Reconcile grade terminology with marketplace rules, remove prior-owner data, and hold listing until required functional checks and ownership transfer are complete.",
+      "gate": "Disclosure covers known defects; data-removal and title checks pass before listing."
+    }
+  ],
+  "operational_details": [
+    "Two identical items have different serial numbers: block accidental swapping during repair intake.",
+    "Personal data remains on a device: quarantine resale until approved erasure is verified.",
+    "A customer disputes transit damage: preserve each custody observation and the dispute separately.",
+    "A part substitution is proposed: require compatibility evidence before updating the repair plan.",
+    "A return label expires: regenerate the logistics artifact without creating a duplicate return entitlement."
+  ],
+  "representative_episode": "A returned device has a cosmetic defect, an intermittent fault, and personal data; its serial differs from the original order record.",
+  "independent_truth_basis": "Hidden serial identities, approved procedures, condition facts, custody events, and exact inventory balances."
+}

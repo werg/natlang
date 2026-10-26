@@ -1,0 +1,49 @@
+{
+  "application_id": "014",
+  "title": "Complex customer onboarding director",
+  "source_relative_path": "applications/03-customer-service-and-commercial-casework/014-complex-customer-onboarding-director.md",
+  "program_root": "codebases/design_briefs/014-complex-customer-onboarding-director",
+  "source_sha256": "d6c572234d8e8a0217219f5eabf3b05d904906f309d04b207b509a0b22b5b7e4",
+  "domain_id": "03",
+  "stages": [
+    {
+      "name": "clarifyOutcomes",
+      "output_type": "OnboardingOutcome",
+      "algorithm": "Convert broad goals into observable outcomes and confirm what onboarding does not include. Distinguish an executive aspiration from an agreed deliverable, and identify decisions requiring customer authority before technical work begins.",
+      "gate": "Each committed outcome has an owner and a verifiable acceptance condition."
+    },
+    {
+      "name": "mapEnvironment",
+      "output_type": "EnvironmentConstraint",
+      "algorithm": "Reconcile customer architecture notes, sample data, security requirements, and available integration capabilities. Separate verified compatibility from assumptions and formulate narrow discovery tasks for unknown interfaces rather than promising unsupported integrations.",
+      "gate": "No production credential in model context; unverified capability remains a blocker."
+    },
+    {
+      "name": "constructPlan",
+      "output_type": "OnboardingTask",
+      "algorithm": "Decompose outcomes into configuration, data, training, and acceptance tasks. Order dependencies, allocate ownership explicitly, and create reversible pilots before broad changes; identify shared prerequisites that would otherwise generate duplicated requests.",
+      "gate": "Task graph is acyclic and every outcome is covered by an executable path."
+    },
+    {
+      "name": "interpretProgress",
+      "output_type": "ProgressFinding",
+      "algorithm": "Read system events and participant updates against each task’s completion contract. Distinguish an attempted import from a reconciled migration and attendance from demonstrated setup capability; request the smallest missing verification artifact.",
+      "gate": "Completion requires evidence, not a percentage reported in free text."
+    },
+    {
+      "name": "replanAndAccept",
+      "output_type": "OnboardingRevision",
+      "algorithm": "When dependencies fail or objectives change, construct feasible alternatives and disclose scope, timing, and effort consequences. Preserve accepted work, obtain approval for material changes, and replay end-to-end outcomes before declaring onboarding complete.",
+      "gate": "Revised plan preserves mandatory requirements or records explicit accepted scope reductions."
+    }
+  ],
+  "operational_details": [
+    "A customer administrator leaves: transfer task ownership without reusing their credentials.",
+    "Sample data works but production data differs: stage a representative validation before full import.",
+    "A vendor integration is unavailable: offer a documented temporary path without pretending the original scope is complete.",
+    "Training attendees differ from system owners: record who can actually perform required tasks.",
+    "A launch date changes: preserve contractual dates separately from internal targets."
+  ],
+  "representative_episode": "A customer needs a multi-system rollout, but identity access is delayed and a pilot import reveals conflicting account identifiers.",
+  "independent_truth_basis": "Hidden environment compatibility, task dependencies, approval events, and end-to-end acceptance checks."
+}

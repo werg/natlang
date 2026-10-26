@@ -1,0 +1,27 @@
+export type ID = string;
+export type Hash = string;
+export type LocalDate = string;
+export type DateTime = string;
+export type Decimal = string;
+export type Ratio = { numerator: Decimal; denominator: Decimal };
+export type Quantity = { value: Decimal; unit: string };
+export type Money = { minorUnits: string; currency: string; scale: number };
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
+export type ExpenseCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; claimantId: string; tripId: string; policyId: string; legalEntityId: string; submittedTotal: { minorUnits: string; currency: string; scale: number } };
+export type ExpenseLine = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; merchant: string; occurredOn: string; purpose: string; amount: { minorUnits: string; currency: string; scale: number }; receiptRef: Ref };
+export type PurposeAllocation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; lineId: string; businessShare: { numerator: string; denominator: string }; personalShare: { numerator: string; denominator: string }; basis: string };
+export type ExpenseFinding = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; lineId: string; eligibleAmount: { minorUnits: string; currency: string; scale: number }; policyClauseIds: string[]; exceptionNeeded: string };
+export type ExpenseQuestion = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; lineIds: string[]; missingFact: string; acceptableEvidence: string; dueAt: string };
+export type ExpenseDisposition = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; findingIds: string[]; approvedTotal: { minorUnits: string; currency: string; scale: number }; heldTotal: { minorUnits: string; currency: string; scale: number }; appealReason: string };
+
+export type ExpenseSubmission = { caseId: string; instruction: string; claimedScope: string; requester: string; expectedRevision: string; sourceRevision: string; claims: ExpenseCase[]; receiptFolders: EvidencePage[]; policyEditions: PolicyCandidate[]; searchedReceiptSets: string[] };
+export type ReceiptComponent = { key: string; receiptId: string; originalDate: string; originalCurrency: string; amount: Money | null; component: "base" | "tax" | "tip" | "fee" | "companion" | "other"; merchantText: string; sourceIds: string[]; unreadableFields: string[] };
+export type PurposeShare = { componentKey: string; businessFraction: Ratio | null; businessBasis: string; personalBasis: string; evidenceIds: string[]; pendingQuestion: string | null };
+export type ExpenseLineDecision = { componentKey: string; policyVersion: string; exceptionId: string | null; allowed: Money | null; rejected: Money | null; held: Money | null; explanation: string; evidenceIds: string[] };
+export type ExpenseEvidenceRequest = { id: string; componentKeys: string[]; question: string; decisionChangedByAnswer: string; restrictedUpload: boolean; alreadySuppliedIds: string[] };
+export type AppealRevision = { appealId: string; originalClaimId: string; priorRevision: number; newEvidenceIds: string[]; reconsideredComponents: string[]; preservedDecisions: string[]; reason: string };
+export type ExpenseCaseFile = { revision: number; originalClaimIds: string[]; components: ReceiptComponent[]; decisions: ExpenseLineDecision[]; requests: ExpenseEvidenceRequest[]; appeals: AppealRevision[]; reimbursementOperationIds: string[]; paymentReceipts: string[] };
+export type ExpenseDispositionReview = { caseFile: ExpenseCaseFile; claimantExplanation: string[]; questions: ExpenseEvidenceRequest[]; independentReviewer: string | null; paymentReleaseAllowed: boolean; reviewBlockers: string[] };

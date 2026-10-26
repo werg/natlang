@@ -1,0 +1,90 @@
+{
+  "application_id": "065",
+  "title": "Adaptive reuse feasibility studio",
+  "source_relative_path": "applications/13-construction-property-and-facilities/065-adaptive-reuse-feasibility-studio.md",
+  "source_sha256": "e6d2599ccaea5c00798fcced990117be91a92f2a9ae66a8e2999230bcface2d3",
+  "domain_id": "13",
+  "stages": [
+    {
+      "name": "recoverSiteFacts",
+      "output_type": "ReuseSiteFact",
+      "algorithm": "Reconcile inventories, surveys, historical plans, and stakeholder descriptions into verified facts and unknowns. Distinguish current observations from outdated drawings and preserve uncertainties that could materially change feasibility or cost.",
+      "gate": "No assumed structural or regulatory fact without supplied evidence."
+    },
+    {
+      "name": "interpretGoals",
+      "output_type": "ReuseGoal",
+      "algorithm": "Translate stakeholder objectives into required functions and explicit tradeoffs. Separate mandatory supplied constraints from preferences, identify incompatible goals, and avoid choosing political or commercial priorities not authorized by the project brief.",
+      "gate": "Goals and constraints retain accountable owners and authority basis."
+    },
+    {
+      "name": "generateConcepts",
+      "output_type": "ReuseConcept",
+      "algorithm": "Invent distinct reuse concepts that exploit the building’s known characteristics while respecting supplied constraints. Describe functional organization and phasing, preserve uncertainty about unverified conditions, and avoid presenting conceptual layouts as certified engineering designs.",
+      "gate": "Concepts satisfy known hard constraints and expose every consequential assumption."
+    },
+    {
+      "name": "planInvestigations",
+      "output_type": "ReuseInvestigation",
+      "algorithm": "Identify the surveys, specialist reviews, or evidence needed to distinguish feasible concepts. Prioritize investigations by their ability to change a decision, and specify how positive, negative, or inconclusive findings would alter the concept.",
+      "gate": "Each investigation resolves a named uncertainty and uses qualified professionals where required."
+    },
+    {
+      "name": "compareFeasibility",
+      "output_type": "ReuseOptionReview",
+      "algorithm": "Compare concepts using exact supplied estimates, known constraints, functional benefits, and unresolved conditions. Present phased or contingent options and clear next decisions, separating creative promise from verified technical or regulatory feasibility.",
+      "gate": "No unqualified feasibility or compliance claim beyond available professional evidence."
+    }
+  ],
+  "operational_details": [
+    "A historic drawing conflicts with a recent survey: preserve both and prioritize verified current evidence.",
+    "A concept depends on an untested structural assumption: mark it contingent and commission qualified review.",
+    "A stakeholder changes the intended use: re-evaluate affected constraints and investigations.",
+    "A budget estimate excludes enabling works: expose the missing scope.",
+    "A phased opening creates access conflicts: include temporary circulation and operational constraints."
+  ],
+  "domain_records": {
+    "ReuseStudy": [
+      "buildingId: ID",
+      "stakeholderIds: ID[]",
+      "suppliedConstraintIds: ID[]",
+      "studyOwnerId: ID",
+      "budgetRange: string"
+    ],
+    "ReuseSiteFact": [
+      "caseId: ID",
+      "buildingArea: string",
+      "observedCondition: string",
+      "sourceRef: Ref",
+      "certainty: string"
+    ],
+    "ReuseGoal": [
+      "caseId: ID",
+      "stakeholderId: ID",
+      "desiredFunction: string",
+      "essentialConstraint: string",
+      "negotiablePreference: string"
+    ],
+    "ReuseConcept": [
+      "caseId: ID",
+      "goalIds: ID[]",
+      "spatialApproach: string",
+      "phasedUse: string",
+      "unresolvedAssumptions: string[]"
+    ],
+    "ReuseInvestigation": [
+      "caseId: ID",
+      "conceptIds: ID[]",
+      "unknownCondition: string",
+      "proposedSurvey: string",
+      "decisionConsequence: string"
+    ],
+    "ReuseOptionReview": [
+      "caseId: ID",
+      "conceptId: ID",
+      "costBasis: string",
+      "constraintFindings: string[]",
+      "residualRisk: string"
+    ]
+  }
+}

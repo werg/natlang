@@ -1,0 +1,5 @@
+# Brand And Design Language Studio
+
+This program maintains a claim-to-asset dependency graph. Product capabilities and prohibitions are grounded in versioned evidence; each proposed direction is distinct in its message logic and exclusions, and cannot smuggle an unsupported promise through style. A system is represented as reusable voice rules with context-specific behavior, including error and sensitive-support contexts where promotional voice is inappropriate.
+
+Application is channel-specific: each asset binds its channel schema, user task, required disclosure, source claims, and approved system revision. Product fact changes invalidate dependent claims and assets only. Name availability is a separate rights-clearance question. Client approval is scoped to exact directions, system, or asset revisions, so assent to a single slogan never authorizes the complete system. Coherence review separates hard factual/terminological defects from subjective preference, then freezes an edition only when all assets and approvals share one dependency version.

@@ -1,0 +1,49 @@
+{
+  "application_id": "015",
+  "title": "Subscription change and exit coordinator",
+  "source_relative_path": "applications/03-customer-service-and-commercial-casework/015-subscription-change-and-exit-coordinator.md",
+  "program_root": "codebases/design_briefs/015-subscription-change-and-exit-coordinator",
+  "source_sha256": "f8083c67f5c1ffb593662e98792524ed22923d144cbef19dce91608f50e9d7de",
+  "domain_id": "03",
+  "stages": [
+    {
+      "name": "interpretIntent",
+      "output_type": "ChangeIntent",
+      "algorithm": "Read the request in conversational context and identify the intended account scope. Distinguish cancelling an add-on from closing the account, and ask a focused question only when ambiguity would change access, billing, or data retention.",
+      "gate": "No retention offer or unrelated account action is inferred as consent."
+    },
+    {
+      "name": "computeConsequences",
+      "output_type": "ChangeConsequence",
+      "algorithm": "Consult authoritative entitlement and billing services for permitted dates and amounts, then explain consequences in plain language. Separate immediate access effects from future billing and data deletion; keep uncertain external balances explicitly unresolved.",
+      "gate": "Monetary values come from exact services; all material consequences are disclosed."
+    },
+    {
+      "name": "constructChoices",
+      "output_type": "ChangeOption",
+      "algorithm": "Form a small set of permitted choices centered on the requested outcome. Include the direct exit path without manipulative friction, disclose linked-service effects, and avoid presenting an unrequested alternative as the default selection.",
+      "gate": "Every option is feasible and the originally requested permitted action remains accessible."
+    },
+    {
+      "name": "executeSelection",
+      "output_type": "SubscriptionOperation",
+      "algorithm": "Verify consent to the exact option and effective date, then apply changes through idempotent adapters. Recheck account versions before commitment and reconcile partial changes across linked products using compensating actions where permitted.",
+      "gate": "No changed selection after consent; unknown outcomes block blind repetition."
+    },
+    {
+      "name": "verifyExit",
+      "output_type": "ExitReceipt",
+      "algorithm": "Compare actual subscription states and upcoming invoices with the selected option. Explain surviving obligations and access explicitly, provide a durable receipt, and reopen inconsistencies rather than declaring success after merely submitting a cancellation request.",
+      "gate": "All affected subscriptions match the confirmed choice; no unapproved service remains active."
+    }
+  ],
+  "operational_details": [
+    "A cancellation arrives near renewal: use authoritative timestamps and the applicable cutoff rule.",
+    "One product is managed by a reseller: expose the separate required action rather than claiming full cancellation.",
+    "A customer changes their mind before execution: invalidate the old consent token.",
+    "A refund is pending: do not hide it behind a closed subscription status.",
+    "A shared workspace has other owners: require the appropriate authority before changing their access."
+  ],
+  "representative_episode": "A customer asks to cancel one add-on after renewal while retaining the base plan and transferring a second subscription.",
+  "independent_truth_basis": "Exact entitlement and billing state machine, explicit consent events, and requested-versus-actual final state."
+}

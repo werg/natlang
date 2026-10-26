@@ -1,5 +1,60 @@
 # Model-facing changes and their measurement
 
+### 2026-10-26 — design-brief root effect completeness (PR #4 review)
+
+The documentary, live-event and persistent-world root result types now require
+their effects arrays. Return `[]` on branches without an outgoing intention.
+Their application interfaces declare `effectsPath`, so missing deployment
+adapters cannot commit pending checkpoints while silently dropping the send.
+Grant slice-ID collisions now withhold both affected expenses, regardless of
+input order. Original fixture truth and whole-application splits remain intact.
+The corrected frozen programs use release v3 and fresh task identities.
+
+Measurement debt: these source changes have engineering regressions but no
+learned-model qualification yet. Measure about 48 executions per retained
+presentation variant during authorized Luna collection, with independently
+identified Sol rubric judging; retain actual actor and outcome provenance.
+Static/source admission does not establish training exposure or capability lift.
+
+### 2026-10-26 — independently designed design-brief application source
+
+PR #4's one-hundred application corpus is being revised from repeated request
+families and prepare/decide/construct/audit scaffolding into application-owned
+native interfaces, typed domain subproblems, semantic control flow, and explicit
+operational recovery. The original brief records, observed fixture worlds,
+finite gate answers, and application-level split assignments remain the source
+contracts; representation and callable paths may change. The optional durable
+host is an exact transport/persistence mechanism outside the model-visible
+programs and does not supply domain judgments or training answers.
+
+Status: **unmeasured; source-only; training admission remains false.** Native
+loading, source coverage, compiler checks, and scripted host tests establish
+engineering properties only. Generation is paused; this revision does not
+resume teacher services, create trajectories, or start training. In the next
+authorized own-model teacher window, sample about 48 executions per retained
+presentation variant and independently review task outcomes, actual nested
+calls, consumption of child values, state continuation, unresolved branches,
+and effect receipts. Compare structurally similar programs as well as different
+domains to detect remaining schematic repetition. Keep held applications held
+out, preserve failures, and require real external-adapter qualification before
+claiming deployed production behavior. Both authoring and integration skills
+now state these boundaries and the required type-compatible resume mapping.
+
+The subsequent review repairs incomplete blocked/result construction and actual
+child argument/result flow in the authored programs. Operational reconciliations
+retain distinct domain state transitions, and inherited unused scaffold types
+are being removed by exact source/type reachability. Mechanical regressions also
+cover per-caller cancellation of coalesced requests, Node worker startup and
+terminal EOF. These engineering tests add no sampled trajectories or semantic
+qualification; the above measurement debt remains open.
+
+The follow-through pass binds previously unbound learning, repair, construction
+and reuse state, corrects planned-versus-verified repair completion, and adds
+nested domain judgments in the remaining shallow analysis trees. The optional
+host now ships exact configured adapters for the declared referral, documentary,
+live-event and world-simulator intentions. Adapter/storage tests use engineering
+inputs only, without authentic external receipts, teacher calls or admission.
+
 ### 2026-10-18 — terminal Neuralese text results are written as typed values
 
 A final assistant text reply to a function declared as `Neuralese<string>` is
@@ -1360,3 +1415,96 @@ whitespace and embedded JSON. Run the same48 cases against the real teacher
 before adoption. The revision11 evidence is bound by SHA256
 `2ec8e1d08acf5053cc3755dec540e327af469a2f77b8801c676b4008f7cfb16f`
 at `/work/generation/qwen36-35b-teacher-20261022/typed-reader-single-header48-20261023-v2/result.json`.
+
+
+## 2026-10-25: one hundred design-brief native programs (source candidates)
+
+`codebases/design_briefs/` adds all 100 application programs from the supplied
+brief archive, with five domain stages per application, nested typed semantic
+procedures, and independent fixtures under
+`training/semantic_applications/design_briefs/`. Three Luna agents implemented
+source and constructed task worlds; they did not generate teacher responses.
+The original archive/brief hashes and implementation base revision are retained.
+All 500 original section-9 operational details have explicit workflow mappings
+and separate view, proposed-state, and proposed-effect assertions. These source
+contracts prevent stage descriptions from substituting for operational coverage.
+
+The corpus uses the current native compiler/loader and existing program/2,
+teacher-collector, and student-root whole-graph RL preparation paths. Exact
+first-stage gate counterfactuals are separate from workflows requiring an
+independent semantic judge. The whole-application split is 60 TRAIN, 20 development,
+and 20 locked evaluation. No protected existing held data was used as an authoring
+source. Static source/fixture checks and any scripted runtime checks are
+engineering evidence, not measured model task performance.
+
+Before production admission, execute the new program variants with the approved
+self-hosted teacher in its next authorized generation window, review full
+trajectories and every domain gate, diagnose systematic failures, and record
+actual checkpoint/tokenizer/runtime/actor identities and source-bound outcomes.
+Measure model-facing changes with the repository's approximately 48-sample
+qualification convention before adoption. Preserve each real sampled or forced
+producer and consumer occurrence in the complete graph; plain correct execution
+remains rewardable without a mandatory Neuralese edge.
+
+The prepared source retains `qualification: source-only-live-pending`; it is not
+an admitted production RL source or SFT corpus. Generation remains paused under
+the standing operational instructions. This PR performs source preparation only. No trajectories,
+optimizer updates, learner exposure, or capability lift are claimed by this PR.
+
+
+## 2026-10-26: PR 4 operational depth and independent application state
+
+The continuing review of `codebases/design_briefs/` repairs missing carried state,
+real domain follow-up operations and callable subgraphs. The optional host now
+commits checked invocation/checkpoint/outbox receipts atomically; it no longer
+requires every program to follow the same proposal/second-person approval/commit
+workflow. Direct and nested state bindings preserve each application's actual
+types and allow different operations to share only their explicitly named state.
+Per-operation capabilities, exact invocation replay and evidence-bound delivery
+remain host mechanisms. No generic domain state or semantic recovery code is
+introduced in JavaScript.
+
+New and revised Natlang signatures, numbered algorithms, operational children and
+checkpoint types are **unmeasured source candidates**. The original fixture truth,
+source observations, split assignments and exact gate inputs are preserved.
+Compiler checks, potential-call graphs, type checks and scripted native host
+executions are engineering evidence only. Measure the changed source with the
+approved self-hosted teacher in the next authorized window, including interrupted
+interactive sessions, state restoration, disputed receipts, evidence corrections
+and branch-specific child-result use. Record actual actor/runtime/source identities
+and complete trajectories; retain the approximately 48-sample convention per
+measured variant. `training_admission` stays false and generation remains paused.
+
+The second publication extends domain checkpoints across commercial/service and
+community/cultural applications and introduces typed follow-up operations for
+research reservations, negative-result follow-up, assessment release, migration
+cutover, identity correction, maintenance work, quote decisions, building handover,
+facility visits and ecological field outcomes. The retired crisp research-window
+search is removed; the existing Natlang frontier remains the scheduler. Nested
+authority, evidence and physical-readback judgments carry their actual findings
+into parent state updates. These additions have the same live-measurement debt;
+no new independent expected answer or sampled model trajectory is authored here.
+
+The final source pass removes unused inherited run/stage declarations while
+preserving all original domain contracts. Creative and simulation applications
+now carry their own citation ancestry, character knowledge, rights and delivery
+states, physical puzzle proof/reset evidence, and pending world actions. Their
+typed nested judgments and complete blocked branches consume the actual child
+findings. The exact kitchen arithmetic and world-action identity helpers have
+native-loader regression coverage. Packaging now checks TypeScript module
+visibility, qualified named exports and explicit call arity as well as Natlang
+children; this does not type-check the semantic content of natural-language
+instructions. Final source-bound evidence lives in
+`training/semantic_applications/design_briefs/release-v2/`. These source changes
+retain the same outstanding live qualification and training admission debt.
+
+The final graph review repairs a disconnected research-scheduling frontier and
+removes inactive qualification wrappers whose original invariants are owned by
+active Natlang operations. The apprenticeship simulator now distinguishes
+information requests and procedure clarification from transitions, preserves
+complete per-turn results for replay without rescheduling or rewinding newer
+history, and gives its debrief separate planned, simulated and observed evidence.
+The original exact fixture roots and independent expected results remain intact.
+Scripted native regressions test wiring and result contracts, not the quality of
+the semantic classifier, scheduler or replay judgment. Qualification debt above
+still applies to these final source changes.

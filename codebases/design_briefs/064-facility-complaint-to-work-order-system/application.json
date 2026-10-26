@@ -1,0 +1,114 @@
+{
+  "schema": "natlang.application/1",
+  "id": "064",
+  "title": "Facility complaint-to-work-order system",
+  "entrypoint": "triageFacilityIssue.nl",
+  "interfaces": [
+    {
+      "name": "triageFacilityIssue",
+      "path": "triageFacilityIssue.nl",
+      "purpose": "Preserve official facility location identity, link recurring mechanisms, schedule condition-specific consented visits, and compose privacy-limited occupant updates."
+    },
+    {
+      "name": "reconcileFacilityVisitReceipt",
+      "path": "reconcileFacilityVisitReceipt.nl",
+      "purpose": "Record access, cancellation, partial work, technical verification, and recurrence evidence as replay-safe visit history.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "facility-visit-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretComplaint",
+        "paths": [
+          "triageFacilityIssue/resolveOfficialFacilityLocation.nl"
+        ]
+      },
+      {
+        "stage": "linkRelatedIssues",
+        "paths": [
+          "triageFacilityIssue/groupByRecurringMechanism.nl"
+        ]
+      },
+      {
+        "stage": "formWorkOrders",
+        "paths": [
+          "triageFacilityIssue/formMechanismAwareWorkOrder.nl"
+        ]
+      },
+      {
+        "stage": "coordinateVisits",
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "stage": "verifyResolution",
+        "paths": [
+          "triageFacilityIssue/formMechanismAwareWorkOrder.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "triageFacilityIssue/resolveOfficialFacilityLocation.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "triageFacilityIssue/composePrivacyLimitedOccupantUpdates.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "triageFacilityIssue/groupByRecurringMechanism.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "append-only facility visit attempts and outcome receipts",
+    "history": "duplicate receipts replay without a second revision; unknown and partial outcomes stay open",
+    "closure": "a visit cannot resolve a recurring issue without technical evidence and occupant or objective verification"
+  },
+  "effects": [
+    "consented visit request",
+    "private occupant update",
+    "fresh consent request or recurrence-monitoring task derived from actual visit outcome"
+  ],
+  "source_files": [
+    "qualification/interpretComplaint.nl",
+    "reconcileFacilityVisitReceipt.nl",
+    "reconcileFacilityVisitReceipt/interpretVisitEvidence.nl",
+    "triageFacilityIssue.nl",
+    "triageFacilityIssue/composePrivacyLimitedOccupantUpdates.nl",
+    "triageFacilityIssue/formMechanismAwareWorkOrder.nl",
+    "triageFacilityIssue/groupByRecurringMechanism.nl",
+    "triageFacilityIssue/negotiateConsentBoundVisit.nl",
+    "triageFacilityIssue/resolveOfficialFacilityLocation.nl",
+    "types.ts",
+    "triageFacilityIssue/groupByRecurringMechanism/assessPriorRepairMechanism.nl",
+    "triageFacilityIssue/groupByRecurringMechanism/compareOccupantMechanism.nl",
+    "triageFacilityIssue/formMechanismAwareWorkOrder/selectSymptomObservation.nl"
+  ]
+}

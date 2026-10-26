@@ -1,0 +1,50 @@
+{
+  "application_id": "075",
+  "title": "Community Agreement Mediator",
+  "source_relative_path": "applications/15-civic-participation-and-community-operations/075-community-agreement-mediator.md",
+  "source_sha256": "e6be8801330bd01a9ba82628bde5c2348228c6addf2a5a8c9273a8ac4bdf86f7",
+  "domain_id": "15",
+  "stages": [
+    {
+      "name": "recoverAgreements",
+      "output_type": "ExistingAgreement",
+      "algorithm": "Reconstruct prior agreements from records and participant accounts, distinguishing signed or acknowledged terms from expectations and informal habits. Preserve disagreement about what was agreed and avoid treating one participant’s confident recollection as authoritative.",
+      "gate": "Agreement status and evidence are explicit."
+    },
+    {
+      "name": "mapPositions",
+      "output_type": "MediationPosition",
+      "algorithm": "Summarize each participant’s position in terms they can review and correct. Separate factual disputes, preferences, and nonnegotiable limits, and do not infer hidden motives or psychological explanations from their communication style.",
+      "gate": "Each position is confirmed or clearly marked as an unconfirmed interpretation."
+    },
+    {
+      "name": "identifyOptions",
+      "output_type": "CommunityOption",
+      "algorithm": "Generate practical alternatives such as scheduling, shared responsibilities, or differentiated use. Preserve each participant’s stated constraints, disclose concessions, and include the option of no agreement rather than manufacturing consensus or pressuring acceptance.",
+      "gate": "Options are feasible and accurately represent who would give up what."
+    },
+    {
+      "name": "designTrial",
+      "output_type": "AgreementTrial",
+      "algorithm": "Turn a promising voluntary option into a reversible trial with clear responsibilities, resource rules, and review criteria. Specify how participants may report problems or leave the trial, and avoid making temporary arrangements permanent by default.",
+      "gate": "Trial requires explicit consent and clear reversal or exit conditions."
+    },
+    {
+      "name": "reviewOutcome",
+      "output_type": "AgreementReview",
+      "algorithm": "Compare actual use and participant feedback with the trial criteria, preserving divergent experiences. Propose continuation, revision, or termination, and record only the terms participants explicitly accept rather than treating silence as agreement.",
+      "gate": "Final agreement reflects actual consent and does not erase unresolved disagreement."
+    }
+  ],
+  "operational_details": [
+    "One participant does not respond: keep consent pending rather than assuming acceptance.",
+    "A prior agreement is disputed: preserve competing accounts and seek evidence.",
+    "A trial works for some but not all: report divergent outcomes instead of averaging them away.",
+    "A participant withdraws consent: apply the agreed exit process promptly.",
+    "A proposal concerns legal rights or immediate safety: route it to appropriate qualified support rather than mediating beyond scope."
+  ],
+  "scenario": {
+    "representative_episode": "Residents disagree over shared workshop hours and cleanup responsibilities; a reversible schedule trial could address different needs without permanent concessions.",
+    "independent_truth": "Fictional agreements, participant-confirmed positions, exact resource constraints, consent states, and trial outcomes."
+  }
+}

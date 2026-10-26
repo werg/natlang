@@ -1,0 +1,49 @@
+{
+  "application_id": "003",
+  "title": "Handover continuity manager",
+  "source_relative_path": "applications/01-organizational-knowledge-and-institutional-memory/003-handover-continuity-manager.md",
+  "program_root": "codebases/design_briefs/003-handover-continuity-manager",
+  "source_sha256": "99514843910d5d0b0cc352c797c30c8a5af29f1c5b19fd9f92ba1afab00661ea",
+  "domain_id": "01",
+  "stages": [
+    {
+      "name": "recoverCommitments",
+      "output_type": "Commitment",
+      "algorithm": "Read threads with their replies and amendments. Distinguish a tentative intention from a promise, identify the beneficiary and deliverable, and retain conditional commitments whose activation event has not yet occurred.",
+      "gate": "Every commitment has an attributable statement; missing dates stay unknown rather than invented."
+    },
+    {
+      "name": "reconstructStatus",
+      "output_type": "WorkStatus",
+      "algorithm": "Match outputs and acknowledgments to each promised outcome. A sent file is not accepted delivery when acceptance was required; cancellation must come from an authorized party, and incomplete evidence produces a status question.",
+      "gate": "Completion requires the specified evidence, not merely a past due date or optimistic message."
+    },
+    {
+      "name": "mapDependencies",
+      "output_type": "HandoverDependency",
+      "algorithm": "Identify knowledge, access, approvals, and external relationships needed to finish each item. Separate credentials from instructions, detect circular handoffs, and formulate minimal access requests without copying secrets into the handover dossier.",
+      "gate": "No plaintext credentials; every blocked dependency has an owner and a recovery task."
+    },
+    {
+      "name": "allocateOwnership",
+      "output_type": "OwnershipTransfer",
+      "algorithm": "Compare successor remit, stated capacity, and required capabilities. Propose explicit ownership with acceptance criteria and unresolved obligations; a recipient mentioned in a meeting is not treated as accepting the transfer.",
+      "gate": "Transfer remains pending until the named successor acknowledges the current scope."
+    },
+    {
+      "name": "verifyContinuity",
+      "output_type": "ContinuityReview",
+      "algorithm": "Revisit the portfolio after departure, follow missing acknowledgments, and compare completed artifacts to promises. Close the handover only when ownership and immediate next steps are established, while operational work may legitimately remain open.",
+      "gate": "Handover completion and task completion are separate statuses with separate gates."
+    }
+  ],
+  "operational_details": [
+    "An employee loses access before departure: freeze authorized evidence snapshots without retaining unnecessary personal mail.",
+    "A successor accepts only part of a project: split obligations before acknowledging ownership.",
+    "An external customer expects a named person: draft a reviewed introduction and record delivery.",
+    "A recurring task has no written deadline: derive a proposed cadence but require owner confirmation.",
+    "A personal note contains useful context: request selective sharing rather than exporting the whole notebook."
+  ],
+  "representative_episode": "A departing manager promised three deliverables, completed one without acceptance, and mentioned a potential successor who has not agreed.",
+  "independent_truth_basis": "Hidden promise-versus-intention labels, acceptance conditions, ownership acknowledgments, and simulated post-departure events."
+}

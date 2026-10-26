@@ -1,0 +1,8 @@
+---
+args: { book: DocumentationPublicationBook, request: DocumentationEditionRequest, proposal: DocumentationEditionProposal, targets: DocumentationPagePatchTarget[], receipt: DocumentationPublicationReceipt }
+returns: DocumentationPublicationReview
+---
+1. For a consumed receipt, compare all receipt and page-edit fields with stored history. Exact replay returns { book, outcome: "replayed", activePageIds: currently active page IDs in book, followUp: outstanding stale or failed page tasks from stored edits }. Conflicting or unbound identity returns { book, outcome: "held", activePageIds: currently active page IDs in book, followUp: ["reconcile publication receipt identity"] }; neither branch changes the book.
+2. Bind assessment = assessPageEditReceipts(request, proposal, targets, receipt). A stale base or changed patch remains visible as an observed partial edit but cannot be represented as a current reviewed page.
+3. Record every observed page edit at its actual outcome. Mark the edition published only when assessment.canRecordAsCurrent is true and receipt.outcome is "published". Failed, unknown, or mixed publication never replaces the prior current documentation edition wholesale.
+4. Append the receipt once, increment revision once, preserve concurrent page edits, and bind followUp to assessment.reasons plus rebase, secret review, broken example, or publication repair tasks. Bind outcome to "published" only when assessment.canRecordAsCurrent and receipt.outcome is "published"; otherwise use the receipt's actual partial or unknown outcome. Bind result = { book: updatedBook, outcome, activePageIds: pages verified current after this receipt, followUp }; return result.

@@ -1,0 +1,106 @@
+{
+  "schema": "natlang.application/1",
+  "id": "061",
+  "title": "Change-order impact coordinator",
+  "entrypoint": "assembleChangeOrder.nl",
+  "interfaces": [
+    {
+      "name": "assembleChangeOrder",
+      "path": "assembleChangeOrder.nl",
+      "purpose": "Separate instruction authority from actual events, isolate drawing scope, traverse explicit dependencies, analyze available float, and prevent duplicate change-cost attribution.",
+      "stateParameter": "dossier",
+      "stateInputPath": ["state"],
+      "stateResultPath": ["state"],
+      "stateKey": "change-order-edition-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "reconstructInstruction",
+        "paths": [
+          "assembleChangeOrder/reconcileInstructionAuthority.nl"
+        ]
+      },
+      {
+        "stage": "compareScope",
+        "paths": [
+          "assembleChangeOrder/isolateChangedDrawingAreas.nl"
+        ]
+      },
+      {
+        "stage": "traceDependencies",
+        "paths": [
+          "assembleChangeOrder/traceChangeDependencies.nl"
+        ]
+      },
+      {
+        "stage": "formOptions",
+        "paths": [
+          "assembleChangeOrder/testAvailableFloat.nl"
+        ]
+      },
+      {
+        "stage": "assembleChange",
+        "paths": [
+          "assembleChangeOrder/removeDuplicateChangeAttribution.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "assembleChangeOrder/reconcileInstructionAuthority.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "assembleChangeOrder/isolateChangedDrawingAreas.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "assembleChangeOrder/reconcileInstructionAuthority.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "assembleChangeOrder/testAvailableFloat.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "assembleChangeOrder/removeDuplicateChangeAttribution.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "contemporaneous instruction, event, and cost records",
+    "writes": "commercial proposal only"
+  },
+  "effects": [
+    "formal confirmation request",
+    "change review packet"
+  ],
+  "source_files": [
+    "assembleChangeOrder.nl",
+    "assembleChangeOrder/isolateChangedDrawingAreas.nl",
+    "assembleChangeOrder/isolateChangedDrawingAreas/assessDrawingRevision.nl",
+    "assembleChangeOrder/reconcileInstructionAuthority.nl",
+    "assembleChangeOrder/reconcileInstructionAuthority/auditConfirmationScope.nl",
+    "assembleChangeOrder/removeDuplicateChangeAttribution.nl",
+    "assembleChangeOrder/removeDuplicateChangeAttribution/matchCostToFieldEvents.nl",
+    "assembleChangeOrder/testAvailableFloat.nl",
+    "assembleChangeOrder/testAvailableFloat/assessActivityFloatPath.nl",
+    "assembleChangeOrder/traceChangeDependencies.nl",
+    "assembleChangeOrder/traceChangeDependencies/qualifyDependencyEdge.nl",
+    "qualification/reconstructInstruction.nl",
+    "types.ts"
+  ]
+}

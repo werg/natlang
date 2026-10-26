@@ -23,6 +23,8 @@ export async function runTerminalShell<S, E extends AppEvent>(
   };
   show((await app.start()).view);
   const lines = createInterface({ input, output, terminal: Boolean((output as NodeJS.WriteStream).isTTY) });
+  let inputClosed = false;
+  lines.once('close', () => { inputClosed = true; });
   const queue = new EventQueue<E>();
   let sequence = 0;
   const writeNote = (text: string): void => { output.write(text.trimEnd() + '\n\n'); };
@@ -43,8 +45,10 @@ export async function runTerminalShell<S, E extends AppEvent>(
   const received = lines[Symbol.asyncIterator]();
   try {
     while (true) {
-      lines.setPrompt(app.view?.prompt ?? options.prompt ?? '> ');
-      lines.prompt();
+      if (!inputClosed) {
+        lines.setPrompt(app.view?.prompt ?? options.prompt ?? '> ');
+        lines.prompt();
+      }
       const next = await received.next();
       if (next.done) break;
       const value = next.value.trim();

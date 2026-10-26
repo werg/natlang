@@ -1,0 +1,60 @@
+
+export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
+
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+
+export type Question = { question: string; respondent: string; evidenceNeeded: string };
+export type ActionProposal = { action: string; target: string; requiresApproval: boolean };
+
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+
+export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type ResearchSchedule = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; projectIds: string[]; resourceIds: string[]; planningWindow: string; coordinatorId: string; protocolIds: string[] };
+export type ExperimentRequirement = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; experimentId: string; scientificObjective: string; resourceNeed: string; timingConstraint: string };
+export type ResourceCapability = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; resourceId: string; capability: string; availabilityWindows: string[]; qualificationRef: Ref };
+export type ExperimentSlot = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; experimentId: string; resourceIds: string[]; startsAt: string; prerequisiteIds: string[] };
+export type RescueOption = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; disruptedSlotId: string; replacementResourceIds: string[]; scientificDeviation: string; approvalNeeded: string };
+export type ReadinessCheck = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; slotId: string; confirmationRefs: Ref[]; remainingBlockers: string[]; goDecisionRef: Ref };
+export type DraftExperimentRequirement = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; experimentId?: string; scientificObjective?: string; resourceNeed?: string; timingConstraint?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
+
+export type ProtocolMandate = { experimentId: string; protocolId: string; sampleWindowStart: string; sampleWindowEnd: string; durationHours: number; requiredCapability: string; requiredOperatorId: string; hardConditions: string[]; preferences: string[]; sourceRefs: Ref[] };
+export type InstrumentWindow = { instrumentId: string; operatorId: string; startsAt: string; endsAt: string; calibrationValidUntil: string; qualificationRefs: Ref[]; capabilities: string[]; measurementBehavior: string; bookingId: string };
+export type ResearchWindowRequest = { caseId: ID; objective: string; scope: string; requestedBy: ID; expectedVersion: string };
+export type ApprovedProtocol = { experimentId: ID; protocolId: ID; version: number; approved: boolean; sampleWindowStart: DateTime; sampleWindowEnd: DateTime; durationHours: number; requiredCapability: string; requiredOperatorId: ID; hardConditions: string[]; preferences: string[]; sourceRefs: Ref[] };
+export type MaintenanceStatus = { instrumentId: ID; available: boolean; calibrationValidUntil: DateTime; sourceRefs: Ref[] };
+export type OperatorQualification = { operatorId: ID; capability: string; validUntil: DateTime; sourceRefs: Ref[] };
+export type ExistingBooking = { experimentId: ID; instrumentId: ID; operatorId: ID; startsAt: DateTime; endsAt: DateTime; status: 'booked' | 'cancelled' | 'complete'; sourceRefs: Ref[] };
+export type CancellationEvent = { experimentId: ID; cancellationId: ID; occurredAt: DateTime; preparedMaterialIds: ID[]; sourceRefs: Ref[] };
+export type PreparedMaterial = { experimentId: ID; materialId: ID; amount: string; reusable: boolean; downstreamExperimentIds: ID[]; sourceRefs: Ref[] };
+export type CurrentReadinessEvidence = { experimentId: ID; kind: 'calibration' | 'maintenance' | 'sample-window' | 'operator-presence' | 'investigator-go' | 'deviation-approval'; observedAt: DateTime; validUntil: DateTime; supports: boolean; sourceRefs: Ref[] };
+export type ResearchOperationsSnapshot = { version: string; schedules: ResearchSchedule[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; protocols?: ApprovedProtocol[]; instrumentWindows?: InstrumentWindow[]; maintenance?: MaintenanceStatus[]; qualifications?: OperatorQualification[]; bookings?: ExistingBooking[]; cancellations?: CancellationEvent[]; preparedMaterials?: PreparedMaterial[]; readinessEvidence?: CurrentReadinessEvidence[] };
+export type ResourceAssessment = { experimentId: string; eligibleInstrumentIds: string[]; eligibleOperatorIds: string[]; blockedBy: string[]; substituteReviewIds: string[]; calendarEvidence: Ref[] };
+export type WindowAssignment = { experimentId: string; instrumentId: string; operatorId: string; startsAt: string; endsAt: string; protocolId: string; measurementBehavior: string; deviationStatus: 'none' | 'investigator-review' | 'approved'; sourceRefs: Ref[] };
+export type AssignmentSearch = { assignments: WindowAssignment[]; unscheduledExperimentIds: string[]; conflictSets: string[][]; searchComplete: boolean; exploredBranches: number };
+export type TimeInterval = { startsAt: DateTime; endsAt: DateTime };
+export type AssignmentBranch = { experimentId: string; instrument: InstrumentWindow; startsAt: DateTime; endsAt: DateTime; sourceRefs: Ref[] };
+export type AssignmentFrontier = { pendingExperimentIds: string[]; deferredExperimentIds: string[]; selected: WindowAssignment[]; rejected: { experimentId: string; reason: string; refs: Ref[] }[]; completeSchedules: WindowAssignment[][]; conflicts: string[][]; exploredBranches: number; searchComplete: boolean };
+export type StartWindowOptions = { branches: AssignmentBranch[]; blockedReasons: string[] };
+export type FeasibilitySet = { feasible: AssignmentBranch[]; rejected: { experimentId: string; reason: string; refs: Ref[] }[]; complete: boolean };
+export type ReadinessDecision = { experimentId: string; bookingRetained: boolean; status: 'ready' | 'blocked' | 'review'; blockers: string[]; currentEvidenceRefs: Ref[]; cancellationId: string };
+export type ConsumptionRecord = { experimentId: string; materialId: string; amount: string; downstreamExperimentIds: string[]; evidenceRefs: Ref[] };
+export type RescueAlternative = { experimentId: string; kind: 'resequence' | 'qualified-substitute' | 'postpone'; assignment?: WindowAssignment; scientificDeviation: string; investigatorApprovalRequired: boolean; reasons: string[] };
+export type ResearchRescuePlan = { caseId: string; mandates: ProtocolMandate[]; resources: ResourceAssessment[]; slotProposal: AssignmentSearch; rescueAlternatives: RescueAlternative[]; readiness: ReadinessDecision[]; consumptionLedger: ConsumptionRecord[]; reviewRequests: Question[]; proposedEffects: ActionProposal[]; commitAllowed: boolean };
+export type ProtocolReview = { mandates: ProtocolMandate[]; missingProtocolIds: string[]; precedenceConflicts: string[] };
+export type InstrumentReview = { eligible: ResourceAssessment[]; substitutionCandidates: InstrumentWindow[]; bookedButUnavailable: string[] };
+export type OperatorReview = { eligibleOperatorIds: string[]; unqualifiedOperatorIds: string[]; currentQualifications: Ref[] };
+export type ReservationReview = { unavailableWindows: string[]; sameOperatorCollisions: string[]; activeBookingRefs: Ref[] };
+
+export type ReadinessEvidenceReview = { status: 'pass' | 'block' | 'uncertain'; blockers: string[]; currentRefs: Ref[] };
+export type MaterialTrace = { cancellations: CancellationEvent[]; materials: PreparedMaterial[] };
+export type DependencyImpact = { experimentIds: string[]; dependencyRefs: Ref[] };
+export type ResearchReservationReceipt = { receiptId: ID; operationId: ID; reservationId: ID; caseId: ID; experimentId: ID; instrumentId: ID; operatorId: ID; startsAt: DateTime; endsAt: DateTime; outcome: "reserved" | "rejected" | "unknown" | "cancelled"; evidenceRefs: Ref[] };
+export type ResearchReservationLedger = { revision: number; receipts: ResearchReservationReceipt[]; consumedReceiptIds: ID[] };
+export type ReservationReceiptReview = { ledger: ResearchReservationLedger; outcome: "recorded" | "replayed" | "held"; status: "reserved" | "rejected" | "unknown" | "cancelled"; followUp: string[] };
+export type ReservationProposalMatch = { matches: boolean; reasons: string[] };

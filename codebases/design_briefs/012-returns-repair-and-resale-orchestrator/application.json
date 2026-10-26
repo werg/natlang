@@ -1,0 +1,123 @@
+{
+  "schema": "natlang.application/1",
+  "id": "012",
+  "title": "Returns, repair, and resale orchestrator",
+  "entrypoint": "manageDeviceReturn.nl",
+  "interfaces": [
+    {
+      "name": "manageDeviceReturn",
+      "path": "manageDeviceReturn.nl",
+      "purpose": "Route a specific returned device through evidence-based condition assessment, purchase-date entitlement, safe repair, serial-verified custody, data erasure, and truthful resale disclosure.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "device-lifecycle"
+    }
+  ],
+  "persistence": [
+    "ConditionAssessment",
+    "ReturnDisposition",
+    "RepairPlan",
+    "CustodyEvent",
+    "ResaleDisclosure"
+  ],
+  "effects": [
+    "quarantine devices with unresolved identity or personal data",
+    "reserve approved parts and workshop capacity before promising repairs",
+    "update inventory only from confirmed custody receipts",
+    "withhold listing until title, functional, and erasure checks pass"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "assessCondition",
+        "paths": [
+          "manageDeviceReturn/assessDeviceCondition.nl",
+          "manageDeviceReturn/assessDeviceCondition/separateConditionObservations.nl",
+          "runCase/assessCondition/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "selectPath",
+        "paths": [
+          "manageDeviceReturn/selectSafeReturnPath.nl",
+          "manageDeviceReturn/selectSafeReturnPath/matchReturnEntitlement.nl"
+        ]
+      },
+      {
+        "stage": "planRepair",
+        "paths": [
+          "manageDeviceReturn/planAuthorizedRepair.nl",
+          "manageDeviceReturn/planAuthorizedRepair/checkRepairPrerequisites.nl"
+        ]
+      },
+      {
+        "stage": "reconcileCustody",
+        "paths": [
+          "manageDeviceReturn/reconcileSerialCustody.nl",
+          "manageDeviceReturn/reconcileSerialCustody/compareSerialHandoffs.nl"
+        ]
+      },
+      {
+        "stage": "prepareResale",
+        "paths": [
+          "manageDeviceReturn/prepareVerifiedResale.nl",
+          "manageDeviceReturn/prepareVerifiedResale/verifyResalePrerequisites.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "manageDeviceReturn/assessDeviceCondition/separateConditionObservations.nl",
+          "manageDeviceReturn/reconcileSerialCustody/compareSerialHandoffs.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "manageDeviceReturn/prepareVerifiedResale/verifyResalePrerequisites.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "manageDeviceReturn/reconcileSerialCustody.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "manageDeviceReturn/planAuthorizedRepair/checkRepairPrerequisites.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "manageDeviceReturn.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "manageDeviceReturn.nl",
+    "manageDeviceReturn/frameDeviceReturn.nl",
+    "manageDeviceReturn/selectDeviceHandlingPolicy.nl",
+    "manageDeviceReturn/assessDeviceCondition.nl",
+    "manageDeviceReturn/assessDeviceCondition/separateConditionObservations.nl",
+    "manageDeviceReturn/selectSafeReturnPath.nl",
+    "manageDeviceReturn/selectSafeReturnPath/matchReturnEntitlement.nl",
+    "manageDeviceReturn/planAuthorizedRepair.nl",
+    "manageDeviceReturn/planAuthorizedRepair/checkRepairPrerequisites.nl",
+    "manageDeviceReturn/reconcileSerialCustody.nl",
+    "manageDeviceReturn/reconcileSerialCustody/compareSerialHandoffs.nl",
+    "manageDeviceReturn/prepareVerifiedResale.nl",
+    "manageDeviceReturn/prepareVerifiedResale/verifyResalePrerequisites.nl",
+    "runCase/assessCondition/audit/qualify.nl",
+    "types.ts",
+    "manageDeviceReturn/reconcileDeviceLifecycle.nl"
+  ]
+}

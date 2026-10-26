@@ -1,0 +1,8 @@
+---
+args: { book: AnalysisRunBook, request: SemanticWorkOrderRequest, proposal: SemanticWorkOrderProposal, receipt: AnalysisMaterializationReceipt, expectedGraphDigest: string, reclassification: RubricReclassificationPlan | null }
+returns: AnalysisRunReconciliation
+---
+1. For a consumed receiptId compare every field with stored evidence. Exact replay binds replayAssessment = verifyMaterializedAnalysis(request, proposal, stored receipt, expectedGraphDigest, reclassification) and returns { book, outcome: "replayed", resultVisible: replayAssessment.publishable, nextSteps: replayAssessment.reasons }. Conflicting or unbound identity returns { book, outcome: "held", resultVisible: false, nextSteps: ["reconcile materialization receipt identity"] }; neither branch mutates the book.
+2. Bind assessment = verifyMaterializedAnalysis(request, proposal, receipt, expectedGraphDigest, reclassification). Keep an artifact hidden when disclosure is denied or unknown; preserve the previous current run when the new run fails.
+3. Record the exact executed run, including protected row IDs, schema snapshot, graph digest, rubric version, and artifact identity. Replace currentRunId only when assessment.publishable is true; a rubric change keeps the prior result under its old rubric and requires row reclassification.
+4. Append the receipt once, increment revision once, bind nextSteps to assessment.reasons plus missing coverage, grain, disclosure, or rubric-reclassification tasks, and bind result = { book: updatedBook, outcome: "recorded", resultVisible: assessment.publishable, nextSteps }. Return result; a failed run never replaces the prior current run.

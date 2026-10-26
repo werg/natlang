@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.application/1",
+  "id": "057",
+  "title": "Work instruction adaptation studio",
+  "entrypoint": "adaptWorkInstruction.nl",
+  "interfaces": [
+    {
+      "name": "adaptWorkInstruction",
+      "path": "adaptWorkInstruction.nl",
+      "purpose": "Adapt an approved procedure while resolving equipment aliases, preserving warning semantics, replaying interruptions, and withdrawing superseded floor copies."
+    },
+    {
+      "name": "reconcileFloorCopyWithdrawal",
+      "path": "reconcileFloorCopyWithdrawal.nl",
+      "purpose": "Reconcile actual physical retrieval, failed searches, and replacement postings for controlled floor instruction copies.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "work-instruction-floor-copy-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverProcedure",
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      },
+      {
+        "stage": "mapLocalContext",
+        "paths": [
+          "adaptWorkInstruction/resolveFloorTerminology.nl"
+        ]
+      },
+      {
+        "stage": "constructVariant",
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      },
+      {
+        "stage": "replayProcedure",
+        "paths": [
+          "adaptWorkInstruction/replayRestartAndExceptions.nl"
+        ]
+      },
+      {
+        "stage": "releaseInstruction",
+        "paths": [
+          "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "adaptWorkInstruction/resolveFloorTerminology.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "adaptWorkInstruction/preserveWarningMeaning.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "adaptWorkInstruction/replayRestartAndExceptions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "versioned floor-copy inventory and append-only withdrawal/posting receipts",
+    "history": "unavailable and unknown copies remain active until witnessed withdrawal",
+    "release": "new text does not replace an old posted copy unless the replacement is authorized and physically posted"
+  },
+  "effects": [
+    "withdrawal task",
+    "instruction approval packet"
+  ],
+  "source_files": [
+    "adaptWorkInstruction.nl",
+    "adaptWorkInstruction/assembleLocalVariant.nl",
+    "adaptWorkInstruction/assembleLocalVariant/bindWarningAssertionsToSteps.nl",
+    "adaptWorkInstruction/assembleLocalVariant/buildRestartProtocols.nl",
+    "adaptWorkInstruction/assembleLocalVariant/mapProcedureStepsToVerifiedControls.nl",
+    "adaptWorkInstruction/assembleLocalVariant/preserveInspectionGuardMap.nl",
+    "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl",
+    "adaptWorkInstruction/preserveWarningMeaning.nl",
+    "adaptWorkInstruction/preserveWarningMeaning/mapTranslationCoverage.nl",
+    "adaptWorkInstruction/replayRestartAndExceptions.nl",
+    "adaptWorkInstruction/replayRestartAndExceptions/verifyRestartAndGuardCoverage.nl",
+    "adaptWorkInstruction/resolveFloorTerminology.nl",
+    "qualification/recoverProcedure.nl",
+    "reconcileFloorCopyWithdrawal.nl",
+    "reconcileFloorCopyWithdrawal/assessCopyDisposition.nl",
+    "types.ts"
+  ]
+}

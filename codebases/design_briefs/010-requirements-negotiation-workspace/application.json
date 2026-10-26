@@ -1,0 +1,125 @@
+{
+  "schema": "natlang.application/1",
+  "id": "010",
+  "title": "Requirements negotiation workspace",
+  "entrypoint": "negotiateRequirements.nl",
+  "interfaces": [
+    {
+      "name": "negotiateRequirements",
+      "path": "negotiateRequirements.nl",
+      "purpose": "Reconcile stakeholder outcomes and constraints into a phased, source-linked specification with explicit pending agreements and replayed acceptance cases.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "requirements-negotiation"
+    }
+  ],
+  "persistence": [
+    "StakeholderPosition",
+    "RequirementConflict",
+    "CompromiseOption",
+    "Requirement",
+    "AcceptanceScenario"
+  ],
+  "effects": [
+    "request explicit successor confirmation for changed stakeholder roles",
+    "route interface-impacting compromises to affected-party review",
+    "keep verbal-only agreement outside baseline",
+    "version baseline revisions after late acceptance feedback"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractPositions",
+        "paths": [
+          "negotiateRequirements/extractPositionsDomain.nl",
+          "negotiateRequirements/extractPositionsDomain/classifyStakeholderRequests.nl",
+          "runCase/extractPositions/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "modelConflicts",
+        "paths": [
+          "negotiateRequirements/findRequirementConflicts.nl",
+          "negotiateRequirements/findRequirementConflicts/compareHardConstraintPairs.nl",
+          "negotiateRequirements/findRequirementConflicts/testRequirementTerminology.nl"
+        ]
+      },
+      {
+        "stage": "designCompromises",
+        "paths": [
+          "negotiateRequirements/designNegotiationOptions.nl",
+          "negotiateRequirements/designNegotiationOptions/varyNegotiationDimensions.nl"
+        ]
+      },
+      {
+        "stage": "writeSpecification",
+        "paths": [
+          "negotiateRequirements/compileAcceptedRequirements.nl",
+          "negotiateRequirements/compileAcceptedRequirements/atomizeRequirementBehavior.nl"
+        ]
+      },
+      {
+        "stage": "replayAcceptance",
+        "paths": [
+          "negotiateRequirements/replayRequirementAcceptance.nl",
+          "negotiateRequirements/replayRequirementAcceptance/deriveRequirementScenarios.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "negotiateRequirements/extractPositionsDomain.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "negotiateRequirements/extractPositionsDomain.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "negotiateRequirements/designNegotiationOptions.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "negotiateRequirements/compileAcceptedRequirements/atomizeRequirementBehavior.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "negotiateRequirements/compileAcceptedRequirements.nl",
+          "negotiateRequirements/replayRequirementAcceptance.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "negotiateRequirements.nl",
+    "negotiateRequirements/frameNegotiation.nl",
+    "negotiateRequirements/extractPositionsDomain.nl",
+    "negotiateRequirements/extractPositionsDomain/classifyStakeholderRequests.nl",
+    "negotiateRequirements/extractPositionsDomain/assemblePositionEvidence.nl",
+    "negotiateRequirements/findRequirementConflicts.nl",
+    "negotiateRequirements/findRequirementConflicts/compareHardConstraintPairs.nl",
+    "negotiateRequirements/findRequirementConflicts/testRequirementTerminology.nl",
+    "negotiateRequirements/designNegotiationOptions.nl",
+    "negotiateRequirements/designNegotiationOptions/varyNegotiationDimensions.nl",
+    "negotiateRequirements/compileAcceptedRequirements.nl",
+    "negotiateRequirements/compileAcceptedRequirements/atomizeRequirementBehavior.nl",
+    "negotiateRequirements/replayRequirementAcceptance.nl",
+    "negotiateRequirements/replayRequirementAcceptance/deriveRequirementScenarios.nl",
+    "runCase/extractPositions/audit/qualify.nl",
+    "types.ts",
+    "negotiateRequirements/reconcileNegotiationState.nl"
+  ]
+}

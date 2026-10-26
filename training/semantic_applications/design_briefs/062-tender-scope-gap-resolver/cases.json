@@ -1,0 +1,542 @@
+[
+  {
+    "id": "062-tender-scope-gap-resolver-gate-supported",
+    "root": "qualification/normalizeBids.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "draft": {
+        "values": {
+          "bidderId": "bid-A62",
+          "includedFunctions": [
+            "demolition"
+          ],
+          "excludedFunctions": [
+            "disposal"
+          ],
+          "allowances": [
+            "temporary weather protection unassigned"
+          ],
+          "caseId": "case-62"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "062-tender-scope-gap-resolver-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "bid schedules and responsibility matrix",
+        "evidence": [
+          {
+            "id": "062-tender-scope-gap-resolver-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bid A includes demolition but excludes disposal; Bid B includes disposal but excludes night work; weather protection is unassigned. Case case-62; current first-stage record values: {\"allowances\": [\"temporary weather protection unassigned\"], \"bidderId\": \"bid-A62\", \"excludedFunctions\": [\"disposal\"], \"includedFunctions\": [\"demolition\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Compare inclusions and exclusions line by line; price similarity does not close scope gaps."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "caseId",
+          "value": "",
+          "evidenceIds": [
+            "062-tender-scope-gap-resolver-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "bid schedules and responsibility matrix: Bid A includes demolition but excludes disposal; Bid B includes disposal and excludes night work. Neither assigns temporary weather protection, and total prices differ by less than one percent. Apply the first-stage gate to the record and source versions; Compare inclusions and exclusions line by line; price similarity does not close scope gaps.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-gate-contradictory",
+    "root": "qualification/normalizeBids.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "draft": {
+        "values": {
+          "bidderId": "bid-A62",
+          "includedFunctions": [
+            "demolition"
+          ],
+          "excludedFunctions": [],
+          "allowances": [
+            "temporary weather protection unassigned"
+          ],
+          "caseId": "case-62"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "062-tender-scope-gap-resolver-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "bid schedules and responsibility matrix",
+        "evidence": [
+          {
+            "id": "062-tender-scope-gap-resolver-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Bid A includes demolition but excludes disposal; Bid B includes disposal but excludes night work; weather protection is unassigned. Case case-62; current first-stage record values: {\"allowances\": [\"temporary weather protection unassigned\"], \"bidderId\": \"bid-A62\", \"excludedFunctions\": [\"disposal\"], \"includedFunctions\": [\"demolition\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Compare inclusions and exclusions line by line; price similarity does not close scope gaps."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "excludedFunctions",
+          "value": "[]",
+          "evidenceIds": [
+            "062-tender-scope-gap-resolver-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "bid schedules and responsibility matrix: Bid A includes demolition but excludes disposal; Bid B includes disposal and excludes night work. Neither assigns temporary weather protection, and total prices differ by less than one percent. Apply the first-stage gate to the record and source versions; Compare inclusions and exclusions line by line; price similarity does not close scope gaps.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-gate-missing",
+    "root": "qualification/normalizeBids.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-62"
+        },
+        "missingFields": [
+          "allowances"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes caseId?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "bid schedules and responsibility matrix",
+        "evidence": [],
+        "missing": [
+          "caseId"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Compare inclusions and exclusions line by line; price similarity does not close scope gaps."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "bid schedules and responsibility matrix: Bid A includes demolition but excludes disposal; Bid B includes disposal and excludes night work. Neither assigns temporary weather protection, and total prices differ by less than one percent. Apply the first-stage gate to the record and source versions; Compare inclusions and exclusions line by line; price similarity does not close scope gaps.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-operational-1",
+    "root": "resolveTenderScope.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "tender": {
+        "caseId": "062-tender-scope-gap-resolver-operational-1",
+        "bidScopes": [
+          {
+            "id": "062-prior-bidscope-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "062-tender-scope-gap-resolver-operational-1",
+            "bidderId": "bid-A62",
+            "includedFunctions": [
+              "demolition"
+            ],
+            "excludedFunctions": [
+              "disposal"
+            ],
+            "allowances": [
+              "temporary weather protection unassigned"
+            ]
+          }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-1-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R062 Tender steward records: Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed. This current event is source 062-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-1. The supplied typed prior 062-prior-bidscope-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 062-tender-scope-gap-resolver-operational-1 against this factual event: Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed. Original §9 detail: A bidder’s price includes an allowance rather than a firm quantity: preserve uncertainty in comparison. Correct handling applies “preserve uncertainty in comparison.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A bidder’s price includes an allowance rather than a firm quantity: preserve uncertainty in comparison.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed. It links source 062-operational-detail-1-source-v2 v2 with prior typed BidScope record 062-prior-bidscope-detail-1-v1 v1 and keeps unresolved scope visible for A62, B62.",
+      "durable_state": "The proposal retains prior record 062-prior-bidscope-detail-1-v1 v1 and versions only the affected state for A62, B62 against source 062-operational-detail-1-source-v2 v2; it applies “preserve uncertainty in comparison.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to A62, B62 and the scope supported by source 062-operational-detail-1-source-v2 v2; it represents “preserve uncertainty in comparison.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-operational-2",
+    "root": "resolveTenderScope.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "tender": {
+        "caseId": "062-tender-scope-gap-resolver-operational-2",
+        "bidScopes": [
+          {
+            "id": "062-prior-bidscope-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "062-tender-scope-gap-resolver-operational-2",
+            "bidderId": "bid-A62",
+            "includedFunctions": [
+              "demolition"
+            ],
+            "excludedFunctions": [
+              "disposal"
+            ],
+            "allowances": [
+              "temporary weather protection unassigned"
+            ]
+          }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-2-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R062 Tender steward records: Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list. This current event is source 062-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-2. The supplied typed prior 062-prior-bidscope-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 062-tender-scope-gap-resolver-operational-2 against this factual event: Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list. Original §9 detail: A clarification changes an exclusion: update all affected interface cells. Correct handling applies “update all affected interface cells.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A clarification changes an exclusion: update all affected interface cells.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list. It links source 062-operational-detail-2-source-v2 v2 with prior typed BidScope record 062-prior-bidscope-detail-2-v1 v1 and keeps unresolved scope visible for CL62-7, F12, F18.",
+      "durable_state": "The proposal retains prior record 062-prior-bidscope-detail-2-v1 v1 and versions only the affected state for CL62-7, F12, F18 against source 062-operational-detail-2-source-v2 v2; it applies “update all affected interface cells.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to CL62-7, F12, F18 and the scope supported by source 062-operational-detail-2-source-v2 v2; it represents “update all affected interface cells.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-operational-3",
+    "root": "resolveTenderScope.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "tender": {
+        "caseId": "062-tender-scope-gap-resolver-operational-3",
+        "bidScopes": [
+          {
+            "id": "062-prior-bidscope-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "062-tender-scope-gap-resolver-operational-3",
+            "bidderId": "bid-A62",
+            "includedFunctions": [
+              "demolition"
+            ],
+            "excludedFunctions": [
+              "disposal"
+            ],
+            "allowances": [
+              "temporary weather protection unassigned"
+            ]
+          }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-3-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R062 Tender steward records: Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.” This current event is source 062-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-3. The supplied typed prior 062-prior-bidscope-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.”"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 062-tender-scope-gap-resolver-operational-3 against this factual event: Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.” Original §9 detail: Two trades each assume the other supplies a connection: create a named acceptance task. Correct handling applies “create a named acceptance task.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.”",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "Two trades each assume the other supplies a connection: create a named acceptance task.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.” It links source 062-operational-detail-3-source-v2 v2 with prior typed BidScope record 062-prior-bidscope-detail-3-v1 v1 and keeps unresolved scope visible for A62, K62.",
+      "durable_state": "The proposal retains prior record 062-prior-bidscope-detail-3-v1 v1 and versions only the affected state for A62, K62 against source 062-operational-detail-3-source-v2 v2; it applies “create a named acceptance task.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to A62, K62 and the scope supported by source 062-operational-detail-3-source-v2 v2; it represents “create a named acceptance task.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-operational-4",
+    "root": "resolveTenderScope.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "tender": {
+        "caseId": "062-tender-scope-gap-resolver-operational-4",
+        "bidScopes": [
+          {
+            "id": "062-prior-bidscope-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "062-tender-scope-gap-resolver-operational-4",
+            "bidderId": "bid-A62",
+            "includedFunctions": [
+              "demolition"
+            ],
+            "excludedFunctions": [
+              "disposal"
+            ],
+            "allowances": [
+              "temporary weather protection unassigned"
+            ]
+          }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-4-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R062 Tender steward records: Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price. This current event is source 062-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-4. The supplied typed prior 062-prior-bidscope-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 062-tender-scope-gap-resolver-operational-4 against this factual event: Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price. Original §9 detail: A late bid revision removes an inclusion: invalidate the previous coverage finding. Correct handling applies “invalidate the previous coverage finding.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A late bid revision removes an inclusion: invalidate the previous coverage finding.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price. It links source 062-operational-detail-4-source-v2 v2 with prior typed BidScope record 062-prior-bidscope-detail-4-v1 v1 and keeps unresolved scope visible for C62.",
+      "durable_state": "The proposal retains prior record 062-prior-bidscope-detail-4-v1 v1 and versions only the affected state for C62 against source 062-operational-detail-4-source-v2 v2; it applies “invalidate the previous coverage finding.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C62 and the scope supported by source 062-operational-detail-4-source-v2 v2; it represents “invalidate the previous coverage finding.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "062-tender-scope-gap-resolver-operational-5",
+    "root": "resolveTenderScope.nl",
+    "split_group": "062-tender-scope-gap-resolver",
+    "inputs": {
+      "tender": {
+        "caseId": "062-tender-scope-gap-resolver-operational-5",
+        "bidScopes": [
+          {
+            "id": "062-prior-bidscope-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "062-tender-scope-gap-resolver-operational-5",
+            "bidderId": "bid-A62",
+            "includedFunctions": [
+              "demolition"
+            ],
+            "excludedFunctions": [
+              "disposal"
+            ],
+            "allowances": [
+              "temporary weather protection unassigned"
+            ]
+          }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-5-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R062 Tender steward records: Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount. This current event is source 062-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-5. The supplied typed prior 062-prior-bidscope-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 062-tender-scope-gap-resolver-operational-5 against this factual event: Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount. Original §9 detail: A lower total omits commissioning: show functional incompleteness rather than ranking by price alone. Correct handling applies “show functional incompleteness rather than ranking by price alone.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A lower total omits commissioning: show functional incompleteness rather than ranking by price alone.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount. It links source 062-operational-detail-5-source-v2 v2 with prior typed BidScope record 062-prior-bidscope-detail-5-v1 v1 and keeps unresolved scope visible for B62, C62-1, T62-2.",
+      "durable_state": "The proposal retains prior record 062-prior-bidscope-detail-5-v1 v1 and versions only the affected state for B62, C62-1, T62-2 against source 062-operational-detail-5-source-v2 v2; it applies “show functional incompleteness rather than ranking by price alone.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to B62, C62-1, T62-2 and the scope supported by source 062-operational-detail-5-source-v2 v2; it represents “show functional incompleteness rather than ranking by price alone.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

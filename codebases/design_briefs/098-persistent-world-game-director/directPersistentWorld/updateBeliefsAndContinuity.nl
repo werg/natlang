@@ -1,0 +1,6 @@
+---
+description: Advance only character knowledge supported by committed, read-back world events.
+args: { world: PersistentWorldState; reconciliation: WorldReconciliation; checkpoint: GameCheckpoint }
+returns: { beliefUpdates: CharacterBelief[]; continuityNotes: string[]; checkpoint: GameCheckpoint; worldState: PersistentWorldState }
+---
+If reconciliation is not reconciled or updatedWorld is absent, preserve all current beliefs, world snapshot and replay cursor; report unresolved receipt IDs and return the same worldState. When reconciled, use reconciliation.updatedWorld, not the stale input world. For each accepted event, update only its actor, witnessed characters and actual message recipients. Keep privateTo boundaries intact. Preserve earlier beliefs with their event provenance; a conflicting event adds or revises an attributed belief only for characters who could receive it. Set checkpoint revision and ruleVersion from updatedWorld, store that exact worldSnapshot, and advance replayCursor only through the latest consecutively reconciled event. Remove only the receipt IDs closed by these exact reconciled receipts from pendingActionIds, unknownReceiptIds and pendingActions; retain every other pending binding unchanged. Apply new content-boundary revisions before any future generation and retain prior rule outcomes for replay.

@@ -230,7 +230,12 @@ export class SourceEvaluator implements ProgramEvaluator {
   }
   private runCase(folder: FolderSnapshot, row: ImprovementCase, seed: number): Promise<SourceCaseResult> {
     return new Promise((resolve, reject) => {
-      const worker = new Worker(new URL('./source-worker.js', import.meta.url), { execArgv: process.execArgv.filter(arg => !arg.startsWith('--input-type')), workerData: { files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
+      // Let Node inherit worker-compatible options, including the parent's permissions.
+      // Copying process.execArgv explicitly also copies V8/process flags that Workers reject.
+      // A data-URL ESM bootstrap remains valid for parents started with --input-type.
+      const entry = new URL('./source-worker.js', import.meta.url).href;
+      const bootstrap = new URL('data:text/javascript,' + encodeURIComponent('import ' + JSON.stringify(entry) + ';'));
+      const worker = new Worker(bootstrap, { workerData: { files: sourceFiles(folder), contract: this.contract, args: row.args, services: row.services, folder: row.folder, seed,
         limits: { maxEpisodes: 30, maxActions: 100, ...(this.options.excludeModelWaitFromTimeout ? {} : {timeoutMs: this.options.timeoutMs ?? 120000}) } } });
       const lifetime = new AbortController();
       const signal = this.options.signal ? AbortSignal.any([lifetime.signal, this.options.signal]) : lifetime.signal;

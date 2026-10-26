@@ -1,0 +1,11 @@
+export type ID = string;
+export type Hash = string;
+export type DateTime = string;
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type DecisionCase = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; subject: string; ownerId: string; decisionDate: string; scope: string; currentResolution: string };
+export type DraftDecisionAssertion = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; actorId?: string; proposition?: string; modality?: 'proposed'|'accepted'|'rejected'; validFrom?: string; scope?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };

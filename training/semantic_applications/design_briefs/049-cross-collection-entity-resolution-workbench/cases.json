@@ -1,0 +1,554 @@
+[
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-gate-supported",
+    "root": "qualification/constructCandidates.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "draft": {
+        "values": {
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ],
+          "caseId": "case-49"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "049-cross-collection-entity-resolution-workbench-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "duplicate-candidate records and identity evidence",
+        "evidence": [
+          {
+            "id": "049-cross-collection-entity-resolution-workbench-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "E491 and E492 share a phone number but differ in legal name and delivery address; only E491 has a verified account ID. Case case-49; current first-stage record values: {\"blockingReasons\": [\"different legal names\", \"different delivery addresses\"], \"disqualifyingFacts\": [\"only shared attribute is phone number; E-491 has verified account ID, E-492 does not\"], \"leftRecordId\": \"E-491\", \"rightRecordId\": \"E-492\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "A shared phone is a weak match and cannot authorize a transitive merge."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "caseId",
+          "value": "",
+          "evidenceIds": [
+            "049-cross-collection-entity-resolution-workbench-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "duplicate-candidate records and identity evidence: Records E-491 and E-492 share a phone number but have different legal names and delivery addresses. E-491 has a verified account identifier; E-492 has only an imported contact row. Apply the first-stage gate to the record and source versions; A shared phone is a weak match and cannot authorize a transitive merge.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-gate-contradictory",
+    "root": "qualification/constructCandidates.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "draft": {
+        "values": {
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ],
+          "caseId": "case-49"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "049-cross-collection-entity-resolution-workbench-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "duplicate-candidate records and identity evidence",
+        "evidence": [
+          {
+            "id": "049-cross-collection-entity-resolution-workbench-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "E491 and E492 share a phone number but differ in legal name and delivery address; only E491 has a verified account ID. Case case-49; current first-stage record values: {\"blockingReasons\": [\"different legal names\", \"different delivery addresses\"], \"disqualifyingFacts\": [\"only shared attribute is phone number; E-491 has verified account ID, E-492 does not\"], \"leftRecordId\": \"E-491\", \"rightRecordId\": \"E-492\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "A shared phone is a weak match and cannot authorize a transitive merge."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "blockingReasons",
+          "value": "[]",
+          "evidenceIds": [
+            "049-cross-collection-entity-resolution-workbench-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "duplicate-candidate records and identity evidence: Records E-491 and E-492 share a phone number but have different legal names and delivery addresses. E-491 has a verified account identifier; E-492 has only an imported contact row. Apply the first-stage gate to the record and source versions; A shared phone is a weak match and cannot authorize a transitive merge.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-gate-missing",
+    "root": "qualification/constructCandidates.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-49"
+        },
+        "missingFields": [
+          "disqualifyingFacts"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes caseId?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "duplicate-candidate records and identity evidence",
+        "evidence": [],
+        "missing": [
+          "caseId"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "A shared phone is a weak match and cannot authorize a transitive merge."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "duplicate-candidate records and identity evidence: Records E-491 and E-492 share a phone number but have different legal names and delivery addresses. E-491 has a verified account identifier; E-492 has only an imported contact row. Apply the first-stage gate to the record and source versions; A shared phone is a weak match and cannot authorize a transitive merge.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-operational-1",
+    "root": "resolveCrossCollectionIdentities.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "resolution": {
+        "resolutionId": "049-cross-collection-entity-resolution-workbench-operational-1",
+        "entityKind": "049-cross-collection-entity-resolution-workbench-operational-1",
+        "sourceEvidence": [
+          {
+            "id": "049-operational-detail-1-source-v2",
+            "source": "Cross-collection entity resolution workbench operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R049 Cross-collection steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R049 Cross-collection steward records: Parent entity E49-P and subsidiary E49-S list the same street address, but their registration numbers and legal names differ. Source filings describe E49-S as wholly owned by E49-P. This current event is source 049-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 049-cross-collection-entity-resolution-workbench-operational-1. The supplied typed prior 049-prior-identitycandidate-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Parent entity E49-P and subsidiary E49-S list the same street address, but their registration numbers and legal names differ. Source filings describe E49-S as wholly owned by E49-P."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorCandidate": {
+          "id": "049-prior-identitycandidate-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "049-cross-collection-entity-resolution-workbench-operational-1",
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ]
+        },
+        "collectionAccessScopes": [],
+        "identityRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "knownCannotLinkPairs": [],
+        "recordValidityIntervals": [],
+        "fieldAuthorityRules": [],
+        "sourceRevocations": [],
+        "downstreamContracts": [],
+        "authorityStatus": "authorized"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 049-cross-collection-entity-resolution-workbench-operational-1 against this factual event: Parent entity E49-P and subsidiary E49-S list the same street address, but their registration numbers and legal names differ. Source filings describe E49-S as wholly owned by E49-P. Original §9 detail: A parent and subsidiary share an address: represent their relationship without merging identities. Correct handling applies “represent their relationship without merging identities.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Parent entity E49-P and subsidiary E49-S list the same street address, but their registration numbers and legal names differ. Source filings describe E49-S as wholly owned by E49-P.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A parent and subsidiary share an address: represent their relationship without merging identities.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Parent entity E49-P and subsidiary E49-S list the same street address, but their registration numbers and legal names differ. Source filings describe E49-S as wholly owned by E49-P. It links source 049-operational-detail-1-source-v2 v2 with prior typed IdentityCandidate record 049-prior-identitycandidate-detail-1-v1 v1 and keeps unresolved scope visible for E49-P, E49-S.",
+      "durable_state": "The proposal retains prior record 049-prior-identitycandidate-detail-1-v1 v1 and versions only the affected state for E49-P, E49-S against source 049-operational-detail-1-source-v2 v2; it applies “represent their relationship without merging identities.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to E49-P, E49-S and the scope supported by source 049-operational-detail-1-source-v2 v2; it represents “represent their relationship without merging identities.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-operational-2",
+    "root": "resolveCrossCollectionIdentities.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "resolution": {
+        "resolutionId": "049-cross-collection-entity-resolution-workbench-operational-2",
+        "entityKind": "049-cross-collection-entity-resolution-workbench-operational-2",
+        "sourceEvidence": [
+          {
+            "id": "049-operational-detail-2-source-v2",
+            "source": "Cross-collection entity resolution workbench operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R049 Cross-collection steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R049 Cross-collection steward records: People P49-1 and P49-2 share the name “Jordan Lee” and employer “North Works.” Their verified emails, birth month and office locations differ; the candidate-link score is 0.72. This current event is source 049-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 049-cross-collection-entity-resolution-workbench-operational-2. The supplied typed prior 049-prior-identitycandidate-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "People P49-1 and P49-2 share the name “Jordan Lee” and employer “North Works.” Their verified emails, birth month and office locations differ; the candidate-link score is 0.72."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorCandidate": {
+          "id": "049-prior-identitycandidate-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "049-cross-collection-entity-resolution-workbench-operational-2",
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ]
+        },
+        "collectionAccessScopes": [],
+        "identityRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "knownCannotLinkPairs": [],
+        "recordValidityIntervals": [],
+        "fieldAuthorityRules": [],
+        "sourceRevocations": [],
+        "downstreamContracts": [],
+        "authorityStatus": "unclear"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 049-cross-collection-entity-resolution-workbench-operational-2 against this factual event: People P49-1 and P49-2 share the name “Jordan Lee” and employer “North Works.” Their verified emails, birth month and office locations differ; the candidate-link score is 0.72. Original §9 detail: Two people share a name and employer: require stronger evidence before linking. Correct handling applies “require stronger evidence before linking.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "People P49-1 and P49-2 share the name “Jordan Lee” and employer “North Works.” Their verified emails, birth month and office locations differ; the candidate-link score is 0.72.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Two people share a name and employer: require stronger evidence before linking.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: People P49-1 and P49-2 share the name “Jordan Lee” and employer “North Works.” Their verified emails, birth month and office locations differ; the candidate-link score is 0.72. It links source 049-operational-detail-2-source-v2 v2 with prior typed IdentityCandidate record 049-prior-identitycandidate-detail-2-v1 v1 and keeps unresolved scope visible for P49-1, P49-2.",
+      "durable_state": "The proposal retains prior record 049-prior-identitycandidate-detail-2-v1 v1 and versions only the affected state for P49-1, P49-2 against source 049-operational-detail-2-source-v2 v2; it applies “require stronger evidence before linking.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P49-1, P49-2 and the scope supported by source 049-operational-detail-2-source-v2 v2; it represents “require stronger evidence before linking.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-operational-3",
+    "root": "resolveCrossCollectionIdentities.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "resolution": {
+        "resolutionId": "049-cross-collection-entity-resolution-workbench-operational-3",
+        "entityKind": "049-cross-collection-entity-resolution-workbench-operational-3",
+        "sourceEvidence": [
+          {
+            "id": "049-operational-detail-3-source-v2",
+            "source": "Cross-collection entity resolution workbench operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R049 Cross-collection steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R049 Cross-collection steward records: Merge M49-88 between records E49-3 and E49-4 was reversed on 2026-10-05. Three dependent account links still point to the merged identity; the split event receipt is present but not propagated. This current event is source 049-operational-detail-3-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 049-cross-collection-entity-resolution-workbench-operational-3. The supplied typed prior 049-prior-identitycandidate-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Merge M49-88 between records E49-3 and E49-4 was reversed on 2026-10-05. Three dependent account links still point to the merged identity; the split event receipt is present but not propagated."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorCandidate": {
+          "id": "049-prior-identitycandidate-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "049-cross-collection-entity-resolution-workbench-operational-3",
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ]
+        },
+        "collectionAccessScopes": [],
+        "identityRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "knownCannotLinkPairs": [],
+        "recordValidityIntervals": [],
+        "fieldAuthorityRules": [],
+        "sourceRevocations": [],
+        "downstreamContracts": [],
+        "authorityStatus": "authorized"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 049-cross-collection-entity-resolution-workbench-operational-3 against this factual event: Merge M49-88 between records E49-3 and E49-4 was reversed on 2026-10-05. Three dependent account links still point to the merged identity; the split event receipt is present but not propagated. Original §9 detail: A merge is later reversed: propagate the split to dependent records and preserve audit history. Correct handling applies “propagate the split to dependent records and preserve audit history.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Merge M49-88 between records E49-3 and E49-4 was reversed on 2026-10-05. Three dependent account links still point to the merged identity; the split event receipt is present but not propagated.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A merge is later reversed: propagate the split to dependent records and preserve audit history.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Merge M49-88 between records E49-3 and E49-4 was reversed on 2026-10-05. Three dependent account links still point to the merged identity; the split event receipt is present but not propagated. It links source 049-operational-detail-3-source-v2 v2 with prior typed IdentityCandidate record 049-prior-identitycandidate-detail-3-v1 v1 and keeps unresolved scope visible for M49-88, E49-3, E49-4.",
+      "durable_state": "The proposal retains prior record 049-prior-identitycandidate-detail-3-v1 v1 and versions only the affected state for M49-88, E49-3, E49-4 against source 049-operational-detail-3-source-v2 v2; it applies “propagate the split to dependent records and preserve audit history.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to M49-88, E49-3, E49-4 and the scope supported by source 049-operational-detail-3-source-v2 v2; it represents “propagate the split to dependent records and preserve audit history.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-operational-4",
+    "root": "resolveCrossCollectionIdentities.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "resolution": {
+        "resolutionId": "049-cross-collection-entity-resolution-workbench-operational-4",
+        "entityKind": "049-cross-collection-entity-resolution-workbench-operational-4",
+        "sourceEvidence": [
+          {
+            "id": "049-operational-detail-4-source-v2",
+            "source": "Cross-collection entity resolution workbench operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R049 Cross-collection steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R049 Cross-collection steward records: Record E49-5 reuses identifier 7781 for two entities: one validity interval ends 2021-06-30, the next starts 2023-01-01. Current matching key stores only the identifier. This current event is source 049-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 049-cross-collection-entity-resolution-workbench-operational-4. The supplied typed prior 049-prior-identitycandidate-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Record E49-5 reuses identifier 7781 for two entities: one validity interval ends 2021-06-30, the next starts 2023-01-01. Current matching key stores only the identifier."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorCandidate": {
+          "id": "049-prior-identitycandidate-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "049-cross-collection-entity-resolution-workbench-operational-4",
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ]
+        },
+        "collectionAccessScopes": [],
+        "identityRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "knownCannotLinkPairs": [],
+        "recordValidityIntervals": [],
+        "fieldAuthorityRules": [],
+        "sourceRevocations": [],
+        "downstreamContracts": [],
+        "authorityStatus": "authorized"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 049-cross-collection-entity-resolution-workbench-operational-4 against this factual event: Record E49-5 reuses identifier 7781 for two entities: one validity interval ends 2021-06-30, the next starts 2023-01-01. Current matching key stores only the identifier. Original §9 detail: A record has a recycled identifier: bind identity to its validity interval. Correct handling applies “bind identity to its validity interval.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Record E49-5 reuses identifier 7781 for two entities: one validity interval ends 2021-06-30, the next starts 2023-01-01. Current matching key stores only the identifier.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A record has a recycled identifier: bind identity to its validity interval.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Record E49-5 reuses identifier 7781 for two entities: one validity interval ends 2021-06-30, the next starts 2023-01-01. Current matching key stores only the identifier. It links source 049-operational-detail-4-source-v2 v2 with prior typed IdentityCandidate record 049-prior-identitycandidate-detail-4-v1 v1 and keeps unresolved scope visible for E49-5.",
+      "durable_state": "The proposal retains prior record 049-prior-identitycandidate-detail-4-v1 v1 and versions only the affected state for E49-5 against source 049-operational-detail-4-source-v2 v2; it applies “bind identity to its validity interval.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to E49-5 and the scope supported by source 049-operational-detail-4-source-v2 v2; it represents “bind identity to its validity interval.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "049-cross-collection-entity-resolution-workbench-operational-5",
+    "root": "resolveCrossCollectionIdentities.nl",
+    "split_group": "049-cross-collection-entity-resolution-workbench",
+    "inputs": {
+      "resolution": {
+        "resolutionId": "049-cross-collection-entity-resolution-workbench-operational-5",
+        "entityKind": "049-cross-collection-entity-resolution-workbench-operational-5",
+        "sourceEvidence": [
+          {
+            "id": "049-operational-detail-5-source-v2",
+            "source": "Cross-collection entity resolution workbench operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R049 Cross-collection steward; event version verified for this case",
+            "observedAt": "2026-10-10T10:15:00Z",
+            "text": "R049 Cross-collection steward records: Source S49-9 was revoked by its owner on 2026-10-10. Canonical address and two entity-link scores still cite S49-9; revocation receipt is recorded, downstream reassessment is not. This current event is source 049-operational-detail-5-source-v2 v2, observed 2026-10-10T10:15:00Z, for case 049-cross-collection-entity-resolution-workbench-operational-5. The supplied typed prior 049-prior-identitycandidate-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Source S49-9 was revoked by its owner on 2026-10-10. Canonical address and two entity-link scores still cite S49-9; revocation receipt is recorded, downstream reassessment is not."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorCandidate": {
+          "id": "049-prior-identitycandidate-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "049-cross-collection-entity-resolution-workbench-operational-5",
+          "leftRecordId": "E-491",
+          "rightRecordId": "E-492",
+          "blockingReasons": [
+            "different legal names",
+            "different delivery addresses"
+          ],
+          "disqualifyingFacts": [
+            "only shared attribute is phone number; E-491 has verified account ID, E-492 does not"
+          ]
+        },
+        "collectionAccessScopes": [],
+        "identityRules": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "knownCannotLinkPairs": [],
+        "recordValidityIntervals": [],
+        "fieldAuthorityRules": [],
+        "sourceRevocations": [],
+        "downstreamContracts": [],
+        "authorityStatus": "authorized"
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 049-cross-collection-entity-resolution-workbench-operational-5 against this factual event: Source S49-9 was revoked by its owner on 2026-10-10. Canonical address and two entity-link scores still cite S49-9; revocation receipt is recorded, downstream reassessment is not. Original §9 detail: A source is revoked: remove its contribution from canonical values and reassess dependent links. Correct handling applies “remove its contribution from canonical values and reassess dependent links.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Source S49-9 was revoked by its owner on 2026-10-10. Canonical address and two entity-link scores still cite S49-9; revocation receipt is recorded, downstream reassessment is not.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A source is revoked: remove its contribution from canonical values and reassess dependent links.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Source S49-9 was revoked by its owner on 2026-10-10. Canonical address and two entity-link scores still cite S49-9; revocation receipt is recorded, downstream reassessment is not. It links source 049-operational-detail-5-source-v2 v2 with prior typed IdentityCandidate record 049-prior-identitycandidate-detail-5-v1 v1 and keeps unresolved scope visible for S49-9.",
+      "durable_state": "The proposal retains prior record 049-prior-identitycandidate-detail-5-v1 v1 and versions only the affected state for S49-9 against source 049-operational-detail-5-source-v2 v2; it applies “remove its contribution from canonical values and reassess dependent links.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to S49-9 and the scope supported by source 049-operational-detail-5-source-v2 v2; it represents “remove its contribution from canonical values and reassess dependent links.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

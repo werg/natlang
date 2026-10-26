@@ -1,0 +1,545 @@
+[
+  {
+    "id": "052-warehouse-exception-controller-gate-supported",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified",
+          "caseId": "case-52"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "condition",
+            "evidenceIds": [
+              "052-warehouse-exception-controller-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "warehouse stock count and custody log",
+        "evidence": [
+          {
+            "id": "052-warehouse-exception-controller-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SKU W52 system count is 12, shelf count is 10; an unsigned move note sends two units to Q4 and no bay scan exists. Case case-52; current first-stage record values: {\"condition\": \"bay scan not received; custody unverified\", \"locationId\": \"quarantine-bay-Q4\", \"observedDescription\": \"two units absent from shelf count; unsigned move note points to quarantine bay\", \"quantity\": {\"unit\": \"units\", \"value\": \"2\"}, \"serial\": \"SKU-W52-lot-A\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the two units in an unresolved custody state and conserve the total."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "condition",
+          "value": "bay scan not received; custody unverified",
+          "evidenceIds": [
+            "052-warehouse-exception-controller-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "warehouse stock count and custody log: SKU W-52 has system quantity 12 and shelf count 10. A later unsigned note moves two units to quarantine bay Q-4; the bay scan has not been received. Apply the first-stage gate to the record and source versions; Keep the two units in an unresolved custody state and conserve the total.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "052-warehouse-exception-controller-gate-contradictory",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "draft": {
+        "values": {
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "12",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified",
+          "caseId": "case-52"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "condition",
+            "evidenceIds": [
+              "052-warehouse-exception-controller-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "warehouse stock count and custody log",
+        "evidence": [
+          {
+            "id": "052-warehouse-exception-controller-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "SKU W52 system count is 12, shelf count is 10; an unsigned move note sends two units to Q4 and no bay scan exists. Case case-52; current first-stage record values: {\"condition\": \"bay scan not received; custody unverified\", \"locationId\": \"quarantine-bay-Q4\", \"observedDescription\": \"two units absent from shelf count; unsigned move note points to quarantine bay\", \"quantity\": {\"unit\": \"units\", \"value\": \"2\"}, \"serial\": \"SKU-W52-lot-A\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the two units in an unresolved custody state and conserve the total."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "quantity",
+          "value": "{\"unit\": \"units\", \"value\": \"12\"}",
+          "evidenceIds": [
+            "052-warehouse-exception-controller-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "warehouse stock count and custody log: SKU W-52 has system quantity 12 and shelf count 10. A later unsigned note moves two units to quarantine bay Q-4; the bay scan has not been received. Apply the first-stage gate to the record and source versions; Keep the two units in an unresolved custody state and conserve the total.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "052-warehouse-exception-controller-gate-missing",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-52"
+        },
+        "missingFields": [
+          "condition"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes condition?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "warehouse stock count and custody log",
+        "evidence": [],
+        "missing": [
+          "condition"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Keep the two units in an unresolved custody state and conserve the total."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "warehouse stock count and custody log: SKU W-52 has system quantity 12 and shelf count 10. A later unsigned note moves two units to quarantine bay Q-4; the bay scan has not been received. Apply the first-stage gate to the record and source versions; Keep the two units in an unresolved custody state and conserve the total.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "052-warehouse-exception-controller-operational-1",
+    "root": "reconcileWarehouseJournal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "inbox": {
+        "exceptionId": "052-warehouse-exception-controller-operational-1",
+        "complaint": "Review the Warehouse exception controller evidence for case 052-warehouse-exception-controller-operational-1; return a traceable proposal from the supplied records.",
+        "suppliedObservation": {
+          "id": "052-prior-stockobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "052-warehouse-exception-controller-operational-1",
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified"
+        },
+        "eventEvidence": [
+          {
+            "id": "052-operational-detail-1-source-v2",
+            "source": "Warehouse exception controller operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R052 Warehouse steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R052 Warehouse steward records: Scanner SC52 went offline at 10:04. Device queue contains signed observations with sequence numbers 187–190 for location Q4; the central inventory last acknowledged sequence 186 and has not received the queued records. This current event is source 052-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 052-warehouse-exception-controller-operational-1. The supplied typed prior 052-prior-stockobservation-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Scanner SC52 went offline at 10:04. Device queue contains signed observations with sequence numbers 187–190 for location Q4; the central inventory last acknowledged sequence 186 and has not received the queued records."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "procedures": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedEventIds": [
+          "052-operational-detail-1-source-v2"
+        ],
+        "operatorView": "accountable reviewer"
+      },
+      "journal": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 052-warehouse-exception-controller-operational-1 against this factual event: Scanner SC52 went offline at 10:04. Device queue contains signed observations with sequence numbers 187–190 for location Q4; the central inventory last acknowledged sequence 186 and has not received the queued records. Original §9 detail: A scanner is offline: queue signed observations with device sequence numbers and reconcile on sync. Correct handling applies “queue signed observations with device sequence numbers and reconcile on sync.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Scanner SC52 went offline at 10:04. Device queue contains signed observations with sequence numbers 187–190 for location Q4; the central inventory last acknowledged sequence 186 and has not received the queued records.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A scanner is offline: queue signed observations with device sequence numbers and reconcile on sync.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Scanner SC52 went offline at 10:04. Device queue contains signed observations with sequence numbers 187–190 for location Q4; the central inventory last acknowledged sequence 186 and has not received the queued records. It links source 052-operational-detail-1-source-v2 v2 with prior typed StockObservation record 052-prior-stockobservation-detail-1-v1 v1 and keeps unresolved scope visible for SC52, Q4.",
+      "durable_state": "The proposal retains prior record 052-prior-stockobservation-detail-1-v1 v1 and versions only the affected state for SC52, Q4 against source 052-operational-detail-1-source-v2 v2; it applies “queue signed observations with device sequence numbers and reconcile on sync.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to SC52, Q4 and the scope supported by source 052-operational-detail-1-source-v2 v2; it represents “queue signed observations with device sequence numbers and reconcile on sync.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "052-warehouse-exception-controller-operational-2",
+    "root": "reconcileWarehouseJournal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "inbox": {
+        "exceptionId": "052-warehouse-exception-controller-operational-2",
+        "complaint": "Review the Warehouse exception controller evidence for case 052-warehouse-exception-controller-operational-2; return a traceable proposal from the supplied records.",
+        "suppliedObservation": {
+          "id": "052-prior-stockobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "052-warehouse-exception-controller-operational-2",
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified"
+        },
+        "eventEvidence": [
+          {
+            "id": "052-operational-detail-2-source-v2",
+            "source": "Warehouse exception controller operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R052 Warehouse steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R052 Warehouse steward records: Cartons C52-1 and C52-2 have identical SKU and packaging but lot numbers LOT-A52 and LOT-B52. The relabel request combines them under one shelf label; supplier certificates bind separate lots. This current event is source 052-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 052-warehouse-exception-controller-operational-2. The supplied typed prior 052-prior-stockobservation-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Cartons C52-1 and C52-2 have identical SKU and packaging but lot numbers LOT-A52 and LOT-B52. The relabel request combines them under one shelf label; supplier certificates bind separate lots."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "procedures": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "unclear",
+        "changedEventIds": [
+          "052-operational-detail-2-source-v2"
+        ],
+        "operatorView": "accountable reviewer"
+      },
+      "journal": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 052-warehouse-exception-controller-operational-2 against this factual event: Cartons C52-1 and C52-2 have identical SKU and packaging but lot numbers LOT-A52 and LOT-B52. The relabel request combines them under one shelf label; supplier certificates bind separate lots. Original §9 detail: Two identical cartons have different lots: preserve lot-level identity through relabeling. Correct handling applies “preserve lot-level identity through relabeling.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Cartons C52-1 and C52-2 have identical SKU and packaging but lot numbers LOT-A52 and LOT-B52. The relabel request combines them under one shelf label; supplier certificates bind separate lots.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "Two identical cartons have different lots: preserve lot-level identity through relabeling.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Cartons C52-1 and C52-2 have identical SKU and packaging but lot numbers LOT-A52 and LOT-B52. The relabel request combines them under one shelf label; supplier certificates bind separate lots. It links source 052-operational-detail-2-source-v2 v2 with prior typed StockObservation record 052-prior-stockobservation-detail-2-v1 v1 and keeps unresolved scope visible for C52-1, C52-2, LOT-A52, LOT-B52.",
+      "durable_state": "The proposal retains prior record 052-prior-stockobservation-detail-2-v1 v1 and versions only the affected state for C52-1, C52-2, LOT-A52, LOT-B52 against source 052-operational-detail-2-source-v2 v2; it applies “preserve lot-level identity through relabeling.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C52-1, C52-2, LOT-A52, LOT-B52 and the scope supported by source 052-operational-detail-2-source-v2 v2; it represents “preserve lot-level identity through relabeling.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "052-warehouse-exception-controller-operational-3",
+    "root": "reconcileWarehouseJournal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "inbox": {
+        "exceptionId": "052-warehouse-exception-controller-operational-3",
+        "complaint": "Review the Warehouse exception controller evidence for case 052-warehouse-exception-controller-operational-3; return a traceable proposal from the supplied records.",
+        "suppliedObservation": {
+          "id": "052-prior-stockobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "052-warehouse-exception-controller-operational-3",
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified"
+        },
+        "eventEvidence": [
+          {
+            "id": "052-operational-detail-3-source-v2",
+            "source": "Warehouse exception controller operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R052 Warehouse steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R052 Warehouse steward records: Picker P52 recounts shortage adjustment SA52-6 for SKU-W52. Policy configuration requires independent verifier V52; the recount was performed by P52 and the verifier field is blank. This current event is source 052-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 052-warehouse-exception-controller-operational-3. The supplied typed prior 052-prior-stockobservation-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Picker P52 recounts shortage adjustment SA52-6 for SKU-W52. Policy configuration requires independent verifier V52; the recount was performed by P52 and the verifier field is blank."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "procedures": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedEventIds": [
+          "052-operational-detail-3-source-v2"
+        ],
+        "operatorView": "accountable reviewer"
+      },
+      "journal": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 052-warehouse-exception-controller-operational-3 against this factual event: Picker P52 recounts shortage adjustment SA52-6 for SKU-W52. Policy configuration requires independent verifier V52; the recount was performed by P52 and the verifier field is blank. Original §9 detail: A recount is performed by the original picker: require the configured independent verification for adjustments. Correct handling applies “require the configured independent verification for adjustments.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Picker P52 recounts shortage adjustment SA52-6 for SKU-W52. Policy configuration requires independent verifier V52; the recount was performed by P52 and the verifier field is blank.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A recount is performed by the original picker: require the configured independent verification for adjustments.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Picker P52 recounts shortage adjustment SA52-6 for SKU-W52. Policy configuration requires independent verifier V52; the recount was performed by P52 and the verifier field is blank. It links source 052-operational-detail-3-source-v2 v2 with prior typed StockObservation record 052-prior-stockobservation-detail-3-v1 v1 and keeps unresolved scope visible for P52, SA52-6, SKU-W52, V52.",
+      "durable_state": "The proposal retains prior record 052-prior-stockobservation-detail-3-v1 v1 and versions only the affected state for P52, SA52-6, SKU-W52, V52 against source 052-operational-detail-3-source-v2 v2; it applies “require the configured independent verification for adjustments.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to P52, SA52-6, SKU-W52, V52 and the scope supported by source 052-operational-detail-3-source-v2 v2; it represents “require the configured independent verification for adjustments.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "052-warehouse-exception-controller-operational-4",
+    "root": "reconcileWarehouseJournal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "inbox": {
+        "exceptionId": "052-warehouse-exception-controller-operational-4",
+        "complaint": "Review the Warehouse exception controller evidence for case 052-warehouse-exception-controller-operational-4; return a traceable proposal from the supplied records.",
+        "suppliedObservation": {
+          "id": "052-prior-stockobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "052-warehouse-exception-controller-operational-4",
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified"
+        },
+        "eventEvidence": [
+          {
+            "id": "052-operational-detail-4-source-v2",
+            "source": "Warehouse exception controller operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R052 Warehouse steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R052 Warehouse steward records: Damaged unit U52-8 remains physically in bin B8 and has quantity one in the scan. Inspection report marks it unsafe for sale; the stock projection currently counts it as available. This current event is source 052-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 052-warehouse-exception-controller-operational-4. The supplied typed prior 052-prior-stockobservation-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Damaged unit U52-8 remains physically in bin B8 and has quantity one in the scan. Inspection report marks it unsafe for sale; the stock projection currently counts it as available."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "procedures": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedEventIds": [
+          "052-operational-detail-4-source-v2"
+        ],
+        "operatorView": "accountable reviewer"
+      },
+      "journal": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 052-warehouse-exception-controller-operational-4 against this factual event: Damaged unit U52-8 remains physically in bin B8 and has quantity one in the scan. Inspection report marks it unsafe for sale; the stock projection currently counts it as available. Original §9 detail: A damaged item is still physically present: change availability without deleting quantity. Correct handling applies “change availability without deleting quantity.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Damaged unit U52-8 remains physically in bin B8 and has quantity one in the scan. Inspection report marks it unsafe for sale; the stock projection currently counts it as available.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A damaged item is still physically present: change availability without deleting quantity.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Damaged unit U52-8 remains physically in bin B8 and has quantity one in the scan. Inspection report marks it unsafe for sale; the stock projection currently counts it as available. It links source 052-operational-detail-4-source-v2 v2 with prior typed StockObservation record 052-prior-stockobservation-detail-4-v1 v1 and keeps unresolved scope visible for U52-8, B8.",
+      "durable_state": "The proposal retains prior record 052-prior-stockobservation-detail-4-v1 v1 and versions only the affected state for U52-8, B8 against source 052-operational-detail-4-source-v2 v2; it applies “change availability without deleting quantity.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to U52-8, B8 and the scope supported by source 052-operational-detail-4-source-v2 v2; it represents “change availability without deleting quantity.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "052-warehouse-exception-controller-operational-5",
+    "root": "reconcileWarehouseJournal.nl",
+    "split_group": "052-warehouse-exception-controller",
+    "inputs": {
+      "inbox": {
+        "exceptionId": "052-warehouse-exception-controller-operational-5",
+        "complaint": "Review the Warehouse exception controller evidence for case 052-warehouse-exception-controller-operational-5; return a traceable proposal from the supplied records.",
+        "suppliedObservation": {
+          "id": "052-prior-stockobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "052-warehouse-exception-controller-operational-5",
+          "locationId": "quarantine-bay-Q4",
+          "observedDescription": "two units absent from shelf count; unsigned move note points to quarantine bay",
+          "serial": "SKU-W52-lot-A",
+          "quantity": {
+            "value": "2",
+            "unit": "units"
+          },
+          "condition": "bay scan not received; custody unverified"
+        },
+        "eventEvidence": [
+          {
+            "id": "052-operational-detail-5-source-v2",
+            "source": "Warehouse exception controller operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R052 Warehouse steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R052 Warehouse steward records: Shortage adjustment SA52-9 removed three units at 09:00. A late receipt LR52-41 for the same SKU and lot carries an event time of 08:55 and arrives after the adjustment; both records reference receiving dock D2. This current event is source 052-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 052-warehouse-exception-controller-operational-5. The supplied typed prior 052-prior-stockobservation-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Shortage adjustment SA52-9 removed three units at 09:00. A late receipt LR52-41 for the same SKU and lot carries an event time of 08:55 and arrives after the adjustment; both records reference receiving dock D2."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "procedures": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authority": "authorized",
+        "changedEventIds": [
+          "052-operational-detail-5-source-v2"
+        ],
+        "operatorView": "accountable reviewer"
+      },
+      "journal": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 052-warehouse-exception-controller-operational-5 against this factual event: Shortage adjustment SA52-9 removed three units at 09:00. A late receipt LR52-41 for the same SKU and lot carries an event time of 08:55 and arrives after the adjustment; both records reference receiving dock D2. Original §9 detail: A late receipt arrives after a shortage adjustment: detect the potential double count. Correct handling applies “detect the potential double count.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Shortage adjustment SA52-9 removed three units at 09:00. A late receipt LR52-41 for the same SKU and lot carries an event time of 08:55 and arrives after the adjustment; both records reference receiving dock D2.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A late receipt arrives after a shortage adjustment: detect the potential double count.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Shortage adjustment SA52-9 removed three units at 09:00. A late receipt LR52-41 for the same SKU and lot carries an event time of 08:55 and arrives after the adjustment; both records reference receiving dock D2. It links source 052-operational-detail-5-source-v2 v2 with prior typed StockObservation record 052-prior-stockobservation-detail-5-v1 v1 and keeps unresolved scope visible for SA52-9, LR52-41, D2.",
+      "durable_state": "The proposal retains prior record 052-prior-stockobservation-detail-5-v1 v1 and versions only the affected state for SA52-9, LR52-41, D2 against source 052-operational-detail-5-source-v2 v2; it applies “detect the potential double count.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to SA52-9, LR52-41, D2 and the scope supported by source 052-operational-detail-5-source-v2 v2; it represents “detect the potential double count.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

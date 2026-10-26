@@ -1,0 +1,92 @@
+{
+  "application_id": "067",
+  "title": "Agricultural cooperative harvest coordinator",
+  "source_relative_path": "applications/14-agriculture-ecology-and-environmental-stewardship/067-agricultural-cooperative-harvest-coordinator.md",
+  "source_sha256": "632d2791c13ebe10c8bcc87c80eae685c76e5c3f3b6fa51260b3cf112fee8286",
+  "domain_id": "14",
+  "stages": [
+    {
+      "name": "interpretReadiness",
+      "output_type": "HarvestReadiness",
+      "algorithm": "Read grower notes and approved assessment records to identify likely readiness, quality, and uncertainty. Distinguish tentative expectations from confirmed availability and preserve variety or lot differences that affect harvest timing and customer suitability.",
+      "gate": "Readiness is evidence-backed and does not become a guarantee from informal wording."
+    },
+    {
+      "name": "recoverCommitments",
+      "output_type": "HarvestCommitment",
+      "algorithm": "Reconcile delivery agreements and customer preferences to identify quantity, quality, and timing requirements. Separate permitted substitutions from assumptions and retain dependencies such as processing or storage windows that constrain otherwise feasible harvest choices.",
+      "gate": "Every critical quality and substitution condition is explicit."
+    },
+    {
+      "name": "matchLots",
+      "output_type": "HarvestMatch",
+      "algorithm": "Compare lot characteristics and readiness with customer requirements, identifying compatible combinations and gaps. Preserve uncertain quality findings and request targeted verification rather than allocating a lot solely because its crop name matches.",
+      "gate": "Allocated lots satisfy confirmed essential requirements."
+    },
+    {
+      "name": "scheduleResources",
+      "output_type": "HarvestPlan",
+      "algorithm": "Use exact scheduling and capacity services to coordinate labor, equipment, harvest windows, storage, and collection. Construct contingency plans for uncertain readiness and avoid assigning the same resource to overlapping lots or ignoring transport bottlenecks.",
+      "gate": "Exact resource feasibility and quantity conservation."
+    },
+    {
+      "name": "replanDelivery",
+      "output_type": "HarvestRevision",
+      "algorithm": "Process changed field observations, resource failures, or customer responses as scoped deltas. Reallocate only affected lots, obtain consent for material substitutions, and reconcile actual harvested and delivered quantities before declaring commitments fulfilled.",
+      "gate": "Revised commitments are accepted and actual quantities remain traceable by lot."
+    }
+  ],
+  "operational_details": [
+    "A grower revises expected quantity: preserve the prior estimate and recompute affected allocations.",
+    "Two varieties share a common name: retain exact variety and quality requirements.",
+    "Equipment is available but an operator is not: treat both as constrained resources.",
+    "A customer rejects a substitution: keep the original unmet commitment visible.",
+    "Actual yield differs from plan: reconcile harvested, stored, and delivered quantities separately."
+  ],
+  "domain_records": {
+    "HarvestRound": [
+      "growerIds: ID[]",
+      "cropLotIds: ID[]",
+      "deliveryCommitmentIds: ID[]",
+      "coordinatorId: ID",
+      "planningWindow: string"
+    ],
+    "HarvestReadiness": [
+      "caseId: ID",
+      "lotId: ID",
+      "observedMaturity: string",
+      "qualityEvidence: Ref[]",
+      "readinessWindow: string",
+      "uncertainty: string"
+    ],
+    "HarvestCommitment": [
+      "caseId: ID",
+      "customerId: ID",
+      "requiredQuality: string",
+      "quantity: Quantity",
+      "deliveryWindow: string",
+      "substitutionsAllowed: string[]"
+    ],
+    "HarvestMatch": [
+      "caseId: ID",
+      "lotIds: ID[]",
+      "commitmentId: ID",
+      "suitability: string",
+      "missingEvidence: string"
+    ],
+    "HarvestPlan": [
+      "caseId: ID",
+      "matchIds: ID[]",
+      "laborSlots: string[]",
+      "equipmentIds: ID[]",
+      "transportIds: ID[]"
+    ],
+    "HarvestRevision": [
+      "caseId: ID",
+      "changedLotIds: ID[]",
+      "affectedCommitmentIds: ID[]",
+      "proposedSubstitution: string",
+      "acceptanceRef: Ref"
+    ]
+  }
+}

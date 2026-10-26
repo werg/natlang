@@ -1,0 +1,792 @@
+[
+  {
+    "id": "096-first-gate-pass",
+    "root": "runCase/modelExperience/audit/qualify.nl",
+    "split_group": "world-096-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+        "candidateIds": [
+          "096-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "096-first-e1",
+            "source": "primary case record ESC-96",
+            "version": "v1",
+            "text": "Primary domain record for case ESC-96 states: caseId=\"ESC-96\"; narrativeGoal=\"Players discover caretaker moved map before flood.\"; venueConstraint=\"One 90-cm passage; no floor-mounted props.\"; accessibilityRequirement=\"Every clue has seated-height and transcript equivalent.\"; prohibitedMechanic=\"No darkness, restraint, or locked exit.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "096-case-record",
+          "caseId": "ESC-96",
+          "sourceRefs": [
+            "096-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EscapeConstraint",
+          "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+          "status": "candidate",
+          "evidenceIds": [
+            "096-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "narrativeGoal": "Players discover caretaker moved map before flood.",
+          "venueConstraint": "One 90-cm passage; no floor-mounted props.",
+          "accessibilityRequirement": "Every clue has seated-height and transcript equivalent.",
+          "prohibitedMechanic": "No darkness, restraint, or locked exit."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "096-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "096-first-gate-fail",
+    "root": "runCase/modelExperience/audit/qualify.nl",
+    "split_group": "world-096-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+        "candidateIds": [
+          "096-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "096-first-e1",
+            "source": "primary case record ESC-96",
+            "version": "v1",
+            "text": "Primary domain record for case ESC-96 states: caseId=\"ESC-96\"; narrativeGoal=\"Players discover caretaker moved map before flood.\"; venueConstraint=\"One 90-cm passage; no floor-mounted props.\"; accessibilityRequirement=\"Every clue has seated-height and transcript equivalent.\"; prohibitedMechanic=\"No darkness, restraint, or locked exit.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "096-case-record",
+          "caseId": "ESC-96",
+          "sourceRefs": [
+            "096-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EscapeConstraint",
+          "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+          "status": "candidate",
+          "evidenceIds": [
+            "096-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "narrativeGoal": "Players discover caretaker moved map before flood.",
+          "venueConstraint": "One 90-cm passage; no floor-mounted props.",
+          "accessibilityRequirement": "Every clue has seated-height and transcript equivalent.",
+          "prohibitedMechanic": "Lock exit until puzzle timer expires."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "096-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "096-first-gate-needs-review",
+    "root": "runCase/modelExperience/audit/qualify.nl",
+    "split_group": "world-096-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+        "candidateIds": [
+          "096-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "096-first-e1",
+            "source": "primary case record ESC-96",
+            "version": "v1",
+            "text": "Primary domain record for case ESC-96 states: caseId=\"ESC-96\"; narrativeGoal=\"Players discover caretaker moved map before flood.\"; venueConstraint=\"One 90-cm passage; no floor-mounted props.\"; accessibilityRequirement=\"Every clue has seated-height and transcript equivalent.\". No current value is present for prohibitedMechanic.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "prohibitedMechanic"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "096-case-record",
+          "sourceRefs": [
+            "096-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EscapeConstraint",
+          "subject": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+          "status": "candidate",
+          "evidenceIds": [
+            "096-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "venueConstraint": "One 90-cm passage; no floor-mounted props.",
+          "accessibilityRequirement": "Every clue has seated-height and transcript equivalent.",
+          "caseId": "ESC-96",
+          "narrativeGoal": "Players discover caretaker moved map before flood."
+        },
+        "missingFields": [
+          "prohibitedMechanic"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "096-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "096-workflow-1",
+    "root": "foundryRoom.nl",
+    "split_group": "world-096-workflow-1",
+    "inputs": {
+      "room": {
+        "id": "096-workflow-1",
+        "revision": 1,
+        "brief": {
+          "id": "096-workflow-1",
+          "goals": [
+            "Prepare a reviewable Escape Room Foundry proposal from the supplied case records and evidence."
+          ],
+          "accessibilityNeeds": [],
+          "safetyRules": [
+            "free exit"
+          ],
+          "sessionMinutes": 60
+        },
+        "nodes": [
+          {
+            "id": "start",
+            "clueIds": [],
+            "requires": [],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          },
+          {
+            "id": "final",
+            "clueIds": [],
+            "requires": [
+              "start"
+            ],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          }
+        ],
+        "props": [],
+        "clues": [
+          "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4."
+        ],
+        "routes": [],
+        "startNodeId": "start",
+        "goalNodeIds": [
+          "final"
+        ],
+        "exitAlwaysAvailable": true
+      },
+      "change": [
+        "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4."
+      ],
+      "proof": {
+        "graphRevision": 1,
+        "reachableNodeIds": [
+          "start",
+          "final"
+        ],
+        "unreachableGoalIds": [],
+        "cycleNodeIds": [],
+        "softLockStates": [],
+        "exitInvariantHolds": true,
+        "propCoverageGaps": []
+      },
+      "sourceRecord": {
+        "id": "096-workflow-1-record",
+        "caseId": "096-workflow-1",
+        "sourceRefs": [
+          "096-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "EscapeRoomProject",
+        "subject": "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4.",
+        "status": "candidate",
+        "evidenceIds": [
+          "096-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "096-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "creativeBrief": "Caretaker moved the map before the flood; seated clue route required.",
+        "venueId": "ROOM-96",
+        "propIds": [
+          "LOCK-4",
+          "CLUE-9",
+          "CLUE-3"
+        ],
+        "designerId": "DESIGN-6",
+        "targetDurationMinutes": 45
+      },
+      "sourceEvidence": [
+        {
+          "id": "096-wf-1-source",
+          "source": "primary case artifact 096-E1",
+          "version": "v1",
+          "text": "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Escape Room Foundry",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A team solves a puzzle before finding its clue: ensure the world state remains coherent. Use observation Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4. as the source of truth. The proposal should preserve source-linked record 096-workflow-1-record and make a recipient-facing distinction grounded in 096-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A team solves a puzzle before finding its clue: ensure the world state remains coherent.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 096-workflow-1-record must accurately preserve observation 096-wf-1-source (v1): Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4. Apply brief requirement A team solves a puzzle before finding its clue: ensure the world state remains coherent. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed EscapeRoomProject record 096-workflow-1-record and its source link to 096-wf-1-source version v1, with a disposition matching this observed state: Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4. Carry requirement A team solves a puzzle before finding its clue: ensure the world state remains coherent. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 096-workflow-1-record based on 096-wf-1-source (v1) and observation Team solves lock puzzle P-4 before discovering clue C-9; dependency graph places C-9 before P-4. Apply requirement A team solves a puzzle before finding its clue: ensure the world state remains coherent. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "096-workflow-2",
+    "root": "foundryRoom.nl",
+    "split_group": "world-096-workflow-2",
+    "inputs": {
+      "room": {
+        "id": "096-workflow-2",
+        "revision": 1,
+        "brief": {
+          "id": "096-workflow-2",
+          "goals": [
+            "Prepare a reviewable Escape Room Foundry proposal from the supplied case records and evidence."
+          ],
+          "accessibilityNeeds": [],
+          "safetyRules": [
+            "free exit"
+          ],
+          "sessionMinutes": 60
+        },
+        "nodes": [
+          {
+            "id": "start",
+            "clueIds": [],
+            "requires": [],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          },
+          {
+            "id": "final",
+            "clueIds": [],
+            "requires": [
+              "start"
+            ],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          }
+        ],
+        "props": [],
+        "clues": [
+          "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear."
+        ],
+        "routes": [],
+        "startNodeId": "start",
+        "goalNodeIds": [
+          "final"
+        ],
+        "exitAlwaysAvailable": true
+      },
+      "change": [
+        "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear."
+      ],
+      "proof": {
+        "graphRevision": 1,
+        "reachableNodeIds": [
+          "start",
+          "final"
+        ],
+        "unreachableGoalIds": [],
+        "cycleNodeIds": [],
+        "softLockStates": [],
+        "exitInvariantHolds": true,
+        "propCoverageGaps": []
+      },
+      "sourceRecord": {
+        "id": "096-workflow-2-record",
+        "caseId": "096-workflow-2",
+        "sourceRefs": [
+          "096-event-2"
+        ],
+        "state": "draft",
+        "kind": "EscapeRoomProject",
+        "subject": "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear.",
+        "status": "candidate",
+        "evidenceIds": [
+          "096-event-2"
+        ],
+        "fields": {
+          "sourceArtifact": "096-event-2",
+          "sourceVersion": "v1"
+        },
+        "creativeBrief": "Caretaker moved the map before the flood; seated clue route required.",
+        "venueId": "ROOM-96",
+        "propIds": [
+          "LOCK-4",
+          "CLUE-9",
+          "CLUE-3"
+        ],
+        "designerId": "DESIGN-6",
+        "targetDurationMinutes": 45
+      },
+      "sourceEvidence": [
+        {
+          "id": "096-event-2",
+          "source": "current domain record 096-E2",
+          "version": "v1",
+          "text": "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Escape Room Foundry",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A prop is lost or broken: provide an approved staff recovery path without trapping participants. Use observation Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear. as the source of truth. The proposal should preserve source-linked record 096-workflow-2-record and make a recipient-facing distinction grounded in 096-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A prop is lost or broken: provide an approved staff recovery path without trapping participants.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 096-workflow-2-record must accurately preserve observation 096-event-2 (v1): Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear. Apply brief requirement A prop is lost or broken: provide an approved staff recovery path without trapping participants. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed EscapeRoomProject record 096-workflow-2-record and its source link to 096-event-2 version v1, with a disposition matching this observed state: Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear. Carry requirement A prop is lost or broken: provide an approved staff recovery path without trapping participants. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 096-workflow-2-record based on 096-event-2 (v1) and observation Puzzle prop P-8 broke at the hinge during pre-session inspection on 2026-10-26. Staff recovery card RC-96 specifies an approved duplicate prop stored at desk D-2; the broken prop is removed from the room and the passage remains clear. Apply requirement A prop is lost or broken: provide an approved staff recovery path without trapping participants. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "096-workflow-3",
+    "root": "foundryRoom.nl",
+    "split_group": "world-096-workflow-3",
+    "inputs": {
+      "room": {
+        "id": "096-workflow-3",
+        "revision": 1,
+        "brief": {
+          "id": "096-workflow-3",
+          "goals": [
+            "Prepare a reviewable Escape Room Foundry proposal from the supplied case records and evidence."
+          ],
+          "accessibilityNeeds": [],
+          "safetyRules": [
+            "free exit"
+          ],
+          "sessionMinutes": 60
+        },
+        "nodes": [
+          {
+            "id": "start",
+            "clueIds": [],
+            "requires": [],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          },
+          {
+            "id": "final",
+            "clueIds": [],
+            "requires": [
+              "start"
+            ],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          }
+        ],
+        "props": [],
+        "clues": [
+          "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2."
+        ],
+        "routes": [],
+        "startNodeId": "start",
+        "goalNodeIds": [
+          "final"
+        ],
+        "exitAlwaysAvailable": true
+      },
+      "change": [
+        "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2."
+      ],
+      "proof": {
+        "graphRevision": 1,
+        "reachableNodeIds": [
+          "start",
+          "final"
+        ],
+        "unreachableGoalIds": [],
+        "cycleNodeIds": [],
+        "softLockStates": [],
+        "exitInvariantHolds": true,
+        "propCoverageGaps": []
+      },
+      "sourceRecord": {
+        "id": "096-workflow-3-record",
+        "caseId": "096-workflow-3",
+        "sourceRefs": [
+          "096-event-3"
+        ],
+        "state": "draft",
+        "kind": "EscapeRoomProject",
+        "subject": "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2.",
+        "status": "candidate",
+        "evidenceIds": [
+          "096-event-3"
+        ],
+        "fields": {
+          "sourceArtifact": "096-event-3",
+          "sourceVersion": "v1"
+        },
+        "creativeBrief": "Caretaker moved the map before the flood; seated clue route required.",
+        "venueId": "ROOM-96",
+        "propIds": [
+          "LOCK-4",
+          "CLUE-9",
+          "CLUE-3"
+        ],
+        "designerId": "DESIGN-6",
+        "targetDurationMinutes": 45
+      },
+      "sourceEvidence": [
+        {
+          "id": "096-event-3",
+          "source": "current domain record 096-E3",
+          "version": "v1",
+          "text": "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Escape Room Foundry",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A reset misses one item: detect it through a pre-session checklist and state verification. Use observation Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2. as the source of truth. The proposal should preserve source-linked record 096-workflow-3-record and make a recipient-facing distinction grounded in 096-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A reset misses one item: detect it through a pre-session checklist and state verification.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 096-workflow-3-record must accurately preserve observation 096-event-3 (v1): Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2. Apply brief requirement A reset misses one item: detect it through a pre-session checklist and state verification. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed EscapeRoomProject record 096-workflow-3-record and its source link to 096-event-3 version v1, with a disposition matching this observed state: Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2. Carry requirement A reset misses one item: detect it through a pre-session checklist and state verification. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 096-workflow-3-record based on 096-event-3 (v1) and observation Reset checklist RC-96 requires key K-3 on hook H-2 before each session. At 17:00 pre-session check, K-3 is absent; previous session log says it was returned to staff drawer D-1 but not reset to H-2. Apply requirement A reset misses one item: detect it through a pre-session checklist and state verification. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "096-workflow-4",
+    "root": "foundryRoom.nl",
+    "split_group": "world-096-workflow-4",
+    "inputs": {
+      "room": {
+        "id": "096-workflow-4",
+        "revision": 1,
+        "brief": {
+          "id": "096-workflow-4",
+          "goals": [
+            "Prepare a reviewable Escape Room Foundry proposal from the supplied case records and evidence."
+          ],
+          "accessibilityNeeds": [],
+          "safetyRules": [
+            "free exit"
+          ],
+          "sessionMinutes": 60
+        },
+        "nodes": [
+          {
+            "id": "start",
+            "clueIds": [],
+            "requires": [],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          },
+          {
+            "id": "final",
+            "clueIds": [],
+            "requires": [
+              "start"
+            ],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          }
+        ],
+        "props": [],
+        "clues": [
+          "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet."
+        ],
+        "routes": [],
+        "startNodeId": "start",
+        "goalNodeIds": [
+          "final"
+        ],
+        "exitAlwaysAvailable": true
+      },
+      "change": [
+        "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet."
+      ],
+      "proof": {
+        "graphRevision": 1,
+        "reachableNodeIds": [
+          "start",
+          "final"
+        ],
+        "unreachableGoalIds": [],
+        "cycleNodeIds": [],
+        "softLockStates": [],
+        "exitInvariantHolds": true,
+        "propCoverageGaps": []
+      },
+      "sourceRecord": {
+        "id": "096-workflow-4-record",
+        "caseId": "096-workflow-4",
+        "sourceRefs": [
+          "096-event-4"
+        ],
+        "state": "draft",
+        "kind": "EscapeRoomProject",
+        "subject": "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet.",
+        "status": "candidate",
+        "evidenceIds": [
+          "096-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "096-event-4",
+          "sourceVersion": "v1"
+        },
+        "creativeBrief": "Caretaker moved the map before the flood; seated clue route required.",
+        "venueId": "ROOM-96",
+        "propIds": [
+          "LOCK-4",
+          "CLUE-9",
+          "CLUE-3"
+        ],
+        "designerId": "DESIGN-6",
+        "targetDurationMinutes": 45
+      },
+      "sourceEvidence": [
+        {
+          "id": "096-event-4",
+          "source": "current domain record 096-E4",
+          "version": "v1",
+          "text": "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Escape Room Foundry",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A participant declines a sensory element: offer an equivalent accessible route. Use observation Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet. as the source of truth. The proposal should preserve source-linked record 096-workflow-4-record and make a recipient-facing distinction grounded in 096-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A participant declines a sensory element: offer an equivalent accessible route.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 096-workflow-4-record must accurately preserve observation 096-event-4 (v1): Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet. Apply brief requirement A participant declines a sensory element: offer an equivalent accessible route. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed EscapeRoomProject record 096-workflow-4-record and its source link to 096-event-4 version v1, with a disposition matching this observed state: Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet. Carry requirement A participant declines a sensory element: offer an equivalent accessible route. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 096-workflow-4-record based on 096-event-4 (v1) and observation Participant A-96 declines the dark-closet sensory clue C-4. Approved accessible route AR-4 conveys the same solution using a lit wall panel; no participant is required to enter the closet. Apply requirement A participant declines a sensory element: offer an equivalent accessible route. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "096-workflow-5",
+    "root": "foundryRoom.nl",
+    "split_group": "world-096-workflow-5",
+    "inputs": {
+      "room": {
+        "id": "096-workflow-5",
+        "revision": 1,
+        "brief": {
+          "id": "096-workflow-5",
+          "goals": [
+            "Prepare a reviewable Escape Room Foundry proposal from the supplied case records and evidence."
+          ],
+          "accessibilityNeeds": [],
+          "safetyRules": [
+            "free exit"
+          ],
+          "sessionMinutes": 60
+        },
+        "nodes": [
+          {
+            "id": "start",
+            "clueIds": [],
+            "requires": [],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          },
+          {
+            "id": "final",
+            "clueIds": [],
+            "requires": [
+              "start"
+            ],
+            "solves": [],
+            "propIds": [],
+            "mandatory": true
+          }
+        ],
+        "props": [],
+        "clues": [
+          "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing."
+        ],
+        "routes": [],
+        "startNodeId": "start",
+        "goalNodeIds": [
+          "final"
+        ],
+        "exitAlwaysAvailable": true
+      },
+      "change": [
+        "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing."
+      ],
+      "proof": {
+        "graphRevision": 1,
+        "reachableNodeIds": [
+          "start",
+          "final"
+        ],
+        "unreachableGoalIds": [],
+        "cycleNodeIds": [],
+        "softLockStates": [],
+        "exitInvariantHolds": true,
+        "propCoverageGaps": []
+      },
+      "sourceRecord": {
+        "id": "096-workflow-5-record",
+        "caseId": "096-workflow-5",
+        "sourceRefs": [
+          "096-wf-5-source"
+        ],
+        "state": "draft",
+        "kind": "EscapeRoomProject",
+        "subject": "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing.",
+        "status": "candidate",
+        "evidenceIds": [
+          "096-wf-5-source"
+        ],
+        "fields": {
+          "sourceArtifact": "096-wf-5-source",
+          "sourceVersion": "v1"
+        },
+        "creativeBrief": "Caretaker moved the map before the flood; seated clue route required.",
+        "venueId": "ROOM-96",
+        "propIds": [
+          "LOCK-4",
+          "CLUE-9",
+          "CLUE-3"
+        ],
+        "designerId": "DESIGN-6",
+        "targetDurationMinutes": 45
+      },
+      "sourceEvidence": [
+        {
+          "id": "096-wf-5-source",
+          "source": "primary case artifact 096-E5",
+          "version": "v1",
+          "text": "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Escape Room Foundry",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A clue has two reasonable answers: repair the artifact or accept both when consistent with the design. Use observation Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing. as the source of truth. The proposal should preserve source-linked record 096-workflow-5-record and make a recipient-facing distinction grounded in 096-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A clue has two reasonable answers: repair the artifact or accept both when consistent with the design.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 096-workflow-5-record must accurately preserve observation 096-wf-5-source (v1): Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing. Apply brief requirement A clue has two reasonable answers: repair the artifact or accept both when consistent with the design. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed EscapeRoomProject record 096-workflow-5-record and its source link to 096-wf-5-source version v1, with a disposition matching this observed state: Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing. Carry requirement A clue has two reasonable answers: repair the artifact or accept both when consistent with the design. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 096-workflow-5-record based on 096-wf-5-source (v1) and observation Player test shows 3 of 8 teams misread symbol △ as a timer; symbol key is absent from opening briefing. Apply requirement A clue has two reasonable answers: repair the artifact or accept both when consistent with the design. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

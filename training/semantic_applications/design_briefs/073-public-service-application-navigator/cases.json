@@ -1,0 +1,797 @@
+[
+  {
+    "id": "073-first-gate-pass",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
+    "split_group": "world-073-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+        "candidateIds": [
+          "073-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "073-first-e1",
+            "source": "primary case record NAV-73",
+            "version": "v1",
+            "text": "Primary domain record for case NAV-73 states: caseId=\"NAV-73\"; statedNeeds=[\"Nora requests replacement of her stolen food-benefit card.\"]; knownFacts=[\"Residence permit verified through 2027-03-31.\",\"Tax document expired 2026-03-31.\"]; unknownFacts=[\"Whether emergency replacement qualifies for expedited processing.\"]; urgentRoutingFlag=\"No immediate danger or shelter loss reported.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "073-case-record",
+          "caseId": "NAV-73",
+          "sourceRefs": [
+            "073-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ServiceSituation",
+          "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "statedNeeds": [
+            "Nora requests replacement of her stolen food-benefit card."
+          ],
+          "knownFacts": [
+            "Residence permit verified through 2027-03-31.",
+            "Tax document expired 2026-03-31."
+          ],
+          "unknownFacts": [
+            "Whether emergency replacement qualifies for expedited processing."
+          ],
+          "urgentRoutingFlag": "No immediate danger or shelter loss reported."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "073-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "073-first-gate-fail",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
+    "split_group": "world-073-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+        "candidateIds": [
+          "073-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "073-first-e1",
+            "source": "primary case record NAV-73",
+            "version": "v1",
+            "text": "Primary domain record for case NAV-73 states: caseId=\"NAV-73\"; statedNeeds=[\"Nora requests replacement of her stolen food-benefit card.\"]; knownFacts=[\"Residence permit verified through 2027-03-31.\",\"Tax document expired 2026-03-31.\"]; unknownFacts=[\"Whether emergency replacement qualifies for expedited processing.\"]; urgentRoutingFlag=\"No immediate danger or shelter loss reported.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "073-case-record",
+          "caseId": "NAV-73",
+          "sourceRefs": [
+            "073-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ServiceSituation",
+          "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "statedNeeds": [
+            "Nora requests replacement of her stolen food-benefit card."
+          ],
+          "knownFacts": [
+            "Residence permit unverified."
+          ],
+          "unknownFacts": [
+            "Whether emergency replacement qualifies for expedited processing."
+          ],
+          "urgentRoutingFlag": "No immediate danger or shelter loss reported."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "073-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "073-first-gate-needs-review",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
+    "split_group": "world-073-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+        "candidateIds": [
+          "073-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "073-first-e1",
+            "source": "primary case record NAV-73",
+            "version": "v1",
+            "text": "Primary domain record for case NAV-73 states: caseId=\"NAV-73\"; statedNeeds=[\"Nora requests replacement of her stolen food-benefit card.\"]; knownFacts=[\"Residence permit verified through 2027-03-31.\",\"Tax document expired 2026-03-31.\"]; unknownFacts=[\"Whether emergency replacement qualifies for expedited processing.\"]. No current value is present for urgentRoutingFlag.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "urgentRoutingFlag"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "073-case-record",
+          "sourceRefs": [
+            "073-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ServiceSituation",
+          "subject": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "knownFacts": [
+            "Residence permit verified through 2027-03-31.",
+            "Tax document expired 2026-03-31."
+          ],
+          "unknownFacts": [
+            "Whether emergency replacement qualifies for expedited processing."
+          ],
+          "caseId": "NAV-73",
+          "statedNeeds": [
+            "Nora requests replacement of her stolen food-benefit card."
+          ]
+        },
+        "missingFields": [
+          "urgentRoutingFlag"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "073-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "073-workflow-1",
+    "root": "navigateServiceApplication.nl",
+    "split_group": "world-073-workflow-1",
+    "inputs": {
+      "dossier": {
+        "navigation": {
+          "id": "073-workflow-1-record",
+          "caseId": "073-workflow-1",
+          "sourceRefs": [
+            "073-event-1"
+          ],
+          "state": "draft",
+          "kind": "ServiceNavigation",
+          "subject": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "073-event-1",
+            "sourceVersion": "v1"
+          },
+          "applicantId": "NORA-73",
+          "statedSituation": "Nora needs a replacement food-benefit card; residence permit verified, tax document expired.",
+          "serviceCatalogId": "CAT-5",
+          "coordinatorId": "NAV-2",
+          "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-1-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
+        }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Service Application Navigator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible. Use observation Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified. as the source of truth. The proposal should preserve source-linked record 073-workflow-1-record and make a recipient-facing distinction grounded in 073-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 073-workflow-1-record must accurately preserve observation 073-event-1 (v1): Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified. Apply brief requirement A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ServiceNavigation record 073-workflow-1-record and its source link to 073-event-1 version v1, with a disposition matching this observed state: Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified. Carry requirement A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 073-workflow-1-record based on 073-event-1 (v1) and observation Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified. Apply requirement A person lacks a standard document: follow supplied alternative-evidence routes rather than declaring them ineligible. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "073-workflow-2",
+    "root": "navigateServiceApplication.nl",
+    "split_group": "world-073-workflow-2",
+    "inputs": {
+      "dossier": {
+        "navigation": {
+          "id": "073-workflow-2-record",
+          "caseId": "073-workflow-2",
+          "sourceRefs": [
+            "073-event-2"
+          ],
+          "state": "draft",
+          "kind": "ServiceNavigation",
+          "subject": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-event-2"
+          ],
+          "fields": {
+            "sourceArtifact": "073-event-2",
+            "sourceVersion": "v1"
+          },
+          "applicantId": "NORA-73",
+          "statedSituation": "Nora needs a replacement food-benefit card; residence permit verified, tax document expired.",
+          "serviceCatalogId": "CAT-5",
+          "coordinatorId": "NAV-2",
+          "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-2-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
+        }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Service Application Navigator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A service rule changes mid-application: revalidate the affected pathway and explain the change. Use observation Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4. as the source of truth. The proposal should preserve source-linked record 073-workflow-2-record and make a recipient-facing distinction grounded in 073-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A service rule changes mid-application: revalidate the affected pathway and explain the change.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 073-workflow-2-record must accurately preserve observation 073-event-2 (v1): Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4. Apply brief requirement A service rule changes mid-application: revalidate the affected pathway and explain the change. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ServiceNavigation record 073-workflow-2-record and its source link to 073-event-2 version v1, with a disposition matching this observed state: Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4. Carry requirement A service rule changes mid-application: revalidate the affected pathway and explain the change. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 073-workflow-2-record based on 073-event-2 (v1) and observation Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4. Apply requirement A service rule changes mid-application: revalidate the affected pathway and explain the change. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "073-workflow-3",
+    "root": "navigateServiceApplication.nl",
+    "split_group": "world-073-workflow-3",
+    "inputs": {
+      "dossier": {
+        "navigation": {
+          "id": "073-workflow-3-record",
+          "caseId": "073-workflow-3",
+          "sourceRefs": [
+            "073-event-3"
+          ],
+          "state": "draft",
+          "kind": "ServiceNavigation",
+          "subject": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "073-event-3",
+            "sourceVersion": "v1"
+          },
+          "applicantId": "NORA-73",
+          "statedSituation": "Nora needs a replacement food-benefit card; residence permit verified, tax document expired.",
+          "serviceCatalogId": "CAT-5",
+          "coordinatorId": "NAV-2",
+          "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-3-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
+        }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Service Application Navigator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer. Use observation Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record. as the source of truth. The proposal should preserve source-linked record 073-workflow-3-record and make a recipient-facing distinction grounded in 073-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 073-workflow-3-record must accurately preserve observation 073-event-3 (v1): Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record. Apply brief requirement A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ServiceNavigation record 073-workflow-3-record and its source link to 073-event-3 version v1, with a disposition matching this observed state: Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record. Carry requirement A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 073-workflow-3-record based on 073-event-3 (v1) and observation Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record. Apply requirement A form cannot represent the person’s situation: route a truthful clarification instead of forcing a false answer. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "073-workflow-4",
+    "root": "navigateServiceApplication.nl",
+    "split_group": "world-073-workflow-4",
+    "inputs": {
+      "dossier": {
+        "navigation": {
+          "id": "073-workflow-4-record",
+          "caseId": "073-workflow-4",
+          "sourceRefs": [
+            "073-event-4"
+          ],
+          "state": "draft",
+          "kind": "ServiceNavigation",
+          "subject": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "073-event-4",
+            "sourceVersion": "v1"
+          },
+          "applicantId": "NORA-73",
+          "statedSituation": "Nora needs a replacement food-benefit card; residence permit verified, tax document expired.",
+          "serviceCatalogId": "CAT-5",
+          "coordinatorId": "NAV-2",
+          "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-4-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
+        }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Service Application Navigator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A submission receipt is delayed: reconcile status before resubmitting. Use observation Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection. as the source of truth. The proposal should preserve source-linked record 073-workflow-4-record and make a recipient-facing distinction grounded in 073-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A submission receipt is delayed: reconcile status before resubmitting.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 073-workflow-4-record must accurately preserve observation 073-event-4 (v1): Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection. Apply brief requirement A submission receipt is delayed: reconcile status before resubmitting. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ServiceNavigation record 073-workflow-4-record and its source link to 073-event-4 version v1, with a disposition matching this observed state: Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection. Carry requirement A submission receipt is delayed: reconcile status before resubmitting. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 073-workflow-4-record based on 073-event-4 (v1) and observation Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection. Apply requirement A submission receipt is delayed: reconcile status before resubmitting. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "073-workflow-5",
+    "root": "navigateServiceApplication.nl",
+    "split_group": "world-073-workflow-5",
+    "inputs": {
+      "dossier": {
+        "navigation": {
+          "id": "073-workflow-5-record",
+          "caseId": "073-workflow-5",
+          "sourceRefs": [
+            "073-event-5"
+          ],
+          "state": "draft",
+          "kind": "ServiceNavigation",
+          "subject": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+          "status": "candidate",
+          "evidenceIds": [
+            "073-event-5"
+          ],
+          "fields": {
+            "sourceArtifact": "073-event-5",
+            "sourceVersion": "v1"
+          },
+          "applicantId": "NORA-73",
+          "statedSituation": "Nora needs a replacement food-benefit card; residence permit verified, tax document expired.",
+          "serviceCatalogId": "CAT-5",
+          "coordinatorId": "NAV-2",
+          "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-5-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
+        }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Service Application Navigator",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A helper acts for the applicant: verify delegated consent and restrict access accordingly. Use observation Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt. as the source of truth. The proposal should preserve source-linked record 073-workflow-5-record and make a recipient-facing distinction grounded in 073-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A helper acts for the applicant: verify delegated consent and restrict access accordingly.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 073-workflow-5-record must accurately preserve observation 073-event-5 (v1): Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt. Apply brief requirement A helper acts for the applicant: verify delegated consent and restrict access accordingly. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ServiceNavigation record 073-workflow-5-record and its source link to 073-event-5 version v1, with a disposition matching this observed state: Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt. Carry requirement A helper acts for the applicant: verify delegated consent and restrict access accordingly. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 073-workflow-5-record based on 073-event-5 (v1) and observation Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt. Apply requirement A helper acts for the applicant: verify delegated consent and restrict access accordingly. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

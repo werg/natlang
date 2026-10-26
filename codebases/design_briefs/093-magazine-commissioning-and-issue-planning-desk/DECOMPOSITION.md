@@ -1,0 +1,5 @@
+# Magazine Commissioning And Issue Planning Desk
+
+An issue is managed as a portfolio under an editorial brief, not a queue of interchangeable slots. Each pitch carries a reporting feasibility map, audience value, distinctive angle, contributor capacity and overlap edges to other pieces. Coverage is evaluated as a set: gaps and redundancy emerge from the portfolio, while unsupported viewpoints are not artificially balanced.
+
+Commissions become commitments only after the contributor accepts the exact angle, length, deadline, rights and reporting duties. Dependencies such as access and photography remain explicit, and loss of a source reopens feasibility instead of being papered over. An issue change propagates through assignments, drafts, fact-check, visuals, captions, headline and promotion. A late withdrawal triggers a prequalified contingency and recomputes coverage. Freeze requires the exact layout edition, accepted assignments, satisfied reporting gates, rights, factual checks, and consistent credit derivatives; a changed photo credit invalidates every dependent export.

@@ -1,0 +1,120 @@
+{
+  "schema": "natlang.application/1",
+  "id": "015",
+  "title": "Subscription change and exit coordinator",
+  "entrypoint": "coordinatedExit.nl",
+  "interfaces": [
+    {
+      "name": "coordinatedExit",
+      "path": "coordinatedExit.nl",
+      "purpose": "Explain and reconcile a precise subscription exit or change, including entitlements, cutoff dates, linked services, consent, refunds, and shared-workspace authority.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "subscription-exit"
+    }
+  ],
+  "persistence": [
+    "ChangeIntent",
+    "ChangeConsequence",
+    "ChangeOption",
+    "SubscriptionOperation",
+    "ExitReceipt"
+  ],
+  "effects": [
+    "change subscription only after bound consent and version checks",
+    "retain reseller-managed exit as pending until its external acknowledgment",
+    "preserve refund obligations independently from subscription state"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretIntent",
+        "paths": [
+          "coordinatedExit/interpretExitIntent.nl",
+          "runCase/interpretIntent/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "computeConsequences",
+        "paths": [
+          "coordinatedExit/readExactExitConsequences.nl",
+          "coordinatedExit/evaluateRenewalCutoff.nl"
+        ]
+      },
+      {
+        "stage": "constructChoices",
+        "paths": [
+          "coordinatedExit/formDirectExitChoices.nl"
+        ]
+      },
+      {
+        "stage": "executeSelection",
+        "paths": [
+          "coordinatedExit/revokeSupersededConsent.nl",
+          "coordinatedExit/reconcileSubscriptionOperations.nl"
+        ]
+      },
+      {
+        "stage": "verifyExit",
+        "paths": [
+          "coordinatedExit/reconcileActualExitState.nl",
+          "coordinatedExit/trackPendingRefund.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinatedExit/evaluateRenewalCutoff.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinatedExit/resolveResellerAction.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinatedExit/revokeSupersededConsent.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinatedExit/trackPendingRefund.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinatedExit/checkWorkspaceAuthority.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "coordinatedExit.nl",
+    "coordinatedExit/frameExit.nl",
+    "coordinatedExit/evaluateRenewalCutoff.nl",
+    "coordinatedExit/resolveResellerAction.nl",
+    "coordinatedExit/revokeSupersededConsent.nl",
+    "coordinatedExit/trackPendingRefund.nl",
+    "coordinatedExit/checkWorkspaceAuthority.nl",
+    "coordinatedExit/selectExitPolicy.nl",
+    "coordinatedExit/interpretExitIntent.nl",
+    "coordinatedExit/readExactExitConsequences.nl",
+    "coordinatedExit/formDirectExitChoices.nl",
+    "coordinatedExit/reconcileSubscriptionOperations.nl",
+    "coordinatedExit/reconcileActualExitState.nl",
+    "runCase/interpretIntent/audit/qualify.nl",
+    "types.ts",
+    "coordinatedExit/reconcileExitCheckpoint.nl",
+    "coordinatedExit/reconcileSubscriptionOperations/reconcileOneSubscriptionOperation.nl"
+  ]
+}

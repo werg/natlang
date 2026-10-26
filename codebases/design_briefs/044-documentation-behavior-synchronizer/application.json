@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "044",
+  "title": "Documentation-behavior synchronizer",
+  "entrypoint": "synchronizeDocumentationEdition.nl",
+  "interfaces": [
+    {
+      "name": "synchronizeDocumentationEdition",
+      "path": "synchronizeDocumentationEdition.nl",
+      "purpose": "Reconcile versioned documentation promises with authoritative behavior and prepare a same-release, revalidated documentation bundle."
+    },
+    {
+      "name": "reconcileDocumentationPublication",
+      "path": "reconcileDocumentationPublication.nl",
+      "purpose": "Reconcile actual page edit and publication receipts against reviewed patch bases, target release, secret scan, and concurrent edits.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "documentation-edition-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractPromises",
+        "paths": [
+          "synchronizeDocumentationEdition/extractVersionedPromises.nl"
+        ]
+      },
+      {
+        "stage": "probeBehavior",
+        "paths": [
+          "synchronizeDocumentationEdition/designReproducibleBehaviorProbes.nl"
+        ]
+      },
+      {
+        "stage": "classifyMismatch",
+        "paths": [
+          "synchronizeDocumentationEdition/adjudicateClaimAgainstAuthority.nl"
+        ]
+      },
+      {
+        "stage": "constructRepairs",
+        "paths": [
+          "synchronizeDocumentationEdition/draftCoordinatedDocumentationRepair.nl"
+        ]
+      },
+      {
+        "stage": "verifyConsistency",
+        "paths": [
+          "synchronizeDocumentationEdition/verifyOneVersionDocumentationBundle.nl",
+          "synchronizeDocumentationEdition/revalidatePageEditsAgainstReviewBase.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "synchronizeDocumentationEdition/designReproducibleBehaviorProbes.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "synchronizeDocumentationEdition/verifyOneVersionDocumentationBundle.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "synchronizeDocumentationEdition/adjudicateClaimAgainstAuthority.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "synchronizeDocumentationEdition/draftCoordinatedDocumentationRepair/scanForSecretBearingExamples.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "synchronizeDocumentationEdition/revalidatePageEditsAgainstReviewBase.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "page-level published edition versions and append-only patch receipts",
+    "history": "stale-base writes and partial page publication remain visible without replacing the reviewed current edition",
+    "release": "only the exact reviewed, secret-cleared bundle on current page bases can become the active edition"
+  },
+  "effects": {
+    "publication": "candidate bundle only; publish after version consistency and accountable release approval",
+    "secretHandling": "redact candidate export and request rotation; never copy credential values"
+  },
+  "source_files": [
+    "qualification/extractPromises.nl",
+    "reconcileDocumentationPublication.nl",
+    "reconcileDocumentationPublication/assessPageEditReceipts.nl",
+    "synchronizeDocumentationEdition.nl",
+    "synchronizeDocumentationEdition/adjudicateClaimAgainstAuthority.nl",
+    "synchronizeDocumentationEdition/designReproducibleBehaviorProbes.nl",
+    "synchronizeDocumentationEdition/draftCoordinatedDocumentationRepair.nl",
+    "synchronizeDocumentationEdition/draftCoordinatedDocumentationRepair/scanForSecretBearingExamples.nl",
+    "synchronizeDocumentationEdition/extractVersionedPromises.nl",
+    "synchronizeDocumentationEdition/revalidatePageEditsAgainstReviewBase.nl",
+    "synchronizeDocumentationEdition/verifyOneVersionDocumentationBundle.nl",
+    "types.ts"
+  ]
+}

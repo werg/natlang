@@ -1,0 +1,115 @@
+{
+  "schema": "natlang.application/1",
+  "id": "021",
+  "title": "Accounts-payable exception resolver",
+  "entrypoint": "resolvePayableExposure.nl",
+  "interfaces": [
+    {
+      "name": "resolvePayableExposure",
+      "path": "resolvePayableExposure.nl",
+      "purpose": "Resolve invoice exposure into separately supported and held balances with shared receipt reservations and independent payment authority.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "payable-ledger"
+    },
+    {
+      "name": "reconcilePaymentReceipt",
+      "path": "reconcilePaymentReceipt.nl",
+      "purpose": "Reconcile an existing processor operation with actual posting receipts before changing payable or receipt balances.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "payable-ledger"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reconcilePaymentReceipt.nl",
+    "reconcilePaymentReceipt/comparePostingEvidence.nl",
+    "resolvePayableExposure.nl",
+    "resolvePayableExposure/identifyLiabilityVersions.nl",
+    "resolvePayableExposure/identifyLiabilityVersions/compareInvoiceRevision.nl",
+    "resolvePayableExposure/invalidateChangedPayments.nl",
+    "resolvePayableExposure/locateReceiptLinks.nl",
+    "resolvePayableExposure/locateReceiptLinks/distinguishReceiptSupport.nl",
+    "resolvePayableExposure/partitionSupportedBalance.nl",
+    "resolvePayableExposure/partitionSupportedBalance/explainDiscrepancy.nl",
+    "resolvePayableExposure/prepareEntityInstructions.nl",
+    "resolvePayableExposure/prepareEntityInstructions/chooseIndependentApproval.nl",
+    "resolvePayableExposure/proposeReceiptReservations.nl",
+    "resolvePayableExposure/readInvoiceLines.nl",
+    "resolvePayableExposure/readInvoiceLines/sumMinorUnits.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "matchDocuments",
+        "paths": [
+          "resolvePayableExposure/locateReceiptLinks/distinguishReceiptSupport.nl"
+        ]
+      },
+      {
+        "stage": "classifyDiscrepancy",
+        "paths": [
+          "resolvePayableExposure/partitionSupportedBalance/explainDiscrepancy.nl"
+        ]
+      },
+      {
+        "stage": "resolveAllocation",
+        "paths": [
+          "resolvePayableExposure/partitionSupportedBalance.nl"
+        ]
+      },
+      {
+        "stage": "prepareDisposition",
+        "paths": [
+          "resolvePayableExposure/prepareEntityInstructions/chooseIndependentApproval.nl"
+        ]
+      },
+      {
+        "stage": "reconcilePosting",
+        "paths": [
+          "reconcilePaymentReceipt/comparePostingEvidence.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "resolvePayableExposure/identifyLiabilityVersions/compareInvoiceRevision.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "resolvePayableExposure/locateReceiptLinks/distinguishReceiptSupport.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "resolvePayableExposure/invalidateChangedPayments.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "resolvePayableExposure/partitionSupportedBalance.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "resolvePayableExposure/invalidateChangedPayments.nl"
+        ]
+      }
+    ]
+  }
+}

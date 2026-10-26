@@ -1,0 +1,864 @@
+[
+  {
+    "id": "088-first-gate-pass",
+    "root": "reconcileHistoricalLinkage/verifyHistoricalObservation.nl",
+    "split_group": "world-088-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+        "candidateIds": [
+          "088-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "088-first-e1",
+            "source": "primary case record HIST-88",
+            "version": "v1",
+            "text": "Primary domain record for case HIST-88 states: caseId=\"HIST-88\"; sourceRecordId=\"REG-188\"; recordedName=\"Mara Ilyan\"; dateExpression=\"14 March 1892; Julian calendar noted in margin.\"; placeExpression=\"Riverside parish, east district.\"; attributes=[\"Occupation: weaver\",\"Household role: lodger\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "088-case-record",
+          "caseId": "HIST-88",
+          "sourceRefs": [
+            "088-first-e1"
+          ],
+          "state": "draft",
+          "kind": "HistoricalObservation",
+          "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "sourceRecordId": "REG-188",
+          "recordedName": "Mara Ilyan",
+          "dateExpression": "14 March 1892; Julian calendar noted in margin.",
+          "placeExpression": "Riverside parish, east district.",
+          "attributes": [
+            "Occupation: weaver",
+            "Household role: lodger"
+          ]
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "088-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "088-first-gate-fail",
+    "root": "reconcileHistoricalLinkage/verifyHistoricalObservation.nl",
+    "split_group": "world-088-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+        "candidateIds": [
+          "088-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "088-first-e1",
+            "source": "primary case record HIST-88",
+            "version": "v1",
+            "text": "Primary domain record for case HIST-88 states: caseId=\"HIST-88\"; sourceRecordId=\"REG-188\"; recordedName=\"Mara Ilyan\"; dateExpression=\"14 March 1892; Julian calendar noted in margin.\"; placeExpression=\"Riverside parish, east district.\"; attributes=[\"Occupation: weaver\",\"Household role: lodger\"].",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "088-case-record",
+          "caseId": "HIST-88",
+          "sourceRefs": [
+            "088-first-e1"
+          ],
+          "state": "draft",
+          "kind": "HistoricalObservation",
+          "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "sourceRecordId": "REG-188",
+          "recordedName": "Maria Ilyan, daughter of the parish clerk.",
+          "dateExpression": "14 March 1892; Julian calendar noted in margin.",
+          "placeExpression": "Riverside parish, east district.",
+          "attributes": [
+            "Occupation: weaver",
+            "Household role: lodger"
+          ]
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "088-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "088-first-gate-needs-review",
+    "root": "reconcileHistoricalLinkage/verifyHistoricalObservation.nl",
+    "split_group": "world-088-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+        "candidateIds": [
+          "088-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "088-first-e1",
+            "source": "primary case record HIST-88",
+            "version": "v1",
+            "text": "Primary domain record for case HIST-88 states: caseId=\"HIST-88\"; sourceRecordId=\"REG-188\"; dateExpression=\"14 March 1892; Julian calendar noted in margin.\"; placeExpression=\"Riverside parish, east district.\"; attributes=[\"Occupation: weaver\",\"Household role: lodger\"]. No current value is present for recordedName.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "recordedName"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "088-case-record",
+          "sourceRefs": [
+            "088-first-e1"
+          ],
+          "state": "draft",
+          "kind": "HistoricalObservation",
+          "subject": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "dateExpression": "14 March 1892; Julian calendar noted in margin.",
+          "placeExpression": "Riverside parish, east district.",
+          "attributes": [
+            "Occupation: weaver",
+            "Household role: lodger"
+          ],
+          "caseId": "HIST-88",
+          "sourceRecordId": "REG-188"
+        },
+        "missingFields": [
+          "recordedName"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "088-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "088-workflow-1",
+    "root": "reconcileHistoricalLinkage.nl",
+    "split_group": "world-088-workflow-1",
+    "inputs": {
+      "dossier": {
+        "linkage": {
+          "id": "088-workflow-1-record",
+          "caseId": "088-workflow-1",
+          "sourceRefs": [
+            "088-event-1"
+          ],
+          "state": "draft",
+          "kind": "HistoricalLinkage",
+          "subject": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-event-1"
+          ],
+          "fields": {
+            "sourceArtifact": "088-event-1",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "REG-188",
+            "REG-191"
+          ],
+          "entityKind": "Person in parish and household registers.",
+          "researchQuestion": "Are Mara Ilyan and Maria Ilyan the same person?",
+          "archivistId": "ARCH-8",
+          "linkagePolicyId": "LINK-POL-8"
+        },
+        "observations": [],
+        "candidates": [],
+        "findings": [],
+        "networks": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "088-workflow-1-record",
+          "observations": [],
+          "dates": [],
+          "places": [],
+          "candidates": [],
+          "findings": [],
+          "networks": [],
+          "impacts": [],
+          "openQuestions": []
+        }
+      },
+      "change": {
+        "newRecords": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transcriptionCorrections": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "geographyEvidence": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "relationshipEvidence": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "splitRequests": [
+          {
+            "id": "088-event-1",
+            "source": "current domain record 088-E1",
+            "version": "v1",
+            "text": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Historical Record Linkage Atelier",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A date is approximate: use intervals in chronology checks. Use observation Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries. as the source of truth. The proposal should preserve source-linked record 088-workflow-1-record and make a recipient-facing distinction grounded in 088-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A date is approximate: use intervals in chronology checks.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 088-workflow-1-record must accurately preserve observation 088-event-1 (v1): Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries. Apply brief requirement A date is approximate: use intervals in chronology checks. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed HistoricalLinkage record 088-workflow-1-record and its source link to 088-event-1 version v1, with a disposition matching this observed state: Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries. Carry requirement A date is approximate: use intervals in chronology checks. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 088-workflow-1-record based on 088-event-1 (v1) and observation Registry REG-188 records Mara Ilyan born “about 14 March 1892”; source clerk marked the date approximate. Later chronology currently treats it as an exact day when comparing the family entries. Apply requirement A date is approximate: use intervals in chronology checks. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "088-workflow-2",
+    "root": "reconcileHistoricalLinkage.nl",
+    "split_group": "world-088-workflow-2",
+    "inputs": {
+      "dossier": {
+        "linkage": {
+          "id": "088-workflow-2-record",
+          "caseId": "088-workflow-2",
+          "sourceRefs": [
+            "088-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "HistoricalLinkage",
+          "subject": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "088-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "REG-188",
+            "REG-191"
+          ],
+          "entityKind": "Person in parish and household registers.",
+          "researchQuestion": "Are Mara Ilyan and Maria Ilyan the same person?",
+          "archivistId": "ARCH-8",
+          "linkagePolicyId": "LINK-POL-8"
+        },
+        "observations": [],
+        "candidates": [],
+        "findings": [],
+        "networks": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "088-workflow-2-record",
+          "observations": [],
+          "dates": [],
+          "places": [],
+          "candidates": [],
+          "findings": [],
+          "networks": [],
+          "impacts": [],
+          "openQuestions": []
+        }
+      },
+      "change": {
+        "newRecords": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transcriptionCorrections": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "geographyEvidence": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "relationshipEvidence": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "splitRequests": [
+          {
+            "id": "088-wf-2-source",
+            "source": "primary case artifact 088-E2",
+            "version": "v1",
+            "text": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Historical Record Linkage Atelier",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A place changes name or boundary: preserve historical geography rather than forcing a modern identity. Use observation Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change. as the source of truth. The proposal should preserve source-linked record 088-workflow-2-record and make a recipient-facing distinction grounded in 088-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 088-workflow-2-record must accurately preserve observation 088-wf-2-source (v1): Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change. Apply brief requirement A place changes name or boundary: preserve historical geography rather than forcing a modern identity. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed HistoricalLinkage record 088-workflow-2-record and its source link to 088-wf-2-source version v1, with a disposition matching this observed state: Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change. Carry requirement A place changes name or boundary: preserve historical geography rather than forcing a modern identity. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 088-workflow-2-record based on 088-wf-2-source (v1) and observation Place boundary map v2 moves Riverside east district line to the river; REG-188 predates the boundary change. Apply requirement A place changes name or boundary: preserve historical geography rather than forcing a modern identity. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "088-workflow-3",
+    "root": "reconcileHistoricalLinkage.nl",
+    "split_group": "world-088-workflow-3",
+    "inputs": {
+      "dossier": {
+        "linkage": {
+          "id": "088-workflow-3-record",
+          "caseId": "088-workflow-3",
+          "sourceRefs": [
+            "088-event-3"
+          ],
+          "state": "draft",
+          "kind": "HistoricalLinkage",
+          "subject": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-event-3"
+          ],
+          "fields": {
+            "sourceArtifact": "088-event-3",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "REG-188",
+            "REG-191"
+          ],
+          "entityKind": "Person in parish and household registers.",
+          "researchQuestion": "Are Mara Ilyan and Maria Ilyan the same person?",
+          "archivistId": "ARCH-8",
+          "linkagePolicyId": "LINK-POL-8"
+        },
+        "observations": [],
+        "candidates": [],
+        "findings": [],
+        "networks": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "088-workflow-3-record",
+          "observations": [],
+          "dates": [],
+          "places": [],
+          "candidates": [],
+          "findings": [],
+          "networks": [],
+          "impacts": [],
+          "openQuestions": []
+        }
+      },
+      "change": {
+        "newRecords": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transcriptionCorrections": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "geographyEvidence": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "relationshipEvidence": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "splitRequests": [
+          {
+            "id": "088-event-3",
+            "source": "current domain record 088-E3",
+            "version": "v1",
+            "text": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Historical Record Linkage Atelier",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A family reuses names across generations: require relationship and timing evidence. Use observation Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference. as the source of truth. The proposal should preserve source-linked record 088-workflow-3-record and make a recipient-facing distinction grounded in 088-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A family reuses names across generations: require relationship and timing evidence.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 088-workflow-3-record must accurately preserve observation 088-event-3 (v1): Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference. Apply brief requirement A family reuses names across generations: require relationship and timing evidence. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed HistoricalLinkage record 088-workflow-3-record and its source link to 088-event-3 version v1, with a disposition matching this observed state: Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference. Carry requirement A family reuses names across generations: require relationship and timing evidence. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 088-workflow-3-record based on 088-event-3 (v1) and observation Family register FR-88 lists Elias Vale naming two children Elias Vale (born 1870) and Elias Vale (born 1901). Relationship pages are incomplete; the linkage draft treats the two names as one person despite a 31-year birth difference. Apply requirement A family reuses names across generations: require relationship and timing evidence. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "088-workflow-4",
+    "root": "reconcileHistoricalLinkage.nl",
+    "split_group": "world-088-workflow-4",
+    "inputs": {
+      "dossier": {
+        "linkage": {
+          "id": "088-workflow-4-record",
+          "caseId": "088-workflow-4",
+          "sourceRefs": [
+            "088-event-4"
+          ],
+          "state": "draft",
+          "kind": "HistoricalLinkage",
+          "subject": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-event-4"
+          ],
+          "fields": {
+            "sourceArtifact": "088-event-4",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "REG-188",
+            "REG-191"
+          ],
+          "entityKind": "Person in parish and household registers.",
+          "researchQuestion": "Are Mara Ilyan and Maria Ilyan the same person?",
+          "archivistId": "ARCH-8",
+          "linkagePolicyId": "LINK-POL-8"
+        },
+        "observations": [],
+        "candidates": [],
+        "findings": [],
+        "networks": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "088-workflow-4-record",
+          "observations": [],
+          "dates": [],
+          "places": [],
+          "candidates": [],
+          "findings": [],
+          "networks": [],
+          "impacts": [],
+          "openQuestions": []
+        }
+      },
+      "change": {
+        "newRecords": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transcriptionCorrections": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "geographyEvidence": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "relationshipEvidence": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "splitRequests": [
+          {
+            "id": "088-event-4",
+            "source": "current domain record 088-E4",
+            "version": "v1",
+            "text": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Historical Record Linkage Atelier",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A transcription is corrected: invalidate dependent links selectively. Use observation Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only. as the source of truth. The proposal should preserve source-linked record 088-workflow-4-record and make a recipient-facing distinction grounded in 088-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A transcription is corrected: invalidate dependent links selectively.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 088-workflow-4-record must accurately preserve observation 088-event-4 (v1): Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only. Apply brief requirement A transcription is corrected: invalidate dependent links selectively. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed HistoricalLinkage record 088-workflow-4-record and its source link to 088-event-4 version v1, with a disposition matching this observed state: Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only. Carry requirement A transcription is corrected: invalidate dependent links selectively. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 088-workflow-4-record based on 088-event-4 (v1) and observation Transcription correction TC-88 changes parish register line 6 from “Mara Ilyan” to “Maria Ilyan” after review of the page image. Link L-88 and derivative family-tree edge E-88 were built from the earlier transcription only. Apply requirement A transcription is corrected: invalidate dependent links selectively. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "088-workflow-5",
+    "root": "reconcileHistoricalLinkage.nl",
+    "split_group": "world-088-workflow-5",
+    "inputs": {
+      "dossier": {
+        "linkage": {
+          "id": "088-workflow-5-record",
+          "caseId": "088-workflow-5",
+          "sourceRefs": [
+            "088-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "HistoricalLinkage",
+          "subject": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+          "status": "candidate",
+          "evidenceIds": [
+            "088-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "088-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "collectionIds": [
+            "REG-188",
+            "REG-191"
+          ],
+          "entityKind": "Person in parish and household registers.",
+          "researchQuestion": "Are Mara Ilyan and Maria Ilyan the same person?",
+          "archivistId": "ARCH-8",
+          "linkagePolicyId": "LINK-POL-8"
+        },
+        "observations": [],
+        "candidates": [],
+        "findings": [],
+        "networks": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "088-workflow-5-record",
+          "observations": [],
+          "dates": [],
+          "places": [],
+          "candidates": [],
+          "findings": [],
+          "networks": [],
+          "impacts": [],
+          "openQuestions": []
+        }
+      },
+      "change": {
+        "newRecords": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transcriptionCorrections": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "geographyEvidence": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "relationshipEvidence": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "splitRequests": [
+          {
+            "id": "088-wf-5-source",
+            "source": "primary case artifact 088-E5",
+            "version": "v1",
+            "text": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Historical Record Linkage Atelier",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A researcher merges entities prematurely: support a reversible split with downstream impact tracking. Use observation Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field. as the source of truth. The proposal should preserve source-linked record 088-workflow-5-record and make a recipient-facing distinction grounded in 088-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A researcher merges entities prematurely: support a reversible split with downstream impact tracking.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 088-workflow-5-record must accurately preserve observation 088-wf-5-source (v1): Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field. Apply brief requirement A researcher merges entities prematurely: support a reversible split with downstream impact tracking. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed HistoricalLinkage record 088-workflow-5-record and its source link to 088-wf-5-source version v1, with a disposition matching this observed state: Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field. Carry requirement A researcher merges entities prematurely: support a reversible split with downstream impact tracking. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 088-workflow-5-record based on 088-wf-5-source (v1) and observation Linkage draft merges Mara Ilyan with Maria Ilyan; source record has no alternate-name field. Apply requirement A researcher merges entities prematurely: support a reversible split with downstream impact tracking. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

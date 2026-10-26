@@ -1,0 +1,49 @@
+{
+  "application_id": "011",
+  "title": "Multi-issue service recovery desk",
+  "source_relative_path": "applications/03-customer-service-and-commercial-casework/011-multi-issue-service-recovery-desk.md",
+  "program_root": "codebases/design_briefs/011-multi-issue-service-recovery-desk",
+  "source_sha256": "9da44a0b5c5bf7afd1d3831a2a565c06c8ff730087ede5985c9c10d2c99af333",
+  "domain_id": "03",
+  "stages": [
+    {
+      "name": "decomposeCase",
+      "output_type": "ServiceIssue",
+      "algorithm": "Reconstruct the timeline across messages and split failures only when they can be resolved independently. Retain earlier promises and interactions between issues, such as a late replacement making a promotional remedy no longer useful.",
+      "gate": "Every issue links to the relevant order and the customer’s stated outcome."
+    },
+    {
+      "name": "interpretEntitlements",
+      "output_type": "EntitlementFinding",
+      "algorithm": "Match each issue to the applicable policy edition, purchased service, and documented exception. Separate mandatory entitlements from discretionary gestures; ask for missing decisive evidence without requiring information already present in the case.",
+      "gate": "No remedy outside delegated authority; original purchase dates determine applicable terms."
+    },
+    {
+      "name": "composeRecovery",
+      "output_type": "RemedyBundle",
+      "algorithm": "Construct alternative bundles that jointly solve the issues, accounting for dependencies and customer preferences. Detect double compensation for the same loss, but do not erase separate entitlements merely because they share one order.",
+      "gate": "Exact amount limits and mutually exclusive remedies checked before presentation."
+    },
+    {
+      "name": "coordinateActions",
+      "output_type": "RecoveryAction",
+      "algorithm": "Sequence approved refunds, replacements, pickups, and communications. Reserve scarce replacements before promising dates, wait for required customer choices, and reconcile uncertain external outcomes rather than retrying irreversible operations blindly.",
+      "gate": "Every effect has an operation identity and a matching approval or preauthorized policy grant."
+    },
+    {
+      "name": "verifyClosure",
+      "output_type": "RecoveryClosure",
+      "algorithm": "Compare actual outcomes with every agreed remedy and earlier promise. A refund request or shipment label is not completion; retain unresolved components and explain partial closure without resetting the entire case history.",
+      "gate": "Close only when all mandatory outcomes are evidenced or an explicit alternative is accepted."
+    }
+  ],
+  "operational_details": [
+    "A refund succeeds but the network response is lost: reconcile by operation ID before any retry.",
+    "A replacement goes out of stock during consent: expire the reservation and renegotiate the promise.",
+    "A supervisor grants an exception: bind it to this customer, issue, amount, and expiry.",
+    "The customer changes channels: preserve one case state while respecting contact preferences.",
+    "One issue resolves early: communicate partial completion without hiding the remaining obligation."
+  ],
+  "representative_episode": "A customer receives a wrong item late and was promised an expiring discount; a replacement is scarce and a refund acknowledgment is delayed.",
+  "independent_truth_basis": "Hidden entitlements and incident timeline; exact payment and stock ledgers; simulated customer choices and delivery outcomes."
+}
