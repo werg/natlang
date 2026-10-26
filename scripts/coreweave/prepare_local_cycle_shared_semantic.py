@@ -12,6 +12,7 @@ import argparse
 import copy
 import json
 from pathlib import Path
+import re
 import sys
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -87,7 +88,7 @@ def _bundle_export_descriptor(role,item,participant,provider,inventory_path):
     manifest=str(root/'current-prepared.json')
     common=[item['python'],'-m',entrypoint]
     source_provider=provider.get('local_source_host')or{}
-    export_python=source_provider.get('python')
+    export_python=source_provider.get('exporter_python',source_provider.get('python'))
     export_runtime=source_provider.get('runtime')
     if not isinstance(export_python,str)or not Path(export_python).is_absolute()or not isinstance(export_runtime,str):
         raise ValueError('private full-state export needs the exact local owner Python/runtime to keep uploader credentials host-side')
@@ -111,6 +112,8 @@ def _bundle_export_descriptor(role,item,participant,provider,inventory_path):
             '--participant',participant,'--out-root',str(root),'--manifest',manifest],
         'private_export_runner':{'source_host_id':source_provider.get('source_host_id'),
             'runtime':export_runtime,'python':export_python,
+            'source_worker_python':source_provider.get('python'),
+            'exporter_python_is_distinct':export_python!=source_provider.get('python'),
             'manifest_source_host_id':item['source_host_id'],
             'source_manifest_path':manifest,'local_manifest_path':export_manifest,
             'manifest_must_be_read_back_before_export':role=='mellum',
@@ -162,14 +165,17 @@ def build_role_declarations(role_inputs):
     qualification={};deployment_models={}
     for role in ('lfm','mellum'):
         item=role_inputs[role]
-        required={'config','readiness','source_receipt','owner_state','owner_cursor','recipe','recipe_target',
+        required={'config','readiness','owner_state','owner_cursor','recipe','recipe_target',
             'source_host_id','provider','provider_queue','port'}
-        if not required<=set(item) or 'model'in item or 'handoff_requirement'in item:
+        if (not required<=set(item) or ('source_receipt' in item)==('source_checkpoint_identity' in item)
+                or 'model'in item or 'handoff_requirement'in item):
             raise ValueError('role declaration needs exact config, receipt, recipe and placement bindings: '+role)
         config_path=Path(binding(item['config']['path'],item['config'])['path'])
         config=json.loads(config_path.read_bytes())
-        receipt_path=Path(binding(item['source_receipt']['path'],item['source_receipt'])['path'])
-        receipt=json.loads(receipt_path.read_bytes())
+        source_evidence_key='source_receipt' if 'source_receipt' in item else 'source_checkpoint_identity'
+        source_evidence_ref=binding(item[source_evidence_key]['path'],item[source_evidence_key])
+        source_evidence_path=Path(source_evidence_ref['path'])
+        source_evidence=json.loads(source_evidence_path.read_bytes())
         owner_state_ref=binding(item['owner_state']['path'],item['owner_state'])
         owner_cursor_ref=binding(item['owner_cursor']['path'],item['owner_cursor'])
         owner_state=json.loads(Path(owner_state_ref['path']).read_bytes())
@@ -184,14 +190,73 @@ def build_role_declarations(role_inputs):
         if not isinstance(declared_recipe,str)or item['recipe_target']!=declared_recipe:
             raise ValueError('role recipe relocation differs from actual config production_recipe')
         if config.get('model')!=role:raise ValueError('owner config model differs from requested role')
-        if (receipt.get('schema')!='natlang.native-training-readiness/1'
-                or receipt.get('native_identity',{}).get('checkpoint_sha256')!=receipt.get('checkpoint',{}).get('sha256')):
-            raise ValueError('owner readiness receipt has inconsistent native checkpoint identity')
-        model_id=receipt.get('model_id')
+        mechanism_ref=None
+        mechanism=None
+        if item.get('mechanism_evidence') is not None:
+            mechanism_ref=binding(item['mechanism_evidence']['path'],item['mechanism_evidence'])
+            mechanism_record=json.loads(Path(mechanism_ref['path']).read_bytes())
+            from natlang_neuralese.rl.native_role_release import MECHANISM_FILES
+            if (mechanism_record.get('schema')!='natlang.local-cycle-runtime-mechanism-evidence/1'
+                    or mechanism_record.get('runtime')!=item.get('runtime')
+                    or not isinstance(mechanism_record.get('mechanism'),dict)
+                    or set(mechanism_record['mechanism'])!=set(MECHANISM_FILES)
+                    or any(not isinstance(value,str)or re.fullmatch(r'[0-9a-f]{64}',value)is None
+                        for value in mechanism_record['mechanism'].values())
+                    or mechanism_record.get('mechanism_inventory_sha256')!=canonical_json_sha256_hex({
+                        'runtime':mechanism_record.get('runtime'),'mechanism':mechanism_record['mechanism']})):
+                raise ValueError('source host mechanism evidence does not bind its declared learner runtime and mechanism inventory')
+            mechanism=mechanism_record['mechanism']
+        receipt=None
+        if source_evidence_key=='source_receipt':
+            receipt=source_evidence
+            if (receipt.get('schema')!='natlang.native-training-readiness/1'
+                    or receipt.get('native_identity',{}).get('checkpoint_sha256')!=receipt.get('checkpoint',{}).get('sha256')):
+                raise ValueError('owner readiness receipt has inconsistent native checkpoint identity')
+            checkpoint_sha=receipt.get('checkpoint',{}).get('sha256')
+            if receipt.get('checkpoint',{}).get('path')!=owner_cursor.get('checkpoint',{}).get('path'):
+                raise ValueError('owner readiness receipt path differs from the current owner checkpoint')
+            model_id=receipt.get('model_id')
+            source_recipe_sha=receipt.get('recipe',{}).get('sha256')
+        else:
+            identity=source_evidence
+            if identity.get('schema')!='natlang.local-cycle-source-checkpoint-identity/1':
+                raise ValueError('unqualified owner head needs the explicit metadata-only source-identity schema')
+            metadata_ref=binding(identity['metadata_verification']['path'],identity['metadata_verification'])
+            private_ref=binding(identity['private_receipt']['path'],identity['private_receipt'])
+            prior_ref=binding(identity['prior_training_receipt']['path'],identity['prior_training_receipt'])
+            metadata=json.loads(Path(metadata_ref['path']).read_bytes())
+            private=json.loads(Path(private_ref['path']).read_bytes())
+            prior=json.loads(Path(prior_ref['path']).read_bytes())
+            checkpoint_binding=identity.get('checkpoint')
+            if (metadata.get('passed') is not True or metadata.get('tensor_payload_bytes_materialized')!=0
+                    or metadata.get('optimizer_rng_exposure_present') is not True
+                    or not isinstance(checkpoint_binding,dict)
+                    or checkpoint_binding.get('path')!=owner_cursor.get('checkpoint',{}).get('path')
+                    or metadata.get('identity',{}).get('sha256')!=checkpoint_binding.get('sha256')
+                    or metadata.get('architecture')!=role
+                    or metadata.get('base_inventory_sha256')!=identity.get('base_inventory_sha256')
+                    or metadata.get('global_step')!=identity.get('global_step')
+                    or metadata.get('recipe_binding')!=identity.get('checkpoint_recipe')
+                    or metadata.get('private_receipt')!=private_ref['path']
+                    or private.get('identity',{}).get('sha256')!=checkpoint_binding.get('sha256')
+                    or private.get('identity',{}).get('bytes')!=metadata.get('identity',{}).get('bytes')
+                    or private.get('role')!=role or private.get('private') is not True
+                    or private.get('recovery_verification') is not True
+                    or private.get('independent_verification',{}).get('sha256')!=checkpoint_binding.get('sha256')
+                    or private.get('independent_verification',{}).get('bytes')!=metadata.get('identity',{}).get('bytes')
+                    or prior.get('schema')!='natlang.native-training-readiness/1'
+                    or prior.get('model_id')!=identity['architecture']+':'+identity['base_inventory_sha256']
+                    or prior.get('native_identity',{}).get('checkpoint_sha256')!=prior.get('checkpoint',{}).get('sha256')):
+                raise ValueError('metadata-only owner head lacks exact independent checkpoint/optimizer custody')
+            checkpoint_sha=checkpoint_binding['sha256']
+            model_id=identity['architecture']+':'+identity['base_inventory_sha256']
+            source_recipe_sha=identity['checkpoint_recipe'].get('sha256')
+        if checkpoint_sha!=owner_cursor.get('checkpoint',{}).get('sha256'):
+            raise ValueError('source identity evidence is not for the current owner checkpoint')
         if not isinstance(model_id,str)or ':' not in model_id or model_id.split(':',1)[0]!=('lfm2' if role=='lfm' else 'mellum'):
             raise ValueError('owner receipt model identity does not match the requested role')
         recipe=resolve_recipe_data(recipe_path);policy_sha=recipe_identity_sha256(recipe_path)
-        if receipt.get('recipe',{}).get('sha256') not in (None,policy_sha):
+        if (source_evidence_key=='source_receipt' and source_recipe_sha not in (None,policy_sha)):
             raise ValueError('owner receipt names a different production recipe identity')
         matching=[stage for stage in recipe['stages']if stage.get('id')==config.get('production_stage')]
         if len(matching)!=1 or matching[0].get('kind')!='native_state_sft':
@@ -211,7 +276,7 @@ def build_role_declarations(role_inputs):
         if not params.get('communication_foundation'):
             raise ValueError('production stage does not declare its communication-foundation objective')
         foundation=inputs['foundation_native_graphs'];manifest=json.loads(Path(foundation['path']).read_bytes())
-        ready=receipt.get('foundation_ready') is True
+        ready=receipt is not None and receipt.get('foundation_ready') is True
         if ready:
             completed=receipt.get('communication_foundation')or{}
             if (completed.get('complete')is not True or (completed.get('sources')or{}).get('sha256')!=foundation['sha256']
@@ -219,7 +284,7 @@ def build_role_declarations(role_inputs):
                     or completed['graph_visits']<completed.get('required_graph_visits',1)):
                 raise ValueError('ready receipt does not prove full exposure of its declared foundation source')
         generation=canonical_json_sha256_hex({'schema':'natlang.foundation-qualification-generation/1',
-            'role':role,'model_id':model_id,'receipt_sha256':binding(receipt_path)['sha256'],
+            'role':role,'model_id':model_id,'source_identity_sha256':source_evidence_ref['sha256'],
             'recipe_sha256':policy_sha,'stage_id':stage['id'],'foundation_sha256':foundation['sha256']})
         cases_ref=_resolve_config_file(config['cases'],routes)
         model={'model':role,'native_participant':model_id,'production_recipe':binding(recipe_path),
@@ -231,9 +296,9 @@ def build_role_declarations(role_inputs):
             'foundation_qualification_generation':generation,
             'foundation_readiness_policy':'on-shared-request',
             'source_identity':{'config':binding(config_path,item['config']),
-                'source_receipt':binding(receipt_path,item['source_receipt']),'owner_state':owner_state_ref,
+                source_evidence_key:source_evidence_ref,'owner_state':owner_state_ref,
                 'owner_cursor':owner_cursor_ref,'recipe':binding(recipe_path,item['recipe']),
-                'source_map':source_map_ref,
+                'source_map':source_map_ref,'runtime_mechanism_evidence':mechanism_ref,
                 'declared_paths':{'production_recipe':declared_recipe,'cases':config['cases'],
                     'seed_native_graphs':config.get('seed_native_graphs'),
                     'held_native_graphs':config.get('held_native_graphs')}}}
@@ -244,9 +309,10 @@ def build_role_declarations(role_inputs):
             'gradient_atol':params.get('gradient_atol',1e-5)}
         qualification[role]={'foundation_ready':False,'source_receipt_foundation_ready':ready,
             'current_owner_checkpoint_sha256':owner_cursor['checkpoint']['sha256'],
-            'source_receipt_checkpoint_sha256':receipt['checkpoint']['sha256'],
-            'receipt_matches_current_owner_checkpoint':receipt['checkpoint']['sha256']==owner_cursor['checkpoint']['sha256'],
-            'receipt_sha256':binding(receipt_path)['sha256'],
+            'source_receipt_checkpoint_sha256':checkpoint_sha,
+            'receipt_matches_current_owner_checkpoint':checkpoint_sha==owner_cursor['checkpoint']['sha256'],
+            'source_evidence_kind':source_evidence_key,
+            'source_evidence_sha256':source_evidence_ref['sha256'],
             'qualification_generation':generation,
             'foundation_sha256':foundation['sha256'],'foundation_rows':manifest.get('rows')}
         def deployment_ref(local,declared_path):
@@ -290,7 +356,7 @@ def prepare(spec_path,out):
     required={'schema','runtime','provider','curriculum','curriculum_graph_relocations','roles','semantic_consumer_out',
             'semantic_curriculum_target','snapshot_curriculum_target','standard_bootstrap_target',
             'controller_target','consumer','exchange_directory','handoff_lease_seconds'}
-    if set(spec)-required-{'task_packet_relocations','recipe_paths'} or not required<=set(spec) or spec['schema']!=SCHEMA:
+    if set(spec)-required-{'task_packet_relocations','recipe_paths','runtime_source_archive','operator_inputs'} or not required<=set(spec) or spec['schema']!=SCHEMA:
         raise ValueError('local-cycle semantic preparation requires its full explicit two-owner input contract')
     if set(spec['roles'])!={'lfm','mellum'} or spec['consumer']!='mellum':
         raise ValueError('current placement requires local LFM, cloud Mellum consumer, and both source owners')
@@ -302,6 +368,7 @@ def prepare(spec_path,out):
         raise ValueError('local-cycle runtime is missing its exact TaskEval Python collector asset')
     collector_ref={**binding(collector),'bytes':collector.stat().st_size}
     provider=read(spec['provider'])
+    if spec.get('operator_inputs') is not None:binding(spec['operator_inputs']['path'],spec['operator_inputs'])
     # The owners are local-cycle learners and intentionally have no old role
     # bootstrap. Build fresh declarations from each exact current model row and
     # source-qualified foundation requirement supplied in the descriptor.
@@ -313,21 +380,66 @@ def prepare(spec_path,out):
         raise ValueError('RAW bootstrap does not preserve distinct actual participant identities')
     assignments={role:{'owned_models':[role],'source_host_id':spec['roles'][role]['source_host_id']}
         for role in ('lfm','mellum')}
+    for role,item in spec['roles'].items():
+        mechanism_ref=item.get('mechanism_evidence')
+        if mechanism_ref is not None:
+            mechanism_value=read(mechanism_ref)['mechanism']
+            assignments[role]['verification_mechanism']=mechanism_value
     if (not isinstance(assignments['lfm']['source_host_id'],str)
             or assignments['lfm']['source_host_id']!=provider.get('local_source_host',{}).get('source_host_id')
             or assignments['mellum']['source_host_id'] not in provider.get('sandboxes',{})):
         raise ValueError('one owner must be the declared local DGX host and Mellum the existing cloud source host')
     if provider.get('coordinator_id')!=assignments['mellum']['source_host_id']:
         raise ValueError('the existing Mellum owner must remain the semantic consumer/coordinator')
-    exchange_dir=Path(spec['exchange_directory'])
-    if not exchange_dir.is_absolute()or '..'in exchange_dir.parts or not str(exchange_dir).startswith('/work/native-production/'):
-        raise ValueError('semantic exchange must use the existing provider-artifact namespace')
+    declared_exchange=spec['exchange_directory']
+    if isinstance(declared_exchange,str):
+        exchange_dirs={role:declared_exchange for role in ('lfm','mellum')}
+    elif isinstance(declared_exchange,dict) and set(declared_exchange)=={'lfm','mellum'}:
+        exchange_dirs=dict(declared_exchange)
+    else:
+        raise ValueError('exchange directories must be one legacy path or one exact path per source owner')
+    for role,path in exchange_dirs.items():
+        host=(provider.get('local_source_host') if role=='lfm'
+            else provider.get('sandboxes',{}).get(spec['roles'][role]['source_host_id']))
+        if (not isinstance(path,str)or not Path(path).is_absolute()or '..'in Path(path).parts
+                or not _under(path,_host_roots(provider,role,spec['roles'][role]['source_host_id']))):
+            raise ValueError('source-role exchange path must be under that exact owner’s declared staging roots')
     out=Path(out).resolve()
     if out.exists():raise FileExistsError('local-cycle semantic preparation needs a new immutable output directory')
     out.mkdir(parents=True)
     plans={};controls={};control_refs={};raw_states={};config_paths={};plan_targets={};cycle_targets={};owner_handoffs={}
     private_export_inventories={}
     stage_files=[]
+    runtime_source_deployment=None
+    runtime_source=spec.get('runtime_source_archive')
+    if runtime_source is not None:
+        if (not isinstance(runtime_source,dict)
+                or set(runtime_source)!={'source','target','runtime_root','source_revision','archive_schema',
+                    'must_extract_before_role_resume'}
+                or runtime_source.get('archive_schema')!='git-archive-tar-v1'
+                or runtime_source.get('must_extract_before_role_resume') is not True
+                or not isinstance(runtime_source.get('source_revision'),str)
+                or not runtime_source['source_revision']
+                or not isinstance(runtime_source.get('runtime_root'),str)
+                or not Path(runtime_source['runtime_root']).is_absolute()
+                or '..'in Path(runtime_source['runtime_root']).parts):
+            raise ValueError('future shared Python runtime needs its exact immutable archive and extraction target')
+        archive=binding(runtime_source['source']['path'],runtime_source['source'])
+        archive={**archive,'bytes':Path(archive['path']).stat().st_size}
+        cloud_roots=_host_roots(provider,'mellum',spec['roles']['mellum']['source_host_id'])
+        if not _under(runtime_source['target'],cloud_roots):
+            raise ValueError('future Mellum Python runtime archive escaped its current source host writable roots')
+        stage_files.append({'role':'mellum','kind':'python-runtime-source-archive',
+            'target':runtime_source['target'],'source':archive})
+        runtime_source_deployment={'schema':'natlang.native-source-runtime-deployment/1',
+            'runtime_root':runtime_source['runtime_root'],'source_revision':runtime_source['source_revision'],
+            'archive':archive,'archive_target':runtime_source['target'],
+            'installed':False,'required_before_role_resume':True,
+            'preserves_actor_runtime_binding':True,
+            'actor_runtime_config_binding':by_role['mellum']['source_identity']['config'],
+            'install_argv':{'mkdir':['mkdir','-p',runtime_source['runtime_root']],
+                'extract':['tar','--extract','--file',runtime_source['target'],
+                    '--directory',runtime_source['runtime_root']]}}
     # TaskEval imports this Python entrypoint through the frozen logical
     # NATLANG_REPO on each owner. Bind and stage the exact collector alongside
     # the already-inventoried compiled TypeScript task runtime.
@@ -335,13 +447,21 @@ def prepare(spec_path,out):
     for role in ('lfm','mellum'):
         item=spec['roles'][role];host=(provider.get('local_source_host') if role=='lfm'
             else provider['sandboxes'][item['source_host_id']])
-        runtime_root=Path(host.get('runtime','')).resolve()
+        owner_config_path=Path(binding(item['config']['path'],item['config'])['path'])
+        owner_config=json.loads(owner_config_path.read_bytes())
+        actor_environment=owner_config.get('actor_environment')or{}
+        actor_runtime=actor_environment.get('NATLANG_REPO')
+        if (not isinstance(actor_runtime,str)or not Path(actor_runtime).is_absolute()
+                or '..'in Path(actor_runtime).parts):
+            raise ValueError('TaskEval collector needs the exact actor logical NATLANG_REPO from its current owner config')
+        runtime_root=Path(actor_runtime)
         target=str(runtime_root/'scripts/run_bonsai_queue.py')
-        readable=[str(runtime_root),*_host_roots(provider,role,item['source_host_id']),*host.get('read_roots',[]),
+        readable=[*_host_roots(provider,role,item['source_host_id']),*host.get('read_roots',[]),
             *host.get('readonly_input_roots',[])]
         if not _under(target,readable):
-            raise ValueError('TaskEval collector target is outside its owner runtime/read roots')
-        collector_assets[role]={'path':target,'kind':'task-source-file',
+            raise ValueError('TaskEval collector target is outside its actor runtime and owner read roots')
+        collector_assets[role]={'path':target,'actor_runtime_root':actor_runtime,
+            'source_python_runtime':host.get('runtime'),'kind':'task-source-file',
             'sha256':collector_ref['sha256'],'bytes':collector_ref['bytes']}
         if _under(target,_host_roots(provider,role,item['source_host_id'])):
             stage_files.append({'role':role,'source_host_id':assignments['lfm']['source_host_id'],
@@ -391,11 +511,13 @@ def prepare(spec_path,out):
                 'kind':'current-production-input','target':target,'source':reference})
     for role in ('lfm','mellum'):
         item=spec['roles'][role]
-        required={'source_host_id','config','source_receipt','owner_state','owner_cursor','config_target',
-            'cycle_plan','cycle_plan_target','state_path','cursor_path','readiness','controls','controls_target',
+        required={'source_host_id','config','owner_state','owner_cursor','config_target',
+            'cycle_plan','cycle_plan_target','state_path','cursor_path','readiness',
             'plan_target','successor_plan_target','owner_identity_path','runtime','python','recipe','recipe_target','provider',
             'provider_queue','port'}
-        if not required<=set(item) or set(item)-required-{'source_map'}:
+        if (not required<=set(item) or set(item)-required-{'source_map','source_receipt',
+                'source_checkpoint_identity','controls','controls_target','mechanism_evidence'}
+                or ('source_receipt' in item)==('source_checkpoint_identity' in item)):
             raise ValueError('source role descriptor is incomplete: '+role)
         config_path=Path(binding(item['config']['path'],item['config'])['path'])
         config=json.loads(config_path.read_bytes())
@@ -413,7 +535,11 @@ def prepare(spec_path,out):
         if configured_python and item['python']!=configured_python:
             raise ValueError('source role learner Python differs from the exact owner worker runtime')
         target_paths=(cfg_target,cycle_target,item['state_path'],item['cursor_path'],item['readiness'],
-            item['controls_target'],item['plan_target'],item['successor_plan_target'],item['owner_identity_path'])
+            item['plan_target'],item['successor_plan_target'],item['owner_identity_path'])
+        if item.get('controls') is not None:
+            if not isinstance(item.get('controls_target'),str):
+                raise ValueError('a supplied role-control source needs an exact target path')
+            target_paths=(*target_paths,item['controls_target'])
         if (not all(isinstance(value,str)and Path(value).is_absolute()and '..'not in Path(value).parts
                 for value in target_paths)
                 or any(not _under(value,host_roots)for value in target_paths)):
@@ -453,7 +579,7 @@ def prepare(spec_path,out):
             raise ValueError('role readiness path differs from the exact current RAW bootstrap requirement')
         base={'schema':'natlang.native-raw-rl-bootstrap/1','models':list(by_role.values()),'owned_models':[role],
             'role_exchange':{'schema':EXCHANGE,'role':role,
-                'roles':copy.deepcopy(assignments),'directory':str(exchange_dir),
+                'roles':copy.deepcopy(assignments),'directory':exchange_dirs[role],
                 'semantic_consumer':'mellum'}}
         plan_target=item['plan_target']
         if not isinstance(plan_target,str)or not _under(plan_target,host_roots):
@@ -465,7 +591,7 @@ def prepare(spec_path,out):
             'readiness':item['readiness'],'state_path':item['state_path'],
             'cursor_path':item['cursor_path'],'optimizer_owner_lock':current_plan['optimizer_owner_lock'],
             'owner_identity_path':item['owner_identity_path'],
-            'return_directory':str(exchange_dir)}
+            'return_directory':exchange_dirs[role]}
         base['local_cycle_source']=source
         # The role plan is immutable once emitted; bind the full descriptor in
         # its first write rather than rewriting a previously bound artifact.
@@ -480,12 +606,13 @@ def prepare(spec_path,out):
         cycle_plan['local_cycle_role_plan']=base_remote_ref
         cycle_path=out/'cycle-plans'/(role+'-cycles.json')
         cycle_local_ref=emit(cycle_path,cycle_plan)
-        control_ref=binding(item['controls']['path'],item['controls'])
-        control_ref={**control_ref,'bytes':Path(control_ref['path']).stat().st_size}
-        control_target=item['controls_target']
-        if not _under(control_target,host_roots):
-            raise ValueError('source role control target must remain under its owner writable root')
-        plans[role]=base_local_ref;controls[role]=item['controls'];control_refs[role]=control_ref
+        control_ref=None
+        if item.get('controls') is not None:
+            control_ref=binding(item['controls']['path'],item['controls'])
+            control_ref={**control_ref,'bytes':Path(control_ref['path']).stat().st_size}
+            if not _under(item['controls_target'],host_roots):
+                raise ValueError('source role control target must remain under its owner writable root')
+        plans[role]=base_local_ref;controls[role]=item.get('controls');control_refs[role]=control_ref
         raw_states[role]=item['state_path'];config_paths[role]=str(config_path)
         owner_handoffs[role]={'current_config':binding(config_path,item['config']),
             'current_cycle_plan':binding(item['cycle_plan']['path'],item['cycle_plan']),
@@ -502,8 +629,9 @@ def prepare(spec_path,out):
             'bytes':Path(cycle_path).stat().st_size}
         stage_files.extend([{'role':role,'source_host_id':assignments['lfm']['source_host_id'],
                 'kind':'base-role-plan','target':plan_target,'source':deployed_base_local_ref},
-            {'role':role,'kind':'cycle-plan','target':cycle_target,'source':cycle_local_ref},
-            {'role':role,'kind':'role-controls','target':control_target,'source':control_ref}])
+            {'role':role,'kind':'cycle-plan','target':cycle_target,'source':cycle_local_ref}])
+        if control_ref is not None:
+            stage_files.append({'role':role,'kind':'role-controls','target':item['controls_target'],'source':control_ref})
     task_relocations=spec.get('task_packet_relocations')
     recipe_paths={role:item for role,item in spec.get('recipe_paths',{}).items()}
     curriculum_result=materialize_current_task_policy(spec['curriculum']['path'],plans,config_paths,'mellum',
@@ -567,7 +695,7 @@ def prepare(spec_path,out):
                 validation_curriculum['task_eval']=copy.deepcopy(validation_curriculum['models'][model_id]['task_eval'])
     validation_path=out/'current-task-policy'/'validation-curriculum.json'
     write_json_durable(validation_path,validation_curriculum)
-    queue=str(Path(exchange_dir)/'bridge-ipc')
+    queue=str(Path(exchange_dirs['mellum'])/'bridge-ipc')
     bridge=[spec['roles']['mellum']['python'],'-m','natlang_neuralese.rl.native_bridge','--queue',queue,
         '--request','{request}','--result','{result}','--stop-file','{stop_file}']
     standard={'schema':'natlang.native-rl-bootstrap/1','models':standard_models,
@@ -631,8 +759,11 @@ def prepare(spec_path,out):
         resource=(relay['provider']['sandboxes'][assignments[role]['source_host_id']]
             if assignments[role]['source_host_id'] in relay['provider']['sandboxes']
             else relay['provider']['local_source_host'])
-        resource['role_controls']={'path':spec['roles'][role]['controls_target'],
-            'sha256':control_refs[role]['sha256'],'bytes':Path(control_refs[role]['path']).stat().st_size}
+        if control_refs[role] is not None:
+            resource['role_controls']={'path':spec['roles'][role]['controls_target'],
+                'sha256':control_refs[role]['sha256'],'bytes':Path(control_refs[role]['path']).stat().st_size}
+        else:
+            resource.pop('role_controls',None)
         relay['local_cycle_returns']['role_plans'][role]=successor_remote
         stage_files.append({'role':role,'kind':'successor-role-plan','target':target,'source':successor_local})
     controller['raw_rl_bootstrap']=relay['hosts']['mellum']['plan']
@@ -664,6 +795,7 @@ def prepare(spec_path,out):
         'target':spec['controller_target'],'source':controller_ref})
     prepared_value={'schema':SCHEMA,
         'inputs':{'spec':binding(spec_path),'runtime':str(runtime),'provider':spec['provider'],
+            **({'operator_inputs':spec['operator_inputs']}if spec.get('operator_inputs')is not None else {}),
             'curriculum':spec['curriculum'],'generated_standard_rl_bootstrap':standard_ref},
         'participant_ids':ids,'qualification':qualification,
         'source_hosts':{role:assignments[role]['source_host_id']for role in assignments},
@@ -671,6 +803,7 @@ def prepare(spec_path,out):
             'sha256':curriculum_ref['sha256'],'bytes':Path(curriculum_ref['path']).stat().st_size}},
         'relay':relay_ref,'controller':{'local':controller_ref,'consumer':controller_remote_ref},
         'task_eval_python_collectors':collector_assets,
+        'future_source_runtime_deployment':runtime_source_deployment,
         'source_plan_targets':plan_targets,'cycle_plan_targets':cycle_targets,
         'owner_handoffs':owner_handoffs,
         'full_state_private_exports':{role:owner_handoffs[role]['full_state_export']for role in ('lfm','mellum')},

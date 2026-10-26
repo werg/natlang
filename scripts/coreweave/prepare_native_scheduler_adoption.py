@@ -146,10 +146,16 @@ def materialize_current_task_policy(curriculum_path,plan_refs,config_paths,consu
             raise ValueError('current role plan omitted its exact participant identity')
         config_ref=binding(config_paths[role]);config=read(config_ref)
         parameters=config.get('trainer_parameters') or {}
-        declaration=parameters.get('task_eval') or config.get('task_eval')
+        # Local-cycle owners may carry the active task policy in the
+        # continuation/seed parameter block while the resident trainer block
+        # records only the original learner defaults. Preserve the policy the
+        # source owner actually launches; do not synthesize cases or floors.
+        seed_parameters=config.get('seed_trainer_parameters') or {}
+        declaration=(parameters.get('task_eval') or config.get('task_eval')
+            or seed_parameters.get('task_eval'))
         recipe_evidence=None
         if not declaration:
-            recipe_decl=parameters.get('recipe_binding')
+            recipe_decl=parameters.get('recipe_binding') or seed_parameters.get('recipe_binding')
             if not isinstance(recipe_decl,dict):
                 raise ValueError('current '+role+' config omitted the task policy and exact recipe binding')
             recipe_path=recipe_paths.get(role)
@@ -160,7 +166,8 @@ def materialize_current_task_policy(curriculum_path,plan_refs,config_paths,consu
             if actual_recipe['sha256']!=recipe_decl['sha256']:
                 raise ValueError('current '+role+' staged recipe differs from its exact config binding')
             recipe=json.loads(Path(actual_recipe['path']).read_bytes())
-            stage_id=config.get('production_stage') or parameters.get('stage_id')
+            stage_id=(config.get('production_stage') or parameters.get('stage_id')
+                or seed_parameters.get('stage_id'))
             stages=[stage for stage in recipe.get('stages',[])if stage.get('id')==stage_id
                 and stage.get('kind')=='native_state_sft']
             if len(stages)!=1:
@@ -173,8 +180,15 @@ def materialize_current_task_policy(curriculum_path,plan_refs,config_paths,consu
             raise ValueError('current '+role+' config omitted its actual task-eval policy')
         from natlang_neuralese.eval.task_cadence import parse_task_eval
         selected=parse_task_eval(copy.deepcopy(declaration))
-        if selected.get('reference_successes') is None:
-            raise ValueError('current '+role+' task policy has no measured/explicit task floor')
+        # A measured reference is useful when the current owner has one. Some
+        # legitimate recovery configs declare only an absolute min_successes
+        # floor; preserve that exact policy and leave the reference unmeasured.
+        # The evaluator keeps such runs ineligible for reference-based task
+        # qualification, so this never manufactures a capability baseline.
+        explicit_min=declaration.get('min_successes')
+        explicit_floor=(type(explicit_min)is int and explicit_min>=0)
+        if selected.get('reference_successes') is None and not explicit_floor:
+            raise ValueError('current '+role+' task policy has neither a measured reference nor an explicit minimum-success floor')
         packet=selected['packet'];packet_evidence={'declared':copy.deepcopy(packet)}
         relocation=task_packets.get(role)
         if relocation is not None:

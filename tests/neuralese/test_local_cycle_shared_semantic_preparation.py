@@ -1,5 +1,6 @@
 """Fresh shared-stage declaration plumbing; fixtures grant no readiness."""
 import json
+import copy
 import sys
 from pathlib import Path
 import pytest
@@ -37,7 +38,7 @@ def source_rows(tmp_path):
             'sources':{'sha256':binding(foundation)['sha256']}}
         write(receipt,{'schema':'natlang.native-training-readiness/1','model_id':participant,
             'stage_id':'native_full_sft','native_identity':{'checkpoint_sha256':checkpoint},
-            'checkpoint':{'sha256':checkpoint},'recipe':{'sha256':binding(recipe)['sha256']},
+            'checkpoint':{'path':str(checkpoint_file),'sha256':checkpoint},'recipe':{'sha256':binding(recipe)['sha256']},
             'foundation_ready':ready,'communication_foundation':foundation_receipt if ready else None})
         remote_paths={str(recipe):'/work/native-production/mellum/recipe.json',
             str(cases):'/work/native-production/mellum/cases.jsonl',
@@ -86,6 +87,70 @@ def test_builds_two_fresh_bootstrap_forms_without_claiming_readiness(tmp_path):
     assert deployed['mellum']['seed_native_graphs']['path']=='/work/native-production/mellum/seed.jsonl'
     assert (deployed['mellum']['handoff_requirement']['foundation_sources']['path']==
         '/work/native-production/mellum/foundation.json')
+
+
+def test_unready_restored_head_uses_exact_metadata_identity_without_readiness_credit(tmp_path):
+    inputs=source_rows(tmp_path)
+    item=inputs['mellum']
+    old=Path(item.pop('source_receipt')['path'])
+    prior=json.loads(old.read_text())
+    checkpoint=prior['checkpoint']
+    recipe=json.loads(Path(item['recipe']['path']).read_text())
+    private=tmp_path/'mellum-private-receipt.json'
+    write(private,{'role':'mellum','private':True,'recovery_verification':True,
+        'identity':{'sha256':checkpoint['sha256'],'bytes':128},
+        'independent_verification':{'sha256':checkpoint['sha256'],'bytes':128}})
+    metadata=tmp_path/'mellum-metadata-verification.json'
+    recipe_binding={'path':item['recipe']['path'],'sha256':binding(item['recipe']['path'])['sha256']}
+    write(metadata,{'passed':True,'global_step':24,'identity':{'sha256':checkpoint['sha256'],'bytes':128},
+        'tensor_payload_bytes_materialized':0,'optimizer_rng_exposure_present':True,
+        'architecture':'mellum','base_inventory_sha256':'base-mellum','stage_id':'d24_offline_preference',
+        'recipe_binding':recipe_binding,'private_receipt':str(private)})
+    identity=tmp_path/'mellum-source-identity.json'
+    write(identity,{'schema':'natlang.local-cycle-source-checkpoint-identity/1',
+        'checkpoint':{'path':checkpoint['path'],'sha256':checkpoint['sha256']},
+        'architecture':'mellum','base_inventory_sha256':'base-mellum','global_step':24,
+        'checkpoint_recipe':recipe_binding,'metadata_verification':binding(metadata),
+        'private_receipt':binding(private),'prior_training_receipt':binding(old)})
+    item['source_checkpoint_identity']=binding(identity)
+    raw,_,qualification,_=build_role_declarations(inputs)
+    mellum=next(row for row in raw if row['model']=='mellum')
+    assert mellum['native_participant']=='mellum:base-mellum'
+    assert qualification['mellum']['foundation_ready'] is False
+    assert qualification['mellum']['source_evidence_kind']=='source_checkpoint_identity'
+    # The historical readiness object is retained only as source ancestry and
+    # cannot be interpreted as readiness for the current restored checkpoint.
+    assert mellum['source_identity']['source_checkpoint_identity']['sha256']==binding(identity)['sha256']
+
+
+@pytest.mark.parametrize('fault',['checkpoint-path','private-role','prior-identity'])
+def test_metadata_only_source_identity_rejects_mismatched_custody(tmp_path,fault):
+    inputs=source_rows(tmp_path);item=inputs['mellum'];old=item.pop('source_receipt')['path']
+    prior=json.loads(Path(old).read_text());checkpoint=prior['checkpoint'];recipe_ref=binding(item['recipe']['path'])
+    private=tmp_path/'private.json';write(private,{'role':'mellum','private':True,'recovery_verification':True,
+        'identity':{'sha256':checkpoint['sha256'],'bytes':128},
+        'independent_verification':{'sha256':checkpoint['sha256'],'bytes':128}})
+    metadata=tmp_path/'metadata.json';write(metadata,{'passed':True,'global_step':24,
+        'identity':{'sha256':checkpoint['sha256'],'bytes':128},'tensor_payload_bytes_materialized':0,
+        'optimizer_rng_exposure_present':True,'architecture':'mellum','base_inventory_sha256':'base-mellum',
+        'stage_id':'d24_offline_preference','recipe_binding':{'path':item['recipe']['path'],'sha256':recipe_ref['sha256']},
+        'private_receipt':str(private)})
+    identity={'schema':'natlang.local-cycle-source-checkpoint-identity/1',
+        'checkpoint':{'path':checkpoint['path'],'sha256':checkpoint['sha256']},'architecture':'mellum',
+        'base_inventory_sha256':'base-mellum','global_step':24,
+        'checkpoint_recipe':{'path':item['recipe']['path'],'sha256':recipe_ref['sha256']},
+        'metadata_verification':binding(metadata),'private_receipt':binding(private),
+        'prior_training_receipt':binding(old)}
+    if fault=='checkpoint-path':identity['checkpoint']['path']='/tmp/other.pt'
+    elif fault=='private-role':
+        value=json.loads(private.read_text());value['role']='lfm';write(private,value)
+        identity['private_receipt']=binding(private)
+    else:
+        value=json.loads(Path(old).read_text());value['native_identity']['checkpoint_sha256']='f'*64;write(old,value)
+        identity['prior_training_receipt']=binding(old)
+    identity_path=tmp_path/'identity.json';write(identity_path,identity);item['source_checkpoint_identity']=binding(identity_path)
+    with pytest.raises((ValueError,KeyError)):
+        build_role_declarations(inputs)
 
 
 @pytest.mark.parametrize('fault',['participant','foundation','trainer-recipe','qualification','owner-cursor','source-map'])
@@ -148,11 +213,13 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
             else'/work/native-production/mellum/production')
         config=json.loads(Path(row['config']['path']).read_text())
         config.update({'runtime':str(runtime/'ts-host'),'out':config_out,
-            'actor_command':[sys.executable],'actor_environment':{'NATLANG_REPO':str(runtime)},
+            'actor_command':[sys.executable],'actor_environment':{'NATLANG_REPO':str(runtime/'actor-runtime')},
             'native_actor_mode':'raw-state','trainer_parameters':{'task_eval':{'packet':binding(tmp_path/f'{role}-packet.json') if (tmp_path/f'{role}-packet.json').exists() else binding(tmp_path/f'{role}-cases.jsonl'),
                 'cases':[0],'reference_successes':0,'reference_provenance':'current owner fixture'}}})
         (tmp_path/f'{role}-packet.json').write_text('protected test packet\n')
         config['trainer_parameters']['task_eval']['packet']=binding(tmp_path/f'{role}-packet.json')
+        if role=='mellum':
+            config['seed_trainer_parameters']={'task_eval':copy.deepcopy(config['trainer_parameters'].pop('task_eval'))}
         write(config_path,config)
         row['config']=binding(config_path)
         cycle_out=(str(tmp_path/f'{role}/cycles')if role=='lfm'else'/work/native-production/mellum/cycles')
@@ -171,6 +238,7 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
             'controls_target':str(Path(target_root)/'controls.json'),'plan_target':str(Path(target_root)/'role-plan.json'),
             'successor_plan_target':str(Path(target_root)/'successor-role-plan.json'),
             'owner_identity_path':cycle_out+'/owner-identity.json','runtime':str(runtime),'python':sys.executable})
+        row.pop('controls');row.pop('controls_target')
         role_inputs[role]=row
     derived_models,_,_,_=build_role_declarations(role_inputs)
     model_by_role={row['model']:row for row in derived_models}
@@ -178,7 +246,9 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
     for role in ('lfm','mellum'):
         packet=model_by_role[role]
         config=json.loads(Path(role_inputs[role]['config']['path']).read_text())
-        packet_ref=config['trainer_parameters']['task_eval']['packet']
+        task_eval=(config.get('trainer_parameters')or{}).get('task_eval')or(
+            config.get('seed_trainer_parameters')or{}).get('task_eval')or config.get('task_eval')
+        packet_ref=task_eval['packet']
         task_packets[role]={'source':packet_ref,'local':binding(packet_ref['path'],packet_ref),
             'target':f'/work/native-production/tasks/{role}-protected.jsonl'}
     graph_relocations={}
@@ -189,7 +259,8 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
     spec={'schema':'natlang.local-cycle-shared-semantic-input/1','runtime':str(runtime),
         'provider':binding(provider_path),'curriculum':binding(curriculum),'roles':role_inputs,'consumer':'mellum',
         'task_packet_relocations':task_packets,'curriculum_graph_relocations':graph_relocations,
-        'exchange_directory':'/work/native-production/shared/exchange',
+        'exchange_directory':{'lfm':str(tmp_path/'lfm'/'exchange'),
+            'mellum':'/work/native-production/shared/exchange/mellum'},
         'semantic_consumer_out':'/work/native-production/shared/semantic',
         'semantic_curriculum_target':'/work/native-production/shared/semantic/full-curriculum.json',
         'snapshot_curriculum_target':'/work/native-production/shared/semantic/snapshot-curriculum.json',
@@ -205,6 +276,12 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
     assert prepared['commands']['lfm_cycle']['mode']=='local-frozen-runtime-subprocess'
     assert prepared['commands']['mellum_cycle']['mode']=='existing-cloud-provider-exec'
     assert prepared['owner_handoffs']['lfm']['applied'] is False
+    assert prepared['task_eval_python_collectors']['mellum']['path']==str(runtime/'actor-runtime/scripts/run_bonsai_queue.py')
+    assert any(row['kind']=='task-eval-python-collector' and row['target']==
+        str(runtime/'actor-runtime/scripts/run_bonsai_queue.py') for row in prepared['stage_files'])
+    relay_value=json.loads(Path(prepared['relay']['path']).read_text())
+    assert relay_value['local_cycle_returns']['role_directories']=={
+        'lfm':str(tmp_path/'lfm'/'exchange'),'mellum':'/work/native-production/shared/exchange/mellum'}
     for role in ('lfm','mellum'):
         export=prepared['owner_handoffs'][role]['full_state_export']
         assert export['schema']=='natlang.native-shared-participant-export-follow/1'
@@ -228,6 +305,7 @@ def test_full_preparation_materializes_current_two_host_launch_and_boundary_plan
     assert sum(item['kind']=='task-eval-python-collector' for item in prepared['stage_files'])==2
     assert sum(item['kind']=='task-eval-packet' for item in prepared['stage_files'])==2
     assert sum(item['kind'] in ('paired-pairs','paired-held_pairs') for item in prepared['stage_files'])==2
+    assert not any(item['kind']=='role-controls' for item in prepared['stage_files'])
     consumer_curriculum=next(item['source']for item in prepared['stage_files']if item['kind']=='full-paired-curriculum')
     consumer_value=json.loads(Path(consumer_curriculum['path']).read_text())
     assert consumer_value['pairs']['path']=='/work/native-production/shared/graphs/pairs.jsonl'
