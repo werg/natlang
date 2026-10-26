@@ -2077,7 +2077,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const hasNonSuccessTerminal = calls.some(call => call.source_tool === 'return_result' &&
         typeof call.arguments === 'object' && call.arguments !== null &&
         Object.hasOwn(call.arguments, 'status') && (call.arguments as Dict).status !== 'success');
-      const nonSuccessTerminal = hasNonSuccessTerminal && invocation !== honestBlockedRoot;
+      const nonSuccessTerminal = hasNonSuccessTerminal &&
+        !(honestBlockedRoot !== undefined && invocation === honestBlockedRoot);
       // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
       const failedAction = nonSuccessTerminal || refusedAttempt || continuedWithoutResult || calls.some(call =>
         ['rejected', 'refused', 'error'].includes(String(record(call.outcome, 'call outcome').status)));

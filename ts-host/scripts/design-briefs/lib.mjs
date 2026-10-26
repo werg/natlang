@@ -481,7 +481,7 @@ export function makeRecord(app, files, fixture, fixtureHash) {
         qualification: 'source-only-live-pending' },
     },
     collection_guidance: {
-      training_admission: false, teacher: 'self-hosted-only',
+      training_admission: false, teacher: 'owner-authorized-generation-actor',
       review_required: !exact, actual_model_measurement: 'pending',
       reward: exact ? 'exact-task-outcome' : 'independent-semantic-review-required',
       graph: 'retain-whole-actual-execution; no mandatory Neuralese traffic',

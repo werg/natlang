@@ -103,7 +103,7 @@ parses or sounds plausible.
 ```sh
 node ts-host/test/design-brief-applications.test.mjs
 node ts-host/scripts/design-briefs/check.mjs --report runs/design-briefs-check.json
-node ts-host/scripts/design-briefs/build.mjs --out data/teacher/design-briefs-v2
+node ts-host/scripts/design-briefs/build.mjs --out data/teacher/design-briefs-v3
 ```
 
 The output directory must be new. The compiler, service and freezer read exactly
@@ -130,8 +130,8 @@ split leakage; it does not prove that conceptual motifs never overlap.
 
 ```sh
 NATLANG_PYTHON=python3 node ts-host/scripts/design-briefs/prepare.mjs \
-  --packet data/teacher/design-briefs-v2 \
-  --out runs/design-briefs-prepared-v2
+  --packet data/teacher/design-briefs-v3 \
+  --out runs/design-briefs-prepared-v3
 ```
 
 Preparation verifies packet hashes and invokes the existing
@@ -148,7 +148,7 @@ separately from the Luna teacher:
 
 ```sh
 NATLANG_PYTHON=python3 node ts-host/scripts/design-briefs/prepare.mjs \
-  --packet data/teacher/design-briefs-v2 --out runs/design-briefs-configured-v2 \
+  --packet data/teacher/design-briefs-v3 --out runs/design-briefs-configured-v3 \
   --teacher-model-id gpt-6-luna --teacher-provider openai-codex \
   --judge-model-id gpt-6-sol --judge-provider openai-codex
 ```

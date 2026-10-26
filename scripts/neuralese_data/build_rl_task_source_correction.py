@@ -20,11 +20,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 from natlang_neuralese.rl.task_source import _ill_posed_port_record_continuation, resolve_task_source
-
-
-def canonical_bytes(value):
-    return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n').encode()
 
 
 def build(source_manifest: Path, output: Path):
@@ -83,7 +80,7 @@ def build(source_manifest: Path, output: Path):
         'cases_rows': len(kept),
     }
     proof_path = output / 'source-correction-proof.json'
-    proof_path.write_bytes(canonical_bytes(proof))
+    proof_path.write_bytes(canonical_json_bytes(proof) + b'\n')
     manifest = {
         'schema': 'natlang.rl-task-source-correction/1',
         'id': resolved['manifest'].stem + '-exact-source-correction-v1',
@@ -97,7 +94,7 @@ def build(source_manifest: Path, output: Path):
         'correction_proof_sha256': sha256_file_hex(proof_path),
     }
     manifest_path = output / 'task-source-manifest.json'
-    manifest_path.write_bytes(canonical_bytes(manifest))
+    manifest_path.write_bytes(canonical_json_bytes(manifest) + b'\n')
     verified = resolve_task_source(manifest_path)
     return {'output': str(output), 'manifest': str(manifest_path),
             'manifest_sha256': verified['manifest_sha256'], 'rows': verified['rows'],

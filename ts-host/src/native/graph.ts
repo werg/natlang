@@ -85,9 +85,13 @@ export function hasProducerOccurrence(block: string, node: string, scope: object
 export function blockInput(block: string, port?: string, sourceOccurrence?: string, scope?: object): GraphInput {
   const occurrences = scope ? PRODUCERS.get(scope)?.byBlock.get(block) : undefined;
   const producer = occurrences?.size ? [...occurrences].at(-1) : undefined;
+  // A recorded trajectory can contain separately opened task invocations. Its
+  // authenticated writer ledger is the same authority used by modelTurnNode;
+  // do not detach those real dependencies because their local budgets differ.
+  const recorded = activeRecorder()?.nativeStateWriters?.(block) ?? [];
   const node = sourceOccurrence !== undefined ?
-    (scope && hasProducerOccurrence(block, sourceOccurrence, scope) ? sourceOccurrence : 'external') :
-    (isNativeStateId(block) ? 'external' : producer ?? 'external');
+    ((scope && hasProducerOccurrence(block, sourceOccurrence, scope)) || recorded.includes(sourceOccurrence) ? sourceOccurrence : 'external') :
+    (isNativeStateId(block) ? recorded.length === 1 ? recorded[0]! : 'external' : producer ?? 'external');
   return { node, block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */
