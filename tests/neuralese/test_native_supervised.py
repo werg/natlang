@@ -383,3 +383,64 @@ def test_seed_fallback_uses_declared_sft_parameters_instead_of_actor_serving_arg
     assert '--history-reasoning-binding-path'not in actual and '--history-reasoning-binding-sha256'not in actual
     assert config['trainer_parameters']==actor_parameters and config['history_reasoning_policy']=='keep'
     assert values['seed_trainer_args']==values['trainer_args']and values['seed_trainer_args']is not values['trainer_args']
+
+
+def test_genuine_zero_update_foundation_is_published_without_fulfilling_sft_debt(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import production
+    from natlang_neuralese.train import native_readiness,recipe as recipes
+    from natlang_neuralese.train.native_resident import binding
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'real parent identity')
+    foundation=tmp_path/'foundation.json';foundation.write_text('{}')
+    config={'native_state':True,'mandatory_sft_only':True,'out':str(tmp_path/'job'),
+        'checkpoint':str(parent),'seed_command':['shared-trainer','{trainer_args}'],
+        'production_recipe':'bound-recipe.json','production_stage':'sft','recipe_lineage_sha256':'a'*64,
+        'foundation_native_graphs':str(foundation),
+        'trainer_parameters':{'communication_foundation':True,'epochs':1.,'forward_atol':1e-4,'gradient_atol':1e-5}}
+    recipe={'stages':[{'id':'sft','kind':'native_state_sft','parameters':{'communication_foundation':True,'epochs':1.}}]}
+    monkeypatch.setattr(recipes,'load_recipe',lambda path:recipe)
+    monkeypatch.setattr(recipes,'resolve_stage_inputs',lambda *a:{'foundation_native_graphs':binding(foundation)})
+    monkeypatch.setattr(recipes,'native_recipe_binding',lambda *a:{'sha256':'b'*64})
+    qualifications=[]
+    def validate(path,requirement):
+        qualifications.append(requirement)
+        assert requirement['readiness_boundary']=='communication-foundation'
+        assert requirement['recipe_lineage_sha256']=='a'*64
+        assert requirement['foundation_sources']==binding(foundation)
+        assert requirement['foundation_epochs']==1.
+        return {'checkpoint':binding(Path(path).parent/'checkpoint.pt'),'readiness_boundary':'communication-foundation'}
+    monkeypatch.setattr(native_readiness,'validate_ready',validate)
+    calls=[]
+    def trainer(command,values):
+        calls.append(command);out=Path(values['learner_out']);out.mkdir(parents=True)
+        (out/'checkpoint.pt').write_bytes(b'same numeric state plus actual qualification metadata')
+        (out/'native-training-receipt.json').write_text(json.dumps({'model_id':'actual-model'}))
+        (out/'report.json').write_text(json.dumps({'completed':False,'foundation_ready':True,'numerics_ok':True,
+            'continuation_boundary':{'kind':'semantic-refresh','reached':False,'new_optimizer_updates':0},
+            'mandatory_sft':{'complete':False,'remaining_graph_visits':9000}}))
+    monkeypatch.setattr(production,'run_command',trainer)
+    path=tmp_path/'config.json';path.write_text(json.dumps(config))
+    state=production.run(path,defer_native_refresh=True)
+    assert state['phase']=='awaiting_semantic_refresh'and state['mandatory_sft']['remaining_graph_visits']==9000
+    assert state['checkpoint']==str(parent)and state['pending_native_checkpoint'].endswith('/learner/checkpoint.pt')
+    assert len(qualifications)==1
+    assert production.run(path,defer_native_refresh=True)==state and len(calls)==1
+
+
+def test_foundation_flag_cannot_replace_actual_current_weight_qualification(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_readiness,recipe as recipes
+    from natlang_neuralese.train.native_resident import binding
+    foundation=tmp_path/'foundation.json';foundation.write_text('{}')
+    checkpoint=tmp_path/'checkpoint.pt';checkpoint.write_bytes(b'actual child')
+    report=tmp_path/'report.json';report.write_text(json.dumps({'foundation_ready':True,'completed':False}))
+    (tmp_path/'native-training-receipt.json').write_text(json.dumps({'model_id':'actual-model'}))
+    config={'production_recipe':'actual-recipe','production_stage':'sft','recipe_lineage_sha256':'a'*64,
+        'foundation_native_graphs':str(foundation),'trainer_parameters':{'communication_foundation':True,'epochs':1.}}
+    monkeypatch.setattr(recipes,'load_recipe',lambda path:{'stages':[{'id':'sft','kind':'native_state_sft','parameters':{'communication_foundation':True,'epochs':1.}}]})
+    monkeypatch.setattr(recipes,'resolve_stage_inputs',lambda *a:{'foundation_native_graphs':binding(foundation)})
+    monkeypatch.setattr(recipes,'native_recipe_binding',lambda *a:{'sha256':'b'*64})
+    monkeypatch.setattr(native_readiness,'validate_ready',lambda *a:None)
+    with pytest.raises(ValueError,match='actual saved checkpoint'):
+        supervised.qualified_foundation_handoff(config,checkpoint,report)
+    config['trainer_parameters']['epochs']=.5
+    with pytest.raises(ValueError,match='exposure quota'):
+        supervised.qualified_foundation_handoff(config,checkpoint,report)
