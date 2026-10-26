@@ -1,0 +1,50 @@
+{
+  "application_id": "098",
+  "title": "Persistent World Game Director",
+  "source_relative_path": "applications/20-games-live-events-and-interactive-experiences/098-persistent-world-game-director.md",
+  "source_sha256": "4eda27fc62a69a6cae89201f03b07cfedf2c3ea1f86b135e3e98159a71d505e0",
+  "domain_id": "20",
+  "stages": [
+    {
+      "name": "interpretIntent",
+      "output_type": "PlayerIntent",
+      "algorithm": "Interpret player language in the visible world context and map it to permitted action types. Distinguish speech, intention, and executed action, ask only consequential clarifications, and avoid granting capabilities because a player narrates success confidently.",
+      "gate": "Intent resolves to a legal action proposal or remains unexecuted."
+    },
+    {
+      "name": "modelCharacterViews",
+      "output_type": "CharacterView",
+      "algorithm": "Build each character’s view from witnessed events, received messages, memory, and approved world facts. Separate true facts from beliefs and secrets, preserve obligations and motivations, and prevent the narrator’s global knowledge from leaking into character decisions.",
+      "gate": "Character-visible context contains only authorized knowledge."
+    },
+    {
+      "name": "chooseWorldActions",
+      "output_type": "CharacterAction",
+      "algorithm": "Choose among exact legal actions in a way consistent with the character’s knowledge, goals, and relationships. Generate dialogue and creative alternatives within world and content boundaries, and avoid overriding resource or location constraints for narrative convenience.",
+      "gate": "Action is legal and dialogue does not reveal unknown or restricted facts."
+    },
+    {
+      "name": "advanceConsequences",
+      "output_type": "WorldConsequence",
+      "algorithm": "Apply actions through the exact world simulator, then interpret their social and narrative consequences without rewriting physical outcomes. Preserve causal history, update beliefs only through information channels, and record unresolved story obligations for later sessions.",
+      "gate": "Resource conservation, chronology, and knowledge propagation remain valid."
+    },
+    {
+      "name": "maintainContinuity",
+      "output_type": "WorldContinuity",
+      "algorithm": "Review long-term consistency and introduce events that develop existing tensions or obligations. Check that new events are possible from current state, respect participant boundaries, and preserve stable checkpoints for replay, moderation, and recovery.",
+      "gate": "No retroactive state invention or unapproved content-boundary change."
+    }
+  ],
+  "operational_details": [
+    "A player disconnects mid-action: commit or reject once using the action identity.",
+    "Two characters spend the same resource: serialize the exact world transaction.",
+    "A character hears a rumor: store it as a belief rather than world truth.",
+    "A participant changes content boundaries: apply the restriction immediately to future generation.",
+    "A world rule changes between sessions: migrate at a checkpoint and preserve historical outcomes."
+  ],
+  "scenario": {
+    "representative_episode": "Several characters pursue conflicting goals around a scarce item while holding different beliefs about its location and ownership.",
+    "independent_truth": "Exact fictional world simulator, private character knowledge, legal actions, resource invariants, and narrative preference evaluation."
+  }
+}

@@ -1,0 +1,7 @@
+# Learning portfolio evidence assessor
+
+The review starts by classifying each artifact and resolving whether it is individual work, a group product, direct observation, reflection, or supervisor comment. It maps actual behavior and source locations to competency facets, then applies only the supplied framework and recency rule. Duplicate artifacts do not become independent demonstrations, and conflicting supervisor comments remain beside the artifact evidence until clarified.
+
+The next task targets the most consequential missing facet and names acceptance evidence before the learner begins. An approved accommodation may change the format while preserving the competency outcome. If a learner appeals attribution, the assessor preserves the prior finding and reassesses only competency mappings affected by the correction. High-stakes recommendations stay pending a named assessor and expose the appeal path.
+
+The unreferenced competency mapping, sufficiency, next-task, and assessment qualification leaves were removed from the packaged source. Their invariants remain in `mapObservedWorkToCompetencies.nl` (demonstrated behavior and source location), `testEvidenceSufficiency.nl` (the supplied standard, recency, independence, breadth, and contradiction), `closeMostConsequentialEvidenceGap.nl` (one feasible task tied to an acceptance observation), and `assembleAssessorDecision.nl` (evidence-bounded recommendations, named approval, and appeal path). `qualification/indexEvidence.nl` remains because the unchanged exact gate cases invoke it.

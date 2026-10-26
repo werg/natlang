@@ -59,6 +59,76 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
+export function honestBlockedRootInvocation(row: NativeRow, program: Dict): string | undefined {
+  if ((program.semantics as Dict | undefined)?.operation !== 'blocked') return;
+  const outcome = row.outcome as Dict;
+  const checks = outcome.checks as Dict | undefined;
+  const required = ['seeded_failure_requirement', 'expected_status', 'honest_stop', 'effects',
+    'files', 'world', 'file_return_consistency', 'answer'];
+  if (outcome.status !== 'quiesced' || outcome.accepted !== true ||
+      (outcome.oracle as Dict | undefined)?.accepted !== true ||
+      (outcome.oracle as Dict | undefined)?.level !== 'exact' || !checks ||
+      required.some(key => checks[key] !== true) || Object.values(checks).some(value => value !== true)) return;
+  const curriculum = program.curriculum as Dict | undefined;
+  const reference = curriculum?.reference as Dict | undefined;
+  const expectedRoot = reference?.root;
+  if (!Array.isArray(expectedRoot) || !expectedRoot.length) return;
+  const expectedTerminal = expectedRoot[expectedRoot.length - 1];
+  if (!Array.isArray(expectedTerminal) || expectedTerminal.length !== 2 ||
+      expectedTerminal[0] !== 'return_result' || !expectedTerminal[1] ||
+      typeof expectedTerminal[1] !== 'object' || (expectedTerminal[1] as Dict).status !== 'blocked') return;
+  const ledger = outcome.invocation_ledger;
+  if (!Array.isArray(ledger)) return;
+  const roots = ledger.filter((entry: unknown) => entry && typeof entry === 'object' &&
+    (entry as Dict).parent_invocation_id === null) as Dict[];
+  if (roots.length !== 1) return;
+  const root = roots[0];
+  if (!root || root.completion_status !== 'quiesced' || root.completion_source !== 'execution_graph' ||
+      typeof root.invocation_id !== 'string') return;
+  const rootId = root.invocation_id as string;
+  const children = ledger.filter((entry: unknown) => entry !== root) as Dict[];
+  if (children.some(entry => entry.completion_status !== 'done' || entry.completion_source !== 'execution_graph')) return;
+  const trajectory = row.trajectory;
+  const rootCalls: Dict[] = [];
+  for (const item of trajectory) {
+    if (item.invocation_id !== rootId) continue;
+    const assistant = item.assistant as Dict | undefined;
+    if (!assistant || !Array.isArray(assistant.calls)) return;
+    rootCalls.push(...assistant.calls.filter((call: unknown): call is Dict =>
+      !!call && typeof call === 'object'));
+  }
+  if (!rootCalls.length) return;
+  const terminal = rootCalls.at(-1);
+  if (!terminal) return;
+  const args = terminal.arguments as Dict | undefined;
+  if ((terminal.source_tool ?? terminal.tool) !== 'return_result' || !args || args.status !== 'blocked' ||
+      typeof args.reason !== 'string' || !args.reason.trim()) return;
+  const actionLedger = outcome.action_ledger;
+  if (!Array.isArray(actionLedger)) return;
+  const rootEvents = actionLedger.filter((event: unknown) => event && typeof event === 'object' &&
+    (event as Dict).call_id === rootId) as Dict[];
+  const terminalEvents = rootEvents.filter(event => event.name === 'return_result');
+  if (terminalEvents.length !== 1 || terminalEvents[0]?.outcome !== 'blocked' ||
+      canonical(terminalEvents[0].arguments) !== canonical(args) ||
+      !Number.isSafeInteger(terminalEvents[0].seq) ||
+      rootEvents.some(event => !Number.isSafeInteger(event.seq)) ||
+      terminalEvents[0].seq !== Math.max(...rootEvents.map(event => Number(event.seq)))) return;
+  const childIds = new Set(children.map(entry => entry.invocation_id).filter((id): id is string => typeof id === 'string'));
+  for (const item of trajectory) {
+    if (typeof item.invocation_id !== 'string' || !childIds.has(item.invocation_id)) continue;
+    const assistant = item.assistant as Dict | undefined;
+    if (!assistant || !Array.isArray(assistant.calls)) return;
+    for (const value of assistant.calls) {
+      if (!value || typeof value !== 'object') return;
+      const call = value as Dict;
+      if ((call.source_tool ?? call.tool) !== 'return_result') continue;
+      const childArgs = call.arguments as Dict | undefined;
+      if (childArgs && childArgs.status !== 'success') return;
+    }
+  }
+  return rootId;
+}
+
 export function nativeRowDigest(value: unknown): string {
   // Lineage refers to the saved JSON artifact, including omitted undefined fields.
   return hexDigest(canonical(JSON.parse(JSON.stringify(value))));
@@ -1633,6 +1703,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const sourceQualityReview = options.sourceQualityClearance ?? (row.source_ref as Dict | undefined)?.source_quality_clearance;
     const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const program = taskIr as unknown as ProgramRecord;
+    const honestBlockedRoot = honestBlockedRootInvocation(row, taskIr);
     const sourceQualityBinding = sourceQualityClearanceForProgram(sourceQualityReview, program);
     const scopedSourceQualityReview = !!sourceQualityReview && typeof sourceQualityReview === 'object' &&
       !Array.isArray(sourceQualityReview) &&
@@ -2003,9 +2074,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
       // A later successful root does not make this child's blocked/failed typed answer a good target.
       // Keep it in context for recovery, but require exact independent approval to train that answer.
-      const nonSuccessTerminal = calls.some(call => call.source_tool === 'return_result' &&
+      const hasNonSuccessTerminal = calls.some(call => call.source_tool === 'return_result' &&
         typeof call.arguments === 'object' && call.arguments !== null &&
         Object.hasOwn(call.arguments, 'status') && (call.arguments as Dict).status !== 'success');
+      const nonSuccessTerminal = hasNonSuccessTerminal &&
+        !(honestBlockedRoot !== undefined && invocation === honestBlockedRoot);
       // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
       const failedAction = nonSuccessTerminal || refusedAttempt || continuedWithoutResult || calls.some(call =>
         ['rejected', 'refused', 'error'].includes(String(record(call.outcome, 'call outcome').status)));

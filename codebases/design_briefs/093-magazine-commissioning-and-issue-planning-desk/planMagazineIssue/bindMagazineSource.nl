@@ -1,0 +1,5 @@
+---
+args: { record: MagazineIssue; sourceEvidence: EvidenceItem[]; suppliedBrief: IssueBrief; suppliedIssue: IssueState }
+returns: MagazineSourceBinding
+---
+Use the MagazineIssue top-level source fields as issue constraints: issueTheme is the theme, audience is the specified audience, sectionIds constrain section assignment, editorId identifies accountable editor, and publicationDate sets the actual deadline. Do not read any of these fields from record.fields. Replace the suppliedBrief's placeholder values with those five source facts while retaining only independently supported mustCover and format requirements. Replace the suppliedIssue.brief with that bound brief, retain its pitch and production records as candidate proposals, and report a blocker wherever a candidate contradicts the original issue subject or evidence. Match each record.evidenceIds and record.sourceRefs to sourceEvidence IDs before allowing a claim or pitch to pass. Return the corrected typed brief and issue state together with editor, section constraints, evidence IDs, and blockers.

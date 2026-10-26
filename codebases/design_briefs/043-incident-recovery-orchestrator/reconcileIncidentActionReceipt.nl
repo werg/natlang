@@ -1,0 +1,9 @@
+---
+args: { book: IncidentRecoveryBook, request: IncidentRecoveryRequest, plan: IncidentRecoveryProposal, receipt: IncidentActionReceipt }
+returns: IncidentActionReconciliation
+---
+1. If receiptId is consumed, compare every field with the stored receipt. Exact replay binds storedAction from book.actions and replayAssessment = verifyRunbookExecution(request, plan, stored receipt), then returns { book, outcome: "replayed", actionStatus: storedAction.status, retryAllowed: replayAssessment.canRetry, nextSteps: storedAction.blockers plus replayAssessment.reasons }. Conflicting or unbound identity returns { book, outcome: "held", actionStatus: "unknown", retryAllowed: false, nextSteps: ["reconcile receipt identity and actual operation state"] }; neither branch mutates the book.
+2. Require book.incidentId and receipt.incidentId to match request.incidentId. Bind assessment = verifyRunbookExecution(request, plan, receipt). A stale commander, operation, runbook version, approval, or precondition is preserved as held evidence and cannot authorize a retry.
+3. Record the actual execution state separately from the user-service postcondition. Keep executed-but-not-restored as an executed action with an unresolved recovery outcome; keep unknown and partial actions open and non-retryable.
+4. Return retryAllowed only when assessment.canRetry is true. Never retry an unknown operation because its command timed out.
+5. Append the receipt once, update only its action state, increment revision once, and bind result = { book: updatedBook, outcome: assessment.authorized and assessment.currentStepMatched ? "recorded" : "held", actionStatus: observed status, retryAllowed: assessment.canRetry, nextSteps: assessment.reasons plus unresolved postcondition tasks }. Return result. Action execution alone never closes the incident.

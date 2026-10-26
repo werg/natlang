@@ -1,0 +1,49 @@
+{
+  "application_id": "016",
+  "title": "Tender response factory",
+  "source_relative_path": "applications/04-procurement-and-supplier-management/016-tender-response-factory.md",
+  "program_root": "codebases/design_briefs/016-tender-response-factory",
+  "source_sha256": "f4821f2edd71003096f8a67ccfddb896ac3e6b519c5382d9be99cb591197c51b",
+  "domain_id": "04",
+  "stages": [
+    {
+      "name": "parseObligations",
+      "output_type": "TenderRequirement",
+      "algorithm": "Read the main tender, schedules, forms, and addenda together. Extract explicit requirements and conditional submission instructions, distinguish mandatory eligibility from scored preferences, and preserve exact formatting or attachment obligations separately from substantive answers.",
+      "gate": "Every source requirement maps to a response slot or an explicit nonresponse decision."
+    },
+    {
+      "name": "mapCapabilities",
+      "output_type": "CapabilityMatch",
+      "algorithm": "Compare required outcomes with verified capabilities and their scope. Do not stretch an adjacent feature into compliance; identify exceptions, delivery dependencies, and evidence that would substantiate a currently unverified claim.",
+      "gate": "Unsupported certifications and future capabilities cannot be represented as current compliance."
+    },
+    {
+      "name": "commissionInputs",
+      "output_type": "ContributionTask",
+      "algorithm": "Group missing technical, financial, and implementation contributions by responsible team. Ask precise questions tied to requirements, specify acceptable evidence, and expose dependencies that could make the submission infeasible before the deadline.",
+      "gate": "Every mandatory gap has an accountable owner or an explicit bid/no-bid escalation."
+    },
+    {
+      "name": "composeResponse",
+      "output_type": "ResponseSection",
+      "algorithm": "Draft consistent answers using supported claims and approved commercial positions. Tailor explanations to the customer’s evaluation criteria without inventing facts; preserve declared exceptions and reconcile promises across technical, pricing, and delivery sections.",
+      "gate": "Each material claim has evidence or a clearly labeled future commitment approved by its owner."
+    },
+    {
+      "name": "validateSubmission",
+      "output_type": "SubmissionManifest",
+      "algorithm": "Re-run coverage and cross-section consistency, validate file naming and required forms, and preview the exact bundle. Freeze approvals to its hash, submit through an authorized adapter, and record portal acknowledgment separately from local upload completion.",
+      "gate": "Mandatory coverage, current addenda, exact bundle hashes, and external receipt all checked."
+    }
+  ],
+  "operational_details": [
+    "An addendum arrives after drafting: compute its impact and invalidate only affected approvals.",
+    "The portal limits filenames or file sizes: validate before the deadline rather than during submission.",
+    "A certificate expires before contract start: disclose the timing and require an approved renewal commitment.",
+    "Pricing and technical teams assume different quantities: reconcile one authoritative quantity schedule.",
+    "A portal upload times out: inspect submission status before sending a duplicate response."
+  ],
+  "representative_episode": "A tender has mandatory data-location requirements, a late pricing addendum, and a capability supported only for one product edition.",
+  "independent_truth_basis": "Generated requirement matrix, capability truth set, addendum precedence, and exact submission manifest checks."
+}

@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.application/1",
+  "id": "024",
+  "title": "Financial close workpaper coordinator",
+  "entrypoint": "coordinateClose.nl",
+  "interfaces": [
+    {
+      "name": "coordinateClose",
+      "path": "coordinateClose.nl",
+      "purpose": "Prepare close workpapers from exact source versions, reconcile unexplained differences, commission evidence and preserve independent current signoff.",
+      "stateParameter": "books",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "financial-close"
+    }
+  ],
+  "persistence": [
+    "ReconciliationScope",
+    "ReconciliationBreak",
+    "CloseTask",
+    "WorkpaperConclusion",
+    "WorkpaperSignoff"
+  ],
+  "effects": [
+    "invalidate only signoffs dependent on changed ledger/source rows",
+    "quarantine unsupported spreadsheet calculations",
+    "preserve missed deadlines and prior signoffs as history"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "frameReconciliation",
+        "paths": [
+          "closeDesk/traceCloseAssertion.nl"
+        ]
+      },
+      {
+        "stage": "classifyBreaks",
+        "paths": [
+          "closeDesk/classifyLedgerBreaks.nl"
+        ]
+      },
+      {
+        "stage": "commissionEvidence",
+        "paths": [
+          "closeDesk/commissionBreakOwners.nl"
+        ]
+      },
+      {
+        "stage": "composeWorkpaper",
+        "paths": [
+          "closeDesk/assembleWorkpaperConclusion.nl"
+        ]
+      },
+      {
+        "stage": "maintainSignoff",
+        "paths": [
+          "closeDesk/checkIndependentSignoff.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "closeDesk/invalidateLateJournalScope.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "closeDesk/compareRegeneratedSource.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "closeDesk/commissionBreakOwners.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "closeDesk/quarantineBrokenFormula.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "closeDesk/recordMissedDeadline.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "types.ts",
+    "coordinateClose.nl",
+    "closeDesk/traceCloseAssertion.nl",
+    "closeDesk/classifyLedgerBreaks.nl",
+    "closeDesk/commissionBreakOwners.nl",
+    "closeDesk/assembleWorkpaperConclusion.nl",
+    "closeDesk/checkIndependentSignoff.nl",
+    "closeDesk/invalidateLateJournalScope.nl",
+    "closeDesk/compareRegeneratedSource.nl",
+    "closeDesk/quarantineBrokenFormula.nl",
+    "closeDesk/recordMissedDeadline.nl",
+    "runCase/frameReconciliation/audit/qualify.nl",
+    "coordinateClose/reconcileCloseCheckpoint.nl",
+    "closeDesk/classifyLedgerBreaks/classifyOneAccountBreak.nl"
+  ]
+}

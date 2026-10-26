@@ -1,0 +1,33 @@
+
+export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type SpanRef = { source: Ref; locatorKind: 'text' | 'table' | 'timecode' | 'region'; locator: string; excerptHash: Hash };
+
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+
+export type PolicyCandidate = { id: string; authority: string; scope: string; effectiveFrom: LocalDate; effectiveTo: LocalDate; supersedes: string[]; clauses: string[] };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type Harmonization = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; datasetIds: string[]; targetConstruct: string; intendedAnalysis: string; dataOwnerId: string; protocolId: string };
+export type MeasureDefinition = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; datasetId: string; variable: string; construct: string; collectionMethod: string; population: string };
+export type MeasureRelation = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; leftMeasureId: string; rightMeasureId: string; relation: 'equivalent'|'transformable'|'partial'|'incompatible'; boundary: string };
+export type HarmonizationRule = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; sourceMeasureId: string; targetName: string; exactOperationId: string; informationLoss: string };
+export type HarmonizedSlice = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; datasetIds: string[]; ruleIds: string[]; inclusionQueryId: string; excludedCount: number };
+export type HarmonizationAudit = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; caseId: string; sliceId: string; assumption: string; alternativeRuleIds: string[]; changedResult: string };
+export type DraftMeasureDefinition = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; datasetId?: string; variable?: string; construct?: string; collectionMethod?: string; population?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };
+
+export type HarmonizationRequest = { caseId: string; datasetIds: string[]; targetConstruct: string; intendedAnalysis: string; dataOwnerId: string; protocolId: string; expectedVersion: string };
+export type MeasurementCorpus = { checkpoint?: HarmonizationCheckpoint; harmonizations: Harmonization[]; evidencePages: EvidencePage[]; measureCatalog: MeasureDefinition[]; rowCollectionVersions: EvidencePage[]; exactTransformReceipts: TransformReceipt[]; missingnessEvidence: EvidencePage[]; categoryDefinitions: EvidencePage[]; participantLinkageEvidence: EvidencePage[]; mappingRevisionEvents: EvidencePage[]; policyCandidates?: PolicyCandidate[] };
+export type TransformReceipt = { operationId: string; datasetId: string; rowCollectionVersion: string; inputUnit: string; outputUnit: string; inputHash: string; outputHash: string; executableVersion: string; validationRef: string };
+export type MeasureBridge = { targetConstruct: string; sourceMeasureIds: string[]; comparable: string[]; noncomparable: string[]; semanticAssumptions: string[]; unresolved: string[] };
+export type MissingnessLedger = { validZeroMeasureIds: string[]; missingMeasureIds: string[]; censoredMeasureIds: string[]; unresolvedSemantics: string[]; evidenceRefs: string[] };
+export type HarmonizedDatasetSlice = { datasetIds: string[]; rowVersions: string[]; includedRecordIds: string[]; excludedRecordIds: string[]; mappingRuleIds: string[]; transformOutputHashes: string[]; participantOverlapUnknown: string[]; queryId: string };
+export type SensitivityFinding = { assumption: string; alternatives: string[]; changedFindings: string[]; stableFindings: string[]; unresolved: string[]; evidenceRefs: string[] };
+export type MappingRevisionEffect = { invalidatedSliceIds: string[]; preservedSliceIds: string[]; affectedRuleIds: string[]; reason: string; evidenceRefs: string[] };
+export type HarmonizationResult = { caseId: string; applicablePolicy: PolicySelection; measureDefinitions: MeasureDefinition[]; bridge: MeasureBridge; missingness: MissingnessLedger; transforms: TransformReceipt[]; slice: HarmonizedDatasetSlice | null; sensitivity: SensitivityFinding[]; revisionEffect: MappingRevisionEffect; unresolved: string[]; checkpoint: HarmonizationCheckpoint; commitAllowed: boolean };
+
+export type HarmonizationCheckpoint={caseId:string;revision:number;measureDefinitionVersions:string[];mappingEditions:string[];rowTransformReceiptIds:string[];missingnessClassificationRefs:string[];participantOverlapRefs:string[];validatedSliceHashes:string[];sliceEditions:HarmonizedDatasetSlice[];staleSliceHashes:string[];sensitivityEditions: SensitivityFinding[]};

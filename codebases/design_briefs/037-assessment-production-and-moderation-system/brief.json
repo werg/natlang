@@ -1,0 +1,90 @@
+{
+  "application_id": "037",
+  "title": "Assessment production and moderation system",
+  "source_relative_path": "applications/08-education-assessment-and-professional-learning/037-assessment-production-and-moderation-system.md",
+  "source_sha256": "14b5b23a5dc0e57c8af28fe616d67f4756023be182ab62cf5c95b242e2a1f94d",
+  "domain_id": "08",
+  "stages": [
+    {
+      "name": "blueprintCoverage",
+      "output_type": "AssessmentBlueprint",
+      "algorithm": "Translate the assessment purpose into observable competencies and a balanced task blueprint. Distinguish intended skills from incidental reading or tool demands, and identify constraints on duration, accessibility, and allowable assistance.",
+      "gate": "Every weighted competency has a measurable evidence path."
+    },
+    {
+      "name": "generateItems",
+      "output_type": "AssessmentItem",
+      "algorithm": "Create varied tasks that elicit the target evidence rather than superficial recall alone. Specify required context and resources, avoid hidden assumptions, and generate plausible alternative interpretations for subsequent review.",
+      "gate": "Item is answerable from supplied knowledge and permitted resources."
+    },
+    {
+      "name": "constructRubrics",
+      "output_type": "ScoringRubric",
+      "algorithm": "Define observable scoring criteria and partial-credit boundaries, separating conceptual correctness from presentation preferences. Include correct alternative methods and common errors, and state how ambiguity or missing evidence should be handled.",
+      "gate": "Rubric does not penalize a valid solution merely for differing from the model answer."
+    },
+    {
+      "name": "challengeAssessment",
+      "output_type": "ItemChallenge",
+      "algorithm": "Independently solve each item, attempt reasonable alternate readings, and test rubric consistency on borderline responses. Repair items and rubrics together, then rerun coverage and duration checks before releasing a frozen assessment edition.",
+      "gate": "No unresolved correctness or material ambiguity defect in released items."
+    },
+    {
+      "name": "moderateAndAppeal",
+      "output_type": "ModerationDecision",
+      "algorithm": "Compare scorer disagreements and appeals against the released rubric and actual response. Identify systematic rubric defects, propose scoped corrections, and apply approved changes consistently to all affected learners rather than only those who appealed.",
+      "gate": "Exact score bounds and consistent retrospective treatment under authorized moderation."
+    }
+  ],
+  "operational_details": [
+    "An item leaks online: retire its use for new assessments without deleting historical scoring evidence.",
+    "A rubric changes after grading: identify every affected response before applying corrections.",
+    "A learner uses an unexpected valid method: route it to semantic review rather than automatic rejection.",
+    "A timed assessment needs an accommodation: preserve content equivalence and separate timing policy.",
+    "A model answer contains an error: block release or trigger a controlled regrade."
+  ],
+  "domain_records": {
+    "AssessmentProject": [
+      "competencyIds: ID[]",
+      "audience: string",
+      "durationMinutes: number",
+      "assessmentOwnerId: ID",
+      "stakes: string"
+    ],
+    "AssessmentBlueprint": [
+      "caseId: ID",
+      "competencyIds: ID[]",
+      "taskKinds: string[]",
+      "coverageWeights: Ratio[]",
+      "excludedConstructs: string[]"
+    ],
+    "AssessmentItem": [
+      "caseId: ID",
+      "competencyIds: ID[]",
+      "prompt: string",
+      "responseFormat: string",
+      "allowedResources: string[]"
+    ],
+    "ScoringRubric": [
+      "caseId: ID",
+      "itemId: ID",
+      "criteria: string[]",
+      "scoreLevels: string[]",
+      "validAlternativeAnswers: string[]"
+    ],
+    "ItemChallenge": [
+      "caseId: ID",
+      "itemId: ID",
+      "ambiguousInterpretation: string",
+      "counterexampleAnswer: string",
+      "proposedRepair: string"
+    ],
+    "ModerationDecision": [
+      "caseId: ID",
+      "responseId: ID",
+      "originalScore: number",
+      "reviewedScore: number",
+      "evidenceReason: string"
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "048",
+  "title": "Taxonomy evolution service",
+  "entrypoint": "evolveTaxonomyVersion.nl",
+  "interfaces": [
+    {
+      "name": "evolveTaxonomyVersion",
+      "path": "evolveTaxonomyVersion.nl",
+      "purpose": "Evaluate category fit under pinned definitions, propose evidence-supported structural revisions, replay affected records, and qualify promotion against consumers."
+    },
+    {
+      "name": "reconcileTaxonomyPromotion",
+      "path": "reconcileTaxonomyPromotion.nl",
+      "purpose": "Apply versioned publication, affected-record replay and consumer acknowledgement receipts while retaining historical taxonomy definitions.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "taxonomy-release-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "assessFit",
+        "paths": [
+          "evolveTaxonomyVersion/testMembershipAgainstVersionedDefinitions.nl"
+        ]
+      },
+      {
+        "stage": "diagnoseStructure",
+        "paths": [
+          "evolveTaxonomyVersion/explainRepeatedBoundaryFailures.nl"
+        ]
+      },
+      {
+        "stage": "designCategoryRevision",
+        "paths": [
+          "evolveTaxonomyVersion/draftStableIdentityRevision.nl",
+          "evolveTaxonomyVersion/draftStableIdentityRevision/compareConcurrentStewardBoundaries.nl"
+        ]
+      },
+      {
+        "stage": "simulateReclassification",
+        "paths": [
+          "evolveTaxonomyVersion/replayOnlyAffectedRecords.nl"
+        ]
+      },
+      {
+        "stage": "promoteTaxonomy",
+        "paths": [
+          "evolveTaxonomyVersion/checkConsumerLabelContract.nl",
+          "evolveTaxonomyVersion/authorizeTaxonomyPromotion.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "evolveTaxonomyVersion/draftStableIdentityRevision.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "evolveTaxonomyVersion/replayOnlyAffectedRecords.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "evolveTaxonomyVersion/checkConsumerLabelContract.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "evolveTaxonomyVersion/explainRepeatedBoundaryFailures.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "evolveTaxonomyVersion/draftStableIdentityRevision/compareConcurrentStewardBoundaries.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "active taxonomy version and append-only publisher/replay receipts",
+    "history": "prior category definitions and historical mappings remain addressable after promotion or reversal",
+    "activation": "candidate becomes current only after digest/version match, every invalidated record replay, required approvals, and consumer acknowledgements"
+  },
+  "effects": {
+    "promotion": "steward-approved version proposal only; downstream compatibility and affected cache invalidation required"
+  },
+  "source_files": [
+    "evolveTaxonomyVersion.nl",
+    "evolveTaxonomyVersion/authorizeTaxonomyPromotion.nl",
+    "evolveTaxonomyVersion/checkConsumerLabelContract.nl",
+    "evolveTaxonomyVersion/draftStableIdentityRevision.nl",
+    "evolveTaxonomyVersion/draftStableIdentityRevision/compareConcurrentStewardBoundaries.nl",
+    "evolveTaxonomyVersion/explainRepeatedBoundaryFailures.nl",
+    "evolveTaxonomyVersion/replayOnlyAffectedRecords.nl",
+    "evolveTaxonomyVersion/testMembershipAgainstVersionedDefinitions.nl",
+    "qualification/assessFit.nl",
+    "reconcileTaxonomyPromotion.nl",
+    "reconcileTaxonomyPromotion/verifyPromotedState.nl",
+    "types.ts"
+  ]
+}

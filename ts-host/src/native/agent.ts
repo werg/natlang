@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerScopeForTrace } from './graph.js';
+import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -662,22 +662,29 @@ export class NativeToolAgent {
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
     const resolveReadSource = (block: string, declared?: string): string => {
-      const writers = trace.events.filter(event => event.kind === 'block_write' && event.block === block &&
-        typeof event.node === 'string');
+      // A producer may live in a child or parent invocation's local trace. The
+      // active episode recorder has already authenticated those actual graph
+      // nodes; include them alongside this request's trace without consulting
+      // the global recent-producer cache (which can refer to another episode).
+      const recorded=activeRecorder()?.nativeStateWriters?.(block)??[];
+      const writers=[...new Set([...trace.events.filter(event=>event.kind==='block_write'&&event.block===block&&
+        typeof event.node==='string')
+        .map(event=>String(event.node)),...producerOccurrences(block,producerScopeForTrace(trace)),...recorded])];
+      if (declared === 'external') {
+        if (writers.length) throw new Error(`neuralese-native-grad-invalid: native read ${block} declares external despite an in-episode writer`);
+        return 'external';
+      }
       if (declared !== undefined) {
-        // A native value can be produced by a completed sibling invocation. Its
-        // writer is no longer in this call's trace, but the graph's content
-        // addressed producer index still binds the exact occurrence. This also
-        // lets a resumed collector attach a saved value to the writer occurrence
-        // recreated by the current replay, rather than treating it as an
-        // unverified external read.
-        if (!writers.some(event => event.node === declared) && !hasProducerOccurrence(block, declared, session.runtime.episodeBudget))
+        // Keep the actual episode recorder's cross-invocation writers and the
+        // task-scoped inference index. Neither can borrow another task's state.
+        if (!writers.includes(declared) &&
+            !hasProducerOccurrence(block, declared, session.runtime.episodeBudget))
           throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
         return declared;
       }
       if (writers.length > 1)
         throw new Error(`neuralese-native-grad-invalid: native read ${block} has multiple in-episode writers and no occurrence binding`);
-      return writers.length === 1 ? String(writers[0]!.node) : 'external';
+      return writers[0] ?? 'external';
     };
     const scopedReads = response.raw_response?.__natlang_native_read_occurrences;
     const preparedMessageOffset = Array.isArray(scopedReads) ? 1 : 0;
@@ -807,7 +814,7 @@ export class NativeToolAgent {
         runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
-      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads], turnId);
+      [{ node: invocationNodeId(callId), port: 'invocation' }, ...reads.map(({node,port})=>({node,port}))], turnId);
   }
 
   private reviewTools(): unknown[] {

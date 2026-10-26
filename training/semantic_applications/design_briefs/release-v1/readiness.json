@@ -1,0 +1,211 @@
+{
+  "schema": "natlang.design-brief-release-readiness/1",
+  "release": "design-briefs-100-native-20261025-v1",
+  "recorded_at": "2026-10-26",
+  "publication_base": "2d14506aa343e3a7b8993a0f6b645fae8dec0243",
+  "inventory": {
+    "applications": 100,
+    "domains": 20,
+    "domain_stages": 500,
+    "native_functions": 4100,
+    "original_records": 600,
+    "domain_fields": 3032,
+    "tasks": 800,
+    "tasks_by_split": {
+      "train": {
+        "applications": 60,
+        "exact_gate_tasks": 180,
+        "judged_workflows": 300
+      },
+      "dev": {
+        "applications": 20,
+        "exact_gate_tasks": 60,
+        "judged_workflows": 100
+      },
+      "test": {
+        "applications": 20,
+        "exact_gate_tasks": 60,
+        "judged_workflows": 100
+      }
+    },
+    "total_exact_gate_tasks": 300,
+    "total_judged_workflows": 500,
+    "split_policy": "whole application family: 60/20/20; all variants stay with their application",
+    "original_operational_details": 500,
+    "mapped_operational_workflows": 500
+  },
+  "source_and_fixture_verification": {
+    "source_fixture_metadata_and_compiler_bindings": "verified",
+    "binding_evidence": ".local/design-brief-current-bindings-operational.json",
+    "compiler": {
+      "applications": 100,
+      "passed": 100,
+      "all_passed": true,
+      "source_hash_bound": true,
+      "evidence_file": "compiler-check.json",
+      "source_stable_results": 100
+    },
+    "compiler_report_sha256": "fde4ef9d1c44ed5c1d918c509ac265b17cf6ae3066f2ba753438343d2da2930f",
+    "source_manifest_sha256": "d870bbb02d1b91df81b644741f5d0caadf7f7dbe9f925fee62f8f9e399f8a63a",
+    "domain_contracts_sha256": "28c606fe827369da986bc471431f9ebcbaf4afa09c4f527e94c3efae00206910",
+    "operational_contracts_sha256": "9ea9d5c0e061f06919e0fc2b15367347909936b99ede558d91219a9dedaf1d15",
+    "exact_gate_fixtures_preserved": 300
+  },
+  "preparation": {
+    "status": "prepared only",
+    "root_mode": "student",
+    "exact_train_gate_tasks": 180,
+    "rollout_requests": 720,
+    "seeds_per_task": 4,
+    "teacher_job_descriptors": 2,
+    "workflow_teacher_tasks": 300,
+    "models_executed": 0,
+    "evidence": ".local/design-brief-prepared-operational-v1 and .local/design-brief-preparation-check-operational.json",
+    "teacher_task_rows": [
+      180,
+      300
+    ],
+    "source_packet_sha256": "d6f5b1d2b48c7d091111faaaf440a53e3e72920cf04ea712c89c128ed14ef5f1",
+    "prepared_packet_sha256": "81689a21c56f10b78add4132afd6e4dc7eb43eb2970101dd74100b1720306c1c",
+    "train_only": true,
+    "authored_root_replay": false
+  },
+  "validation": {
+    "release_unit": {
+      "status": "pass",
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "log": "validation.txt (UNIT TESTS)"
+    },
+    "current_base_quick": {
+      "status": "pass",
+      "base": "2d14506aa343e3a7b8993a0f6b645fae8dec0243",
+      "log": "validation.txt (QUICK GATE)",
+      "checks": [
+        "source-review-manifest",
+        "python-ratchets",
+        "ts-check"
+      ]
+    },
+    "full_suite": {
+      "status": "red on earlier base; rerun required before merge",
+      "base": "1b6b4102cf338f6eae6a449e93f17b8e91f48b2d",
+      "python_summary": {
+        "passed": 2508,
+        "failed": 87,
+        "errors": 54,
+        "skipped": 63
+      },
+      "reported_failure_classes": [
+        "missing /proc availability",
+        "missing Triton/GPU capability",
+        "subprocess capture / EPERM",
+        "historical objects absent in then-shallow checkout"
+      ],
+      "qualification": "Do not treat all failures as proven baseline failures.",
+      "log": "validation.txt (EARLIER FULL GATE); complete original log retained at .local/design-brief-full.log"
+    },
+    "native_typescript_host_runner": {
+      "summary": "260 test files passed; 86 test files reported failures",
+      "status": "red; inspect against current publication base"
+    },
+    "native_conformance": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full_suite_gate": "Run scripts/check-main.sh on the merge candidate under the repository memory ledger; resolve or route every red step before merge."
+  },
+  "readiness": {
+    "training_admission": false,
+    "qualification": "source-only-live-pending",
+    "production_host_readback": false,
+    "real_teacher_output": false,
+    "real_student_output": false,
+    "optimizer_steps": 0,
+    "whole_graph_live_trajectories": 0,
+    "pop_readback": false,
+    "remote_sync": false
+  },
+  "reproducible_commands": [
+    "node ts-host/scripts/design-briefs/check.test.mjs",
+    "node ts-host/scripts/design-briefs/check.mjs --report .local/design-briefs-compiler-operational.json",
+    "node ts-host/scripts/design-briefs/build.mjs --out .local/design-brief-packet-operational-v1",
+    "NATLANG_PYTHON=python3 node ts-host/scripts/design-briefs/prepare.mjs --packet .local/design-brief-packet-operational-v1 --out .local/design-brief-prepared-operational-v1",
+    "sh scripts/check-main.sh --quick",
+    "sh scripts/check-main.sh"
+  ],
+  "release_input_and_script_bindings": [
+    {
+      "path": "ts-host/scripts/design-briefs/lib.mjs",
+      "bytes": 18755,
+      "sha256": "fe13880a43c32cdff12a2cbbd1f7abfc9894654b9b5c652da15f4e82229a69df"
+    },
+    {
+      "path": "ts-host/scripts/design-briefs/check.mjs",
+      "bytes": 3113,
+      "sha256": "812e75ad1dcbfb3386ace237703be4508110a38b20ff738704fdb90d68681937"
+    },
+    {
+      "path": "ts-host/scripts/design-briefs/check.test.mjs",
+      "bytes": 10240,
+      "sha256": "b5506cd3aef63c4d962f3074fd56f1ceb92628a520a35206c26670cb5d3b83c6"
+    },
+    {
+      "path": "ts-host/scripts/design-briefs/build.mjs",
+      "bytes": 5525,
+      "sha256": "4360692d57ee68fd72bd006c62f9efbd60773490b10c2568c4c2d09749d5ea8b"
+    },
+    {
+      "path": "ts-host/scripts/design-briefs/prepare.mjs",
+      "bytes": 4233,
+      "sha256": "bd57871b55fcab240fe3ca0c4df3f28d7ece145055b89323418f1505bc9569f7"
+    },
+    {
+      "path": "scripts/sync_training_corpora.py",
+      "bytes": 42385,
+      "sha256": "3d17e8ebf07d9e2a0e71c56b2a39d24f6228dfc78376d95a3c6a6759a3e7908d"
+    },
+    {
+      "path": "training/semantic_applications/design_briefs/source-manifest.json",
+      "bytes": 49758,
+      "sha256": "d870bbb02d1b91df81b644741f5d0caadf7f7dbe9f925fee62f8f9e399f8a63a"
+    },
+    {
+      "path": "training/semantic_applications/design_briefs/domain-contracts.json",
+      "bytes": 121369,
+      "sha256": "28c606fe827369da986bc471431f9ebcbaf4afa09c4f527e94c3efae00206910"
+    },
+    {
+      "path": "training/semantic_applications/design_briefs/operational-contracts.json",
+      "bytes": 65771,
+      "sha256": "9ea9d5c0e061f06919e0fc2b15367347909936b99ede558d91219a9dedaf1d15"
+    },
+    {
+      "path": "training/semantic_applications/design_briefs/release-v1/validation.txt",
+      "bytes": 3318,
+      "sha256": "0000c8ef29d89c6e6fd99719be192c03bf5423ddd71403f1ff99fe05df95086f"
+    },
+    {
+      "path": ".local/design-brief-current-bindings-operational.json",
+      "bytes": 283,
+      "sha256": "38e20b83bb0d4d36ce546a90f915c8a26a25397466780300492f3545a0da142a"
+    },
+    {
+      "path": ".local/design-brief-preparation-check-operational.json",
+      "bytes": 518,
+      "sha256": "2d57d303346a894075904c4906b716bce8ec8ff73dd507fa78224204527aedb3"
+    }
+  ],
+  "registry_integration": {
+    "status": "pending at preparation; not centrally registered",
+    "prepared_registry_entry": "registry-entry.json",
+    "prepared_locally_from": ".local/design-brief-registry-entry.json",
+    "github_registry_upload": "stalled while uploading the 47 MB registry payload",
+    "ordinary_git_push": "blocked because CLI credentials are unavailable",
+    "draft_pr_requirement": "Apply the prepared central registry patch on the PR branch before merge, preserving newer registry entries. This status concerns central registration; program and preparation-source publication is tracked separately.",
+    "central_registry_published": false,
+    "local_registry_patch_prepared": true
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.application/1",
+  "id": "092",
+  "title": "Documentary Assembly Studio",
+  "entrypoint": "assembleDocumentary.nl",
+  "interfaces": [
+    {
+      "name": "assembleDocumentary",
+      "path": "assembleDocumentary.nl",
+      "purpose": "Audit a documentary assembly graph and freeze a version-bound release package.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "documentary-assembly-checkpoint",
+      "effectsPath": ["effects"]
+    },
+    {
+      "name": "prepareDocumentaryDelivery",
+      "path": "assembleDocumentary/prepareDocumentaryDelivery.nl",
+      "purpose": "Prepare a digest-bound documentary package transfer or reconcile its observed receipt.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "documentary-assembly-checkpoint",
+      "effectsPath": ["effects"]
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "indexMaterial",
+        "paths": [
+          "assembleDocumentary/indexSourceRanges.nl",
+          "assembleDocumentary/mapDocumentaryArgument.nl",
+          "assembleDocumentary/inspectCutImplications.nl",
+          "assembleDocumentary/inspectCutImplications/reconcileSequenceImplications.nl",
+          "assembleDocumentary/reviewDocumentaryClearance.nl",
+          "assembleDocumentary/freezeDocumentaryAssembly.nl",
+          "assembleDocumentary/prepareDocumentaryDelivery.nl"
+        ]
+      },
+      {
+        "stage": "constructArguments",
+        "paths": [
+          "assembleDocumentary/mapDocumentaryArgument.nl"
+        ]
+      },
+      {
+        "stage": "selectEdits",
+        "paths": [
+          "assembleDocumentary/inspectCutImplications.nl"
+          ,"assembleDocumentary/inspectCutImplications/reconcileSequenceImplications.nl"
+        ]
+      },
+      {
+        "stage": "reviewProduction",
+        "paths": [
+          "assembleDocumentary/reviewDocumentaryClearance.nl",
+          "assembleDocumentary/reviewDocumentaryClearance/reconcileConsentAndCorrections.nl"
+        ]
+      },
+      {
+        "stage": "freezeAssembly",
+        "paths": [
+          "assembleDocumentary/freezeDocumentaryAssembly.nl",
+          "assembleDocumentary/prepareDocumentaryDelivery.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "assembleDocumentary/inspectCutImplications.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "assembleDocumentary/mapDocumentaryArgument.nl",
+          "assembleDocumentary/inspectCutImplications.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "assembleDocumentary/reviewDocumentaryClearance.nl"
+          ,"assembleDocumentary/reviewDocumentaryClearance/reconcileConsentAndCorrections.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "assembleDocumentary/reviewDocumentaryClearance.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "assembleDocumentary/freezeDocumentaryAssembly.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "assembleDocumentary.nl",
+    "assembleDocumentary/freezeDocumentaryAssembly.nl",
+    "assembleDocumentary/indexSourceRanges.nl",
+    "assembleDocumentary/inspectCutImplications.nl",
+    "assembleDocumentary/mapDocumentaryArgument.nl",
+    "assembleDocumentary/prepareDocumentaryDelivery.nl",
+    "assembleDocumentary/inspectCutImplications/reconcileSequenceImplications.nl",
+    "assembleDocumentary/reviewDocumentaryClearance.nl",
+    "assembleDocumentary/reviewDocumentaryClearance/reconcileConsentAndCorrections.nl",
+    "runCase/indexMaterial/audit/qualify.nl",
+    "types.ts"
+  ]
+}

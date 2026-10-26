@@ -1,0 +1,49 @@
+{
+  "application_id": "027",
+  "title": "Amendment impact engine",
+  "source_relative_path": "applications/06-contracts-policies-and-information-governance/027-amendment-impact-engine.md",
+  "program_root": "codebases/design_briefs/027-amendment-impact-engine",
+  "source_sha256": "2232f5287491c1e16c536942520a803801a5777de972360951be30ec788ff50a",
+  "domain_id": "06",
+  "stages": [
+    {
+      "name": "identifyTargets",
+      "output_type": "AmendmentTarget",
+      "algorithm": "Read amendment language against the referenced agreement edition. Resolve section references, defined terms, and indirect targets; distinguish correction of wording from a substantive change and retain ambiguous references for review rather than choosing the nearest heading.",
+      "gate": "Target identity and base edition established before transformation."
+    },
+    {
+      "name": "interpretScope",
+      "output_type": "AmendmentScope",
+      "algorithm": "Determine effective dates, covered transactions, parties, and explicit exclusions. Separate signature date from effective date, preserve grandfathered cases, and identify whether the amendment applies retroactively only when the supplied text supports that interpretation.",
+      "gate": "No application outside established temporal and entity scope."
+    },
+    {
+      "name": "composeObligations",
+      "output_type": "AmendedObligation",
+      "algorithm": "Construct the amended obligation by applying the specific operation to its target. Preserve untouched exceptions, prerequisites, definitions, and cross-references; compare the result against counterexamples that would expose accidental broadening or deletion.",
+      "gate": "Protected conditions remain equivalent; every removed condition is authorized by the amendment."
+    },
+    {
+      "name": "traceImpacts",
+      "output_type": "AmendmentImpact",
+      "algorithm": "Traverse dependency edges from changed obligation facets, not the whole agreement. Assess which open tasks, approvals, notices, and future schedules become stale while retaining completed actions that were valid under their historical effective rules.",
+      "gate": "Exact dependency reachability followed by semantic materiality; no global invalidation by default."
+    },
+    {
+      "name": "releaseRevision",
+      "output_type": "AmendmentRelease",
+      "algorithm": "Present a before-and-after obligation diff and affected-case replay to qualified reviewers. Freeze the approved interpretation, rebase active cases at controlled checkpoints, and preserve old versions for disputes, audit, and rollback of uncommitted changes.",
+      "gate": "No in-flight commitment changes silently; active cases record their interpretation migration decision."
+    }
+  ],
+  "operational_details": [
+    "An amendment references an old section number: resolve by the executed edition and flag ambiguity.",
+    "A retroactive amendment arrives after billing: propose a reviewed correction rather than rewriting history.",
+    "Two amendments overlap: construct a precedence question instead of assuming upload order.",
+    "A task is approved before cutover but executes after it: revalidate applicable scope at commit time.",
+    "An unaffected exception disappears in drafting: block release with a preservation test."
+  ],
+  "representative_episode": "An amendment extends one region’s service window for new orders only, while a separate safety prerequisite and older orders remain unchanged.",
+  "independent_truth_basis": "Hidden amendment operation graph, effective scopes, preserved clauses, and exact expected impacted-case set."
+}

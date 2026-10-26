@@ -1,0 +1,855 @@
+[
+  {
+    "id": "092-first-gate-pass",
+    "root": "runCase/indexMaterial/audit/qualify.nl",
+    "split_group": "world-092-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+        "candidateIds": [
+          "092-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "092-first-e1",
+            "source": "primary case record DOC-92",
+            "version": "v1",
+            "text": "Primary domain record for case DOC-92 states: caseId=\"DOC-92\"; assetId=\"INT-92-A\"; timeRange=\"00:38–00:44\"; speakerClaim=\"Mira says bridge closed before alarm.\"; context=\"Warning lamp is still dark; later interview disputes bridge timing.\"; rightsStatus=\"Internal edit review only; release clearance pending.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "092-case-record",
+          "caseId": "DOC-92",
+          "sourceRefs": [
+            "092-first-e1"
+          ],
+          "state": "draft",
+          "kind": "DocumentarySegment",
+          "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+          "status": "candidate",
+          "evidenceIds": [
+            "092-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "assetId": "INT-92-A",
+          "timeRange": "00:38–00:44",
+          "speakerClaim": "Mira says bridge closed before alarm.",
+          "context": "Warning lamp is still dark; later interview disputes bridge timing.",
+          "rightsStatus": "Internal edit review only; release clearance pending."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "092-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A short quote loses its qualifier: restore context or reject the cut.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "092-first-gate-fail",
+    "root": "runCase/indexMaterial/audit/qualify.nl",
+    "split_group": "world-092-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+        "candidateIds": [
+          "092-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "092-first-e1",
+            "source": "primary case record DOC-92",
+            "version": "v1",
+            "text": "Primary domain record for case DOC-92 states: caseId=\"DOC-92\"; assetId=\"INT-92-A\"; timeRange=\"00:38–00:44\"; speakerClaim=\"Mira says bridge closed before alarm.\"; context=\"Warning lamp is still dark; later interview disputes bridge timing.\"; rightsStatus=\"Internal edit review only; release clearance pending.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "092-case-record",
+          "caseId": "DOC-92",
+          "sourceRefs": [
+            "092-first-e1"
+          ],
+          "state": "draft",
+          "kind": "DocumentarySegment",
+          "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+          "status": "candidate",
+          "evidenceIds": [
+            "092-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "assetId": "INT-92-A",
+          "timeRange": "00:38–00:44",
+          "speakerClaim": "Mira says the bridge was open after the alarm.",
+          "context": "Warning lamp is still dark; later interview disputes bridge timing.",
+          "rightsStatus": "Internal edit review only; release clearance pending."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "092-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A short quote loses its qualifier: restore context or reject the cut.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "092-first-gate-needs-review",
+    "root": "runCase/indexMaterial/audit/qualify.nl",
+    "split_group": "world-092-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+        "candidateIds": [
+          "092-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "092-first-e1",
+            "source": "primary case record DOC-92",
+            "version": "v1",
+            "text": "Primary domain record for case DOC-92 states: caseId=\"DOC-92\"; assetId=\"INT-92-A\"; timeRange=\"00:38–00:44\"; context=\"Warning lamp is still dark; later interview disputes bridge timing.\"; rightsStatus=\"Internal edit review only; release clearance pending.\". No current value is present for speakerClaim.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "speakerClaim"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "092-case-record",
+          "sourceRefs": [
+            "092-first-e1"
+          ],
+          "state": "draft",
+          "kind": "DocumentarySegment",
+          "subject": "A short quote loses its qualifier: restore context or reject the cut.",
+          "status": "candidate",
+          "evidenceIds": [
+            "092-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "timeRange": "00:38–00:44",
+          "context": "Warning lamp is still dark; later interview disputes bridge timing.",
+          "rightsStatus": "Internal edit review only; release clearance pending.",
+          "caseId": "DOC-92",
+          "assetId": "INT-92-A"
+        },
+        "missingFields": [
+          "speakerClaim"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "092-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A short quote loses its qualifier: restore context or reject the cut.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "092-workflow-1",
+    "root": "assembleDocumentary.nl",
+    "split_group": "world-092-workflow-1",
+    "inputs": {
+      "assets": [
+        {
+          "id": "092-workflow-1-record",
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
+          ],
+          "sourceDate": "unknown",
+          "correctedClaim": ""
+        }
+      ],
+      "assembly": {
+        "id": "092-workflow-1",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-1-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-1-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
+        {
+          "id": "092-event-1",
+          "source": "current domain record 092-E1",
+          "version": "v1",
+          "text": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "checkpoint": {
+        "assemblyId": "092-workflow-1",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-1-record",
+        "caseId": "092-workflow-1",
+        "sourceRefs": [
+          "092-event-1"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-event-1"
+        ],
+        "fields": {
+          "sourceArtifact": "092-event-1",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
+        {
+          "id": "092-event-1",
+          "source": "current domain record 092-E1",
+          "version": "v1",
+          "text": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Documentary Assembly Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: Two adjacent clips imply causation: require evidence or revise the transition. Use observation Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition. as the source of truth. The proposal should preserve source-linked record 092-workflow-1-record and make a recipient-facing distinction grounded in 092-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Two adjacent clips imply causation: require evidence or revise the transition.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 092-workflow-1-record must accurately preserve observation 092-event-1 (v1): Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition. Apply brief requirement Two adjacent clips imply causation: require evidence or revise the transition. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed DocumentaryProject record 092-workflow-1-record and its source link to 092-event-1 version v1, with a disposition matching this observed state: Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition. Carry requirement Two adjacent clips imply causation: require evidence or revise the transition. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 092-workflow-1-record based on 092-event-1 (v1) and observation Documentary cut E-92 places clip A (the bridge siren) immediately before clip B (the bridge closure). Neither source says the siren caused the closure; editorial review has no causal evidence for the transition. Apply requirement Two adjacent clips imply causation: require evidence or revise the transition. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "092-workflow-2",
+    "root": "assembleDocumentary.nl",
+    "split_group": "world-092-workflow-2",
+    "inputs": {
+      "assets": [
+        {
+          "id": "092-workflow-2-record",
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
+          ],
+          "sourceDate": "unknown",
+          "correctedClaim": ""
+        }
+      ],
+      "assembly": {
+        "id": "092-workflow-2",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-2-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-2-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
+        {
+          "id": "092-wf-2-source",
+          "source": "primary case artifact 092-E2",
+          "version": "v1",
+          "text": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "checkpoint": {
+        "assemblyId": "092-workflow-2",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-2-record",
+        "caseId": "092-workflow-2",
+        "sourceRefs": [
+          "092-wf-2-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-2-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-2-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
+        {
+          "id": "092-wf-2-source",
+          "source": "primary case artifact 092-E2",
+          "version": "v1",
+          "text": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Documentary Assembly Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Cut list removes “I think” from a witness quote; source recording includes the qualifier."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A short quote loses its qualifier: restore context or reject the cut. Use observation Cut list removes “I think” from a witness quote; source recording includes the qualifier. as the source of truth. The proposal should preserve source-linked record 092-workflow-2-record and make a recipient-facing distinction grounded in 092-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Cut list removes “I think” from a witness quote; source recording includes the qualifier.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A short quote loses its qualifier: restore context or reject the cut.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 092-workflow-2-record must accurately preserve observation 092-wf-2-source (v1): Cut list removes “I think” from a witness quote; source recording includes the qualifier. Apply brief requirement A short quote loses its qualifier: restore context or reject the cut. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed DocumentaryProject record 092-workflow-2-record and its source link to 092-wf-2-source version v1, with a disposition matching this observed state: Cut list removes “I think” from a witness quote; source recording includes the qualifier. Carry requirement A short quote loses its qualifier: restore context or reject the cut. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 092-workflow-2-record based on 092-wf-2-source (v1) and observation Cut list removes “I think” from a witness quote; source recording includes the qualifier. Apply requirement A short quote loses its qualifier: restore context or reject the cut. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "092-workflow-3",
+    "root": "assembleDocumentary.nl",
+    "split_group": "world-092-workflow-3",
+    "inputs": {
+      "assets": [
+        {
+          "id": "092-workflow-3-record",
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
+          ],
+          "sourceDate": "unknown",
+          "correctedClaim": ""
+        }
+      ],
+      "assembly": {
+        "id": "092-workflow-3",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-3-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-3-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
+        {
+          "id": "092-wf-3-source",
+          "source": "archive license L-92 and production calendar v4",
+          "version": "v2",
+          "text": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "checkpoint": {
+        "assemblyId": "092-workflow-3",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-3-record",
+        "caseId": "092-workflow-3",
+        "sourceRefs": [
+          "092-wf-3-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-3-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-3-source",
+          "sourceVersion": "v2"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
+        {
+          "id": "092-wf-3-source",
+          "source": "archive license L-92 and production calendar v4",
+          "version": "v2",
+          "text": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Documentary Assembly Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Archive rights expire before release: obtain renewal or replace the asset. Independently assess the rights-expiry use case. The proposed release on 2026-11-20 falls after L-92 ends on 2026-11-15, and the register contains neither renewal nor replacement clearance. The view must state this gap; durable proposal keeps A-92 blocked from the planned release until a valid right or cleared substitute is evidenced. Renewal/replacement is a proposal only; claim no rights were renewed or asset changed. Use the supplied evidence as the source of truth, preserve record 092-workflow-3-record and source 092-wf-3-source version v2, and keep persistence and external effects at the host boundary."
+    },
+    "scenario": "Archive license L-92 for asset A-92 grants use through 2026-11-15. The production calendar v4 sets the proposed public release for 2026-11-20; no renewal agreement or replacement-asset clearance is in the rights register.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Archive rights expire before release: obtain renewal or replace the asset.",
+    "boundary_assertions": {
+      "view": "View identifies L-92’s 2026-11-15 end date and proposed 2026-11-20 release, notes that neither renewal nor substitute clearance exists, and marks the asset’s release status unresolved.",
+      "durable_state": "Proposed project state retains A-92 and its license dates, flags the planned release as beyond the documented permission window, and records absent renewal/substitute evidence; no release or persisted update is claimed.",
+      "effects": "Effect ledger may propose obtaining a rights renewal or a cleared replacement before 2026-11-20. It must not claim renewal, replacement, or publication occurred without host authorization and receipt."
+    }
+  },
+  {
+    "id": "092-workflow-4",
+    "root": "assembleDocumentary.nl",
+    "split_group": "world-092-workflow-4",
+    "inputs": {
+      "assets": [
+        {
+          "id": "092-workflow-4-record",
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
+          ],
+          "sourceDate": "unknown",
+          "correctedClaim": ""
+        }
+      ],
+      "assembly": {
+        "id": "092-workflow-4",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-4-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-4-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
+        {
+          "id": "092-wf-4-source",
+          "source": "primary case artifact 092-E4",
+          "version": "v1",
+          "text": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "checkpoint": {
+        "assemblyId": "092-workflow-4",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-4-record",
+        "caseId": "092-workflow-4",
+        "sourceRefs": [
+          "092-wf-4-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-4-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-4-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
+        {
+          "id": "092-wf-4-source",
+          "source": "primary case artifact 092-E4",
+          "version": "v1",
+          "text": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Documentary Assembly Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A speaker corrects a factual statement: preserve the correction in editorial review. Use observation Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock. as the source of truth. The proposal should preserve source-linked record 092-workflow-4-record and make a recipient-facing distinction grounded in 092-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A speaker corrects a factual statement: preserve the correction in editorial review.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 092-workflow-4-record must accurately preserve observation 092-wf-4-source (v1): Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock. Apply brief requirement A speaker corrects a factual statement: preserve the correction in editorial review. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed DocumentaryProject record 092-workflow-4-record and its source link to 092-wf-4-source version v1, with a disposition matching this observed state: Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock. Carry requirement A speaker corrects a factual statement: preserve the correction in editorial review. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 092-workflow-4-record based on 092-wf-4-source (v1) and observation Speaker correction C-92 says “south bridge,” not “old bridge”; correction was received before picture lock. Apply requirement A speaker corrects a factual statement: preserve the correction in editorial review. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "092-workflow-5",
+    "root": "assembleDocumentary.nl",
+    "split_group": "world-092-workflow-5",
+    "inputs": {
+      "assets": [
+        {
+          "id": "092-workflow-5-record",
+          "revision": "v1",
+          "durationFrames": 100,
+          "frameRate": 25,
+          "speaker": "unknown",
+          "claim": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+          "qualifier": "",
+          "contextBefore": "",
+          "contextAfter": "",
+          "rights": [
+            "case permission"
+          ],
+          "sourceDate": "unknown",
+          "correctedClaim": ""
+        }
+      ],
+      "assembly": {
+        "id": "092-workflow-5",
+        "revision": 1,
+        "assets": [
+          {
+            "id": "092-workflow-5-record",
+            "revision": "v1",
+            "durationFrames": 100,
+            "frameRate": 25,
+            "speaker": "unknown",
+            "claim": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+            "qualifier": "",
+            "contextBefore": "",
+            "contextAfter": "",
+            "rights": [
+              "case permission"
+            ],
+            "sourceDate": "unknown",
+            "correctedClaim": ""
+          }
+        ],
+        "cuts": [
+          {
+            "assetId": "092-workflow-5-record",
+            "inFrame": 0,
+            "outFrame": 100
+          }
+        ],
+        "transitions": [],
+        "targetFrames": 100,
+        "approvedClaimIds": [],
+        "captionsRevision": "v1",
+        "descriptionsRevision": "v1"
+      },
+      "corrections": [
+        {
+          "id": "092-wf-5-source",
+          "source": "primary case artifact 092-E5",
+          "version": "v1",
+          "text": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ],
+      "checkpoint": {
+        "assemblyId": "092-workflow-5",
+        "revision": 0,
+        "digest": "",
+        "checkedAssets": [],
+        "invalidatedOutputs": [],
+        "clearanceRefs": [],
+        "receiptStatus": "none"
+      },
+      "sourceRecord": {
+        "id": "092-workflow-5-record",
+        "caseId": "092-workflow-5",
+        "sourceRefs": [
+          "092-wf-5-source"
+        ],
+        "state": "draft",
+        "kind": "DocumentaryProject",
+        "subject": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+        "status": "candidate",
+        "evidenceIds": [
+          "092-wf-5-source"
+        ],
+        "fields": {
+          "sourceArtifact": "092-wf-5-source",
+          "sourceVersion": "v1"
+        },
+        "interviewIds": [
+          "INT-92-A",
+          "INT-92-B"
+        ],
+        "archiveAssetIds": [
+          "ARCH-92-A"
+        ],
+        "editorialBrief": "Investigate when the bridge closed relative to the alarm; keep conflicting testimony visible.",
+        "editorId": "ED-92",
+        "targetDurationSeconds": 1800
+      },
+      "sourceEvidence": [
+        {
+          "id": "092-wf-5-source",
+          "source": "primary case artifact 092-E5",
+          "version": "v1",
+          "text": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Documentary Assembly Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A late edit shifts duration: update captions, descriptions, and clearance references together. Use observation Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline. as the source of truth. The proposal should preserve source-linked record 092-workflow-5-record and make a recipient-facing distinction grounded in 092-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A late edit shifts duration: update captions, descriptions, and clearance references together.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 092-workflow-5-record must accurately preserve observation 092-wf-5-source (v1): Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline. Apply brief requirement A late edit shifts duration: update captions, descriptions, and clearance references together. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed DocumentaryProject record 092-workflow-5-record and its source link to 092-wf-5-source version v1, with a disposition matching this observed state: Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline. Carry requirement A late edit shifts duration: update captions, descriptions, and clearance references together. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 092-workflow-5-record based on 092-wf-5-source (v1) and observation Late edit E-12 adds 18 seconds; caption file, audio description and release duration still use previous timeline. Apply requirement A late edit shifts duration: update captions, descriptions, and clearance references together. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,123 @@
+{
+  "schema": "natlang.application/1",
+  "id": "032",
+  "title": "Cross-study measurement harmonizer",
+  "entrypoint": "harmonizeMeasures.nl",
+  "interfaces": [
+    {
+      "name": "harmonizeMeasures",
+      "path": "harmonizeMeasures.nl",
+      "purpose": "Build a comparable study slice only from source-compatible constructs, explicit missingness semantics, exact row-version transforms, and audited sensitivity.",
+      "stateParameter": "corpus",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "measurement-harmonization"
+    }
+  ],
+  "persistence": [
+    "MeasureBridge",
+    "MissingnessLedger",
+    "TransformReceipt",
+    "HarmonizedDatasetSlice",
+    "SensitivityFinding",
+    "MappingRevisionEffect"
+  ],
+  "effects": [
+    "exclude unsupported unit or category conversions",
+    "invalidate only derived slices that consumed a revised mapping"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverMeasures",
+        "paths": [
+          "measureHarmonizer/frameHarmonization.nl",
+          "measureHarmonizer/compareConstructDefinitions.nl",
+          "runCase/recoverMeasures/audit/qualify.nl",
+          "measureHarmonizer/selectHarmonizationPolicy.nl"
+        ]
+      },
+      {
+        "stage": "assessComparability",
+        "paths": [
+          "measureHarmonizer/compareConstructDefinitions.nl",
+          "measureHarmonizer/verifyCategoryMapping.nl"
+        ]
+      },
+      {
+        "stage": "proposeTransforms",
+        "paths": [
+          "measureHarmonizer/bindRowTransforms.nl"
+        ]
+      },
+      {
+        "stage": "constructCohort",
+        "paths": [
+          "measureHarmonizer/buildValidatedSlice.nl",
+          "measureHarmonizer/traceParticipantOverlap.nl"
+        ]
+      },
+      {
+        "stage": "auditSensitivity",
+        "paths": [
+          "measureHarmonizer/probeMappingSensitivity.nl",
+          "measureHarmonizer/invalidateRevisedMapping.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "measureHarmonizer/classifyMissingness.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "measureHarmonizer/verifyCategoryMapping.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "measureHarmonizer/bindRowTransforms.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "measureHarmonizer/traceParticipantOverlap.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "measureHarmonizer/invalidateRevisedMapping.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "harmonizeMeasures.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/recoverMeasures/audit/qualify.nl",
+    "measureHarmonizer/frameHarmonization.nl",
+    "measureHarmonizer/compareConstructDefinitions.nl",
+    "measureHarmonizer/classifyMissingness.nl",
+    "measureHarmonizer/verifyCategoryMapping.nl",
+    "measureHarmonizer/bindRowTransforms.nl",
+    "measureHarmonizer/traceParticipantOverlap.nl",
+    "measureHarmonizer/buildValidatedSlice.nl",
+    "measureHarmonizer/probeMappingSensitivity.nl",
+    "measureHarmonizer/invalidateRevisedMapping.nl",
+    "measureHarmonizer/selectHarmonizationPolicy.nl",
+    "harmonizeMeasures/reconcileHarmonization.nl",
+    "measureHarmonizer/compareConstructDefinitions/compareOneConstructPair.nl"
+  ]
+}

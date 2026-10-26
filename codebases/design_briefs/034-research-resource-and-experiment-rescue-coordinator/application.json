@@ -1,0 +1,187 @@
+{
+  "schema": "natlang.application/1",
+  "id": "034",
+  "title": "Research resource and experiment rescue coordinator",
+  "entrypoint": "coordinateResearchWindow.nl",
+  "interfaces": [
+    {
+      "name": "coordinateResearchWindow",
+      "path": "coordinateResearchWindow.nl",
+      "purpose": "Build a protocol-bound resource assignment, rescue branch, readiness decision, and consumption ledger."
+    },
+    {
+      "name": "parseProtocolConstraints",
+      "path": "coordinateResearchWindow/parseProtocolConstraints.nl",
+      "purpose": "Separate approved experimental conditions from researcher preferences."
+    },
+    {
+      "name": "reconcileResourceCalendar",
+      "path": "coordinateResearchWindow/reconcileResourceCalendar.nl",
+      "purpose": "Check capability, calibration, booking, maintenance, and operator qualification."
+    },
+    {
+      "name": "solveWindowAssignments",
+      "path": "coordinateResearchWindow/solveWindowAssignments.nl",
+      "purpose": "Search finite instrument and operator windows without relaxing hard constraints."
+    },
+    {
+      "name": "proposeResearchRescue",
+      "path": "coordinateResearchWindow/proposeResearchRescue.nl",
+      "purpose": "Compare resequencing, qualified substitutes, and postponement with explicit deviation review."
+    },
+    {
+      "name": "reconcileConsumedMaterials",
+      "path": "coordinateResearchWindow/reconcileConsumedMaterials.nl",
+      "purpose": "Retain preparation consumption and identify explicitly dependent experiments."
+    },
+    {
+      "name": "recheckDayOfReadiness",
+      "path": "coordinateResearchWindow/recheckDayOfReadiness.nl",
+      "purpose": "Revalidate current facts immediately before execution while preserving bookings."
+    },
+    {
+      "name": "reconcileResearchReservation",
+      "path": "reconcileResearchReservation.nl",
+      "purpose": "Reconcile exact external booking, rejection, unknown, and cancellation receipts against the proposed experiment windows.",
+      "stateParameter": "ledger",
+      "stateResultPath": [
+        "ledger"
+      ],
+      "stateKey": "research-reservation-ledger"
+    }
+  ],
+  "mechanisms": [
+    {
+      "name": "intervalsOverlap",
+      "path": "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
+      "purpose": "Exact half-open interval arithmetic only; NatLang owns candidate search, branching, and ranking."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretRequirements",
+        "paths": [
+          "coordinateResearchWindow/parseProtocolConstraints/extractProtocolPredicates.nl"
+        ]
+      },
+      {
+        "stage": "modelResources",
+        "paths": [
+          "coordinateResearchWindow/reconcileResourceCalendar/assessInstrumentMatch.nl"
+        ]
+      },
+      {
+        "stage": "constructSchedule",
+        "paths": [
+          "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/chooseNextExperiment.nl",
+          "coordinateResearchWindow/solveWindowAssignments/chooseBestProtocolSchedule.nl"
+        ]
+      },
+      {
+        "stage": "planRescue",
+        "paths": [
+          "coordinateResearchWindow/proposeResearchRescue/testSubstituteBehavior.nl"
+        ]
+      },
+      {
+        "stage": "coordinateReadiness",
+        "paths": [
+          "coordinateResearchWindow/recheckDayOfReadiness/verifyInstrumentStatus.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinateResearchWindow/recheckDayOfReadiness/verifyInstrumentStatus.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinateResearchWindow/recheckDayOfReadiness/verifySampleViability.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinateResearchWindow/reconcileResourceCalendar/examineSharedReservations.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinateResearchWindow/proposeResearchRescue/testSubstituteBehavior.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinateResearchWindow/reconcileConsumedMaterials/tracePreparedMaterialUse.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "recordFamilies": [
+      "ResearchSchedule",
+      "ExperimentRequirement",
+      "ExperimentSlot",
+      "RescueOption",
+      "ReadinessCheck",
+      "ResearchReservationReceipt"
+    ],
+    "history": "reservation responses and cancellations are append-only and idempotent by receipt ID; unknown outcomes block a duplicate request",
+    "dispatch": "only a matching reservation receipt confirms a booking; readiness is checked again immediately before execution"
+  },
+  "effects": {
+    "proposed": [
+      "resource-owner notice",
+      "operator instruction",
+      "investigator deviation review"
+    ],
+    "dispatch": "operator-controlled; plan generation does not reserve or start experiments"
+  },
+  "source_files": [
+    "coordinateResearchWindow.nl",
+    "coordinateResearchWindow/collectResearchQuestions.nl",
+    "coordinateResearchWindow/parseProtocolConstraints.nl",
+    "coordinateResearchWindow/parseProtocolConstraints/extractProtocolPredicates.nl",
+    "coordinateResearchWindow/parseProtocolConstraints/locateApprovedProtocols.nl",
+    "coordinateResearchWindow/parseProtocolConstraints/resolveProtocolPrecedence.nl",
+    "coordinateResearchWindow/prepareFacilityNotices.nl",
+    "coordinateResearchWindow/proposeResearchRescue.nl",
+    "coordinateResearchWindow/proposeResearchRescue/testPostponementAuthority.nl",
+    "coordinateResearchWindow/proposeResearchRescue/testResequencing.nl",
+    "coordinateResearchWindow/proposeResearchRescue/testSubstituteBehavior.nl",
+    "coordinateResearchWindow/recheckDayOfReadiness.nl",
+    "coordinateResearchWindow/recheckDayOfReadiness/verifyDeviationApproval.nl",
+    "coordinateResearchWindow/recheckDayOfReadiness/verifyInstrumentStatus.nl",
+    "coordinateResearchWindow/recheckDayOfReadiness/verifyOperatorPresence.nl",
+    "coordinateResearchWindow/recheckDayOfReadiness/verifySampleViability.nl",
+    "coordinateResearchWindow/reconcileConsumedMaterials.nl",
+    "coordinateResearchWindow/reconcileConsumedMaterials/identifyDependentExperiments.nl",
+    "coordinateResearchWindow/reconcileConsumedMaterials/tracePreparedMaterialUse.nl",
+    "coordinateResearchWindow/reconcileResourceCalendar.nl",
+    "coordinateResearchWindow/reconcileResourceCalendar/assessInstrumentMatch.nl",
+    "coordinateResearchWindow/reconcileResourceCalendar/examineSharedReservations.nl",
+    "coordinateResearchWindow/reconcileResourceCalendar/verifyOperatorQualifications.nl",
+    "coordinateResearchWindow/requirements/audit/qualify.nl",
+    "coordinateResearchWindow/solveWindowAssignments.nl",
+    "coordinateResearchWindow/solveWindowAssignments/chooseBestProtocolSchedule.nl",
+    "coordinateResearchWindow/solveWindowAssignments/seedAssignmentSearch.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/chooseNextExperiment.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/deriveLegalIntervalOptions.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts.nl",
+    "coordinateResearchWindow/solveWindowAssignments/walkScheduleFrontier/expandFrontierLayer/expandOneFrontier/testAssignmentFeasibility/testAssignmentConflicts/intervalsOverlap.ts",
+    "reconcileResearchReservation.nl",
+    "reconcileResearchReservation/verifyReceiptAgainstAssignment.nl",
+    "types.ts"
+  ]
+}

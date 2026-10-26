@@ -1,0 +1,90 @@
+{
+  "application_id": "043",
+  "title": "Incident recovery orchestrator",
+  "source_relative_path": "applications/09-software-engineering-and-technical-operations/043-incident-recovery-orchestrator.md",
+  "source_sha256": "a7eaa0c07c624b7a62923c2aedee076d9943a89377727254f989315f9962e500",
+  "domain_id": "09",
+  "stages": [
+    {
+      "name": "frameImpact",
+      "output_type": "IncidentImpact",
+      "algorithm": "Combine alerts, user reports, and service telemetry to describe observed impact and uncertainty. Separate symptoms from causes and distinguish missing telemetry from healthy behavior; identify the service outcomes that recovery must actually restore.",
+      "gate": "Impact statements cite observations and preserve unknown coverage."
+    },
+    {
+      "name": "maintainHypotheses",
+      "output_type": "IncidentHypothesis",
+      "algorithm": "Generate a bounded set of causal hypotheses from deployment history, dependencies, and symptoms. Track evidence for and against each, choose checks that distinguish mechanisms, and avoid repeatedly confirming the most recent or most fluent explanation.",
+      "gate": "Hypotheses remain provisional until diagnostic evidence supports them."
+    },
+    {
+      "name": "selectDiagnostics",
+      "output_type": "DiagnosticAction",
+      "algorithm": "Choose from approved read-only or bounded diagnostic operations, considering expected discrimination and operational risk. Validate scope and rate limits, request commander approval for intrusive checks, and record what each possible result would change.",
+      "gate": "Diagnostic action is allowlisted and cannot widen credentials or query scope."
+    },
+    {
+      "name": "planRecovery",
+      "output_type": "RecoveryStep",
+      "algorithm": "Select a recovery path from approved runbooks using current evidence and legal action options. Sequence reversible actions first where appropriate, preserve prerequisites, and avoid improvising destructive commands or treating a successful command as recovered service.",
+      "gate": "Current authority, service state, and runbook preconditions checked immediately before execution."
+    },
+    {
+      "name": "verifyRestoration",
+      "output_type": "RestorationFinding",
+      "algorithm": "Recheck the affected user-visible functions and representative cohorts after recovery actions. Distinguish reduced alerts from actual restoration, retain residual degradation, and schedule observation long enough to detect recurrence under the supplied incident policy.",
+      "gate": "Closure requires outcome verification, not merely green infrastructure metrics."
+    }
+  ],
+  "operational_details": [
+    "A diagnostic query would overload the database: enforce resource budgets in the query service.",
+    "A rollback succeeds but data remains inconsistent: keep the incident open with a separate repair plan.",
+    "An action times out after execution: reconcile its actual state before retrying.",
+    "The commander changes mid-incident: transfer authority explicitly and preserve approvals.",
+    "A model proposes an unapproved shell command: reject it and request an authorized runbook extension."
+  ],
+  "domain_records": {
+    "Incident": [
+      "serviceIds: ID[]",
+      "reportedImpact: string",
+      "commanderId: ID",
+      "startedAt: DateTime",
+      "runbookIds: ID[]"
+    ],
+    "IncidentImpact": [
+      "caseId: ID",
+      "affectedFunctions: string[]",
+      "affectedCohorts: string[]",
+      "observedSymptoms: string[]",
+      "unknownScope: string"
+    ],
+    "IncidentHypothesis": [
+      "caseId: ID",
+      "mechanism: string",
+      "supportingRefs: Ref[]",
+      "contradictingRefs: Ref[]",
+      "discriminatingCheck: string"
+    ],
+    "DiagnosticAction": [
+      "caseId: ID",
+      "hypothesisIds: ID[]",
+      "approvedOperationId: ID",
+      "expectedInformation: string",
+      "operationalRisk: string"
+    ],
+    "RecoveryStep": [
+      "caseId: ID",
+      "operationId: ID",
+      "prerequisiteIds: ID[]",
+      "approvalRef: Ref",
+      "rollbackCondition: string"
+    ],
+    "RestorationFinding": [
+      "caseId: ID",
+      "function: string",
+      "verificationRefs: Ref[]",
+      "residualImpact: string",
+      "monitoringWindow: string"
+    ]
+  }
+}

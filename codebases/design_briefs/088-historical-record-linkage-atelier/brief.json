@@ -1,0 +1,50 @@
+{
+  "application_id": "088",
+  "title": "Historical Record Linkage Atelier",
+  "source_relative_path": "applications/18-archives-museums-and-cultural-heritage/088-historical-record-linkage-atelier.md",
+  "source_sha256": "09f918b53fa9b3dc29a7a920e07df15af1b9dcd708d4dc417b1c3a44576e9d6e",
+  "domain_id": "18",
+  "stages": [
+    {
+      "name": "normalizeRecords",
+      "output_type": "HistoricalObservation",
+      "algorithm": "Preserve original spellings, date expressions, and geographic descriptions while creating normalized search forms. Distinguish transcription uncertainty from historical variation, and avoid converting approximate dates or changing place names into falsely precise modern facts.",
+      "gate": "Original representation and uncertainty remain available."
+    },
+    {
+      "name": "generateLinks",
+      "output_type": "HistoricalCandidate",
+      "algorithm": "Generate candidate links using names, chronology, places, relationships, and contextual descriptions. Include plausible aliases while preserving hard incompatibilities, and audit records excluded by blocking so unusual spellings do not disappear from consideration.",
+      "gate": "Candidate generation is bounded and recall is independently assessed."
+    },
+    {
+      "name": "judgeIdentity",
+      "output_type": "HistoricalIdentityFinding",
+      "algorithm": "Compare evidence for identity versus kinship, institutional succession, or coincidence. Weigh source reliability only within its actual scope, preserve competing candidates, and avoid treating a plausible story as proof of identity.",
+      "gate": "Established links require discriminating evidence and compatible chronology."
+    },
+    {
+      "name": "reconcileNetworks",
+      "output_type": "HistoricalNetwork",
+      "algorithm": "Check proposed identity and relationship links globally for impossible dates, incompatible simultaneous identities, and circular assumptions. Prevent one uncertain link from becoming evidence that confirms itself through a derived family or institutional network.",
+      "gate": "No self-supporting evidence cycle or established chronological contradiction."
+    },
+    {
+      "name": "prepareResearchView",
+      "output_type": "HistoricalLinkageEdition",
+      "algorithm": "Publish a reviewable linkage view with source-level explanations and explicit alternatives. Support corrections and reversible splits, preserve stable source identifiers, and expose uncertainty to downstream researchers instead of exporting only a deceptively clean graph.",
+      "gate": "Accepted and provisional relationships remain distinguishable in every export."
+    }
+  ],
+  "operational_details": [
+    "A place changes name or boundary: preserve historical geography rather than forcing a modern identity.",
+    "A date is approximate: use intervals in chronology checks.",
+    "A family reuses names across generations: require relationship and timing evidence.",
+    "A transcription is corrected: invalidate dependent links selectively.",
+    "A researcher merges entities prematurely: support a reversible split with downstream impact tracking."
+  ],
+  "scenario": {
+    "representative_episode": "Two historical residents share a name, one record has an approximate date, and a tempting linkage would create an impossible family chronology.",
+    "independent_truth": "Fictional historical identities, alias and date uncertainty, true relationships, and exact chronological constraints."
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "application_id": "076",
+  "title": "Referral Packet Completeness Manager",
+  "source_relative_path": "applications/16-healthcare-administration-and-care-logistics/076-referral-packet-completeness-manager.md",
+  "source_sha256": "7a222ffc9216fbdae3b2549770ac858785e051156714df3f312b1ad6e53fed08",
+  "domain_id": "16",
+  "stages": [
+    {
+      "name": "interpretRequirements",
+      "output_type": "ReferralRequirement",
+      "algorithm": "Read the receiving service’s supplied administrative requirements and the clinician’s referral instructions. Identify required records, forms, dates, and signatures while preserving clinician-provided priority and avoiding any independent judgment about clinical necessity.",
+      "gate": "Requirements are current, service-specific, and administrative in scope."
+    },
+    {
+      "name": "matchPatientRecords",
+      "output_type": "ReferralRecordMatch",
+      "algorithm": "Verify patient and episode identity using approved exact matching and reviewed evidence. Distinguish similar names, historical identifiers, and unrelated episodes; quarantine mismatches before content is included in a packet.",
+      "gate": "No cross-patient attachment or unsupported identity merge."
+    },
+    {
+      "name": "assessCompleteness",
+      "output_type": "ReferralGap",
+      "algorithm": "Compare each requirement with submitted documents, checking scope, dates, signatures, and readability. Distinguish document presence from actual required content and route clinical-content questions to authorized staff rather than interpreting them autonomously.",
+      "gate": "Every administrative requirement is met or explicitly unresolved."
+    },
+    {
+      "name": "requestMaterial",
+      "output_type": "ReferralRequest",
+      "algorithm": "Group missing-material requests by authorized source, ask only for necessary records, and preserve patient consent and permitted disclosure scope. Avoid repeated requests for existing evidence and track who is responsible for each unresolved gap.",
+      "gate": "Requests are minimal, authorized, and tied to a specific requirement."
+    },
+    {
+      "name": "releaseAndTrack",
+      "output_type": "ReferralPacket",
+      "algorithm": "Assemble a recipient-bound packet, verify exact patient and service identifiers, and obtain required review before transmission. Track delivery, receipt, and administrative acceptance separately, preserving rejection reasons and follow-up obligations.",
+      "gate": "No claim of appointment or clinical acceptance from a transport receipt alone."
+    }
+  ],
+  "operational_details": [
+    "Two patients share a name: require approved identity evidence before matching documents.",
+    "A receiving service changes its checklist: revalidate only affected pending packets.",
+    "A document is present but unsigned: retain the gap rather than marking complete.",
+    "A clinician changes priority: preserve the authoritative change without independently re-triaging.",
+    "A transfer acknowledgment is lost: reconcile recipient status before resending sensitive records."
+  ],
+  "scenario": {
+    "representative_episode": "A referral includes an expired form and one document from a similarly named patient; the receiving service later requests an additional administrative signature.",
+    "independent_truth": "Synthetic patient identities, service checklists, document validity, authorizations, and exact transfer states."
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "schema": "natlang.application/1",
+  "id": "025",
+  "title": "Grant spending and reporting manager",
+  "entrypoint": "coordinateGrantReport.nl",
+  "interfaces": [
+    {
+      "name": "coordinateGrantReport",
+      "path": "coordinateGrantReport.nl",
+      "purpose": "Reconcile grant-specific conditions, costs, activity evidence, reporting claims and submission receipts.",
+      "stateParameter": "ledger",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "grant-reporting"
+    }
+  ],
+  "persistence": [
+    "GrantCondition",
+    "GrantAllocation",
+    "ActivityEvidence",
+    "GrantNarrative",
+    "GrantSubmission"
+  ],
+  "effects": [
+    "retain each funder submission as an immutable, receipt-linked version",
+    "withhold participant disclosure without consent and authority"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractGrantRules",
+        "paths": [
+          "grantDesk/deriveAwardConditions.nl"
+        ]
+      },
+      {
+        "stage": "allocateSpending",
+        "paths": [
+          "grantDesk/allocateServiceSlices.nl"
+        ]
+      },
+      {
+        "stage": "verifyActivities",
+        "paths": [
+          "grantDesk/traceActivityClaims.nl"
+        ]
+      },
+      {
+        "stage": "composeReport",
+        "paths": [
+          "grantDesk/composeEvidenceNarrative.nl"
+        ]
+      },
+      {
+        "stage": "manageSubmission",
+        "paths": [
+          "grantDesk/assembleSubmissionVersion.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "grantDesk/classifyAmendmentEffectiveDate.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "grantDesk/allocateAcrossPeriods.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "grantDesk/reconcileSharedActivity.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "grantDesk/reviewParticipantDisclosure.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "grantDesk/amendSubmittedReport.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "types.ts",
+    "coordinateGrantReport.nl",
+    "grantDesk/deriveAwardConditions.nl",
+    "grantDesk/allocateServiceSlices.nl",
+    "grantDesk/grantMath/checkPeriodSliceTotals.ts",
+    "grantDesk/traceActivityClaims.nl",
+    "grantDesk/composeEvidenceNarrative.nl",
+    "grantDesk/assembleSubmissionVersion.nl",
+    "grantDesk/classifyAmendmentEffectiveDate.nl",
+    "grantDesk/allocateAcrossPeriods.nl",
+    "grantDesk/reconcileSharedActivity.nl",
+    "grantDesk/reviewParticipantDisclosure.nl",
+    "grantDesk/amendSubmittedReport.nl",
+    "runCase/extractGrantRules/audit/qualify.nl",
+    "coordinateGrantReport/reconcileGrantReportState.nl",
+    "grantDesk/reconcileSharedActivity/evaluateOneSharedActivity.nl"
+  ]
+}

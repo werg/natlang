@@ -71,6 +71,43 @@ def _assert_same(left, right):
         assert left == right
 
 
+def _install_source_baseline_eval(monkeypatch,tmp_path,config_path,config):
+    """Protocol fixture for collector outcomes; the real runner stays separate."""
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.eval.native_state import task_execution_receipt
+    from natlang_neuralese.eval.task_cadence import task_eval_policy_identity,task_eval_runtime_identity
+    from natlang_neuralese.eval.task_packet import TASK_OUTCOMES
+    packet=tmp_path/'source-baseline-packet.json';packet.write_text('{}\n')
+    declaration={'packet':{'path':str(packet.resolve()),'sha256':sha256_file_hex(packet)},
+        'cases':[0],'reference_successes':None,'min_successes':0}
+    config['task_eval']=declaration
+    config_path.write_text(json.dumps(config))
+    def measure(participants,export,selected,out,step,device,vae=None,stop_requested=None,source_baseline=False):
+        if not source_baseline:return {}
+        assert vae is None and step>=0
+        result={}
+        for name,participant in participants.items():
+            run=Path(out)/name.replace(':','-');run.mkdir(parents=True,exist_ok=True)
+            counts={outcome:0 for outcome in TASK_OUTCOMES};counts['invalid_action']=1
+            score={'schema':'natlang.in-run-task-eval/1','step':step,'run':str(run),'cases':1,
+                'case_indices':[0],'packet_sha256':declaration['packet']['sha256'],'outcome_counts':counts,
+                'complete':True,'eligible':True,'task_successes':0,
+                'cases_detail':[{'id':name+':baseline','outcome':'invalid_action'}]}
+            score_path=run/'task-score.json';score_path.write_text(json.dumps(score))
+            summary={key:value for key,value in score.items()if key!='cases_detail'}
+            receipt=task_execution_receipt(summary,participant.identity,
+                checkpoint_sha256=participant.identity['checkpoint_sha256'])
+            policy_sha=task_eval_policy_identity(declaration)
+            runtime=task_eval_runtime_identity(declaration)
+            receipt.update(source_baseline=True,baseline_comparison_floor=0,
+                task_eval_policy_sha256=policy_sha,task_runtime_identity=runtime)
+            path=run/'native-task-execution-receipt.json';path.write_text(json.dumps(receipt))
+            result[name]={'path':str(path.resolve()),'sha256':sha256_file_hex(path),
+                'passed':receipt['passed'],'task_successes':receipt['task_successes']}
+        return result
+    monkeypatch.setattr(stage,'measure_tasks',measure)
+
+
 def test_inherited_participant_optimizer_policy_beats_generic_curriculum_defaults():
     from natlang_neuralese.train.native_semantic_stage import _inherited_optimizer_options
 
@@ -530,6 +567,7 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
     """Actual two-port VAE/joint updates; readiness transport is a protocol fixture."""
     path,manifest,config,_=_fixture(tmp_path,monkeypatch)
     config['snapshot_preparation']=True
+    _install_source_baseline_eval(monkeypatch,tmp_path,path,config)
     bindings=json.loads(manifest.read_text())
     for binding in bindings['models']:
         binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
@@ -556,7 +594,8 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
         native_readiness.validate_completion(tmp_path/'preparation/shared-stage-completion.json',published)
     controller=tmp_path/'controller.json'
     controller.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1',
-        'participants':bindings['models'],'out':str(tmp_path/'preparation'),'curriculum':str(path),
+        'participants':bindings['models'],'out':str(tmp_path/'preparation'),
+        'curriculum':frozen['curriculum']['path'],
         'command':['unused-no-launch-during-once-inspection','--participants','{participants}','--out','{out}']}))
     with monkeypatch.context() as local:
         local.setattr(native_readiness,'ready_participants',lambda config:(bindings['models'],[]))
@@ -602,6 +641,10 @@ def test_frozen_snapshot_preparation_then_explicit_descendant_optimizer_adoption
         device='cpu',max_updates=1)
     adopted=CheckpointPolicy.load(tmp_path/'adopted/checkpoint.pt')
     assert continued['step']==2 and not continued['production_ready']
+    for name in ('lfm','mellum'):
+        assert continued['source_task_baselines'][name]['native_identity']['checkpoint_sha256']=='b'*64
+        resolved=json.loads(Path(continued['resolved_curriculum']['path']).read_text())
+        assert resolved['models'][name]['task_eval']['reference_successes']==0
     assert adopted['training']['participant_refreshes'][-1]['changed_models']==['lfm','mellum']
     for name,participant in adopted['participants'].items():
         _assert_same(participant['optimizer'],loaded[name])
@@ -617,6 +660,7 @@ def test_new_frozen_work_refreshes_vae_after_real_descendant_sgd_and_resumes_exa
     """Actual tiny two-port optimizer/VAE work; readiness proofs are protocol fixtures."""
     path,manifest,config,_=_fixture(tmp_path,monkeypatch)
     config.update(snapshot_preparation=True,adaptive_refresh={'updates_per_phase':1})
+    _install_source_baseline_eval(monkeypatch,tmp_path,path,config)
     bindings=json.loads(manifest.read_text())
     for binding in bindings['models']:
         binding.update(readiness={'path':'protocol-proof','sha256':'a'*64},
@@ -692,6 +736,7 @@ def test_generated_snapshot_full_multirow_vae_epoch_resumes_after_quantum(tmp_pa
     config['snapshot_preparation']=snapshot['snapshot_preparation']
     if 'adaptive_refresh'in snapshot:config['adaptive_refresh']=snapshot['adaptive_refresh']
     config['inherit_optimizer']=snapshot['inherit_optimizer']
+    _install_source_baseline_eval(monkeypatch,actual,path,config)
     monkeypatch.setattr(stage,'_qualified_snapshot',lambda name,binding:binding)
     from natlang_neuralese.train import native_continuation
     monkeypatch.setattr(native_continuation,'qualified_refresh_config',lambda *a,**k:(config,[]))

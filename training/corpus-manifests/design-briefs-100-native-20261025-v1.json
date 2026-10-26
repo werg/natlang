@@ -1,0 +1,554 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "design-briefs-100-native-20261025-v1",
+  "owner": "pop",
+  "path": "training/semantic_applications/design_briefs",
+  "files": [
+    {
+      "path": "001-decision-dependency-ledger/cases.json",
+      "bytes": 49434,
+      "sha256": "d37ef9a2cdc6e8054f351aecb28e80fd05f097b43a4ad69343f0a12a8ce1238e"
+    },
+    {
+      "path": "002-contradiction-aware-knowledge-publisher/cases.json",
+      "bytes": 43463,
+      "sha256": "49a5e11a8d811194ac133695a428a66830cb48541b813b2a00ac41925d74e8d8"
+    },
+    {
+      "path": "003-handover-continuity-manager/cases.json",
+      "bytes": 43182,
+      "sha256": "76b761733da0d6a64a353c89ad0d9b3402e84a43c492eb223e30a6f18a1cd3ed"
+    },
+    {
+      "path": "004-organizational-knowledge-integration-workbench/cases.json",
+      "bytes": 43125,
+      "sha256": "0d1f46120caf14a6bbe598270b8f926ee9dca560dc3d07f6e7e837acc674fe7f"
+    },
+    {
+      "path": "005-exception-and-precedent-steward/cases.json",
+      "bytes": 42754,
+      "sha256": "74963211af430395d5d516463dd399d01430316b7cf77ccd04c559118bd96e4d"
+    },
+    {
+      "path": "006-continuous-customer-problem-observatory/cases.json",
+      "bytes": 43561,
+      "sha256": "9587bf98d73b2303eeffbad3cd575334be19787861642f33d313f922150d26c7"
+    },
+    {
+      "path": "007-qualitative-research-studio/cases.json",
+      "bytes": 44239,
+      "sha256": "ef8fcb2c8c794b9ec097464981469b7ceee33adaa6ad46dfc84b4d7f72d0b234"
+    },
+    {
+      "path": "008-product-opportunity-portfolio-manager/cases.json",
+      "bytes": 43931,
+      "sha256": "14f90770ae99837d3106ea319ebe8677459715cdb68e33dfc63470e629980819"
+    },
+    {
+      "path": "009-experiment-interpretation-workbench/cases.json",
+      "bytes": 43311,
+      "sha256": "2ca0ce7ce6026733eebed8b47516bf9fdf60a81356be393ccf7d75e5af053c88"
+    },
+    {
+      "path": "010-requirements-negotiation-workspace/cases.json",
+      "bytes": 43326,
+      "sha256": "800347361a9c27a97dbbcb82cb17835f00765fb39e95d5f7f118be0a715936a0"
+    },
+    {
+      "path": "011-multi-issue-service-recovery-desk/cases.json",
+      "bytes": 42765,
+      "sha256": "d00e69ebfb30e219950a88e767e186950d7546d57b0cebe151a0da76c2cf75b0"
+    },
+    {
+      "path": "012-returns-repair-and-resale-orchestrator/cases.json",
+      "bytes": 43043,
+      "sha256": "3416e509af97d6214796e38698f76dc80ce30d0559dda6d7bf1fd1833f784713"
+    },
+    {
+      "path": "013-marketplace-dispute-case-builder/cases.json",
+      "bytes": 42379,
+      "sha256": "53207ab679d7957e91bbdf40ec8a03ece7b7aa927bc70ad41d87d29cfbd722dd"
+    },
+    {
+      "path": "014-complex-customer-onboarding-director/cases.json",
+      "bytes": 42895,
+      "sha256": "85577d4842399d7e982fb4a9c4ec4663d601d9abc121fe252372b61c117f81af"
+    },
+    {
+      "path": "015-subscription-change-and-exit-coordinator/cases.json",
+      "bytes": 44276,
+      "sha256": "c39b98288b7f73be463d1be81f69007bdb3011521d5109f28322bbb6d85507fc"
+    },
+    {
+      "path": "016-tender-response-factory/cases.json",
+      "bytes": 42134,
+      "sha256": "093a996080af88d5346e473cc7d35a958936fb34b720eb5e29de15c787a2b961"
+    },
+    {
+      "path": "017-functional-substitution-sourcing-desk/cases.json",
+      "bytes": 43248,
+      "sha256": "78bf89c6664942ecf6fac0f6a3267e2130b17692944812c07973275f52a3112e"
+    },
+    {
+      "path": "018-supplier-incident-coordinator/cases.json",
+      "bytes": 43009,
+      "sha256": "ea351716b41134bfeb1db87c544a7e9af3c8bc81177bf59d7d0addbd9f0dac37"
+    },
+    {
+      "path": "019-contract-to-purchasing-conformance-desk/cases.json",
+      "bytes": 42340,
+      "sha256": "1247c20d44e817bcabde23503424ff8d7b57c25e6ff0ea90e0a670e0f60cf709"
+    },
+    {
+      "path": "020-multi-party-sourcing-negotiator/cases.json",
+      "bytes": 43370,
+      "sha256": "12e1c58c5687a16a8b7124d24548faaf69fc15f4a92e45a8f64fe77064d6772a"
+    },
+    {
+      "path": "021-accounts-payable-exception-resolver/cases.json",
+      "bytes": 41837,
+      "sha256": "dd1472535f919565c9256192b78b9d9adcaef4fd4ce2a8cf853feffe276948e0"
+    },
+    {
+      "path": "022-delivery-to-billing-obligation-reconciler/cases.json",
+      "bytes": 42109,
+      "sha256": "b135ddbf411c6c8b70e2b8fef38d6b19d6dcb6c4943dc87cf864490adcc800a7"
+    },
+    {
+      "path": "023-expense-policy-casework-system/cases.json",
+      "bytes": 42864,
+      "sha256": "bdb5507c7a7be6346842e123d58535743baeb679c4dbfd8f9990ce677263a987"
+    },
+    {
+      "path": "024-financial-close-workpaper-coordinator/cases.json",
+      "bytes": 42172,
+      "sha256": "b744f07c013131c15d4a4b1ded28fa765d6ca0793c577ce33f9bec600fe1fe58"
+    },
+    {
+      "path": "025-grant-spending-and-reporting-manager/cases.json",
+      "bytes": 42121,
+      "sha256": "65397c998438c6caac3c1ec37a4e507b3b3660df4f9174ff66ea989326171f2f"
+    },
+    {
+      "path": "026-contract-obligation-workbench/cases.json",
+      "bytes": 43867,
+      "sha256": "b0246f4a19ea24b796ee379e7cfa973cb27de17574e5e8c8c49bc8089f429ac1"
+    },
+    {
+      "path": "027-amendment-impact-engine/cases.json",
+      "bytes": 42871,
+      "sha256": "c54654bbe79cdac1c370dafae46bd0350704e37ba1e7998500700203b54abf61"
+    },
+    {
+      "path": "028-negotiation-clause-package-designer/cases.json",
+      "bytes": 42083,
+      "sha256": "9decdf89e5cc567758cea0aa89789fd641f80cdd83e08e89be42657956e8e612"
+    },
+    {
+      "path": "029-policy-change-simulator/cases.json",
+      "bytes": 42771,
+      "sha256": "f7109c745edfb84810c4f709c867b7784061da6bc606edf236756b10278f168c"
+    },
+    {
+      "path": "030-disclosure-and-redaction-review-workspace/cases.json",
+      "bytes": 44243,
+      "sha256": "8c70e8af7755ef7fe68ed0f3b17d25e3dcf7332a7a7b52a156e316e383535332"
+    },
+    {
+      "path": "031-living-evidence-map/cases.json",
+      "bytes": 43334,
+      "sha256": "b2f55216fe99460b1c851dfb9ff4b354aaf1d31807bfce3cf0a563202b91052b"
+    },
+    {
+      "path": "032-cross-study-measurement-harmonizer/cases.json",
+      "bytes": 43798,
+      "sha256": "dffa38710f9416ef6770aa786af35ea4eb9ee015a53c70cd8713966c15b72616"
+    },
+    {
+      "path": "033-replication-planning-workbench/cases.json",
+      "bytes": 44134,
+      "sha256": "4605b1d7e58aafd7287823e567f23603623164d69361feee68ac5a5723408c99"
+    },
+    {
+      "path": "034-research-resource-and-experiment-rescue-coordinator/cases.json",
+      "bytes": 43739,
+      "sha256": "e213a9677ddc62004012048143cfff5aa1c8a17b41c61f87f503afd985a7b622"
+    },
+    {
+      "path": "035-negative-result-learning-archive/cases.json",
+      "bytes": 44480,
+      "sha256": "094602e1672fb3a20ea50ad3ae876c4f832c49b8f2b77afaf7e00b5f7f5b6a26"
+    },
+    {
+      "path": "036-misconception-repair-studio/cases.json",
+      "bytes": 33476,
+      "sha256": "8e5001965269a4d4ccde62aeb3254156371224cca9dd88b773ddd084e88f7d70"
+    },
+    {
+      "path": "037-assessment-production-and-moderation-system/cases.json",
+      "bytes": 35969,
+      "sha256": "332e7e29276aca755bd4a878206d3266d2ce44fd59bc0ba3993e0cbf75e65d3c"
+    },
+    {
+      "path": "038-project-based-learning-director/cases.json",
+      "bytes": 36143,
+      "sha256": "e1a9a0fe45e40633edb15b77a039160efcb00891c0d38299ffbd2c27882d005c"
+    },
+    {
+      "path": "039-apprenticeship-practice-simulator/cases.json",
+      "bytes": 37194,
+      "sha256": "3eef4c420011fc84b92f66eba9e79cf3ad32ccac3e01dc3b43f599487881f688"
+    },
+    {
+      "path": "040-learning-portfolio-evidence-assessor/cases.json",
+      "bytes": 36227,
+      "sha256": "0b62331495bf932257baac09c08aa13555f8c85fb0f6e467d15f43c927d13e1e"
+    },
+    {
+      "path": "041-requirement-to-regression-factory/cases.json",
+      "bytes": 35181,
+      "sha256": "ad634efb04a847159b9c0d186e73930fe95b16daf5935906eb24188de2236d8b"
+    },
+    {
+      "path": "042-release-compatibility-coordinator/cases.json",
+      "bytes": 35024,
+      "sha256": "8504d67f218d7092334804b74a4bc6d03b8313af753d2b4fd41f7e9771922108"
+    },
+    {
+      "path": "043-incident-recovery-orchestrator/cases.json",
+      "bytes": 36367,
+      "sha256": "9bf406e9aae3f2cc99b6f65c5b2fc9acfb7515c37fd13efbbaf1fdb55892ef26"
+    },
+    {
+      "path": "044-documentation-behavior-synchronizer/cases.json",
+      "bytes": 34267,
+      "sha256": "014f780aebaffb093a422d6b6ad30b6db91d204f153733f435535ca84d204984"
+    },
+    {
+      "path": "045-technical-debt-campaign-planner/cases.json",
+      "bytes": 34312,
+      "sha256": "9d3f1af18f953a88b72a927a26562b3a05d6d6301ae90e1f46c7bb83edb27383"
+    },
+    {
+      "path": "046-semantic-analysis-work-order-compiler/cases.json",
+      "bytes": 36145,
+      "sha256": "7e9334456ad244b2a158213f7378b84fce3d618a4b374bfcad9aa2e3cafca333"
+    },
+    {
+      "path": "047-domain-data-migration-workshop/cases.json",
+      "bytes": 34821,
+      "sha256": "2aaae32b383c73482d308d1719e3f3f9381c70c646c98f82eb0a57bbe3091049"
+    },
+    {
+      "path": "048-taxonomy-evolution-service/cases.json",
+      "bytes": 34611,
+      "sha256": "89b71338ca856f5f8bd90e7c16101d5dd00e92278f91936b66138b38df74e530"
+    },
+    {
+      "path": "049-cross-collection-entity-resolution-workbench/cases.json",
+      "bytes": 34998,
+      "sha256": "a4a1ae1562c0a1b04865a2a493697bbfcc7b66a8204cc79ea5da5f95c0a16ec6"
+    },
+    {
+      "path": "050-dataset-specification-and-audit-studio/cases.json",
+      "bytes": 36018,
+      "sha256": "361c94a468b7827ec1d8b0e955d031e5006bd92154a3f6a96c941c476ce8756c"
+    },
+    {
+      "path": "051-disruption-aware-shipment-replanner/cases.json",
+      "bytes": 35952,
+      "sha256": "7762377ac3f98e7c5d20678ecd98a60aa20729eea825595303cf0215c34b01b8"
+    },
+    {
+      "path": "052-warehouse-exception-controller/cases.json",
+      "bytes": 34805,
+      "sha256": "2b15182770ddedc023291724e5bd2a33d97c8d6543759d24407bebcc435979bb"
+    },
+    {
+      "path": "053-industrial-surplus-exchange/cases.json",
+      "bytes": 34904,
+      "sha256": "b26c077ddc216ea730911a1d4a83e11909587895fe9b9660593cdf85a9700517"
+    },
+    {
+      "path": "054-donation-redistribution-coordinator/cases.json",
+      "bytes": 35408,
+      "sha256": "de19b8849c8cfbc2a3a669be7a783e11b9a1b52cca1ab8afb061f1f3345c158b"
+    },
+    {
+      "path": "055-repair-cooperative-dispatcher/cases.json",
+      "bytes": 34024,
+      "sha256": "cb04388539e7fa0a7ff36947105340abdecd8c862f28adae08f2d0556b6d61c3"
+    },
+    {
+      "path": "056-quality-escape-investigator/cases.json",
+      "bytes": 33962,
+      "sha256": "8076d3c0235468820a11e328061208a94f3737009ffb57d84586bb7cdbb9edee"
+    },
+    {
+      "path": "057-work-instruction-adaptation-studio/cases.json",
+      "bytes": 34973,
+      "sha256": "35398fba069c44c9184269a333f36c96d0a10f5c5ec4a838a42350cff9f3a727"
+    },
+    {
+      "path": "058-maintenance-planning-and-handover-system/cases.json",
+      "bytes": 34779,
+      "sha256": "50ea717e8fffa3e4333437f1caceec9012589557b3282ec0a96b1c8cd81b3f82"
+    },
+    {
+      "path": "059-engineering-change-impact-manager/cases.json",
+      "bytes": 34160,
+      "sha256": "8b564a4b1acf5779dc70f046b299061ecb055b3a026a8385e68b726b2c83b5d0"
+    },
+    {
+      "path": "060-custom-fabrication-quoting-desk/cases.json",
+      "bytes": 34526,
+      "sha256": "f9f2fc414fafa655a50600a34c005066325973739abbfe882d6f78dfa8c8bd3b"
+    },
+    {
+      "path": "061-change-order-impact-coordinator/cases.json",
+      "bytes": 34080,
+      "sha256": "ef6fec33a07aad90b3f812f2a0ac9f0093940cd5dd6ace58b9e5bd5987ab8fe7"
+    },
+    {
+      "path": "062-tender-scope-gap-resolver/cases.json",
+      "bytes": 32938,
+      "sha256": "df89e5fa1987edb70eedad46decd5846899a68ca95b2dcdd1eff4d64001b57eb"
+    },
+    {
+      "path": "063-building-handover-dossier-compiler/cases.json",
+      "bytes": 34172,
+      "sha256": "489eb9564293e3108de80b23bee211ee809031ac5d232c395d1b4dee2ef26338"
+    },
+    {
+      "path": "064-facility-complaint-to-work-order-system/cases.json",
+      "bytes": 35437,
+      "sha256": "50cdfc87f478cf3c17d683454e1795ed7cd9b36e0526be8c89b88f79d0dc5698"
+    },
+    {
+      "path": "065-adaptive-reuse-feasibility-studio/cases.json",
+      "bytes": 34390,
+      "sha256": "87f0f3435e912ebdb5381a9ab461cd4dcaeecbd69962be986f128529ad67c2a6"
+    },
+    {
+      "path": "066-habitat-restoration-planner/cases.json",
+      "bytes": 34278,
+      "sha256": "5117ccc0876919cebb500525017d76d81c28fe95a2d55e99b01b84ff82196c69"
+    },
+    {
+      "path": "067-agricultural-cooperative-harvest-coordinator/cases.json",
+      "bytes": 36077,
+      "sha256": "143e76a48d6d60c498153325057c7d317117cfbc014c20b06ec9215ea0f03114"
+    },
+    {
+      "path": "068-citizen-science-observation-curator/cases.json",
+      "bytes": 34933,
+      "sha256": "86ea87b6956f0d10fa34f70cb300bfdaf2f636d87121c82149ad04d3137af83c"
+    },
+    {
+      "path": "069-environmental-reporting-evidence-assembler/cases.json",
+      "bytes": 36207,
+      "sha256": "28ac08c3692f5ef1c47626f92cb0abb114628ac33e7d6294decafbc5cdd74d41"
+    },
+    {
+      "path": "070-community-garden-steward/cases.json",
+      "bytes": 34831,
+      "sha256": "9dcd6a4f65078ad22c383e9028dbbc4cf01c6053e3b843fe8d6f6493c6a53112"
+    },
+    {
+      "path": "071-public-consultation-synthesis-studio/cases.json",
+      "bytes": 32683,
+      "sha256": "4eb60ef134d0062e47b9c127fc347bffdcc8fdba19463be62519792d6e04b0e5"
+    },
+    {
+      "path": "072-participatory-budgeting-facilitator/cases.json",
+      "bytes": 34281,
+      "sha256": "00aa7b1fae46abfc277e0c7f788d780a41973bb384f6c1b5e4b288514beb66db"
+    },
+    {
+      "path": "073-public-service-application-navigator/cases.json",
+      "bytes": 38913,
+      "sha256": "ea66024992380b5cc63aec3f257b9678b438d72ed15437f826946fb97277bb52"
+    },
+    {
+      "path": "074-volunteer-deployment-coordinator/cases.json",
+      "bytes": 36381,
+      "sha256": "9f2d1641436784bce0b6a50d5f6137774f0b59414acfd22cd951c25c9e4d5b47"
+    },
+    {
+      "path": "075-community-agreement-mediator/cases.json",
+      "bytes": 36395,
+      "sha256": "61fdd1149a1bb3915962ae2a105821ca209ac45570f23222354ad9f2d100c133"
+    },
+    {
+      "path": "076-referral-packet-completeness-manager/cases.json",
+      "bytes": 31990,
+      "sha256": "e9a1244aa7b0ad102b32e9e00e1e901c4dca6664cfcc26359767a2ec4246bcd3"
+    },
+    {
+      "path": "077-care-transition-logistics-coordinator/cases.json",
+      "bytes": 34005,
+      "sha256": "976153552d7c40a2df613adc1364a503e8f4a61257e0109cfa90523bc4e50c40"
+    },
+    {
+      "path": "078-appointment-preparation-service/cases.json",
+      "bytes": 35499,
+      "sha256": "20108c5647c203625a741d14d21c307cfee3452499ccd9addfc2ae0acd2d6d3f"
+    },
+    {
+      "path": "079-health-record-request-fulfillment-workbench/cases.json",
+      "bytes": 35712,
+      "sha256": "ce0014ff404c3370896263ea8c2dd9962dcb8ec91aa428aa21c5bbb81e431093"
+    },
+    {
+      "path": "080-patient-experience-improvement-laboratory/cases.json",
+      "bytes": 37238,
+      "sha256": "1d43b741195a6586a652acf6d92c2f2b8c3cc1376e9ad0e682ca89037b09c01b"
+    },
+    {
+      "path": "081-localization-release-manager/cases.json",
+      "bytes": 35659,
+      "sha256": "af1f6a5a2339db412badbd4adade95a3b983036fd61148ba44a1b8e3e6103e71"
+    },
+    {
+      "path": "082-plain-language-transformation-studio/cases.json",
+      "bytes": 36508,
+      "sha256": "c024bd1843baa92121478d799035627e5e88cdb424d07baf9bf2b32cc54ceaba"
+    },
+    {
+      "path": "083-accessible-narrative-production-desk/cases.json",
+      "bytes": 34928,
+      "sha256": "7e7d5cdb307724e8788e6331e2d1e076bc08e4912f293a17c61edcf2908ca3ba"
+    },
+    {
+      "path": "084-cross-cultural-training-adaptation-studio/cases.json",
+      "bytes": 35534,
+      "sha256": "fd92652cd4d3f26e5b0d3228116ae25156bd72c09d61d927a2ad9056d42fa02b"
+    },
+    {
+      "path": "085-multilingual-terminology-negotiation-workbench/cases.json",
+      "bytes": 35374,
+      "sha256": "ea1c2147e22700945080e12e4e768a817ee24eaba23e965483342e701a4c7ad0"
+    },
+    {
+      "path": "086-museum-exhibition-curator/cases.json",
+      "bytes": 38086,
+      "sha256": "94ba2778ac2f00c705de28adb2e50a883da4a6b3d65577cbd85c2d9c6026a90c"
+    },
+    {
+      "path": "087-oral-history-reconciliation-archive/cases.json",
+      "bytes": 35734,
+      "sha256": "ba3fccfc26ec82e17e293b78a6499f7766e25b49fa017e1a68d89a3a51457dff"
+    },
+    {
+      "path": "088-historical-record-linkage-atelier/cases.json",
+      "bytes": 34772,
+      "sha256": "60e177713d9bf4276bfe4f9d49205a42eb453b371a2bcb9d3584e25e8041ba30"
+    },
+    {
+      "path": "089-collection-rights-and-consent-steward/cases.json",
+      "bytes": 32432,
+      "sha256": "c3644c22d9cba507715ca6eaecc6b25a33289c1b01d8c71b7a0882bbb586c807"
+    },
+    {
+      "path": "090-archive-research-commission-manager/cases.json",
+      "bytes": 37403,
+      "sha256": "b391bc306c1d3f592751b3e2bddf109f10f1c042d2678d326b6b4e5696c6cffd"
+    },
+    {
+      "path": "091-serial-fiction-continuity-room/cases.json",
+      "bytes": 35938,
+      "sha256": "deb7725a899bb354d4e0566affc62e75adaff9d4bac7554ff81c806ffe277b72"
+    },
+    {
+      "path": "092-documentary-assembly-studio/cases.json",
+      "bytes": 32432,
+      "sha256": "b654b037cb31716a4a907af3fa299eaa6053d6a1c8505678d67780a0d655c8a6"
+    },
+    {
+      "path": "093-magazine-commissioning-and-issue-planning-desk/cases.json",
+      "bytes": 35334,
+      "sha256": "dae09c96d1fcf045b23726d3982391705a9ad800a55161005c3fdbd5da088cb6"
+    },
+    {
+      "path": "094-brand-and-design-language-studio/cases.json",
+      "bytes": 35958,
+      "sha256": "5694d81e07266557d4ce8af260650975ed4949d8e96e193a2aa8b3c3aa9021d5"
+    },
+    {
+      "path": "095-culinary-concept-development-kitchen/cases.json",
+      "bytes": 32147,
+      "sha256": "62c7c54930211a5cbe6f58b8e9826122ac1f0c618b03e04eb3cb743bf66906ba"
+    },
+    {
+      "path": "096-escape-room-foundry/cases.json",
+      "bytes": 34313,
+      "sha256": "41b9b3bef17f4e31a1c321fe172be0a26887794cda4ad16fa87495f328f4f821"
+    },
+    {
+      "path": "097-live-event-disruption-director/cases.json",
+      "bytes": 35317,
+      "sha256": "4d765b067405b4dc9154cc4ee3f49a44c28b716abb2160041416538676ea42d8"
+    },
+    {
+      "path": "098-persistent-world-game-director/cases.json",
+      "bytes": 33949,
+      "sha256": "93ffd95279371f22cc9d9a7df426444010e552ba853fa02dce1ffce260cb138c"
+    },
+    {
+      "path": "099-negotiation-training-arena/cases.json",
+      "bytes": 32726,
+      "sha256": "298ddc3a7e23466f4b29e61162871f0da8bd2760911e50b5e721b9a89b57b493"
+    },
+    {
+      "path": "100-immersive-theatre-stage-manager/cases.json",
+      "bytes": 35191,
+      "sha256": "e30855ea1d6da13c0d4e4b8104f97b040798b5e30888f1217692bf9e030a7bc8"
+    },
+    {
+      "path": "domain-contracts.json",
+      "bytes": 121369,
+      "sha256": "28c606fe827369da986bc471431f9ebcbaf4afa09c4f527e94c3efae00206910"
+    },
+    {
+      "path": "operational-contracts.json",
+      "bytes": 65771,
+      "sha256": "9ea9d5c0e061f06919e0fc2b15367347909936b99ede558d91219a9dedaf1d15"
+    },
+    {
+      "path": "release-v1/compiler-check.json",
+      "bytes": 26361,
+      "sha256": "fde4ef9d1c44ed5c1d918c509ac265b17cf6ae3066f2ba753438343d2da2930f"
+    },
+    {
+      "path": "release-v1/inventory.json",
+      "bytes": 118962,
+      "sha256": "02dff8bd1ef66154b2e161629eb66beff34a30a6ce55c009743375a05d8c2956"
+    },
+    {
+      "path": "release-v1/packet-manifest.json",
+      "bytes": 2831,
+      "sha256": "e0a07b305f4ee8a087e313d177001aef52a91c5a88f453c15ad0b4b6cbcdd20d"
+    },
+    {
+      "path": "release-v1/readiness.json",
+      "bytes": 8025,
+      "sha256": "a513b16c2dfe4745df89631b634f99cff7c80dd923b459185991c4964a7b9994"
+    },
+    {
+      "path": "release-v1/registry-entry.json",
+      "bytes": 2346,
+      "sha256": "9c3b22a817f05f30bc9f251fca8e8899a76bbb536f8ba17ebd32460ee6e4d445"
+    },
+    {
+      "path": "release-v1/validation.txt",
+      "bytes": 3318,
+      "sha256": "0000c8ef29d89c6e6fd99719be192c03bf5423ddd71403f1ff99fe05df95086f"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 49758,
+      "sha256": "d870bbb02d1b91df81b644741f5d0caadf7f7dbe9f925fee62f8f9e399f8a63a"
+    }
+  ],
+  "bytes": 4193370
+}

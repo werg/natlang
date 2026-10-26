@@ -1,0 +1,122 @@
+{
+  "schema": "natlang.application/1",
+  "id": "029",
+  "title": "Policy change simulator",
+  "entrypoint": "simulatePolicyChange.nl",
+  "interfaces": [
+    {
+      "name": "simulatePolicyChange",
+      "path": "simulatePolicyChange.nl",
+      "purpose": "Compare exact policy replay artifacts across a frozen case cohort; preserve indeterminate cases, cohort changes and rare safeguard regressions.",
+      "stateParameter": "dossier",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "policy-simulation"
+    }
+  ],
+  "persistence": [
+    "PolicyDeltaSet",
+    "CohortReview",
+    "PolicyReplayBinding",
+    "PolicyOutcomeSet",
+    "RegressionSuite",
+    "BoundaryMatrix",
+    "PolicyOptionProposal"
+  ],
+  "effects": [
+    "do not claim simulation without exact baseline and candidate execution receipts",
+    "fork candidate when policy content changes during evaluation",
+    "require a fresh full replay after later policy edits"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "compilePolicyDifference",
+        "paths": [
+          "policySimulator/compilePolicyDelta.nl",
+          "runCase/compilePolicyDifference/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "prepareCases",
+        "paths": [
+          "policySimulator/freezeCaseCohort.nl"
+        ]
+      },
+      {
+        "stage": "compareOutcomes",
+        "paths": [
+          "policySimulator/bindPolicyReplayEvidence.nl",
+          "policySimulator/compareExactOutcomes.nl"
+        ]
+      },
+      {
+        "stage": "generateBoundaries",
+        "paths": [
+          "policySimulator/protectExceptionRegression.nl",
+          "policySimulator/traceBoundaryCases.nl"
+        ]
+      },
+      {
+        "stage": "preparePolicyOptions",
+        "paths": [
+          "policySimulator/proposePolicyOption.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "policySimulator/freezeCaseCohort.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "policySimulator/forkEditedSnapshot.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "policySimulator/protectExceptionRegression.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "policySimulator/freezeCaseCohort.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "policySimulator/bindAdoptedVersion.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "simulatePolicyChange.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/compilePolicyDifference/audit/qualify.nl",
+    "policySimulator/frameSimulation.nl",
+    "policySimulator/compilePolicyDelta.nl",
+    "policySimulator/freezeCaseCohort.nl",
+    "policySimulator/bindPolicyReplayEvidence.nl",
+    "policySimulator/compareExactOutcomes.nl",
+    "policySimulator/protectExceptionRegression.nl",
+    "policySimulator/traceBoundaryCases.nl",
+    "policySimulator/proposePolicyOption.nl",
+    "policySimulator/forkEditedSnapshot.nl",
+    "policySimulator/bindAdoptedVersion.nl",
+    "simulatePolicyChange/reconcilePolicyScenario.nl",
+    "policySimulator/compareExactOutcomes/compareOnePolicyReplayPair.nl"
+  ]
+}

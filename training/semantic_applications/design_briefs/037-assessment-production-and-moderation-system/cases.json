@@ -1,0 +1,590 @@
+[
+  {
+    "id": "037-assessment-production-and-moderation-system-gate-supported",
+    "root": "qualification/blueprintCoverage.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ],
+          "caseId": "case-37"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "037-assessment-production-and-moderation-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "assessment moderation packet",
+        "evidence": [
+          {
+            "id": "037-assessment-production-and-moderation-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Item A37 accepts 3/8 by a common-denominator method, but rubric R37 scores only the numeric result. Case case-37; current first-stage record values: {\"competencyIds\": [\"fraction-equivalence\"], \"coverageWeights\": [{\"denominator\": \"1\", \"numerator\": \"1\"}], \"excludedConstructs\": [\"reading speed\"], \"taskKinds\": [\"constructed-response with alternate valid method\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The item and rubric need moderation; the valid unexpected reasoning must remain visible."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "caseId",
+          "value": "",
+          "evidenceIds": [
+            "037-assessment-production-and-moderation-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "assessment moderation packet: For item A-037, the candidate gives 3/8 and shows the valid common-denominator method. The rubric awards the numeric answer but omits the method criterion; moderator M-2 marked it wrong. Apply the first-stage gate to the record and source versions; The item and rubric need moderation; the valid unexpected reasoning must remain visible.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-gate-contradictory",
+    "root": "qualification/blueprintCoverage.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "numeric reasoning"
+          ],
+          "caseId": "case-37"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "caseId",
+            "evidenceIds": [
+              "037-assessment-production-and-moderation-system-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "assessment moderation packet",
+        "evidence": [
+          {
+            "id": "037-assessment-production-and-moderation-system-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Item A37 accepts 3/8 by a common-denominator method, but rubric R37 scores only the numeric result. Case case-37; current first-stage record values: {\"competencyIds\": [\"fraction-equivalence\"], \"coverageWeights\": [{\"denominator\": \"1\", \"numerator\": \"1\"}], \"excludedConstructs\": [\"reading speed\"], \"taskKinds\": [\"constructed-response with alternate valid method\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The item and rubric need moderation; the valid unexpected reasoning must remain visible."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "excludedConstructs",
+          "value": "[\"numeric reasoning\"]",
+          "evidenceIds": [
+            "037-assessment-production-and-moderation-system-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "assessment moderation packet: For item A-037, the candidate gives 3/8 and shows the valid common-denominator method. The rubric awards the numeric answer but omits the method criterion; moderator M-2 marked it wrong. Apply the first-stage gate to the record and source versions; The item and rubric need moderation; the valid unexpected reasoning must remain visible.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-gate-missing",
+    "root": "qualification/blueprintCoverage.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-37"
+        },
+        "missingFields": [
+          "excludedConstructs"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes caseId?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "assessment moderation packet",
+        "evidence": [],
+        "missing": [
+          "caseId"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "The item and rubric need moderation; the valid unexpected reasoning must remain visible."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "assessment moderation packet: For item A-037, the candidate gives 3/8 and shows the valid common-denominator method. The rubric awards the numeric answer but omits the method criterion; moderator M-2 marked it wrong. Apply the first-stage gate to the record and source versions; The item and rubric need moderation; the valid unexpected reasoning must remain visible.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-operational-1",
+    "root": "freezeAssessmentEdition.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "assessment": {
+        "assessmentId": "037-assessment-production-and-moderation-system-operational-1",
+        "purpose": "Review the Assessment production and moderation system evidence for case 037-assessment-production-and-moderation-system-operational-1; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
+          {
+            "id": "037-operational-detail-1-source-v2",
+            "source": "Assessment production and moderation system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R037 Assessment steward; event version verified for this case",
+            "observedAt": "2026-10-12T10:00:00Z",
+            "text": "R037 Assessment steward records: Item A37, version 3, was posted to a public answer-sharing site at 09:15 on 2026-10-12. The assessment log lists 41 historical scored submissions from version 2 and 8 attempts recorded after the posting timestamp. This current event is source 037-operational-detail-1-source-v2 v2, observed 2026-10-12T10:00:00Z, for case 037-assessment-production-and-moderation-system-operational-1. The supplied typed prior 037-prior-assessmentblueprint-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Item A37, version 3, was posted to a public answer-sharing site at 09:15 on 2026-10-12. The assessment log lists 41 historical scored submissions from version 2 and 8 attempts recorded after the posting timestamp."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "revisedEvidenceIds": [
+          "037-operational-detail-1-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "currentBlueprint": {
+          "id": "037-prior-assessmentblueprint-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "037-assessment-production-and-moderation-system-operational-1",
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 037-assessment-production-and-moderation-system-operational-1 against this factual event: Item A37, version 3, was posted to a public answer-sharing site at 09:15 on 2026-10-12. The assessment log lists 41 historical scored submissions from version 2 and 8 attempts recorded after the posting timestamp. Original §9 detail: An item leaks online: retire its use for new assessments without deleting historical scoring evidence. Correct handling applies “retire its use for new assessments without deleting historical scoring evidence.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Item A37, version 3, was posted to a public answer-sharing site at 09:15 on 2026-10-12. The assessment log lists 41 historical scored submissions from version 2 and 8 attempts recorded after the posting timestamp.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "An item leaks online: retire its use for new assessments without deleting historical scoring evidence.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Item A37, version 3, was posted to a public answer-sharing site at 09:15 on 2026-10-12. The assessment log lists 41 historical scored submissions from version 2 and 8 attempts recorded after the posting timestamp. It links source 037-operational-detail-1-source-v2 v2 with prior typed AssessmentBlueprint record 037-prior-assessmentblueprint-detail-1-v1 v1 and keeps unresolved scope visible for A37.",
+      "durable_state": "The proposal retains prior record 037-prior-assessmentblueprint-detail-1-v1 v1 and versions only the affected state for A37 against source 037-operational-detail-1-source-v2 v2; it applies “retire its use for new assessments without deleting historical scoring evidence.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to A37 and the scope supported by source 037-operational-detail-1-source-v2 v2; it represents “retire its use for new assessments without deleting historical scoring evidence.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-operational-2",
+    "root": "freezeAssessmentEdition.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "assessment": {
+        "assessmentId": "037-assessment-production-and-moderation-system-operational-2",
+        "purpose": "Review the Assessment production and moderation system evidence for case 037-assessment-production-and-moderation-system-operational-2; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
+          {
+            "id": "037-operational-detail-2-source-v2",
+            "source": "Assessment production and moderation system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R037 Assessment steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R037 Assessment steward records: Rubric R37 version 2 graded responses R37-101 through R37-118 before editor Jules Park published version 3 at 14:00. Version 3 changes partial credit for written reasoning; all 18 response IDs retain their rubric-version field. This current event is source 037-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 037-assessment-production-and-moderation-system-operational-2. The supplied typed prior 037-prior-assessmentblueprint-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rubric R37 version 2 graded responses R37-101 through R37-118 before editor Jules Park published version 3 at 14:00. Version 3 changes partial credit for written reasoning; all 18 response IDs retain their rubric-version field."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "revisedEvidenceIds": [
+          "037-operational-detail-2-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "currentBlueprint": {
+          "id": "037-prior-assessmentblueprint-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "037-assessment-production-and-moderation-system-operational-2",
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 037-assessment-production-and-moderation-system-operational-2 against this factual event: Rubric R37 version 2 graded responses R37-101 through R37-118 before editor Jules Park published version 3 at 14:00. Version 3 changes partial credit for written reasoning; all 18 response IDs retain their rubric-version field. Original §9 detail: A rubric changes after grading: identify every affected response before applying corrections. Correct handling applies “identify every affected response before applying corrections.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Rubric R37 version 2 graded responses R37-101 through R37-118 before editor Jules Park published version 3 at 14:00. Version 3 changes partial credit for written reasoning; all 18 response IDs retain their rubric-version field.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A rubric changes after grading: identify every affected response before applying corrections.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Rubric R37 version 2 graded responses R37-101 through R37-118 before editor Jules Park published version 3 at 14:00. Version 3 changes partial credit for written reasoning; all 18 response IDs retain their rubric-version field. It links source 037-operational-detail-2-source-v2 v2 with prior typed AssessmentBlueprint record 037-prior-assessmentblueprint-detail-2-v1 v1 and keeps unresolved scope visible for R37, R37-101, R37-118.",
+      "durable_state": "The proposal retains prior record 037-prior-assessmentblueprint-detail-2-v1 v1 and versions only the affected state for R37, R37-101, R37-118 against source 037-operational-detail-2-source-v2 v2; it applies “identify every affected response before applying corrections.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R37, R37-101, R37-118 and the scope supported by source 037-operational-detail-2-source-v2 v2; it represents “identify every affected response before applying corrections.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-operational-3",
+    "root": "freezeAssessmentEdition.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "assessment": {
+        "assessmentId": "037-assessment-production-and-moderation-system-operational-3",
+        "purpose": "Review the Assessment production and moderation system evidence for case 037-assessment-production-and-moderation-system-operational-3; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
+          {
+            "id": "037-operational-detail-3-source-v2",
+            "source": "Assessment production and moderation system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R037 Assessment steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R037 Assessment steward records: For item A37, learner L37 writes “3/8 + 1/4 = 0.375 + 0.25 = 0.625 = 5/8.” The current rubric exemplar accepts only a common-denominator fraction trace; no independent review is attached to L37’s response. This current event is source 037-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 037-assessment-production-and-moderation-system-operational-3. The supplied typed prior 037-prior-assessmentblueprint-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "For item A37, learner L37 writes “3/8 + 1/4 = 0.375 + 0.25 = 0.625 = 5/8.” The current rubric exemplar accepts only a common-denominator fraction trace; no independent review is attached to L37’s response."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "revisedEvidenceIds": [
+          "037-operational-detail-3-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "currentBlueprint": {
+          "id": "037-prior-assessmentblueprint-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "037-assessment-production-and-moderation-system-operational-3",
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 037-assessment-production-and-moderation-system-operational-3 against this factual event: For item A37, learner L37 writes “3/8 + 1/4 = 0.375 + 0.25 = 0.625 = 5/8.” The current rubric exemplar accepts only a common-denominator fraction trace; no independent review is attached to L37’s response. Original §9 detail: A learner uses an unexpected valid method: route it to semantic review rather than automatic rejection. Correct handling applies “route it to semantic review rather than automatic rejection.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "For item A37, learner L37 writes “3/8 + 1/4 = 0.375 + 0.25 = 0.625 = 5/8.” The current rubric exemplar accepts only a common-denominator fraction trace; no independent review is attached to L37’s response.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A learner uses an unexpected valid method: route it to semantic review rather than automatic rejection.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: For item A37, learner L37 writes “3/8 + 1/4 = 0.375 + 0.25 = 0.625 = 5/8.” The current rubric exemplar accepts only a common-denominator fraction trace; no independent review is attached to L37’s response. It links source 037-operational-detail-3-source-v2 v2 with prior typed AssessmentBlueprint record 037-prior-assessmentblueprint-detail-3-v1 v1 and keeps unresolved scope visible for A37, L37.",
+      "durable_state": "The proposal retains prior record 037-prior-assessmentblueprint-detail-3-v1 v1 and versions only the affected state for A37, L37 against source 037-operational-detail-3-source-v2 v2; it applies “route it to semantic review rather than automatic rejection.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to A37, L37 and the scope supported by source 037-operational-detail-3-source-v2 v2; it represents “route it to semantic review rather than automatic rejection.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-operational-4",
+    "root": "freezeAssessmentEdition.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "assessment": {
+        "assessmentId": "037-assessment-production-and-moderation-system-operational-4",
+        "purpose": "Review the Assessment production and moderation system evidence for case 037-assessment-production-and-moderation-system-operational-4; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
+          {
+            "id": "037-operational-detail-4-source-v2",
+            "source": "Assessment production and moderation system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R037 Assessment steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R037 Assessment steward records: Learner L37’s approved plan A37 allows 1.5× working time on item A37. The prompt, numeric values, answer rubric and content version are the same as the standard form; start and submit timestamps are 09:00 and 09:46. This current event is source 037-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 037-assessment-production-and-moderation-system-operational-4. The supplied typed prior 037-prior-assessmentblueprint-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Learner L37’s approved plan A37 allows 1.5× working time on item A37. The prompt, numeric values, answer rubric and content version are the same as the standard form; start and submit timestamps are 09:00 and 09:46."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "revisedEvidenceIds": [
+          "037-operational-detail-4-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "currentBlueprint": {
+          "id": "037-prior-assessmentblueprint-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "037-assessment-production-and-moderation-system-operational-4",
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 037-assessment-production-and-moderation-system-operational-4 against this factual event: Learner L37’s approved plan A37 allows 1.5× working time on item A37. The prompt, numeric values, answer rubric and content version are the same as the standard form; start and submit timestamps are 09:00 and 09:46. Original §9 detail: A timed assessment needs an accommodation: preserve content equivalence and separate timing policy. Correct handling applies “preserve content equivalence and separate timing policy.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Learner L37’s approved plan A37 allows 1.5× working time on item A37. The prompt, numeric values, answer rubric and content version are the same as the standard form; start and submit timestamps are 09:00 and 09:46.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A timed assessment needs an accommodation: preserve content equivalence and separate timing policy.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Learner L37’s approved plan A37 allows 1.5× working time on item A37. The prompt, numeric values, answer rubric and content version are the same as the standard form; start and submit timestamps are 09:00 and 09:46. It links source 037-operational-detail-4-source-v2 v2 with prior typed AssessmentBlueprint record 037-prior-assessmentblueprint-detail-4-v1 v1 and keeps unresolved scope visible for L37, A37.",
+      "durable_state": "The proposal retains prior record 037-prior-assessmentblueprint-detail-4-v1 v1 and versions only the affected state for L37, A37 against source 037-operational-detail-4-source-v2 v2; it applies “preserve content equivalence and separate timing policy.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to L37, A37 and the scope supported by source 037-operational-detail-4-source-v2 v2; it represents “preserve content equivalence and separate timing policy.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "037-assessment-production-and-moderation-system-operational-5",
+    "root": "freezeAssessmentEdition.nl",
+    "split_group": "037-assessment-production-and-moderation-system",
+    "inputs": {
+      "assessment": {
+        "assessmentId": "037-assessment-production-and-moderation-system-operational-5",
+        "purpose": "Review the Assessment production and moderation system evidence for case 037-assessment-production-and-moderation-system-operational-5; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
+          {
+            "id": "037-operational-detail-5-source-v2",
+            "source": "Assessment production and moderation system operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R037 Assessment steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "Jules Park records in 037-operational-detail-5-source-v2 v2 for case 037-assessment-production-and-moderation-system-operational-5: Item A37 asks “3/8 + 1/4.” Model answer key K37 lists “7/12” and remains marked approved in the release manifest; no independent review record is attached. The typed prior record 037-prior-assessmentblueprint-detail-5-v1 v1 is the assessment blueprint linked to item A37.",
+            "supports": [
+              "item prompt text",
+              "model answer key version and approval status"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "revisedEvidenceIds": [
+          "037-operational-detail-5-source-v2"
+        ],
+        "audience": "accountable reviewer",
+        "currentBlueprint": {
+          "id": "037-prior-assessmentblueprint-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "037-assessment-production-and-moderation-system-operational-5",
+          "competencyIds": [
+            "fraction-equivalence"
+          ],
+          "taskKinds": [
+            "constructed-response with alternate valid method"
+          ],
+          "coverageWeights": [
+            {
+              "numerator": "1",
+              "denominator": "1"
+            }
+          ],
+          "excludedConstructs": [
+            "reading speed"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 037-assessment-production-and-moderation-system-operational-5 against this factual event: Model answer key K37 says 3/8 + 1/4 = 7/12. The item source shows 3/8 and 1/4; an independent answer sheet lists 5/8. The release manifest still marks K37 as approved. Original §9 detail: A model answer contains an error: block release or trigger a controlled regrade. Correct handling applies “block release or trigger a controlled regrade.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Item A37 asks “3/8 + 1/4.” Model answer key K37 lists “7/12” and remains marked approved in the release manifest; no independent review record is attached.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A model answer contains an error: block release or trigger a controlled regrade.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Item A37 asks “3/8 + 1/4.” Model answer key K37 lists “7/12” and remains marked approved in the release manifest; no independent review record is attached. It links source 037-operational-detail-5-source-v2 v2 with prior typed AssessmentBlueprint record 037-prior-assessmentblueprint-detail-5-v1 v1 and keeps unresolved scope visible for A37, K37.",
+      "durable_state": "The proposal retains prior record 037-prior-assessmentblueprint-detail-5-v1 v1 and versions only the affected state for A37, K37 against source 037-operational-detail-5-source-v2 v2; it applies “block release or trigger a controlled regrade.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to A37, K37 and the scope supported by source 037-operational-detail-5-source-v2 v2; it represents “block release or trigger a controlled regrade.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

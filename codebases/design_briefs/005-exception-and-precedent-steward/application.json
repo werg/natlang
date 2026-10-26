@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "005",
+  "title": "Exception and precedent steward",
+  "entrypoint": "hearExceptionRequest.nl",
+  "interfaces": [
+    {
+      "name": "hearExceptionRequest",
+      "path": "hearExceptionRequest.nl",
+      "purpose": "Hear a bounded exception through rationale, disanalogy, decisive facts and current authority while retaining revocable historical precedent.",
+      "stateParameter": "register",
+      "stateResultPath": [
+        "register"
+      ],
+      "stateKey": "waiver-register"
+    },
+    {
+      "name": "reviewWaiverRevocation",
+      "path": "reviewWaiverRevocation.nl",
+      "purpose": "Apply an authorized effective revocation to future reliance while preserving prior valid actions and pending notification receipts.",
+      "stateParameter": "register",
+      "stateResultPath": [
+        "register"
+      ],
+      "stateKey": "waiver-register"
+    }
+  ],
+  "source_files": [
+    "hearExceptionRequest.nl",
+    "hearExceptionRequest/examinePolicyBoundaryPattern.nl",
+    "hearExceptionRequest/examinePolicyBoundaryPattern/challengeRevisionOnHistory.nl",
+    "hearExceptionRequest/hearLimitingFacts.nl",
+    "hearExceptionRequest/hearLimitingFacts/testDecisiveCondition.nl",
+    "hearExceptionRequest/linkResubmittedRequests.nl",
+    "hearExceptionRequest/recheckPendingPolicy.nl",
+    "hearExceptionRequest/recoverAuthorizedWaivers.nl",
+    "hearExceptionRequest/retrieveRationaleContrasts.nl",
+    "hearExceptionRequest/retrieveRationaleContrasts/comparePrecedentRationale.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "reviewWaiverRevocation.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeExceptions",
+        "paths": [
+          "hearExceptionRequest/recoverAuthorizedWaivers.nl"
+        ]
+      },
+      {
+        "stage": "retrievePrecedents",
+        "paths": [
+          "hearExceptionRequest/retrieveRationaleContrasts.nl"
+        ]
+      },
+      {
+        "stage": "judgeApplicability",
+        "paths": [
+          "hearExceptionRequest/hearLimitingFacts/testDecisiveCondition.nl"
+        ]
+      },
+      {
+        "stage": "formDecision",
+        "paths": [
+          "hearExceptionRequest/hearLimitingFacts.nl"
+        ]
+      },
+      {
+        "stage": "reviewPatterns",
+        "paths": [
+          "hearExceptionRequest/examinePolicyBoundaryPattern/challengeRevisionOnHistory.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "hearExceptionRequest/recoverAuthorizedWaivers.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "hearExceptionRequest/retrieveRationaleContrasts/comparePrecedentRationale.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "hearExceptionRequest/recheckPendingPolicy.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "hearExceptionRequest/linkResubmittedRequests.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reviewWaiverRevocation.nl"
+        ]
+      }
+    ]
+  }
+}

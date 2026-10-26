@@ -1,0 +1,128 @@
+{
+  "schema": "natlang.application/1",
+  "id": "007",
+  "title": "Qualitative research studio",
+  "entrypoint": "studyAnalysis.nl",
+  "interfaces": [
+    {
+      "name": "studyAnalysis",
+      "path": "studyAnalysis.nl",
+      "purpose": "Plan and analyze a bounded qualitative study with decision contrasts, a frozen sample, versioned code boundaries, independent-coder review, counterevidence, and quotation privacy.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "qualitative-study"
+    }
+  ],
+  "persistence": [
+    "InquiryFrame",
+    "SamplingPlan",
+    "CodeDefinition",
+    "CodingDecision",
+    "ResearchFinding"
+  ],
+  "effects": [
+    "request participant privacy review before quotation export",
+    "mark affected coding decisions stale after codebook changes",
+    "retain dissenting interpretations in reviewer packet",
+    "report unmet sampling and stopping conditions"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "frameInquiry",
+        "paths": [
+          "runCase/frameInquiry/decomposeDecisionQuestion.nl",
+          "runCase/frameInquiry/enumerateRivalExplanations.nl"
+        ]
+      },
+      {
+        "stage": "selectSample",
+        "paths": [
+          "runCase/selectSample/defineInquiryStrata.nl",
+          "runCase/selectSample/freezeSamplingManifest.nl"
+        ]
+      },
+      {
+        "stage": "buildCodebook",
+        "paths": [
+          "researchCore/constructCodebook.nl"
+        ]
+      },
+      {
+        "stage": "codeAndReconcile",
+        "paths": [
+          "runCase/codeAndReconcile/alignTranslationPassages.nl",
+          "runCase/codeAndReconcile/compareIndependentCoders.nl"
+        ]
+      },
+      {
+        "stage": "synthesizeFindings",
+        "paths": [
+          "runCase/synthesizeFindings/searchCounterevidence.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "researchCore/assessQuotationRisk.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "runCase/selectSample/defineInquiryStrata.nl",
+          "runCase/selectSample/freezeSamplingManifest.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "researchCore/constructCodebook.nl",
+          "runCase/codeAndReconcile/compareIndependentCoders.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "runCase/codeAndReconcile/alignTranslationPassages.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "runCase/codeAndReconcile/compareIndependentCoders.nl",
+          "runCase/synthesizeFindings/searchCounterevidence.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "researchCore/assessQuotationRisk.nl",
+    "researchCore/constructCodebook.nl",
+    "researchCore/constructCodebook/reviewCodeBoundary.nl",
+    "researchCore/constructCodebook/reviewCodeBoundary/assessBoundaryExample.nl",
+    "researchCore/frameResearchQuestion.nl",
+    "researchCore/selectResearchPolicy.nl",
+    "runCase/codeAndReconcile/alignTranslationPassages.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders/reviewOneCoderDisagreement.nl",
+    "runCase/codeAndReconcile/compareIndependentCoders/reviewOneCoderDisagreement/qualifyCoderEvidence.nl",
+    "runCase/frameInquiry/audit/qualify.nl",
+    "runCase/frameInquiry/decomposeDecisionQuestion.nl",
+    "runCase/frameInquiry/enumerateRivalExplanations.nl",
+    "runCase/selectSample/defineInquiryStrata.nl",
+    "runCase/selectSample/freezeSamplingManifest.nl",
+    "runCase/synthesizeFindings/searchCounterevidence.nl",
+    "runCase/synthesizeFindings/searchCounterevidence/searchOneMechanism.nl",
+    "runCase/synthesizeFindings/searchCounterevidence/searchOneMechanism/classifyCounterexample.nl",
+    "studyAnalysis.nl",
+    "studyAnalysis/compareStudyRevision.nl",
+    "studyAnalysis/reconcileStudyCheckpoint.nl",
+    "types.ts"
+  ]
+}

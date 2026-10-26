@@ -67,8 +67,10 @@ def test_materializes_both_current_task_policies_and_exact_existing_policy_caden
 def test_materializer_rejects_unmeasured_floor_and_wrong_relocated_packet(tmp_path):
     curriculum,plans,configs,relocations,*_=source(tmp_path,cloud_packet=True)
     config=Path(configs['lfm']);value=json.loads(config.read_text())
-    value['trainer_parameters']['task_eval']['reference_successes']=None;write(config,value)
-    with pytest.raises(ValueError,match='no measured/explicit task floor'):
+    value['trainer_parameters']['task_eval']['reference_successes']=None
+    value['trainer_parameters']['task_eval'].pop('min_successes',None)
+    write(config,value)
+    with pytest.raises(ValueError,match='neither a measured reference nor an explicit minimum-success floor'):
         materialize_current_task_policy(curriculum,plans,configs,'mellum',tmp_path/'bad-floor',relocations)
     second=tmp_path/'second';second.mkdir()
     curriculum,plans,configs,relocations,*_=source(second,cloud_packet=True)
@@ -76,6 +78,20 @@ def test_materializer_rejects_unmeasured_floor_and_wrong_relocated_packet(tmp_pa
     with pytest.raises(ValueError):
         materialize_current_task_policy(curriculum,plans,configs,'mellum',tmp_path/'bad-relocation',relocations)
 
+
+
+def test_materializer_preserves_explicit_absolute_floor_without_inventing_reference(tmp_path):
+    curriculum,plans,configs,relocations,*_=source(tmp_path,cloud_packet=True)
+    config=Path(configs['lfm']);value=json.loads(config.read_text())
+    task=value['trainer_parameters']['task_eval'];task['reference_successes']=None;task['min_successes']=0
+    write(config,value)
+    result=materialize_current_task_policy(curriculum,plans,configs,'mellum',tmp_path/'out',relocations)
+    prepared=json.loads(Path(result['path']).read_text())
+    value=json.loads(Path(prepared['curriculum']['path']).read_text())
+    selected=value['models']['lfm:base']['task_eval']
+    assert selected['reference_successes'] is None
+    assert selected['min_successes']==0
+    assert prepared['task_eval_sources']['lfm']['task_eval']['reference_successes'] is None
 
 def test_mellum_task_policy_resolves_from_exact_staged_recipe(tmp_path):
     curriculum,plans,configs,relocations,*_=source(tmp_path,cloud_packet=True)

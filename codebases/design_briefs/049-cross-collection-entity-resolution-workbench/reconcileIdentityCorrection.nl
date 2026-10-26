@@ -1,0 +1,9 @@
+---
+args: { ledger: IdentityCorrectionLedger, plan: IdentityCorrectionPlan, receipt: IdentityCorrectionReceipt }
+returns: IdentityCorrectionReconciliation
+---
+1. For a consumed receiptId compare every field with the stored receipt. Exact replay binds priorAssessment = assessAppliedGraph(plan, stored receipt, ledger) and returns { ledger, outcome: "replayed", affectedConsumers: priorAssessment.unresolvedConsumers, followUp: priorAssessment.reasons }. Conflicting or unbound identity returns { ledger, outcome: "held", affectedConsumers: plan.downstreamLinks, followUp: ["reconcile receipt identity and graph version"] }; neither branch mutates the ledger.
+2. Bind assessment = assessAppliedGraph(plan, receipt, ledger). If receipt identity, resolution, or prior graph version does not bind to the current plan and graph, preserve it as held evidence and do not advance the graph version.
+3. For "applied", advance currentGraphVersion to receipt.observedGraphVersion only when assessment.safeToAdvance is true. If it is partial, preserve the exact receipt and leave the graph version unchanged while every affected consumer remains under reconciliation.
+4. For "rolled-back", retain the original prior graph version and mark the correction rolled back only when every required reversal is evidenced. A partial reversal stays open and uncertain.
+5. Record partial, unknown, applied, and rolled-back events without deleting canonical history or source attributions. Increment revision once and consume receiptId once. Bind followUp to assessment.reasons and affected consumer refreshes. Bind outcome to receipt.status only when its status-specific acceptance checks pass; otherwise use "held". Bind result = { ledger: updatedLedger, outcome, affectedConsumers: assessment.unresolvedConsumers, followUp }; return result. A merged identity correction never erases the records or evidence that justified it.

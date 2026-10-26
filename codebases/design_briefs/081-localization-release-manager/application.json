@@ -1,0 +1,101 @@
+{
+  "schema": "natlang.application/1",
+  "id": "081",
+  "title": "Localization Release Manager",
+  "entrypoint": "coordinateLocaleEdition.nl",
+  "interfaces": [
+    {
+      "name": "coordinateLocaleEdition",
+      "path": "coordinateLocaleEdition.nl",
+      "purpose": "Coordinate context-specific localization, concept/sense terminology, independent fidelity review and coherent versioned locale journeys.",
+      "stateParameter": "localeLedger",
+      "stateResultPath": [
+        "localeLedger"
+      ],
+      "stateKey": "localization-edition-ledger"
+    }
+  ],
+  "source_files": [
+    "coordinateLocaleEdition.nl",
+    "coordinateLocaleEdition/assembleCoherentJourneys.nl",
+    "coordinateLocaleEdition/identifySemanticInvalidation.nl",
+    "coordinateLocaleEdition/identifySemanticInvalidation/compareChangedMeaning.nl",
+    "coordinateLocaleEdition/independentlyReviewLocale.nl",
+    "coordinateLocaleEdition/independentlyReviewLocale/challengeSourceMeaning.nl",
+    "coordinateLocaleEdition/independentlyReviewLocale/compareProtectedTokens.ts",
+    "coordinateLocaleEdition/recoverContextSegments.nl",
+    "coordinateLocaleEdition/recoverContextSegments/separateContextUses.nl",
+    "coordinateLocaleEdition/resolveConceptTerminology.nl",
+    "coordinateLocaleEdition/transformCommunicativePurpose.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "segmentWithContext",
+        "paths": [
+          "coordinateLocaleEdition/recoverContextSegments/separateContextUses.nl"
+        ]
+      },
+      {
+        "stage": "resolveTerminology",
+        "paths": [
+          "coordinateLocaleEdition/resolveConceptTerminology.nl"
+        ]
+      },
+      {
+        "stage": "transformContent",
+        "paths": [
+          "coordinateLocaleEdition/transformCommunicativePurpose.nl"
+        ]
+      },
+      {
+        "stage": "validateLocale",
+        "paths": [
+          "coordinateLocaleEdition/independentlyReviewLocale.nl"
+        ]
+      },
+      {
+        "stage": "assembleLocaleRelease",
+        "paths": [
+          "coordinateLocaleEdition/assembleCoherentJourneys.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinateLocaleEdition/recoverContextSegments/separateContextUses.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinateLocaleEdition/independentlyReviewLocale.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinateLocaleEdition/identifySemanticInvalidation/compareChangedMeaning.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinateLocaleEdition/assembleCoherentJourneys.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinateLocaleEdition/identifySemanticInvalidation/compareChangedMeaning.nl"
+        ]
+      }
+    ]
+  }
+}

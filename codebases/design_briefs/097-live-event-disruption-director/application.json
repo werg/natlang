@@ -1,0 +1,111 @@
+{
+  "schema": "natlang.application/1",
+  "id": "097",
+  "title": "Live Event Disruption Director",
+  "entrypoint": "directLiveEvent.nl",
+  "interfaces": [
+    {
+      "name": "directLiveEvent",
+      "path": "directLiveEvent.nl",
+      "purpose": "Replan disrupted live program segments and coordinate revision-bound staff acknowledgements.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "live-event-checkpoint",
+      "effectsPath": ["effects"]
+    },
+    {
+      "name": "prepareLiveEventEffects",
+      "path": "directLiveEvent/prepareLiveEventEffects.nl",
+      "purpose": "Prepare revision-bound resource, staff and public-event intentions from a proved run sheet.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": ["checkpoint"],
+      "stateKey": "live-event-checkpoint",
+      "effectsPath": ["effects"]
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverEventPromises",
+        "paths": [
+          "directLiveEvent/recoverEventPromises.nl"
+        ]
+      },
+      {
+        "stage": "interpretFailure",
+        "paths": [
+          "directLiveEvent/interpretCapabilityLoss.nl"
+        ]
+      },
+      {
+        "stage": "generateFormats",
+        "paths": [
+          "directLiveEvent/constructRecoveryFormats.nl"
+        ]
+      },
+      {
+        "stage": "rebuildRunOfShow",
+        "paths": [
+          "directLiveEvent/rebuildEventRunSheet.nl",
+          "directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl"
+        ]
+      },
+      {
+        "stage": "coordinateLiveChange",
+        "paths": [
+          "directLiveEvent/coordinateRoleUpdates.nl",
+          "directLiveEvent/prepareLiveEventEffects.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "directLiveEvent/interpretCapabilityLoss.nl",
+          "directLiveEvent/rebuildEventRunSheet.nl"
+          ,"directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "directLiveEvent/constructRecoveryFormats.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "directLiveEvent/coordinateRoleUpdates.nl",
+          "directLiveEvent/prepareLiveEventEffects.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "directLiveEvent/recoverEventPromises.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "directLiveEvent.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "directLiveEvent.nl",
+    "directLiveEvent/constructRecoveryFormats.nl",
+    "directLiveEvent/coordinateRoleUpdates.nl",
+    "directLiveEvent/interpretCapabilityLoss.nl",
+    "directLiveEvent/prepareLiveEventEffects.nl",
+    "directLiveEvent/rebuildEventRunSheet.nl",
+    "directLiveEvent/rebuildEventRunSheet/traceDisruptionDependencyImpact.nl",
+    "directLiveEvent/recoverEventPromises.nl",
+    "runCase/recoverEventPromises/audit/qualify.nl",
+    "types.ts"
+  ]
+}

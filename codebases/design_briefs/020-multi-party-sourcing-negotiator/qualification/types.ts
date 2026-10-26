@@ -1,0 +1,12 @@
+export type ID = string;
+export type Hash = string;
+export type DateTime = string;
+export type Decimal = string;
+export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
+export type FieldConflict = { field: string; alternatives: string[]; evidenceRefs: string[] };
+export type Evidence = { id: string; source: string; version: string; observedAt: string; authority: string; scope: string; text: string };
+export type EvidencePage = { evidence: Evidence[]; searchedPartition: string; complete: boolean };
+export type PolicySelection = { selected: string[]; precedenceQuestions: string[]; applicableScope: string };
+export type GateVerdict = 'pass' | 'fail' | 'needs-review';
+export type SourcingEvent = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID; requirementIds: string[]; buyerId: string; supplierIds: string[]; negotiationMandateId: string; deadline: string };
+export type DraftSourcingRequirement = { value: { tenantId?: string; id?: string; version?: number; schemaVersion?: string; state?: string; createdAt?: string; updatedAt?: string; createdBy?: string; sourceRefs?: Ref[]; decisionRefs?: Ref[]; sensitivity?: string[]; purposeIds?: string[]; retentionPolicyId?: string; caseId?: string; function?: string; minimumQuantity?: { value: Decimal; unit: string }; deliveryWindow?: string; allowedTradeoffs?: string[] }; missingFields: string[]; conflicts: FieldConflict[]; evidenceRefs: string[] };

@@ -1,0 +1,50 @@
+{
+  "application_id": "074",
+  "title": "Volunteer Deployment Coordinator",
+  "source_relative_path": "applications/15-civic-participation-and-community-operations/074-volunteer-deployment-coordinator.md",
+  "source_sha256": "631d100557bf787a6d01b1b516e74192db7b64c9a571754ea62b90d98d9d4361",
+  "domain_id": "15",
+  "stages": [
+    {
+      "name": "interpretMission",
+      "output_type": "MissionRequirement",
+      "algorithm": "Translate the mission brief into concrete tasks, capability requirements, and practical constraints. Distinguish essential qualifications from preferences, identify supervision needs, and preserve safety or safeguarding requirements supplied by the organization.",
+      "gate": "Requirements are task-based and not inferred from volunteer demographics."
+    },
+    {
+      "name": "interpretProfiles",
+      "output_type": "VolunteerCapability",
+      "algorithm": "Read volunteer profiles and confirmations to distinguish self-reported skills, verified qualifications, availability, and accepted roles. Preserve limitations and preferences, and avoid treating past participation as consent to a new assignment.",
+      "gate": "Capability and consent are explicit and current."
+    },
+    {
+      "name": "constructTeams",
+      "output_type": "VolunteerTeam",
+      "algorithm": "Build feasible team configurations that collectively cover mission requirements and supervision. Use exact scheduling and capacity checks, explain role assignments, and preserve fair application of supplied assignment principles rather than optimizing convenience alone.",
+      "gate": "All required capabilities and consent conditions satisfied or the mission remains blocked."
+    },
+    {
+      "name": "prepareBriefings",
+      "output_type": "VolunteerBriefing",
+      "algorithm": "Generate role-specific briefings with task boundaries, practical logistics, and escalation routes. Share only necessary participant information, distinguish instructions from optional suggestions, and obtain acknowledgment for consequential responsibilities before deployment.",
+      "gate": "Briefings preserve approved procedures and contain no unauthorized personal disclosures."
+    },
+    {
+      "name": "replanAssignments",
+      "output_type": "VolunteerRevision",
+      "algorithm": "Process withdrawals and changed mission conditions by identifying exact capability gaps. Propose replacement teams or reduced scope, seek fresh consent for changed roles, and cancel unsafe or incomplete deployments rather than pretending nominal headcount is sufficient.",
+      "gate": "Replanned teams retain required coverage, supervision, and current consent."
+    }
+  ],
+  "operational_details": [
+    "A volunteer withdraws at short notice: recompute capability coverage, not merely headcount.",
+    "A qualification expires: remove only assignments requiring it and notify the coordinator.",
+    "A role changes from remote to on-site: obtain fresh consent and check practical constraints.",
+    "A team member needs private access information: disclose it only for the accepted assignment window.",
+    "A trainee is assigned: preserve the required supervisor relationship."
+  ],
+  "scenario": {
+    "representative_episode": "A community event needs several distinct skills; a qualified volunteer withdraws and a replacement is available only under supervision.",
+    "independent_truth": "Hidden mission requirements, exact volunteer availability, verified qualifications, supplied assignment rules, and consent events."
+  }
+}

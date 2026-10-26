@@ -1,0 +1,49 @@
+{
+  "application_id": "031",
+  "title": "Living evidence map",
+  "source_relative_path": "applications/07-scientific-evidence-and-research-operations/031-living-evidence-map.md",
+  "program_root": "codebases/design_briefs/031-living-evidence-map",
+  "source_sha256": "11c2d91b1907bdefa361acce66452a81c107a6c4c01f6b6be7c9ad75da41a859",
+  "domain_id": "07",
+  "stages": [
+    {
+      "name": "frameEligibility",
+      "output_type": "EligibilityCriterion",
+      "algorithm": "Translate the research question into explicit screening criteria and distinguish mandatory eligibility from useful descriptive metadata. Define ambiguous boundaries with examples before full screening and preserve questions requiring expert methodological judgment.",
+      "gate": "Criteria are frozen by version and usable on unseen records."
+    },
+    {
+      "name": "linkStudyReports",
+      "output_type": "StudyIdentity",
+      "algorithm": "Compare authors, enrollment windows, populations, identifiers, and methods to determine whether reports describe the same study or overlapping cohorts. Preserve uncertain links and distinguish follow-up analyses from independent replications before counting evidence.",
+      "gate": "Multiple reports cannot inflate the count of independent studies."
+    },
+    {
+      "name": "screenAndExtract",
+      "output_type": "StudyObservation",
+      "algorithm": "Apply eligibility to available evidence, escalating insufficient abstracts to full-text review. Extract outcomes, methods, and limitations with source locations; keep author interpretation separate from directly reported observations and exact numerical results.",
+      "gate": "Exclusions have criterion-specific reasons; extracted values preserve units and uncertainty."
+    },
+    {
+      "name": "mapClaims",
+      "output_type": "EvidenceClaim",
+      "algorithm": "Group evidence by the actual proposition and relevant population rather than broad topic. Identify incompatible measurements and contradictory findings, qualify applicability, and expose evidence gaps without treating absent studies as proof of no effect.",
+      "gate": "Claims do not exceed the populations, designs, and measures of their supporting studies."
+    },
+    {
+      "name": "maintainReview",
+      "output_type": "EvidenceUpdate",
+      "algorithm": "Process new reports, corrections, and retractions as scoped changes. Re-evaluate linked studies and dependent claims, preserve prior review snapshots, and request expert review where the new evidence changes methodological interpretation rather than merely adding another citation.",
+      "gate": "Retractions and corrections invalidate all affected derivatives; unchanged claims retain provenance."
+    }
+  ],
+  "operational_details": [
+    "A preprint becomes a journal article: link versions instead of counting a new study.",
+    "A table uses different outcome units: preserve originals and require an approved conversion.",
+    "Full text is inaccessible: record the limitation rather than infer its results from an abstract.",
+    "A paper is retracted: invalidate dependent claims and notify review owners.",
+    "Eligibility changes mid-review: re-screen affected records under an explicit new version."
+  ],
+  "representative_episode": "Three papers describe one cohort, a follow-up uses a different outcome definition, and a newly corrected table changes one claim.",
+  "independent_truth_basis": "Generated study worlds with report linkage, eligibility truth, exact reported values, and source-supported claim scopes."
+}

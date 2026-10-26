@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.design-brief-review-validation/1",
+  "at": "2026-10-26T16:48:26.916455+00:00",
+  "reviewer": "root",
+  "tested_files": {
+    "scripts/check-main.sh": "3433688af9db8be89a02749df5fdfe02da4745cc96b138134e4cb82f8282a6b6",
+    "scripts/continuous_storage_manager.py": "78b61b0ac5a933d597e3fbaada66578b54aa1bb20c42d65fd21fa538a3da3c21",
+    "training/neuralese/natlang_neuralese/train/trajectory_state.py": "9a82b6cf2ba9fd50a353ce69a03cf83b11a6ee0b69b6302d08e8c37313c8471b",
+    "training/neuralese/natlang_neuralese/train/checkpoint_safety.py": "35e1bcd4b0bf39025b01e8ac9600c2d32428e548ccb95fd556fb661db2d8789e",
+    "ts-host/src/native/agent.ts": "6e867c603fe8f2b9c242fed3e2ff3e67d73d6a5c2bdb87d7151c967c49aa65ef",
+    "ts-host/src/native/graph.ts": "afe769592268561838b7abc5db498736cc0c3662f4121c024d4322ee1fe91fe1",
+    "ts-host/src/model/neuralese-server.ts": "7e5b19318ba355bb148d74a4478de7c2333ba20ae8973c0661f609e240c6dee3",
+    "ts-host/src/neuralese/view.ts": "e795308996964e87cd18139282fcba83aa680b527de7d8713375d54672ce4ae2"
+  },
+  "full_command_passed": false,
+  "qualification": "Component suites and focused repairs; do not describe either earlier failing full command as green. Every reported failure below has a passing affected-suite rerun.",
+  "ordinary_python": {
+    "passed": 2765,
+    "skipped": 4
+  },
+  "neuralese_python": {
+    "passed": 5051,
+    "skipped": 15,
+    "deselected": 19,
+    "failed": 1,
+    "repair": "Bind check-main runtime inventories to the worktree under test rather than a concurrently changing canonical checkout.",
+    "affected_rerun_passed": 48,
+    "affected_unit": "natlang-pr4-frozen-role-policy-regression-20261026"
+  },
+  "cuda": {
+    "passed": 19
+  },
+  "typescript_complete": {
+    "files": 351,
+    "passed": 2176,
+    "failed": 2,
+    "repair": "Two old assertions detached actual same-task writers as external; assert the actual writer and retain the external input on the writer.",
+    "affected_rerun_passed": 61,
+    "affected_units": [
+      "natlang-pr4-final-native-scope-regressions-20261026",
+      "natlang-pr4-final-typed-argument-regressions-20261026"
+    ]
+  },
+  "conformance": {
+    "passed": 22,
+    "failed": 0
+  },
+  "checkpoint_focused": {
+    "passed": 60,
+    "failed": 0,
+    "unit": "natlang-physical-checkpoint-reservation-20261026"
+  },
+  "real_full_state_roundtrip": {
+    "global_step": 39271,
+    "source_bytes": 2981760303,
+    "all_tensors_optimizer_rng_exposure_equal": true,
+    "source_unchanged": true,
+    "unit": "natlang-real-final-physical-checkpoint-guard-20261026"
+  },
+  "live_frozen_writer_guard_adopted": false,
+  "capability_lift_claimed": false
+}

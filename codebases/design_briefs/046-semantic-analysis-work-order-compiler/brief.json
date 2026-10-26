@@ -1,0 +1,92 @@
+{
+  "application_id": "046",
+  "title": "Semantic analysis work-order compiler",
+  "source_relative_path": "applications/10-data-stewardship-and-semantic-analysis/046-semantic-analysis-work-order-compiler.md",
+  "source_sha256": "9028abc984eafd76e6c4eaa1ddc7e94c612a8b6aea4c9cf4e3fe42d5da9af56e",
+  "domain_id": "10",
+  "stages": [
+    {
+      "name": "formalizeQuestion",
+      "output_type": "AnalysisMeaning",
+      "algorithm": "Parse the request into population, entities, semantic predicates, temporal relations, grouping, and desired output. Generate competing interpretations only where they change the answer; resolve decisive ambiguity before choosing a convenient available column.",
+      "gate": "Every phrase affecting inclusion, timing, or aggregation maps to an explicit meaning component."
+    },
+    {
+      "name": "inspectData",
+      "output_type": "DataSuitability",
+      "algorithm": "Inspect schemas, dictionaries, representative records, and access constraints to determine whether the question is answerable. Distinguish absent data from inaccessible data and identify proxy fields that would change the meaning rather than silently substituting them.",
+      "gate": "Each required concept has a supported mapping or an explicit unanswerable component."
+    },
+    {
+      "name": "compileGraph",
+      "output_type": "AnalysisWorkGraph",
+      "algorithm": "Construct a typed DAG of exact filters, joins, bounded semantic classification, temporal matching, and aggregation. Push exact restrictive filters before semantic work when meaning is preserved; attach provenance and missing-data rules to every edge and reject unsupported operations.",
+      "gate": "Graph typechecks, has no cycle, and preserves the formalized population and output grain."
+    },
+    {
+      "name": "executeAndAudit",
+      "output_type": "AnalysisSlice",
+      "algorithm": "Execute finite partitions, cache semantic judgments by record and rubric version, and reconcile every input disposition. Audit sampled positive and negative labels, exact join cardinalities, temporal boundaries, and denominators before materializing the final aggregate.",
+      "gate": "No silent row loss, duplicate join inflation, unclassified inclusion, or unsupported denominator."
+    },
+    {
+      "name": "explainResult",
+      "output_type": "AnalysisAnswer",
+      "algorithm": "Formulate the result using exact computed values and the approved question interpretation. Explain exclusions, uncertainty, and unanswerable components; attach the executable work order and lineage so another analyst can reproduce or revise the analysis.",
+      "gate": "Every numerical claim matches the materialized result and every semantic qualification matches the plan."
+    }
+  ],
+  "operational_details": [
+    "A request says after without a time window: surface the consequential ambiguity rather than choosing one silently.",
+    "A one-to-many join inflates counts: enforce declared grain and cardinality checks.",
+    "A record is inaccessible to the requester: exclude it before model exposure and explain coverage without leaking it.",
+    "A rubric changes mid-run: pin the old run and create a targeted reclassification plan.",
+    "A user changes only the grouping: reuse qualified row judgments and recompute exact aggregation."
+  ],
+  "domain_records": {
+    "AnalysisRequest": [
+      "question: string",
+      "datasetIds: ID[]",
+      "requesterId: ID",
+      "decisionPurpose: string",
+      "resultAudience: string"
+    ],
+    "AnalysisMeaning": [
+      "caseId: ID",
+      "population: string",
+      "semanticPredicates: string[]",
+      "timeRelation: string",
+      "outputGrain: string",
+      "ambiguity: string"
+    ],
+    "DataSuitability": [
+      "caseId: ID",
+      "meaningId: ID",
+      "requiredFields: string[]",
+      "availableFields: string[]",
+      "missingEvidence: string"
+    ],
+    "AnalysisWorkGraph": [
+      "caseId: ID",
+      "nodeIds: ID[]",
+      "semanticNodeIds: ID[]",
+      "exactNodeIds: ID[]",
+      "outputContract: string"
+    ],
+    "AnalysisSlice": [
+      "caseId: ID",
+      "graphId: ID",
+      "inputManifestId: ID",
+      "classifiedIds: ID[]",
+      "aggregateArtifactId: ID",
+      "coverageGap: string"
+    ],
+    "AnalysisAnswer": [
+      "caseId: ID",
+      "sliceId: ID",
+      "answer: string",
+      "qualification: string",
+      "reproducibilityManifestId: ID"
+    ]
+  }
+}

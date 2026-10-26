@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "068",
+  "title": "Citizen-science observation curator",
+  "entrypoint": "curateObservations.nl",
+  "interfaces": [
+    {
+      "name": "curateObservations",
+      "path": "curateObservations.nl",
+      "purpose": "Curate a submission batch while retaining raw observer provenance, identity ambiguity and privacy-limited public derivatives.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "observation-curation-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeObservations",
+        "paths": [
+          "curateObservations/normalizeSubmissionEnvelope.nl",
+          "curateObservations/normalizeSubmissionEnvelope/preserveObserverEnvelope.nl",
+          "curateObservations/verifyNormalizedObservation.nl"
+        ]
+      },
+      {
+        "stage": "resolveTerminology",
+        "paths": [
+          "curateObservations/resolveCandidateIdentities.nl"
+        ]
+      },
+      {
+        "stage": "detectDuplicates",
+        "paths": [
+          "curateObservations/linkSubmissionEvents.nl",
+          "curateObservations/linkSubmissionEvents/compareObservationPairs.nl"
+        ]
+      },
+      {
+        "stage": "requestVerification",
+        "paths": [
+          "curateObservations/formFieldQuestion.nl"
+        ]
+      },
+      {
+        "stage": "publishCurated",
+        "paths": [
+          "curateObservations/projectPublicRecords.nl",
+          "curateObservations/projectPublicRecords/applyDisclosureProjection.nl",
+          "curateObservations/projectPublicRecords/versionExpertInterpretations.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "curateObservations/resolveCandidateIdentities.nl",
+          "curateObservations/formFieldQuestion.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "curateObservations/normalizeSubmissionEnvelope.nl",
+          "curateObservations/normalizeSubmissionEnvelope/preserveObserverEnvelope.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "curateObservations/projectPublicRecords.nl",
+          "curateObservations/projectPublicRecords/applyDisclosureProjection.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "curateObservations/linkSubmissionEvents.nl",
+          "curateObservations/linkSubmissionEvents/compareObservationPairs.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "curateObservations/projectPublicRecords.nl",
+          "curateObservations/projectPublicRecords/versionExpertInterpretations.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "curateObservations.nl",
+    "curateObservations/formFieldQuestion.nl",
+    "curateObservations/linkSubmissionEvents.nl",
+    "curateObservations/linkSubmissionEvents/compareObservationPairs.nl",
+    "curateObservations/normalizeSubmissionEnvelope.nl",
+    "curateObservations/normalizeSubmissionEnvelope/preserveObserverEnvelope.nl",
+    "curateObservations/projectPublicRecords.nl",
+    "curateObservations/projectPublicRecords/applyDisclosureProjection.nl",
+    "curateObservations/projectPublicRecords/versionExpertInterpretations.nl",
+    "curateObservations/resolveCandidateIdentities.nl",
+    "curateObservations/verifyNormalizedObservation.nl",
+    "types.ts"
+  ]
+}

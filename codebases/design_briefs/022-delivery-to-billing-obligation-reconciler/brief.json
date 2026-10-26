@@ -1,0 +1,49 @@
+{
+  "application_id": "022",
+  "title": "Delivery-to-billing obligation reconciler",
+  "source_relative_path": "applications/05-finance-and-administrative-accounting/022-delivery-to-billing-obligation-reconciler.md",
+  "program_root": "codebases/design_briefs/022-delivery-to-billing-obligation-reconciler",
+  "source_sha256": "97376406e83d56f30f9523106f4a79e505ea0e58d2243c3de89640f9e685ee5c",
+  "domain_id": "05",
+  "stages": [
+    {
+      "name": "extractConditions",
+      "output_type": "BillingCondition",
+      "algorithm": "Read contract schedules and amendments to identify triggers, acceptance requirements, partial billing rules, and exclusions. Distinguish work performed from the specific event authorizing billing and retain conditions that apply only to particular deliverables.",
+      "gate": "Every billable condition has a source and effective scope."
+    },
+    {
+      "name": "mapDelivery",
+      "output_type": "DeliveryEvidence",
+      "algorithm": "Relate project artifacts, service logs, and customer messages to the promised deliverables. Identify partial or alternative delivery and distinguish a draft shared for comment from an accepted contractual handover.",
+      "gate": "Evidence supports the actual milestone, not merely related activity."
+    },
+    {
+      "name": "assessAcceptance",
+      "output_type": "AcceptanceFinding",
+      "algorithm": "Interpret customer responses under the agreement’s acceptance process. Separate acknowledgment of receipt from acceptance, verify the respondent’s authority, and apply deemed-acceptance timing only when all supplied contractual prerequisites are established.",
+      "gate": "No implied acceptance outside the configured agreement; exact date calculations use host services."
+    },
+    {
+      "name": "calculateBillability",
+      "output_type": "BillableAllocation",
+      "algorithm": "Submit established milestone states and exact schedules to the billing calculator. Account for prior invoices, credits, caps, and partial acceptance; explain remaining holds without inventing a commercial compromise not authorized by the contract.",
+      "gate": "No overbilling, duplicate milestone consumption, or amount based on an unresolved trigger."
+    },
+    {
+      "name": "assemblePacket",
+      "output_type": "BillingPacket",
+      "algorithm": "Assemble a customer-readable explanation and internal approval packet linking each amount to satisfied conditions. Recheck late amendments and acceptance changes before release, then reconcile the actual invoice identifier back to consumed obligations.",
+      "gate": "Approved packet hash, current conditions, and exact ledger reconciliation required."
+    }
+  ],
+  "operational_details": [
+    "A customer accepts only one phase: allocate partial billing without marking the entire project complete.",
+    "A milestone is renamed in project software: preserve the contract identity.",
+    "Acceptance comes from an unauthorized contact: seek confirmation rather than discarding the message.",
+    "An amendment changes future rates: retain prior earned amounts under their effective schedule.",
+    "An invoice is voided: release consumed billing capacity only after authoritative confirmation."
+  ],
+  "representative_episode": "A deliverable is sent on time, acknowledged by a coordinator, and partly accepted later by the authorized customer owner.",
+  "independent_truth_basis": "Generated milestone contracts, authority records, delivery events, acceptance conditions, and exact billing schedules."
+}

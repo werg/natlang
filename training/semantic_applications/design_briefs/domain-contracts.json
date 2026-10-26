@@ -1,0 +1,4438 @@
+{
+  "schema": "natlang.design-brief-domain-contracts/1",
+  "note": "Original domain field names and declared types extracted from each supplied brief section4; common envelope is separately declared by each executable source package.",
+  "applications": {
+    "001": {
+      "DecisionCase": {
+        "subject": "string",
+        "ownerId": "ID",
+        "decisionDate": "LocalDate",
+        "scope": "string",
+        "currentResolution": "string"
+      },
+      "DecisionAssertion": {
+        "caseId": "ID",
+        "actorId": "ID",
+        "proposition": "string",
+        "modality": "'proposed'|'accepted'|'rejected'",
+        "validFrom": "LocalDate",
+        "scope": "string"
+      },
+      "AssumptionBinding": {
+        "caseId": "ID",
+        "decisionId": "ID",
+        "assumption": "string",
+        "dependencyKind": "'necessary'|'supporting'|'context'",
+        "condition": "string"
+      },
+      "ChangeImpact": {
+        "caseId": "ID",
+        "changedRef": "Ref",
+        "decisionId": "ID",
+        "relation": "'refutes'|'narrows'|'irrelevant'|'uncertain'",
+        "survivingScope": "string"
+      },
+      "ReviewPlan": {
+        "caseId": "ID",
+        "decisionIds": "ID[]",
+        "blockedTaskIds": "ID[]",
+        "reviewerIds": "ID[]",
+        "proposedQuestion": "string"
+      },
+      "ResolutionDelta": {
+        "caseId": "ID",
+        "decisionId": "ID",
+        "replacesId": "ID",
+        "outcome": "'retain'|'revise'|'withdraw'|'defer'",
+        "remainingQuestion": "string"
+      }
+    },
+    "002": {
+      "KnowledgeRevision": {
+        "topic": "string",
+        "audience": "string",
+        "pageIds": "ID[]",
+        "publicationBranch": "string",
+        "releaseOwnerId": "ID"
+      },
+      "ScopedClaim": {
+        "caseId": "ID",
+        "proposition": "string",
+        "subjectId": "ID",
+        "jurisdiction": "string",
+        "validFrom": "LocalDate",
+        "modality": "string"
+      },
+      "ClaimConflict": {
+        "caseId": "ID",
+        "leftId": "ID",
+        "rightId": "ID",
+        "conflictKind": "'contradiction'|'time'|'scope'|'terminology'|'none'",
+        "disputedFacet": "string"
+      },
+      "AuthorityDecision": {
+        "caseId": "ID",
+        "conflictId": "ID",
+        "selectedIds": "ID[]",
+        "unresolvedIds": "ID[]",
+        "authorityBasis": "string"
+      },
+      "PagePatch": {
+        "caseId": "ID",
+        "pageId": "ID",
+        "baseHash": "string",
+        "replacement": "string",
+        "protectedClaimIds": "ID[]"
+      },
+      "PublicationCheck": {
+        "caseId": "ID",
+        "patchIds": "ID[]",
+        "remainingConflictIds": "ID[]",
+        "brokenLinks": "ID[]",
+        "reviewerId": "ID"
+      }
+    },
+    "003": {
+      "Handover": {
+        "personId": "ID",
+        "departureDate": "LocalDate",
+        "successorIds": "ID[]",
+        "projectIds": "ID[]",
+        "scope": "string"
+      },
+      "Commitment": {
+        "caseId": "ID",
+        "promisorId": "ID",
+        "beneficiaryId": "ID",
+        "promisedOutcome": "string",
+        "dueAt": "DateTime",
+        "commitmentKind": "string"
+      },
+      "WorkStatus": {
+        "caseId": "ID",
+        "commitmentId": "ID",
+        "state": "'open'|'partial'|'done'|'cancelled'|'uncertain'",
+        "remainingWork": "string"
+      },
+      "HandoverDependency": {
+        "caseId": "ID",
+        "commitmentId": "ID",
+        "prerequisiteIds": "ID[]",
+        "accessResourceIds": "ID[]",
+        "missingContext": "string"
+      },
+      "OwnershipTransfer": {
+        "caseId": "ID",
+        "commitmentId": "ID",
+        "proposedOwnerId": "ID",
+        "acceptedAt": "DateTime",
+        "conditions": "string"
+      },
+      "ContinuityReview": {
+        "caseId": "ID",
+        "transferIds": "ID[]",
+        "unownedIds": "ID[]",
+        "nextCheckpoint": "DateTime",
+        "closureEvidence": "Ref[]"
+      }
+    },
+    "004": {
+      "IntegrationProject": {
+        "leftOrgId": "ID",
+        "rightOrgId": "ID",
+        "targetScope": "string",
+        "cutoverDate": "LocalDate",
+        "sponsorId": "ID"
+      },
+      "TermSense": {
+        "caseId": "ID",
+        "term": "string",
+        "organizationId": "ID",
+        "definition": "string",
+        "context": "string",
+        "exampleRefs": "Ref[]"
+      },
+      "ConceptAlignment": {
+        "caseId": "ID",
+        "leftSenseId": "ID",
+        "rightSenseId": "ID",
+        "relation": "'same'|'overlap'|'broader'|'different'",
+        "boundary": "string"
+      },
+      "RoleInterface": {
+        "caseId": "ID",
+        "leftRoleId": "ID",
+        "rightRoleId": "ID",
+        "responsibility": "string",
+        "authorityGap": "string"
+      },
+      "IntegrationWave": {
+        "caseId": "ID",
+        "conceptIds": "ID[]",
+        "affectedRecordIds": "ID[]",
+        "prerequisiteIds": "ID[]",
+        "rollbackRule": "string"
+      },
+      "InterfaceScenario": {
+        "caseId": "ID",
+        "roleIds": "ID[]",
+        "initialSituation": "string",
+        "expectedHandoff": "string",
+        "observedGap": "string"
+      }
+    },
+    "005": {
+      "ExceptionCase": {
+        "requesterId": "ID",
+        "requestedDeviation": "string",
+        "policyId": "ID",
+        "eventDate": "LocalDate",
+        "accountableOwnerId": "ID"
+      },
+      "ExceptionRecord": {
+        "caseId": "ID",
+        "ruleId": "ID",
+        "waivedRequirement": "string",
+        "survivingRequirements": "string[]",
+        "expiresAt": "DateTime",
+        "grantedBy": "ID"
+      },
+      "PrecedentCandidate": {
+        "caseId": "ID",
+        "priorId": "ID",
+        "sharedFactors": "string[]",
+        "materialDifferences": "string[]"
+      },
+      "ApplicabilityFinding": {
+        "caseId": "ID",
+        "precedentId": "ID",
+        "verdict": "'applies'|'distinguishable'|'expired'|'uncertain'",
+        "missingCondition": "string"
+      },
+      "ExceptionDisposition": {
+        "caseId": "ID",
+        "proposedOutcome": "string",
+        "retainedControls": "string[]",
+        "reviewerId": "ID",
+        "reviewDate": "LocalDate"
+      },
+      "PolicyReviewSignal": {
+        "caseId": "ID",
+        "ruleId": "ID",
+        "independentCaseIds": "ID[]",
+        "proposedRevision": "string",
+        "counterexampleIds": "ID[]"
+      }
+    },
+    "006": {
+      "ProblemStudy": {
+        "question": "string",
+        "populationDefinition": "string",
+        "windowStart": "LocalDate",
+        "windowEnd": "LocalDate",
+        "ownerId": "ID"
+      },
+      "ProblemEpisode": {
+        "caseId": "ID",
+        "customerId": "ID",
+        "situation": "string",
+        "desiredOutcome": "string",
+        "observedObstacle": "string",
+        "occurredAt": "DateTime"
+      },
+      "IncidentGroup": {
+        "caseId": "ID",
+        "episodeIds": "ID[]",
+        "customerId": "ID",
+        "incidentKey": "string",
+        "independenceBasis": "string"
+      },
+      "ProblemConcept": {
+        "caseId": "ID",
+        "name": "string",
+        "definition": "string",
+        "episodeIds": "ID[]",
+        "boundaryExamples": "string[]"
+      },
+      "TrendSlice": {
+        "caseId": "ID",
+        "conceptId": "ID",
+        "cohortQueryId": "ID",
+        "numerator": "number",
+        "denominator": "number",
+        "qualification": "string"
+      },
+      "InvestigationBrief": {
+        "caseId": "ID",
+        "conceptIds": "ID[]",
+        "question": "string",
+        "discriminatingEvidence": "string",
+        "ownerId": "ID"
+      }
+    },
+    "007": {
+      "ResearchProject": {
+        "researchQuestion": "string",
+        "decisionContext": "string",
+        "corpusIds": "ID[]",
+        "consentPolicyId": "ID",
+        "principalInvestigatorId": "ID"
+      },
+      "InquiryFrame": {
+        "caseId": "ID",
+        "subquestions": "string[]",
+        "rivalExplanations": "string[]",
+        "excludedClaims": "string[]",
+        "stoppingRule": "string"
+      },
+      "SamplingPlan": {
+        "caseId": "ID",
+        "strata": "string[]",
+        "selectedRecordIds": "ID[]",
+        "excludedRecordIds": "ID[]",
+        "selectionReason": "string"
+      },
+      "CodeDefinition": {
+        "caseId": "ID",
+        "label": "string",
+        "inclusionRule": "string",
+        "exclusionRule": "string",
+        "anchorRefs": "Ref[]",
+        "parentCodeId": "ID"
+      },
+      "CodingDecision": {
+        "caseId": "ID",
+        "passageRef": "Ref",
+        "codeIds": "ID[]",
+        "disagreement": "string",
+        "adjudication": "string"
+      },
+      "ResearchFinding": {
+        "caseId": "ID",
+        "question": "string",
+        "supportingRefs": "Ref[]",
+        "contradictoryRefs": "Ref[]",
+        "claim": "string",
+        "limitation": "string"
+      }
+    },
+    "008": {
+      "OpportunityPortfolio": {
+        "strategyId": "ID",
+        "planningHorizon": "string",
+        "budget": "Money",
+        "capacityUnits": "number",
+        "sponsorId": "ID"
+      },
+      "CustomerNeed": {
+        "caseId": "ID",
+        "segment": "string",
+        "desiredOutcome": "string",
+        "obstacle": "string",
+        "evidenceRefs": "Ref[]",
+        "uncertainty": "string"
+      },
+      "Intervention": {
+        "caseId": "ID",
+        "needIds": "ID[]",
+        "concept": "string",
+        "mechanism": "string",
+        "nonProductAlternative": "string",
+        "assumptionIds": "ID[]"
+      },
+      "OpportunityEstimate": {
+        "caseId": "ID",
+        "interventionId": "ID",
+        "costRange": "string",
+        "dependencyIds": "ID[]",
+        "confidenceBasis": "string"
+      },
+      "PortfolioOption": {
+        "caseId": "ID",
+        "interventionIds": "ID[]",
+        "totalCost": "Money",
+        "capacityUse": "number",
+        "tradeoff": "string"
+      },
+      "OpportunityExperiment": {
+        "caseId": "ID",
+        "assumptionId": "ID",
+        "discriminatingTask": "string",
+        "decisionThreshold": "string",
+        "ownerId": "ID"
+      }
+    },
+    "009": {
+      "ExperimentReview": {
+        "experimentId": "ID",
+        "originalPlanId": "ID",
+        "analysisSnapshotId": "ID",
+        "decisionOwnerId": "ID",
+        "hypothesis": "string"
+      },
+      "ExperimentDesign": {
+        "caseId": "ID",
+        "assignmentUnit": "string",
+        "exposureDefinition": "string",
+        "outcomeDefinitions": "string[]",
+        "stoppingRule": "string",
+        "deviations": "string[]"
+      },
+      "MeasurementFinding": {
+        "caseId": "ID",
+        "metricId": "ID",
+        "instrumentationChange": "string",
+        "affectedWindow": "string",
+        "comparability": "'valid'|'limited'|'invalid'"
+      },
+      "ResultClaim": {
+        "caseId": "ID",
+        "analysisId": "ID",
+        "statement": "string",
+        "population": "string",
+        "uncertaintySummary": "string",
+        "causalScope": "string"
+      },
+      "MechanismFinding": {
+        "caseId": "ID",
+        "claimId": "ID",
+        "feedbackRefs": "Ref[]",
+        "rivalMechanism": "string",
+        "discriminatingObservation": "string"
+      },
+      "AnalysisOrder": {
+        "caseId": "ID",
+        "question": "string",
+        "datasetSnapshotId": "ID",
+        "cohortDefinition": "string",
+        "operationIds": "ID[]",
+        "completionTest": "string"
+      }
+    },
+    "010": {
+      "RequirementsProject": {
+        "productScope": "string",
+        "sponsorId": "ID",
+        "stakeholderIds": "ID[]",
+        "releaseTarget": "string",
+        "baselineId": "ID"
+      },
+      "StakeholderPosition": {
+        "caseId": "ID",
+        "stakeholderId": "ID",
+        "requestedOutcome": "string",
+        "rationale": "string",
+        "strength": "'mandatory'|'preference'|'unknown'",
+        "condition": "string"
+      },
+      "RequirementConflict": {
+        "caseId": "ID",
+        "positionIds": "ID[]",
+        "sharedResource": "string",
+        "incompatibility": "string",
+        "relaxationOptions": "string[]"
+      },
+      "CompromiseOption": {
+        "caseId": "ID",
+        "conflictId": "ID",
+        "proposal": "string",
+        "preservedOutcomes": "string[]",
+        "concededOutcomes": "string[]"
+      },
+      "Requirement": {
+        "caseId": "ID",
+        "statement": "string",
+        "ownerId": "ID",
+        "acceptanceCriterion": "string",
+        "dependencyIds": "ID[]",
+        "sourcePositionIds": "ID[]"
+      },
+      "AcceptanceScenario": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "initialState": "string",
+        "action": "string",
+        "expectedOutcome": "string",
+        "coverageKind": "string"
+      }
+    },
+    "011": {
+      "RecoveryCase": {
+        "customerId": "ID",
+        "orderIds": "ID[]",
+        "requestedOutcome": "string",
+        "agentId": "ID",
+        "priority": "string"
+      },
+      "ServiceIssue": {
+        "caseId": "ID",
+        "orderId": "ID",
+        "failure": "string",
+        "requestedRemedy": "string",
+        "dependencyIds": "ID[]"
+      },
+      "EntitlementFinding": {
+        "caseId": "ID",
+        "issueId": "ID",
+        "policyId": "ID",
+        "allowedRemedies": "string[]",
+        "survivingConditions": "string[]"
+      },
+      "RemedyBundle": {
+        "caseId": "ID",
+        "issueIds": "ID[]",
+        "remedyKinds": "string[]",
+        "amount": "Money",
+        "conditionalOn": "string[]"
+      },
+      "RecoveryAction": {
+        "caseId": "ID",
+        "bundleId": "ID",
+        "operationId": "ID",
+        "actionKind": "string",
+        "prerequisiteIds": "ID[]",
+        "confirmationRef": "Ref"
+      },
+      "RecoveryClosure": {
+        "caseId": "ID",
+        "issueIds": "ID[]",
+        "fulfilledIds": "ID[]",
+        "residualIssue": "string",
+        "customerAcknowledgment": "Ref"
+      }
+    },
+    "012": {
+      "ReturnCase": {
+        "customerId": "ID",
+        "itemId": "ID",
+        "purchaseId": "ID",
+        "statedProblem": "string",
+        "preferredOutcome": "string"
+      },
+      "ConditionAssessment": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "observedDefects": "string[]",
+        "missingEvidence": "string[]",
+        "certainty": "string"
+      },
+      "ReturnDisposition": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "permittedPaths": "string[]",
+        "chosenPath": "string",
+        "policyBasis": "string"
+      },
+      "RepairPlan": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "taskIds": "ID[]",
+        "partIds": "ID[]",
+        "expectedCost": "Money",
+        "acceptanceTests": "string[]"
+      },
+      "CustodyEvent": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "fromPartyId": "ID",
+        "toPartyId": "ID",
+        "observedCondition": "string",
+        "receiptRef": "Ref"
+      },
+      "ResaleDisclosure": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "conditionGrade": "string",
+        "repairedFeatures": "string[]",
+        "disclosedDefects": "string[]"
+      }
+    },
+    "013": {
+      "DisputeCase": {
+        "buyerId": "ID",
+        "sellerId": "ID",
+        "transactionId": "ID",
+        "disputedOutcome": "string",
+        "reviewerId": "ID"
+      },
+      "DisputeEvent": {
+        "caseId": "ID",
+        "actorId": "ID",
+        "happenedAt": "DateTime",
+        "eventKind": "string",
+        "assertedFact": "string"
+      },
+      "DisputedQuestion": {
+        "caseId": "ID",
+        "proposition": "string",
+        "positions": "string[]",
+        "decisiveEvidence": "string",
+        "burdenRule": "string"
+      },
+      "EvidenceFinding": {
+        "caseId": "ID",
+        "questionId": "ID",
+        "supportingRefs": "Ref[]",
+        "opposingRefs": "Ref[]",
+        "sufficiency": "'enough'|'insufficient'|'conflicted'"
+      },
+      "DisputeRecommendation": {
+        "caseId": "ID",
+        "questionIds": "ID[]",
+        "ruleIds": "ID[]",
+        "proposedOutcome": "string",
+        "unresolvedFacts": "string[]"
+      },
+      "ReviewDossier": {
+        "caseId": "ID",
+        "recommendationId": "ID",
+        "partyResponseIds": "ID[]",
+        "appealDeadline": "DateTime",
+        "redactedArtifactIds": "ID[]"
+      }
+    },
+    "014": {
+      "Onboarding": {
+        "customerId": "ID",
+        "objectives": "string[]",
+        "sponsorId": "ID",
+        "targetDate": "LocalDate",
+        "scopeBaselineId": "ID"
+      },
+      "OnboardingOutcome": {
+        "caseId": "ID",
+        "objective": "string",
+        "acceptanceEvidence": "string",
+        "customerOwnerId": "ID",
+        "excludedScope": "string"
+      },
+      "EnvironmentConstraint": {
+        "caseId": "ID",
+        "systemId": "ID",
+        "capability": "string",
+        "accessRequirement": "string",
+        "incompatibility": "string"
+      },
+      "OnboardingTask": {
+        "caseId": "ID",
+        "outcomeIds": "ID[]",
+        "prerequisiteIds": "ID[]",
+        "assignedTo": "ID",
+        "completionEvidence": "string"
+      },
+      "ProgressFinding": {
+        "caseId": "ID",
+        "taskId": "ID",
+        "state": "string",
+        "evidenceRefs": "Ref[]",
+        "residualWork": "string"
+      },
+      "OnboardingRevision": {
+        "caseId": "ID",
+        "changedTaskIds": "ID[]",
+        "scopeDelta": "string",
+        "customerApprovalRef": "Ref",
+        "acceptanceResult": "string"
+      }
+    },
+    "015": {
+      "SubscriptionCase": {
+        "customerId": "ID",
+        "subscriptionIds": "ID[]",
+        "requestedOutcome": "string",
+        "requestedEffectiveDate": "LocalDate",
+        "consentRef": "Ref"
+      },
+      "ChangeIntent": {
+        "caseId": "ID",
+        "affectedIds": "ID[]",
+        "requestedAction": "string",
+        "preservedServices": "string[]",
+        "ambiguity": "string"
+      },
+      "ChangeConsequence": {
+        "caseId": "ID",
+        "subscriptionId": "ID",
+        "accessEnd": "DateTime",
+        "billingDelta": "Money",
+        "dataConsequence": "string"
+      },
+      "ChangeOption": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "effectiveAt": "DateTime",
+        "explanation": "string",
+        "requiresConsent": "boolean"
+      },
+      "SubscriptionOperation": {
+        "caseId": "ID",
+        "selectedOptionId": "ID",
+        "operationId": "ID",
+        "approvalRef": "Ref",
+        "externalStatus": "string"
+      },
+      "ExitReceipt": {
+        "caseId": "ID",
+        "operationIds": "ID[]",
+        "remainingCharges": "string",
+        "remainingAccess": "string",
+        "confirmationRef": "Ref"
+      }
+    },
+    "016": {
+      "TenderResponse": {
+        "tenderId": "ID",
+        "customerId": "ID",
+        "dueAt": "DateTime",
+        "responseOwnerId": "ID",
+        "submissionChannel": "string"
+      },
+      "TenderRequirement": {
+        "caseId": "ID",
+        "requirementText": "string",
+        "responseLocation": "string",
+        "mandatory": "boolean",
+        "scoringHint": "string"
+      },
+      "CapabilityMatch": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "capabilityId": "ID",
+        "match": "'full'|'partial'|'none'|'unverified'",
+        "limitation": "string"
+      },
+      "ContributionTask": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "ownerId": "ID",
+        "requestedEvidence": "string",
+        "dueAt": "DateTime"
+      },
+      "ResponseSection": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "text": "string",
+        "claimRefs": "Ref[]",
+        "exceptionIds": "ID[]"
+      },
+      "SubmissionManifest": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "requirementIds": "ID[]",
+        "unresolvedIds": "ID[]",
+        "receiptRef": "Ref"
+      }
+    },
+    "017": {
+      "SubstitutionRequest": {
+        "originalItemId": "ID",
+        "intendedUse": "string",
+        "requiredBy": "LocalDate",
+        "requesterId": "ID",
+        "approvalOwnerId": "ID"
+      },
+      "FunctionalRequirement": {
+        "caseId": "ID",
+        "function": "string",
+        "environment": "string",
+        "essentialProperties": "string[]",
+        "incidentalProperties": "string[]"
+      },
+      "SubstituteCandidate": {
+        "caseId": "ID",
+        "supplierId": "ID",
+        "itemId": "ID",
+        "proposedMechanism": "string",
+        "changedAssumptions": "string[]"
+      },
+      "CompatibilityFinding": {
+        "caseId": "ID",
+        "candidateId": "ID",
+        "property": "string",
+        "verdict": "'pass'|'fail'|'unknown'",
+        "evidenceRef": "Ref"
+      },
+      "QualificationTask": {
+        "caseId": "ID",
+        "candidateId": "ID",
+        "unresolvedProperty": "string",
+        "requestedTest": "string",
+        "acceptingRole": "string"
+      },
+      "SubstitutionPacket": {
+        "caseId": "ID",
+        "candidateId": "ID",
+        "adaptationTasks": "ID[]",
+        "residualRisks": "string[]",
+        "approvalRef": "Ref"
+      }
+    },
+    "018": {
+      "SupplierIncident": {
+        "supplierId": "ID",
+        "affectedOrderIds": "ID[]",
+        "reportedProblem": "string",
+        "incidentOwnerId": "ID",
+        "severity": "string"
+      },
+      "IncidentCluster": {
+        "caseId": "ID",
+        "reportIds": "ID[]",
+        "lotIds": "ID[]",
+        "sharedMechanism": "string",
+        "unrelatedIds": "ID[]"
+      },
+      "ExposureFinding": {
+        "caseId": "ID",
+        "incidentId": "ID",
+        "affectedStockIds": "ID[]",
+        "affectedCustomerIds": "ID[]",
+        "uncertainty": "string"
+      },
+      "ContainmentPlan": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "ownerIds": "ID[]",
+        "releaseConditions": "string[]",
+        "customerMessage": "string"
+      },
+      "CorrectiveAction": {
+        "caseId": "ID",
+        "supplierId": "ID",
+        "causalClaim": "string",
+        "proposedChange": "string",
+        "verificationTaskIds": "ID[]"
+      },
+      "IncidentClosure": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "verificationRefs": "Ref[]",
+        "residualExposureIds": "ID[]",
+        "monitoringUntil": "LocalDate"
+      }
+    },
+    "019": {
+      "PurchaseReview": {
+        "requesterId": "ID",
+        "supplierId": "ID",
+        "requestedItems": "string[]",
+        "intendedUse": "string",
+        "agreementId": "ID"
+      },
+      "PurchaseIntent": {
+        "caseId": "ID",
+        "requestedFunction": "string",
+        "quantity": "Quantity",
+        "useLocation": "string",
+        "essentialConstraints": "string[]"
+      },
+      "AgreementScope": {
+        "caseId": "ID",
+        "agreementId": "ID",
+        "coveredCategories": "string[]",
+        "territory": "string",
+        "effectiveWindow": "string"
+      },
+      "ConformanceFinding": {
+        "caseId": "ID",
+        "requestLineId": "ID",
+        "verdict": "'covered'|'outside'|'conditional'|'unknown'",
+        "condition": "string"
+      },
+      "PurchasingOption": {
+        "caseId": "ID",
+        "lineIds": "ID[]",
+        "alternativeItemIds": "ID[]",
+        "tradeoff": "string",
+        "exceptionRequired": "boolean"
+      },
+      "PurchaseDisposition": {
+        "caseId": "ID",
+        "optionId": "ID",
+        "requiredApproverIds": "ID[]",
+        "unresolvedConditions": "string[]",
+        "approvalRef": "Ref"
+      }
+    },
+    "020": {
+      "SourcingEvent": {
+        "requirementIds": "ID[]",
+        "buyerId": "ID",
+        "supplierIds": "ID[]",
+        "negotiationMandateId": "ID",
+        "deadline": "DateTime"
+      },
+      "SourcingRequirement": {
+        "caseId": "ID",
+        "function": "string",
+        "minimumQuantity": "Quantity",
+        "deliveryWindow": "string",
+        "allowedTradeoffs": "string[]"
+      },
+      "SupplierOffer": {
+        "caseId": "ID",
+        "supplierId": "ID",
+        "lineIds": "ID[]",
+        "totalPrice": "Money",
+        "conditionalTerms": "string[]",
+        "validUntil": "DateTime"
+      },
+      "SourcingPackage": {
+        "caseId": "ID",
+        "offerIds": "ID[]",
+        "allocatedQuantities": "Quantity[]",
+        "totalCost": "Money",
+        "residualRisk": "string"
+      },
+      "Counteroffer": {
+        "caseId": "ID",
+        "supplierId": "ID",
+        "proposedTerms": "string",
+        "contingentOn": "string[]",
+        "mandateCheck": "string"
+      },
+      "SourcingAgreement": {
+        "caseId": "ID",
+        "acceptedOfferIds": "ID[]",
+        "remainingConditions": "string[]",
+        "commitmentIds": "ID[]",
+        "signatureRefs": "Ref[]"
+      }
+    },
+    "021": {
+      "PayableCase": {
+        "supplierId": "ID",
+        "invoiceId": "ID",
+        "legalEntityId": "ID",
+        "currency": "string",
+        "period": "string"
+      },
+      "InvoiceMatch": {
+        "caseId": "ID",
+        "invoiceLineId": "ID",
+        "orderLineIds": "ID[]",
+        "receiptIds": "ID[]",
+        "matchBasis": "string"
+      },
+      "PayableDiscrepancy": {
+        "caseId": "ID",
+        "lineId": "ID",
+        "kind": "'price'|'quantity'|'acceptance'|'duplicate'|'scope'",
+        "disputedAmount": "Money"
+      },
+      "AllocationProposal": {
+        "caseId": "ID",
+        "invoiceLineId": "ID",
+        "acceptedAmount": "Money",
+        "heldAmount": "Money",
+        "allocationIds": "ID[]"
+      },
+      "PayableDisposition": {
+        "caseId": "ID",
+        "allocationIds": "ID[]",
+        "action": "string",
+        "approverIds": "ID[]",
+        "evidenceRefs": "Ref[]"
+      },
+      "PostingReceipt": {
+        "caseId": "ID",
+        "operationId": "ID",
+        "ledgerEntryIds": "ID[]",
+        "remainingBalance": "Money",
+        "externalStatus": "string"
+      }
+    },
+    "022": {
+      "BillingCase": {
+        "agreementId": "ID",
+        "customerId": "ID",
+        "projectId": "ID",
+        "billingPeriod": "string",
+        "ownerId": "ID"
+      },
+      "BillingCondition": {
+        "caseId": "ID",
+        "milestone": "string",
+        "trigger": "string",
+        "acceptanceRequired": "boolean",
+        "amountRule": "string"
+      },
+      "DeliveryEvidence": {
+        "caseId": "ID",
+        "conditionId": "ID",
+        "artifactIds": "ID[]",
+        "deliveredScope": "string",
+        "remainingScope": "string"
+      },
+      "AcceptanceFinding": {
+        "caseId": "ID",
+        "conditionId": "ID",
+        "status": "'accepted'|'rejected'|'pending'|'uncertain'",
+        "acceptingActorId": "ID"
+      },
+      "BillableAllocation": {
+        "caseId": "ID",
+        "conditionId": "ID",
+        "eligibleAmount": "Money",
+        "previouslyBilled": "Money",
+        "heldReason": "string"
+      },
+      "BillingPacket": {
+        "caseId": "ID",
+        "allocationIds": "ID[]",
+        "evidenceRefs": "Ref[]",
+        "approverId": "ID",
+        "invoiceDraftId": "ID"
+      }
+    },
+    "023": {
+      "ExpenseCase": {
+        "claimantId": "ID",
+        "tripId": "ID",
+        "policyId": "ID",
+        "legalEntityId": "ID",
+        "submittedTotal": "Money"
+      },
+      "ExpenseLine": {
+        "caseId": "ID",
+        "merchant": "string",
+        "occurredOn": "LocalDate",
+        "purpose": "string",
+        "amount": "Money",
+        "receiptRef": "Ref"
+      },
+      "PurposeAllocation": {
+        "caseId": "ID",
+        "lineId": "ID",
+        "businessShare": "Ratio",
+        "personalShare": "Ratio",
+        "basis": "string"
+      },
+      "ExpenseFinding": {
+        "caseId": "ID",
+        "lineId": "ID",
+        "eligibleAmount": "Money",
+        "policyClauseIds": "ID[]",
+        "exceptionNeeded": "string"
+      },
+      "ExpenseQuestion": {
+        "caseId": "ID",
+        "lineIds": "ID[]",
+        "missingFact": "string",
+        "acceptableEvidence": "string",
+        "dueAt": "DateTime"
+      },
+      "ExpenseDisposition": {
+        "caseId": "ID",
+        "findingIds": "ID[]",
+        "approvedTotal": "Money",
+        "heldTotal": "Money",
+        "appealReason": "string"
+      }
+    },
+    "024": {
+      "CloseWorkpaper": {
+        "entityId": "ID",
+        "period": "string",
+        "accountIds": "ID[]",
+        "preparerId": "ID",
+        "reviewerId": "ID"
+      },
+      "ReconciliationScope": {
+        "caseId": "ID",
+        "accountIds": "ID[]",
+        "sourceSnapshotIds": "ID[]",
+        "assertion": "string",
+        "materialityRule": "string"
+      },
+      "ReconciliationBreak": {
+        "caseId": "ID",
+        "sourceLineIds": "ID[]",
+        "difference": "Money",
+        "explanationKind": "string",
+        "unresolvedFact": "string"
+      },
+      "CloseTask": {
+        "caseId": "ID",
+        "breakIds": "ID[]",
+        "requestedEvidence": "string",
+        "ownerId": "ID",
+        "dueAt": "DateTime"
+      },
+      "WorkpaperConclusion": {
+        "caseId": "ID",
+        "scopeId": "ID",
+        "explainedBreakIds": "ID[]",
+        "residualBreakIds": "ID[]",
+        "conclusion": "string"
+      },
+      "WorkpaperSignoff": {
+        "caseId": "ID",
+        "conclusionId": "ID",
+        "reviewerId": "ID",
+        "approvedHash": "string",
+        "invalidatedByIds": "ID[]"
+      }
+    },
+    "025": {
+      "GrantReport": {
+        "grantId": "ID",
+        "reportingWindow": "string",
+        "projectId": "ID",
+        "principalOwnerId": "ID",
+        "funderId": "ID"
+      },
+      "GrantCondition": {
+        "caseId": "ID",
+        "category": "string",
+        "allowedUse": "string",
+        "excludedUse": "string",
+        "reportingTrigger": "string"
+      },
+      "GrantAllocation": {
+        "caseId": "ID",
+        "expenseId": "ID",
+        "conditionId": "ID",
+        "allocatedAmount": "Money",
+        "allocationBasis": "string"
+      },
+      "ActivityEvidence": {
+        "caseId": "ID",
+        "milestoneId": "ID",
+        "activityRefs": "Ref[]",
+        "deliveredOutcome": "string",
+        "remainingRequirement": "string"
+      },
+      "GrantNarrative": {
+        "caseId": "ID",
+        "conditionIds": "ID[]",
+        "claimRefs": "Ref[]",
+        "narrative": "string",
+        "limitation": "string"
+      },
+      "GrantSubmission": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "approvalRefs": "Ref[]",
+        "submittedAt": "DateTime",
+        "receiptRef": "Ref"
+      }
+    },
+    "026": {
+      "ContractCase": {
+        "agreementIds": "ID[]",
+        "partyIds": "ID[]",
+        "operationalScope": "string",
+        "ownerId": "ID",
+        "governingPolicyId": "ID"
+      },
+      "ContractObligation": {
+        "caseId": "ID",
+        "actorId": "ID",
+        "modality": "'duty'|'permission'|'prohibition'",
+        "action": "string",
+        "trigger": "string",
+        "deadlineRule": "string"
+      },
+      "ObligationRelation": {
+        "caseId": "ID",
+        "fromId": "ID",
+        "toId": "ID",
+        "relation": "'depends'|'excepts'|'supersedes'|'conflicts'",
+        "scope": "string"
+      },
+      "TriggerFinding": {
+        "caseId": "ID",
+        "obligationId": "ID",
+        "eventIds": "ID[]",
+        "status": "'active'|'inactive'|'unknown'",
+        "missingFact": "string"
+      },
+      "ObligationTask": {
+        "caseId": "ID",
+        "obligationId": "ID",
+        "ownerId": "ID",
+        "prerequisiteIds": "ID[]",
+        "dueAt": "DateTime",
+        "completionEvidence": "string"
+      },
+      "ObligationStatus": {
+        "caseId": "ID",
+        "obligationId": "ID",
+        "status": "'open'|'satisfied'|'waived'|'disputed'",
+        "evidenceRefs": "Ref[]"
+      }
+    },
+    "027": {
+      "AmendmentCase": {
+        "baseAgreementId": "ID",
+        "amendmentIds": "ID[]",
+        "effectiveDate": "LocalDate",
+        "reviewOwnerId": "ID",
+        "baselineHash": "string"
+      },
+      "AmendmentTarget": {
+        "caseId": "ID",
+        "amendmentId": "ID",
+        "targetClauseIds": "ID[]",
+        "operation": "'replace'|'add'|'delete'|'narrow'|'extend'",
+        "ambiguity": "string"
+      },
+      "AmendmentScope": {
+        "caseId": "ID",
+        "targetId": "ID",
+        "validFrom": "LocalDate",
+        "validTo": "LocalDate",
+        "coveredEntities": "ID[]",
+        "excludedCases": "string[]"
+      },
+      "AmendedObligation": {
+        "caseId": "ID",
+        "priorId": "ID",
+        "newText": "string",
+        "preservedConditions": "string[]",
+        "removedConditions": "string[]"
+      },
+      "AmendmentImpact": {
+        "caseId": "ID",
+        "obligationId": "ID",
+        "affectedTaskIds": "ID[]",
+        "affectedArtifactIds": "ID[]",
+        "unaffectedReason": "string"
+      },
+      "AmendmentRelease": {
+        "caseId": "ID",
+        "impactIds": "ID[]",
+        "reviewerIds": "ID[]",
+        "approvedHash": "string",
+        "migrationPlan": "string"
+      }
+    },
+    "028": {
+      "ClauseNegotiation": {
+        "agreementDraftId": "ID",
+        "playbookId": "ID",
+        "stakeholderIds": "ID[]",
+        "negotiationOwnerId": "ID",
+        "mandateId": "ID"
+      },
+      "NegotiationPosition": {
+        "caseId": "ID",
+        "issue": "string",
+        "preferredOutcome": "string",
+        "fallback": "string",
+        "prohibitedConcession": "string"
+      },
+      "ClauseDependency": {
+        "caseId": "ID",
+        "clauseIds": "ID[]",
+        "interaction": "string",
+        "consequence": "string",
+        "affectedPositionIds": "ID[]"
+      },
+      "ClausePackage": {
+        "caseId": "ID",
+        "clauseIds": "ID[]",
+        "packageText": "string",
+        "concessions": "string[]",
+        "retainedProtections": "string[]"
+      },
+      "RedlineFinding": {
+        "caseId": "ID",
+        "editRef": "Ref",
+        "semanticChange": "string",
+        "acceptedPositionIds": "ID[]",
+        "requiresEscalation": "boolean"
+      },
+      "ClauseOffer": {
+        "caseId": "ID",
+        "packageId": "ID",
+        "reviewerIds": "ID[]",
+        "approvedHash": "string",
+        "unresolvedIssues": "string[]"
+      }
+    },
+    "029": {
+      "PolicySimulation": {
+        "baselinePolicyId": "ID",
+        "candidatePolicyId": "ID",
+        "caseCollectionId": "ID",
+        "policyOwnerId": "ID",
+        "purpose": "string"
+      },
+      "PolicyDelta": {
+        "caseId": "ID",
+        "clauseIds": "ID[]",
+        "changedCondition": "string",
+        "changedConsequence": "string",
+        "unchangedSafeguards": "string[]"
+      },
+      "PolicyCaseFacts": {
+        "caseId": "ID",
+        "establishedFacts": "string[]",
+        "unknownFacts": "string[]",
+        "protectedAttributes": "string[]"
+      },
+      "OutcomeDifference": {
+        "caseId": "ID",
+        "baselineOutcome": "string",
+        "candidateOutcome": "string",
+        "causalDeltaIds": "ID[]"
+      },
+      "BoundaryScenario": {
+        "caseId": "ID",
+        "deltaId": "ID",
+        "initialFacts": "string[]",
+        "perturbedFact": "string",
+        "expectedDistinction": "string"
+      },
+      "PolicyOption": {
+        "caseId": "ID",
+        "deltaIds": "ID[]",
+        "revisedText": "string",
+        "affectedCaseIds": "ID[]",
+        "unresolvedTradeoff": "string"
+      }
+    },
+    "030": {
+      "DisclosureCase": {
+        "recipientId": "ID",
+        "purpose": "string",
+        "documentIds": "ID[]",
+        "authorityRef": "Ref",
+        "reviewOwnerId": "ID"
+      },
+      "DisclosureScope": {
+        "caseId": "ID",
+        "requestedTopics": "string[]",
+        "dateWindow": "string",
+        "permittedCategories": "string[]",
+        "excludedCategories": "string[]"
+      },
+      "DisclosureSelection": {
+        "caseId": "ID",
+        "documentId": "ID",
+        "relevantSpans": "SpanRef[]",
+        "excludedReason": "string",
+        "partialDisclosure": "boolean"
+      },
+      "RedactionProposal": {
+        "caseId": "ID",
+        "documentId": "ID",
+        "spanRefs": "SpanRef[]",
+        "reasonCode": "string",
+        "retainedMeaning": "string"
+      },
+      "DisclosureRisk": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "combinedInference": "string",
+        "restrictedFact": "string",
+        "mitigation": "string"
+      },
+      "DisclosureManifest": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "redactionIds": "ID[]",
+        "reviewerIds": "ID[]",
+        "recipientBinding": "string"
+      }
+    },
+    "031": {
+      "EvidenceReview": {
+        "question": "string",
+        "inclusionPolicyId": "ID",
+        "corpusIds": "ID[]",
+        "reviewOwnerId": "ID",
+        "cutoffDate": "LocalDate"
+      },
+      "EligibilityCriterion": {
+        "caseId": "ID",
+        "population": "string",
+        "interventionOrExposure": "string",
+        "outcome": "string",
+        "exclusion": "string"
+      },
+      "StudyIdentity": {
+        "caseId": "ID",
+        "reportIds": "ID[]",
+        "registryIds": "ID[]",
+        "cohortDescription": "string",
+        "linkageBasis": "string"
+      },
+      "StudyObservation": {
+        "caseId": "ID",
+        "studyId": "ID",
+        "eligible": "boolean",
+        "measuredOutcome": "string",
+        "resultRef": "Ref",
+        "limitation": "string"
+      },
+      "EvidenceClaim": {
+        "caseId": "ID",
+        "proposition": "string",
+        "supportingStudyIds": "ID[]",
+        "opposingStudyIds": "ID[]",
+        "applicability": "string"
+      },
+      "EvidenceUpdate": {
+        "caseId": "ID",
+        "changedStudyIds": "ID[]",
+        "staleClaimIds": "ID[]",
+        "revisionReason": "string",
+        "remainingGap": "string"
+      }
+    },
+    "032": {
+      "Harmonization": {
+        "datasetIds": "ID[]",
+        "targetConstruct": "string",
+        "intendedAnalysis": "string",
+        "dataOwnerId": "ID",
+        "protocolId": "ID"
+      },
+      "MeasureDefinition": {
+        "caseId": "ID",
+        "datasetId": "ID",
+        "variable": "string",
+        "construct": "string",
+        "collectionMethod": "string",
+        "population": "string"
+      },
+      "MeasureRelation": {
+        "caseId": "ID",
+        "leftMeasureId": "ID",
+        "rightMeasureId": "ID",
+        "relation": "'equivalent'|'transformable'|'partial'|'incompatible'",
+        "boundary": "string"
+      },
+      "HarmonizationRule": {
+        "caseId": "ID",
+        "sourceMeasureId": "ID",
+        "targetName": "string",
+        "exactOperationId": "ID",
+        "informationLoss": "string"
+      },
+      "HarmonizedSlice": {
+        "caseId": "ID",
+        "datasetIds": "ID[]",
+        "ruleIds": "ID[]",
+        "inclusionQueryId": "ID",
+        "excludedCount": "number"
+      },
+      "HarmonizationAudit": {
+        "caseId": "ID",
+        "sliceId": "ID",
+        "assumption": "string",
+        "alternativeRuleIds": "ID[]",
+        "changedResult": "string"
+      }
+    },
+    "033": {
+      "ReplicationProject": {
+        "studyId": "ID",
+        "replicationGoal": "string",
+        "sourceIds": "ID[]",
+        "investigatorId": "ID",
+        "computeBudget": "Money"
+      },
+      "MethodStep": {
+        "caseId": "ID",
+        "inputIds": "ID[]",
+        "operation": "string",
+        "outputDefinition": "string",
+        "parameterSources": "Ref[]"
+      },
+      "ReplicationDependency": {
+        "caseId": "ID",
+        "stepId": "ID",
+        "prerequisiteIds": "ID[]",
+        "resourceIds": "ID[]",
+        "compatibilityIssue": "string"
+      },
+      "MethodQuestion": {
+        "caseId": "ID",
+        "stepId": "ID",
+        "ambiguity": "string",
+        "alternatives": "string[]",
+        "discriminatingEvidence": "string"
+      },
+      "ReplicationTask": {
+        "caseId": "ID",
+        "stepId": "ID",
+        "commandSpecId": "ID",
+        "inputHashIds": "ID[]",
+        "expectedArtifact": "string"
+      },
+      "ReplicationFinding": {
+        "caseId": "ID",
+        "taskIds": "ID[]",
+        "referenceResult": "string",
+        "observedResult": "string",
+        "explanationStatus": "string"
+      }
+    },
+    "034": {
+      "ResearchSchedule": {
+        "projectIds": "ID[]",
+        "resourceIds": "ID[]",
+        "planningWindow": "string",
+        "coordinatorId": "ID",
+        "protocolIds": "ID[]"
+      },
+      "ExperimentRequirement": {
+        "caseId": "ID",
+        "experimentId": "ID",
+        "scientificObjective": "string",
+        "resourceNeed": "string",
+        "timingConstraint": "string"
+      },
+      "ResourceCapability": {
+        "caseId": "ID",
+        "resourceId": "ID",
+        "capability": "string",
+        "availabilityWindows": "string[]",
+        "qualificationRef": "Ref"
+      },
+      "ExperimentSlot": {
+        "caseId": "ID",
+        "experimentId": "ID",
+        "resourceIds": "ID[]",
+        "startsAt": "DateTime",
+        "prerequisiteIds": "ID[]"
+      },
+      "RescueOption": {
+        "caseId": "ID",
+        "disruptedSlotId": "ID",
+        "replacementResourceIds": "ID[]",
+        "scientificDeviation": "string",
+        "approvalNeeded": "string"
+      },
+      "ReadinessCheck": {
+        "caseId": "ID",
+        "slotId": "ID",
+        "confirmationRefs": "Ref[]",
+        "remainingBlockers": "string[]",
+        "goDecisionRef": "Ref"
+      }
+    },
+    "035": {
+      "NegativeResultCase": {
+        "projectId": "ID",
+        "originalQuestion": "string",
+        "investigatorId": "ID",
+        "recordIds": "ID[]",
+        "archiveScope": "string"
+      },
+      "ResearchAttempt": {
+        "caseId": "ID",
+        "hypothesis": "string",
+        "procedure": "string",
+        "actualConditions": "string[]",
+        "completionStatus": "string"
+      },
+      "NegativeFinding": {
+        "caseId": "ID",
+        "attemptId": "ID",
+        "kind": "'negative'|'invalid'|'incomplete'|'inconclusive'",
+        "supportedConclusion": "string"
+      },
+      "FailureExplanation": {
+        "caseId": "ID",
+        "findingId": "ID",
+        "mechanism": "string",
+        "supportingRefs": "Ref[]",
+        "rivalExplanationIds": "ID[]"
+      },
+      "DiscriminatingExperiment": {
+        "caseId": "ID",
+        "explanationIds": "ID[]",
+        "proposedChange": "string",
+        "expectedDistinction": "string",
+        "stopRule": "string"
+      },
+      "ResearchLesson": {
+        "caseId": "ID",
+        "attemptIds": "ID[]",
+        "reusableLesson": "string",
+        "applicability": "string",
+        "supersededBy": "ID"
+      }
+    },
+    "036": {
+      "LearningCase": {
+        "learnerId": "ID",
+        "competencyIds": "ID[]",
+        "learningGoal": "string",
+        "instructorId": "ID",
+        "accommodationIds": "ID[]"
+      },
+      "ResponseObservation": {
+        "caseId": "ID",
+        "taskId": "ID",
+        "responseRef": "Ref",
+        "observedStrategy": "string",
+        "errorLocation": "string"
+      },
+      "MisconceptionHypothesis": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "hypothesis": "string",
+        "rivalHypotheses": "string[]",
+        "discriminatingFeature": "string"
+      },
+      "DiagnosticTask": {
+        "caseId": "ID",
+        "hypothesisIds": "ID[]",
+        "prompt": "string",
+        "expectedResponseClasses": "string[]",
+        "prerequisiteIds": "ID[]"
+      },
+      "LearningIntervention": {
+        "caseId": "ID",
+        "hypothesisId": "ID",
+        "explanation": "string",
+        "workedExample": "string",
+        "practiceTaskIds": "ID[]"
+      },
+      "TransferFinding": {
+        "caseId": "ID",
+        "competencyId": "ID",
+        "novelTaskIds": "ID[]",
+        "demonstratedSkill": "string",
+        "remainingUncertainty": "string"
+      }
+    },
+    "037": {
+      "AssessmentProject": {
+        "competencyIds": "ID[]",
+        "audience": "string",
+        "durationMinutes": "number",
+        "assessmentOwnerId": "ID",
+        "stakes": "string"
+      },
+      "AssessmentBlueprint": {
+        "caseId": "ID",
+        "competencyIds": "ID[]",
+        "taskKinds": "string[]",
+        "coverageWeights": "Ratio[]",
+        "excludedConstructs": "string[]"
+      },
+      "AssessmentItem": {
+        "caseId": "ID",
+        "competencyIds": "ID[]",
+        "prompt": "string",
+        "responseFormat": "string",
+        "allowedResources": "string[]"
+      },
+      "ScoringRubric": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "criteria": "string[]",
+        "scoreLevels": "string[]",
+        "validAlternativeAnswers": "string[]"
+      },
+      "ItemChallenge": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "ambiguousInterpretation": "string",
+        "counterexampleAnswer": "string",
+        "proposedRepair": "string"
+      },
+      "ModerationDecision": {
+        "caseId": "ID",
+        "responseId": "ID",
+        "originalScore": "number",
+        "reviewedScore": "number",
+        "evidenceReason": "string"
+      }
+    },
+    "038": {
+      "LearningProject": {
+        "learnerGroupIds": "ID[]",
+        "competencyIds": "ID[]",
+        "projectBrief": "string",
+        "instructorId": "ID",
+        "timeBudgetHours": "number"
+      },
+      "ProjectLearningGoal": {
+        "caseId": "ID",
+        "competencyId": "ID",
+        "observableEvidence": "string",
+        "prerequisiteIds": "ID[]",
+        "assessmentBoundary": "string"
+      },
+      "ProjectConcept": {
+        "caseId": "ID",
+        "setting": "string",
+        "roles": "string[]",
+        "centralChallenge": "string",
+        "deliverables": "string[]"
+      },
+      "ProjectMilestone": {
+        "caseId": "ID",
+        "deliverable": "string",
+        "prerequisiteIds": "ID[]",
+        "evidenceCriteria": "string[]",
+        "dueAt": "DateTime"
+      },
+      "ScaffoldingPlan": {
+        "caseId": "ID",
+        "learnerGroupId": "ID",
+        "observedGap": "string",
+        "support": "string",
+        "fadingCondition": "string"
+      },
+      "ProjectRevision": {
+        "caseId": "ID",
+        "milestoneId": "ID",
+        "complication": "string",
+        "recoveryOptions": "string[]",
+        "preservedGoals": "string[]"
+      }
+    },
+    "039": {
+      "PracticeSession": {
+        "learnerId": "ID",
+        "scenarioFamily": "string",
+        "procedureId": "ID",
+        "instructorId": "ID",
+        "difficulty": "string"
+      },
+      "PracticeScenario": {
+        "caseId": "ID",
+        "initialFacts": "string[]",
+        "hiddenFacts": "string[]",
+        "actorGoals": "string[]",
+        "allowedActions": "string[]"
+      },
+      "LearnerAction": {
+        "caseId": "ID",
+        "utterance": "string",
+        "intendedAction": "string",
+        "targetId": "ID",
+        "ambiguity": "string"
+      },
+      "PracticeTransition": {
+        "caseId": "ID",
+        "actionId": "ID",
+        "stateDelta": "string",
+        "revealedFacts": "string[]",
+        "consequence": "string"
+      },
+      "PracticeComplication": {
+        "caseId": "ID",
+        "trigger": "string",
+        "newFact": "string",
+        "affectedObligationIds": "ID[]",
+        "recoveryPaths": "string[]"
+      },
+      "PracticeFeedback": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "demonstratedSkills": "string[]",
+        "missedEvidence": "string[]",
+        "nextPractice": "string"
+      }
+    },
+    "040": {
+      "PortfolioReview": {
+        "learnerId": "ID",
+        "competencyFrameworkId": "ID",
+        "artifactIds": "ID[]",
+        "assessorId": "ID",
+        "reviewPurpose": "string"
+      },
+      "PortfolioEvidence": {
+        "caseId": "ID",
+        "artifactId": "ID",
+        "contribution": "string",
+        "context": "string",
+        "authorshipStatus": "string"
+      },
+      "CompetencyMapping": {
+        "caseId": "ID",
+        "evidenceId": "ID",
+        "competencyId": "ID",
+        "demonstratedFacet": "string",
+        "missingFacet": "string"
+      },
+      "CompetencyFinding": {
+        "caseId": "ID",
+        "competencyId": "ID",
+        "evidenceIds": "ID[]",
+        "sufficiency": "'met'|'partial'|'insufficient'",
+        "limitation": "string"
+      },
+      "EvidenceTask": {
+        "caseId": "ID",
+        "competencyId": "ID",
+        "task": "string",
+        "requiredDemonstration": "string",
+        "acceptanceCriteria": "string[]"
+      },
+      "PortfolioDisposition": {
+        "caseId": "ID",
+        "findingIds": "ID[]",
+        "assessorNotes": "string",
+        "nextTaskIds": "ID[]",
+        "approvalRef": "Ref"
+      }
+    },
+    "041": {
+      "RegressionProject": {
+        "repositoryId": "ID",
+        "requirementIds": "ID[]",
+        "targetRevision": "string",
+        "testOwnerId": "ID",
+        "sandboxProfileId": "ID"
+      },
+      "BehavioralRequirement": {
+        "caseId": "ID",
+        "precondition": "string",
+        "action": "string",
+        "expectedOutcome": "string",
+        "forbiddenOutcome": "string"
+      },
+      "TestPartition": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "inputClass": "string",
+        "boundary": "string",
+        "interactionIds": "ID[]"
+      },
+      "RegressionTest": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "setupSpec": "string",
+        "actionSpec": "string",
+        "assertionSpec": "string"
+      },
+      "TestFailureFinding": {
+        "caseId": "ID",
+        "testId": "ID",
+        "failureKind": "'product'|'test'|'environment'|'uncertain'",
+        "evidenceRefs": "Ref[]"
+      },
+      "SuiteQualification": {
+        "caseId": "ID",
+        "testIds": "ID[]",
+        "mutationIds": "ID[]",
+        "survivingMutations": "ID[]",
+        "coverageGaps": "string[]"
+      }
+    },
+    "042": {
+      "ReleaseReview": {
+        "releaseId": "ID",
+        "baselineRevision": "string",
+        "candidateRevision": "string",
+        "integrationIds": "ID[]",
+        "releaseOwnerId": "ID"
+      },
+      "BehavioralChange": {
+        "caseId": "ID",
+        "componentId": "ID",
+        "oldBehavior": "string",
+        "newBehavior": "string",
+        "affectedContract": "string"
+      },
+      "ConsumerDependency": {
+        "caseId": "ID",
+        "consumerId": "ID",
+        "reliedOnBehavior": "string",
+        "evidenceRefs": "Ref[]",
+        "exposure": "string"
+      },
+      "CompatibilityTest": {
+        "caseId": "ID",
+        "consumerId": "ID",
+        "scenario": "string",
+        "baselineResult": "string",
+        "candidateResult": "string"
+      },
+      "MigrationWave": {
+        "caseId": "ID",
+        "consumerIds": "ID[]",
+        "prerequisiteIds": "ID[]",
+        "fallbackPlan": "string",
+        "acceptanceCriteria": "string[]"
+      },
+      "ReleaseReadiness": {
+        "caseId": "ID",
+        "waveIds": "ID[]",
+        "documentationIds": "ID[]",
+        "ownerApprovals": "Ref[]",
+        "unresolvedRisk": "string"
+      }
+    },
+    "043": {
+      "Incident": {
+        "serviceIds": "ID[]",
+        "reportedImpact": "string",
+        "commanderId": "ID",
+        "startedAt": "DateTime",
+        "runbookIds": "ID[]"
+      },
+      "IncidentImpact": {
+        "caseId": "ID",
+        "affectedFunctions": "string[]",
+        "affectedCohorts": "string[]",
+        "observedSymptoms": "string[]",
+        "unknownScope": "string"
+      },
+      "IncidentHypothesis": {
+        "caseId": "ID",
+        "mechanism": "string",
+        "supportingRefs": "Ref[]",
+        "contradictingRefs": "Ref[]",
+        "discriminatingCheck": "string"
+      },
+      "DiagnosticAction": {
+        "caseId": "ID",
+        "hypothesisIds": "ID[]",
+        "approvedOperationId": "ID",
+        "expectedInformation": "string",
+        "operationalRisk": "string"
+      },
+      "RecoveryStep": {
+        "caseId": "ID",
+        "operationId": "ID",
+        "prerequisiteIds": "ID[]",
+        "approvalRef": "Ref",
+        "rollbackCondition": "string"
+      },
+      "RestorationFinding": {
+        "caseId": "ID",
+        "function": "string",
+        "verificationRefs": "Ref[]",
+        "residualImpact": "string",
+        "monitoringWindow": "string"
+      }
+    },
+    "044": {
+      "DocumentationReview": {
+        "repositoryId": "ID",
+        "documentIds": "ID[]",
+        "targetRelease": "string",
+        "ownerId": "ID",
+        "behaviorSnapshotId": "ID"
+      },
+      "DocumentedPromise": {
+        "caseId": "ID",
+        "documentId": "ID",
+        "behaviorClaim": "string",
+        "applicableVersion": "string",
+        "exampleRefs": "Ref[]"
+      },
+      "BehaviorObservation": {
+        "caseId": "ID",
+        "promiseId": "ID",
+        "probeSpecId": "ID",
+        "observedOutcome": "string",
+        "environmentHash": "string"
+      },
+      "DocumentationMismatch": {
+        "caseId": "ID",
+        "promiseId": "ID",
+        "kind": "'stale-doc'|'product-defect'|'intentional-change'|'uncertain'",
+        "rationale": "string"
+      },
+      "DocumentationPatch": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "baseHashes": "string[]",
+        "proposedText": "string",
+        "protectedClaims": "string[]"
+      },
+      "DocumentationRelease": {
+        "caseId": "ID",
+        "patchIds": "ID[]",
+        "exampleTestIds": "ID[]",
+        "residualMismatchIds": "ID[]",
+        "approvalRefs": "Ref[]"
+      }
+    },
+    "045": {
+      "DebtCampaign": {
+        "repositoryIds": "ID[]",
+        "serviceIds": "ID[]",
+        "planningHorizon": "string",
+        "sponsorId": "ID",
+        "capacityBudget": "number"
+      },
+      "DebtSymptom": {
+        "caseId": "ID",
+        "affectedWorkflow": "string",
+        "observation": "string",
+        "frequencyBasis": "string",
+        "evidenceRefs": "Ref[]"
+      },
+      "DebtMechanism": {
+        "caseId": "ID",
+        "symptomIds": "ID[]",
+        "proposedCause": "string",
+        "rivalCause": "string",
+        "validationTask": "string"
+      },
+      "DebtWorkPackage": {
+        "caseId": "ID",
+        "mechanismId": "ID",
+        "boundedChange": "string",
+        "excludedScope": "string",
+        "completionEvidence": "string"
+      },
+      "DebtWave": {
+        "caseId": "ID",
+        "packageIds": "ID[]",
+        "prerequisiteIds": "ID[]",
+        "capacityUse": "number",
+        "rollbackPlan": "string"
+      },
+      "DebtOutcome": {
+        "caseId": "ID",
+        "packageId": "ID",
+        "beforeMeasure": "string",
+        "afterMeasure": "string",
+        "residualSymptoms": "string[]"
+      }
+    },
+    "046": {
+      "AnalysisRequest": {
+        "question": "string",
+        "datasetIds": "ID[]",
+        "requesterId": "ID",
+        "decisionPurpose": "string",
+        "resultAudience": "string"
+      },
+      "AnalysisMeaning": {
+        "caseId": "ID",
+        "population": "string",
+        "semanticPredicates": "string[]",
+        "timeRelation": "string",
+        "outputGrain": "string",
+        "ambiguity": "string"
+      },
+      "DataSuitability": {
+        "caseId": "ID",
+        "meaningId": "ID",
+        "requiredFields": "string[]",
+        "availableFields": "string[]",
+        "missingEvidence": "string"
+      },
+      "AnalysisWorkGraph": {
+        "caseId": "ID",
+        "nodeIds": "ID[]",
+        "semanticNodeIds": "ID[]",
+        "exactNodeIds": "ID[]",
+        "outputContract": "string"
+      },
+      "AnalysisSlice": {
+        "caseId": "ID",
+        "graphId": "ID",
+        "inputManifestId": "ID",
+        "classifiedIds": "ID[]",
+        "aggregateArtifactId": "ID",
+        "coverageGap": "string"
+      },
+      "AnalysisAnswer": {
+        "caseId": "ID",
+        "sliceId": "ID",
+        "answer": "string",
+        "qualification": "string",
+        "reproducibilityManifestId": "ID"
+      }
+    },
+    "047": {
+      "MigrationProject": {
+        "sourceSystemIds": "ID[]",
+        "targetSchemaId": "ID",
+        "migrationOwnerId": "ID",
+        "cutoverWindow": "string",
+        "rollbackPolicyId": "ID"
+      },
+      "SourceFieldMeaning": {
+        "caseId": "ID",
+        "systemId": "ID",
+        "field": "string",
+        "meaning": "string",
+        "missingStates": "string[]",
+        "conditionalUse": "string"
+      },
+      "MigrationMapping": {
+        "caseId": "ID",
+        "sourceFields": "string[]",
+        "targetField": "string",
+        "condition": "string",
+        "transformation": "string"
+      },
+      "MigrationDecision": {
+        "caseId": "ID",
+        "sourceRecordId": "ID",
+        "mappingIds": "ID[]",
+        "targetDraft": "string",
+        "unresolvedFields": "string[]"
+      },
+      "MigrationRehearsal": {
+        "caseId": "ID",
+        "manifestId": "ID",
+        "targetRecordIds": "ID[]",
+        "invariantFailures": "string[]",
+        "rollbackArtifactId": "ID"
+      },
+      "MigrationCutover": {
+        "caseId": "ID",
+        "rehearsalId": "ID",
+        "approvedHash": "string",
+        "finalDeltaIds": "ID[]",
+        "reconciliationStatus": "string"
+      }
+    },
+    "048": {
+      "TaxonomyChange": {
+        "taxonomyId": "ID",
+        "incomingCollectionId": "ID",
+        "stewardId": "ID",
+        "intendedUse": "string",
+        "baselineVersion": "string"
+      },
+      "CategoryFit": {
+        "caseId": "ID",
+        "recordId": "ID",
+        "candidateCategoryIds": "ID[]",
+        "fit": "'clear'|'overlap'|'none'|'uncertain'",
+        "boundaryIssue": "string"
+      },
+      "TaxonomyDefect": {
+        "caseId": "ID",
+        "categoryIds": "ID[]",
+        "kind": "'split'|'merge'|'rename'|'boundary'|'new'",
+        "evidenceIds": "ID[]"
+      },
+      "CategoryRevision": {
+        "caseId": "ID",
+        "affectedIds": "ID[]",
+        "newDefinitions": "string[]",
+        "relationMap": "string",
+        "preservedDistinctions": "string[]"
+      },
+      "TaxonomyImpact": {
+        "caseId": "ID",
+        "revisionId": "ID",
+        "changedRecordIds": "ID[]",
+        "historicalBridge": "string",
+        "unresolvedIds": "ID[]"
+      },
+      "TaxonomyRelease": {
+        "caseId": "ID",
+        "revisionId": "ID",
+        "approvalRefs": "Ref[]",
+        "migrationTaskIds": "ID[]",
+        "rollbackVersion": "string"
+      }
+    },
+    "049": {
+      "ResolutionProject": {
+        "collectionIds": "ID[]",
+        "entityKind": "string",
+        "identityPolicyId": "ID",
+        "stewardId": "ID",
+        "intendedUse": "string"
+      },
+      "IdentityCandidate": {
+        "caseId": "ID",
+        "leftRecordId": "ID",
+        "rightRecordId": "ID",
+        "blockingReasons": "string[]",
+        "disqualifyingFacts": "string[]"
+      },
+      "IdentityJudgment": {
+        "caseId": "ID",
+        "leftId": "ID",
+        "rightId": "ID",
+        "relation": "'same'|'different'|'related'|'unknown'",
+        "decisiveEvidence": "string"
+      },
+      "IdentityCluster": {
+        "caseId": "ID",
+        "memberIds": "ID[]",
+        "cannotLinkIds": "ID[]",
+        "unresolvedPairIds": "ID[]",
+        "consistencyFinding": "string"
+      },
+      "CanonicalEntity": {
+        "caseId": "ID",
+        "memberIds": "ID[]",
+        "preferredName": "string",
+        "attributeClaims": "string[]",
+        "unresolvedAttributes": "string[]"
+      },
+      "IdentityRevision": {
+        "caseId": "ID",
+        "clusterId": "ID",
+        "operation": "'merge'|'split'|'relabel'|'defer'",
+        "affectedConsumerIds": "ID[]"
+      }
+    },
+    "050": {
+      "DatasetProject": {
+        "intendedUse": "string",
+        "targetPopulation": "string",
+        "sourceCollectionIds": "ID[]",
+        "ownerId": "ID",
+        "releaseAudience": "string"
+      },
+      "DatasetUse": {
+        "caseId": "ID",
+        "task": "string",
+        "targetPopulation": "string",
+        "prohibitedUses": "string[]",
+        "requiredSlices": "string[]"
+      },
+      "AnnotationRule": {
+        "caseId": "ID",
+        "label": "string",
+        "inclusionRule": "string",
+        "exclusionRule": "string",
+        "ambiguityPolicy": "string"
+      },
+      "DatasetRecordAudit": {
+        "caseId": "ID",
+        "recordId": "ID",
+        "eligibility": "string",
+        "qualityIssues": "string[]",
+        "rightsStatus": "string"
+      },
+      "CoverageFinding": {
+        "caseId": "ID",
+        "slice": "string",
+        "eligibleCount": "number",
+        "targetCount": "number",
+        "gapDescription": "string"
+      },
+      "DatasetRelease": {
+        "caseId": "ID",
+        "acquisitionTaskIds": "ID[]",
+        "annotationVersion": "string",
+        "artifactIds": "ID[]",
+        "unresolvedLimits": "string[]"
+      }
+    },
+    "051": {
+      "ShipmentDisruption": {
+        "shipmentIds": "ID[]",
+        "disruptionDescription": "string",
+        "coordinatorId": "ID",
+        "planningWindow": "string",
+        "priorityPolicyId": "ID"
+      },
+      "DisruptionImpact": {
+        "caseId": "ID",
+        "routeIds": "ID[]",
+        "affectedWindow": "string",
+        "unavailableCapabilities": "string[]",
+        "uncertainty": "string"
+      },
+      "ShippingCommitment": {
+        "caseId": "ID",
+        "shipmentId": "ID",
+        "promisedOutcome": "string",
+        "deadline": "DateTime",
+        "essentialConditions": "string[]"
+      },
+      "ShippingAlternative": {
+        "caseId": "ID",
+        "shipmentIds": "ID[]",
+        "routeIds": "ID[]",
+        "substitutions": "string[]",
+        "changedPromises": "string[]"
+      },
+      "ShippingAllocation": {
+        "caseId": "ID",
+        "alternativeIds": "ID[]",
+        "reservedCapacityIds": "ID[]",
+        "totalCost": "Money",
+        "unresolvedDemand": "string"
+      },
+      "ShippingRecovery": {
+        "caseId": "ID",
+        "allocationId": "ID",
+        "communicationIds": "ID[]",
+        "carrierReceiptIds": "ID[]",
+        "remainingRisk": "string"
+      }
+    },
+    "052": {
+      "WarehouseException": {
+        "warehouseId": "ID",
+        "itemRefs": "ID[]",
+        "reportedDiscrepancy": "string",
+        "operatorId": "ID",
+        "inventorySnapshotId": "ID"
+      },
+      "StockObservation": {
+        "caseId": "ID",
+        "locationId": "ID",
+        "observedDescription": "string",
+        "serial": "string",
+        "quantity": "Quantity",
+        "condition": "string"
+      },
+      "StockIdentityFinding": {
+        "caseId": "ID",
+        "observationId": "ID",
+        "candidateItemIds": "ID[]",
+        "verdict": "string",
+        "missingEvidence": "string"
+      },
+      "WarehouseFinding": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "kind": "'misplaced'|'mislabeled'|'damaged'|'missing'|'pending'",
+        "affectedQuantity": "Quantity"
+      },
+      "WarehouseWorkOrder": {
+        "caseId": "ID",
+        "findingId": "ID",
+        "task": "string",
+        "targetLocationId": "ID",
+        "verificationRequired": "string"
+      },
+      "InventoryResolution": {
+        "caseId": "ID",
+        "workOrderIds": "ID[]",
+        "movementIds": "ID[]",
+        "adjustmentIds": "ID[]",
+        "residualDiscrepancy": "string"
+      }
+    },
+    "053": {
+      "SurplusExchange": {
+        "offerIds": "ID[]",
+        "needIds": "ID[]",
+        "coordinatorId": "ID",
+        "exchangeRegion": "string",
+        "allocationPolicyId": "ID"
+      },
+      "SurplusOffer": {
+        "caseId": "ID",
+        "ownerId": "ID",
+        "materialFunction": "string",
+        "quantity": "Quantity",
+        "condition": "string",
+        "transferRestrictions": "string[]"
+      },
+      "ReuseNeed": {
+        "caseId": "ID",
+        "recipientId": "ID",
+        "desiredFunction": "string",
+        "essentialProperties": "string[]",
+        "adaptationTolerance": "string"
+      },
+      "ReuseMatch": {
+        "caseId": "ID",
+        "offerIds": "ID[]",
+        "needId": "ID",
+        "reuseConcept": "string",
+        "requiredAdaptations": "string[]"
+      },
+      "ExchangePackage": {
+        "caseId": "ID",
+        "matchIds": "ID[]",
+        "transferLegIds": "ID[]",
+        "reservedQuantities": "Quantity[]",
+        "logisticsCost": "Money"
+      },
+      "ReuseReceipt": {
+        "caseId": "ID",
+        "packageId": "ID",
+        "custodyRefs": "Ref[]",
+        "recipientAcceptance": "Ref",
+        "residualIssue": "string"
+      }
+    },
+    "054": {
+      "DonationRound": {
+        "offerIds": "ID[]",
+        "recipientNeedIds": "ID[]",
+        "coordinatorId": "ID",
+        "allocationRuleId": "ID",
+        "distributionWindow": "string"
+      },
+      "DonationOffer": {
+        "caseId": "ID",
+        "donorId": "ID",
+        "itemDescription": "string",
+        "quantity": "Quantity",
+        "condition": "string",
+        "availabilityWindow": "string"
+      },
+      "RecipientNeed": {
+        "caseId": "ID",
+        "recipientId": "ID",
+        "desiredOutcome": "string",
+        "essentialConstraints": "string[]",
+        "acceptableSubstitutions": "string[]"
+      },
+      "DonationBundle": {
+        "caseId": "ID",
+        "offerIds": "ID[]",
+        "recipientId": "ID",
+        "intendedUse": "string",
+        "missingComponents": "string[]"
+      },
+      "DonationAllocation": {
+        "caseId": "ID",
+        "bundleIds": "ID[]",
+        "reservedQuantities": "Quantity[]",
+        "ruleBasis": "string",
+        "unmetNeedIds": "ID[]"
+      },
+      "DonationDelivery": {
+        "caseId": "ID",
+        "allocationId": "ID",
+        "logisticsTaskIds": "ID[]",
+        "acceptanceRef": "Ref",
+        "declinedItems": "ID[]"
+      }
+    },
+    "055": {
+      "RepairRequest": {
+        "requesterId": "ID",
+        "itemDescription": "string",
+        "reportedSymptoms": "string[]",
+        "preferredWindow": "string",
+        "coordinatorId": "ID"
+      },
+      "RepairSymptom": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "observedBehavior": "string",
+        "priorAttempt": "string",
+        "riskFlag": "string"
+      },
+      "RepairDiagnostic": {
+        "caseId": "ID",
+        "symptomIds": "ID[]",
+        "approvedCheck": "string",
+        "requiredSkill": "string",
+        "expectedDistinction": "string"
+      },
+      "RepairAssignment": {
+        "caseId": "ID",
+        "taskIds": "ID[]",
+        "repairerId": "ID",
+        "skillEvidence": "Ref[]",
+        "capacitySlot": "string"
+      },
+      "RepairWorkPlan": {
+        "caseId": "ID",
+        "assignmentIds": "ID[]",
+        "partIds": "ID[]",
+        "prerequisiteIds": "ID[]",
+        "customerApprovalRef": "Ref"
+      },
+      "RepairOutcome": {
+        "caseId": "ID",
+        "workPlanId": "ID",
+        "verifiedResult": "string",
+        "remainingIssue": "string",
+        "reusableLesson": "string"
+      }
+    },
+    "056": {
+      "QualityInvestigation": {
+        "productIds": "ID[]",
+        "lotIds": "ID[]",
+        "reportedDefect": "string",
+        "qualityOwnerId": "ID",
+        "investigationScope": "string"
+      },
+      "DefectObservation": {
+        "caseId": "ID",
+        "productId": "ID",
+        "lotId": "ID",
+        "symptom": "string",
+        "observedAt": "DateTime",
+        "inspectionContext": "string"
+      },
+      "QualityExposure": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "affectedLotIds": "ID[]",
+        "downstreamItemIds": "ID[]",
+        "uncertainBoundary": "string"
+      },
+      "QualityHypothesis": {
+        "caseId": "ID",
+        "mechanism": "string",
+        "supportingRefs": "Ref[]",
+        "contradictingRefs": "Ref[]",
+        "discriminatingTest": "string"
+      },
+      "QualityActionPlan": {
+        "caseId": "ID",
+        "hypothesisIds": "ID[]",
+        "containmentTasks": "ID[]",
+        "correctiveTasks": "ID[]",
+        "releaseCriteria": "string[]"
+      },
+      "QualityClosure": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "verificationRefs": "Ref[]",
+        "residualRisk": "string",
+        "monitoringRule": "string"
+      }
+    },
+    "057": {
+      "InstructionAdaptation": {
+        "masterProcedureId": "ID",
+        "siteId": "ID",
+        "equipmentVariantIds": "ID[]",
+        "ownerId": "ID",
+        "intendedAudience": "string"
+      },
+      "ProcedureRequirement": {
+        "caseId": "ID",
+        "action": "string",
+        "prerequisite": "string",
+        "safetyConstraint": "string",
+        "expectedEvidence": "string"
+      },
+      "LocalProcedureConstraint": {
+        "caseId": "ID",
+        "siteId": "ID",
+        "equipmentDifference": "string",
+        "localResource": "string",
+        "incompatibility": "string"
+      },
+      "InstructionVariant": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "adaptedSteps": "string[]",
+        "retainedControls": "string[]",
+        "deviationIds": "ID[]"
+      },
+      "ProcedureScenario": {
+        "caseId": "ID",
+        "variantId": "ID",
+        "initialCondition": "string",
+        "expectedAction": "string",
+        "counterexample": "string"
+      },
+      "InstructionRelease": {
+        "caseId": "ID",
+        "variantId": "ID",
+        "approvalRefs": "Ref[]",
+        "trainingTaskIds": "ID[]",
+        "supersededVersion": "string"
+      }
+    },
+    "058": {
+      "MaintenanceCase": {
+        "assetId": "ID",
+        "observedIssue": "string",
+        "maintenanceOwnerId": "ID",
+        "serviceWindow": "string",
+        "procedureIds": "ID[]"
+      },
+      "AssetObservation": {
+        "caseId": "ID",
+        "assetId": "ID",
+        "symptom": "string",
+        "operatingContext": "string",
+        "priorWorkRefs": "Ref[]"
+      },
+      "MaintenanceProcedureFit": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "procedureId": "ID",
+        "applicability": "string",
+        "missingPrerequisite": "string"
+      },
+      "MaintenanceWorkOrder": {
+        "caseId": "ID",
+        "procedureId": "ID",
+        "taskIds": "ID[]",
+        "partIds": "ID[]",
+        "prerequisiteIds": "ID[]"
+      },
+      "MaintenanceProgress": {
+        "caseId": "ID",
+        "taskId": "ID",
+        "completedAction": "string",
+        "verificationRef": "Ref",
+        "remainingState": "string"
+      },
+      "MaintenanceHandover": {
+        "caseId": "ID",
+        "openTaskIds": "ID[]",
+        "assetState": "string",
+        "nextRequiredChecks": "string[]",
+        "receivingOwnerId": "ID"
+      }
+    },
+    "059": {
+      "EngineeringChange": {
+        "changeId": "ID",
+        "affectedDesignIds": "ID[]",
+        "effectiveRule": "string",
+        "engineeringOwnerId": "ID",
+        "baselineRevision": "string"
+      },
+      "DesignDelta": {
+        "caseId": "ID",
+        "designId": "ID",
+        "changedFunction": "string",
+        "changedInterface": "string",
+        "preservedRequirements": "string[]"
+      },
+      "ChangeApplicability": {
+        "caseId": "ID",
+        "deltaId": "ID",
+        "serialRanges": "string[]",
+        "lotIds": "ID[]",
+        "grandfatheredCases": "string[]"
+      },
+      "EngineeringImpact": {
+        "caseId": "ID",
+        "deltaId": "ID",
+        "affectedItemIds": "ID[]",
+        "affectedDocumentIds": "ID[]",
+        "indirectReason": "string"
+      },
+      "ChangeWorkPackage": {
+        "caseId": "ID",
+        "impactIds": "ID[]",
+        "taskIds": "ID[]",
+        "stockDisposition": "string",
+        "prerequisiteIds": "ID[]"
+      },
+      "ChangeVerification": {
+        "caseId": "ID",
+        "packageId": "ID",
+        "configurationIds": "ID[]",
+        "verificationRefs": "Ref[]",
+        "residualExceptions": "string[]"
+      }
+    },
+    "060": {
+      "FabricationQuote": {
+        "customerId": "ID",
+        "requestedObject": "string",
+        "intendedUse": "string",
+        "dueDate": "LocalDate",
+        "estimatorId": "ID"
+      },
+      "FabricationRequirement": {
+        "caseId": "ID",
+        "function": "string",
+        "dimensions": "string",
+        "appearancePreference": "string",
+        "essentialConstraint": "string"
+      },
+      "FabricationConcept": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "materialChoice": "string",
+        "constructionApproach": "string",
+        "tradeoff": "string"
+      },
+      "FabricationRoute": {
+        "caseId": "ID",
+        "conceptId": "ID",
+        "operationIds": "ID[]",
+        "resourceIds": "ID[]",
+        "inspectionCriteria": "string[]"
+      },
+      "FabricationEstimate": {
+        "caseId": "ID",
+        "routeId": "ID",
+        "materialCost": "Money",
+        "laborCost": "Money",
+        "contingencyBasis": "string"
+      },
+      "FabricationAgreement": {
+        "caseId": "ID",
+        "conceptId": "ID",
+        "estimateId": "ID",
+        "acceptedAssumptions": "string[]",
+        "approvalRef": "Ref"
+      }
+    },
+    "061": {
+      "ChangeOrderCase": {
+        "projectId": "ID",
+        "instructionIds": "ID[]",
+        "baselineScopeId": "ID",
+        "coordinatorId": "ID",
+        "affectedArea": "string"
+      },
+      "SiteInstruction": {
+        "caseId": "ID",
+        "issuerId": "ID",
+        "requestedChange": "string",
+        "issuedAt": "DateTime",
+        "authorityScope": "string"
+      },
+      "ScopeDifference": {
+        "caseId": "ID",
+        "instructionId": "ID",
+        "baselineRequirement": "string",
+        "proposedRequirement": "string",
+        "changeKind": "string"
+      },
+      "ConstructionImpact": {
+        "caseId": "ID",
+        "differenceId": "ID",
+        "affectedTaskIds": "ID[]",
+        "interfaceIds": "ID[]",
+        "scheduleConsequence": "string"
+      },
+      "ChangeOption": {
+        "caseId": "ID",
+        "impactIds": "ID[]",
+        "proposedWork": "string",
+        "costBasis": "string",
+        "scheduleAlternative": "string"
+      },
+      "ChangePackage": {
+        "caseId": "ID",
+        "optionId": "ID",
+        "evidenceRefs": "Ref[]",
+        "approvalRefs": "Ref[]",
+        "residualDispute": "string"
+      }
+    },
+    "062": {
+      "ScopeReview": {
+        "projectId": "ID",
+        "bidIds": "ID[]",
+        "requiredScopeId": "ID",
+        "reviewerId": "ID",
+        "tenderRound": "string"
+      },
+      "BidScope": {
+        "caseId": "ID",
+        "bidderId": "ID",
+        "includedFunctions": "string[]",
+        "excludedFunctions": "string[]",
+        "allowances": "string[]"
+      },
+      "ScopeCoverage": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "candidateBidIds": "ID[]",
+        "coverageKind": "'full'|'partial'|'none'|'uncertain'"
+      },
+      "ScopeInterface": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "parties": "ID[]",
+        "gap": "string",
+        "duplicateWork": "string"
+      },
+      "ScopeClarification": {
+        "caseId": "ID",
+        "bidderId": "ID",
+        "question": "string",
+        "requiredCommitment": "string",
+        "responseRef": "Ref"
+      },
+      "ResponsibilityMatrix": {
+        "caseId": "ID",
+        "coverageIds": "ID[]",
+        "interfaceIds": "ID[]",
+        "acceptedBidRefs": "Ref[]",
+        "residualGaps": "string[]"
+      }
+    },
+    "063": {
+      "BuildingHandover": {
+        "projectId": "ID",
+        "buildingId": "ID",
+        "assetIds": "ID[]",
+        "handoverOwnerId": "ID",
+        "targetDate": "LocalDate"
+      },
+      "HandoverRequirement": {
+        "caseId": "ID",
+        "assetClass": "string",
+        "requiredArtifact": "string",
+        "acceptanceRole": "string",
+        "completionCondition": "string"
+      },
+      "AssetIdentity": {
+        "caseId": "ID",
+        "assetId": "ID",
+        "aliases": "string[]",
+        "location": "string",
+        "equipmentRevision": "string"
+      },
+      "HandoverEvidence": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "assetId": "ID",
+        "artifactIds": "ID[]",
+        "sufficiency": "string"
+      },
+      "HandoverClosureTask": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "ownerId": "ID",
+        "missingEvidence": "string",
+        "dueAt": "DateTime"
+      },
+      "HandoverDossier": {
+        "caseId": "ID",
+        "assetIds": "ID[]",
+        "evidenceIds": "ID[]",
+        "outstandingIds": "ID[]",
+        "acceptanceRefs": "Ref[]"
+      }
+    },
+    "064": {
+      "FacilityCase": {
+        "buildingId": "ID",
+        "occupantId": "ID",
+        "reportedProblem": "string",
+        "accessConstraints": "string[]",
+        "coordinatorId": "ID"
+      },
+      "FacilityObservation": {
+        "caseId": "ID",
+        "locationId": "ID",
+        "assetCandidateIds": "ID[]",
+        "symptom": "string",
+        "occurrencePattern": "string"
+      },
+      "FacilityIssueGroup": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "sharedMechanism": "string",
+        "separateIssueIds": "ID[]",
+        "uncertainty": "string"
+      },
+      "FacilityWorkOrder": {
+        "caseId": "ID",
+        "issueIds": "ID[]",
+        "trade": "string",
+        "task": "string",
+        "completionEvidence": "string"
+      },
+      "FacilityVisit": {
+        "caseId": "ID",
+        "workOrderIds": "ID[]",
+        "assignedPartyId": "ID",
+        "accessWindow": "string",
+        "prerequisiteIds": "ID[]"
+      },
+      "FacilityResolution": {
+        "caseId": "ID",
+        "workOrderId": "ID",
+        "technicianEvidence": "Ref[]",
+        "occupantResponse": "Ref",
+        "residualSymptom": "string"
+      }
+    },
+    "065": {
+      "ReuseStudy": {
+        "buildingId": "ID",
+        "stakeholderIds": "ID[]",
+        "suppliedConstraintIds": "ID[]",
+        "studyOwnerId": "ID",
+        "budgetRange": "string"
+      },
+      "ReuseSiteFact": {
+        "caseId": "ID",
+        "buildingArea": "string",
+        "observedCondition": "string",
+        "sourceRef": "Ref",
+        "certainty": "string"
+      },
+      "ReuseGoal": {
+        "caseId": "ID",
+        "stakeholderId": "ID",
+        "desiredFunction": "string",
+        "essentialConstraint": "string",
+        "negotiablePreference": "string"
+      },
+      "ReuseConcept": {
+        "caseId": "ID",
+        "goalIds": "ID[]",
+        "spatialApproach": "string",
+        "phasedUse": "string",
+        "unresolvedAssumptions": "string[]"
+      },
+      "ReuseInvestigation": {
+        "caseId": "ID",
+        "conceptIds": "ID[]",
+        "unknownCondition": "string",
+        "proposedSurvey": "string",
+        "decisionConsequence": "string"
+      },
+      "ReuseOptionReview": {
+        "caseId": "ID",
+        "conceptId": "ID",
+        "costBasis": "string",
+        "constraintFindings": "string[]",
+        "residualRisk": "string"
+      }
+    },
+    "066": {
+      "RestorationProject": {
+        "siteId": "ID",
+        "landholderIds": "ID[]",
+        "restorationGoals": "string[]",
+        "expertOwnerId": "ID",
+        "planningHorizon": "string"
+      },
+      "HabitatObservation": {
+        "caseId": "ID",
+        "locationId": "ID",
+        "observedFeature": "string",
+        "surveyMethod": "string",
+        "seasonalContext": "string"
+      },
+      "RestorationObjective": {
+        "caseId": "ID",
+        "desiredCondition": "string",
+        "indicator": "string",
+        "landholderConstraint": "string",
+        "uncertainty": "string"
+      },
+      "RestorationOption": {
+        "caseId": "ID",
+        "objectiveIds": "ID[]",
+        "approvedAction": "string",
+        "prerequisites": "string[]",
+        "expectedMechanism": "string"
+      },
+      "MonitoringTask": {
+        "caseId": "ID",
+        "objectiveId": "ID",
+        "observationMethod": "string",
+        "samplingWindow": "string",
+        "decisionRule": "string"
+      },
+      "RestorationRevision": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "affectedOptionIds": "ID[]",
+        "proposedChange": "string",
+        "expertApprovalRef": "Ref"
+      }
+    },
+    "067": {
+      "HarvestRound": {
+        "growerIds": "ID[]",
+        "cropLotIds": "ID[]",
+        "deliveryCommitmentIds": "ID[]",
+        "coordinatorId": "ID",
+        "planningWindow": "string"
+      },
+      "HarvestReadiness": {
+        "caseId": "ID",
+        "lotId": "ID",
+        "observedMaturity": "string",
+        "qualityEvidence": "Ref[]",
+        "readinessWindow": "string",
+        "uncertainty": "string"
+      },
+      "HarvestCommitment": {
+        "caseId": "ID",
+        "customerId": "ID",
+        "requiredQuality": "string",
+        "quantity": "Quantity",
+        "deliveryWindow": "string",
+        "substitutionsAllowed": "string[]"
+      },
+      "HarvestMatch": {
+        "caseId": "ID",
+        "lotIds": "ID[]",
+        "commitmentId": "ID",
+        "suitability": "string",
+        "missingEvidence": "string"
+      },
+      "HarvestPlan": {
+        "caseId": "ID",
+        "matchIds": "ID[]",
+        "laborSlots": "string[]",
+        "equipmentIds": "ID[]",
+        "transportIds": "ID[]"
+      },
+      "HarvestRevision": {
+        "caseId": "ID",
+        "changedLotIds": "ID[]",
+        "affectedCommitmentIds": "ID[]",
+        "proposedSubstitution": "string",
+        "acceptanceRef": "Ref"
+      }
+    },
+    "068": {
+      "ObservationReview": {
+        "collectionId": "ID",
+        "projectId": "ID",
+        "observationType": "string",
+        "curatorId": "ID",
+        "disclosurePolicyId": "ID"
+      },
+      "FieldObservation": {
+        "caseId": "ID",
+        "observerId": "ID",
+        "observedAt": "DateTime",
+        "locationRef": "Ref",
+        "description": "string",
+        "method": "string"
+      },
+      "ObservationInterpretation": {
+        "caseId": "ID",
+        "observationId": "ID",
+        "candidateConceptIds": "ID[]",
+        "interpretation": "string",
+        "ambiguity": "string"
+      },
+      "ObservationLink": {
+        "caseId": "ID",
+        "observationIds": "ID[]",
+        "relation": "'same-event'|'independent'|'related'|'unknown'",
+        "basis": "string"
+      },
+      "ObservationQuestion": {
+        "caseId": "ID",
+        "observationId": "ID",
+        "decisiveUnknown": "string",
+        "requestedEvidence": "string",
+        "recipientId": "ID"
+      },
+      "CuratedObservation": {
+        "caseId": "ID",
+        "observationId": "ID",
+        "acceptedInterpretation": "string",
+        "qualityFlags": "string[]",
+        "publicLocationPrecision": "string"
+      }
+    },
+    "069": {
+      "EnvironmentalReport": {
+        "organizationId": "ID",
+        "reportingPeriod": "string",
+        "requirementIds": "ID[]",
+        "reviewerId": "ID",
+        "boundaryDefinition": "string"
+      },
+      "ReportingBoundary": {
+        "caseId": "ID",
+        "includedOperations": "ID[]",
+        "excludedOperations": "ID[]",
+        "measurementRules": "string[]",
+        "effectiveScope": "string"
+      },
+      "EnvironmentalMeasure": {
+        "caseId": "ID",
+        "operationId": "ID",
+        "measureKind": "string",
+        "value": "Decimal",
+        "unit": "string",
+        "methodRef": "Ref"
+      },
+      "EnvironmentalAllocation": {
+        "caseId": "ID",
+        "measureIds": "ID[]",
+        "boundaryId": "ID",
+        "allocatedValue": "Decimal",
+        "allocationBasis": "string"
+      },
+      "EnvironmentalClaim": {
+        "caseId": "ID",
+        "statement": "string",
+        "measureIds": "ID[]",
+        "activityRefs": "Ref[]",
+        "limitation": "string"
+      },
+      "EnvironmentalSubmission": {
+        "caseId": "ID",
+        "claimIds": "ID[]",
+        "scheduleArtifactIds": "ID[]",
+        "unresolvedGaps": "string[]",
+        "approvalRefs": "Ref[]"
+      }
+    },
+    "070": {
+      "GardenSeason": {
+        "gardenId": "ID",
+        "memberIds": "ID[]",
+        "plotIds": "ID[]",
+        "season": "string",
+        "coordinatorId": "ID"
+      },
+      "GardenPreference": {
+        "caseId": "ID",
+        "memberId": "ID",
+        "desiredUse": "string",
+        "availability": "string",
+        "accessibilityNeed": "string"
+      },
+      "PlotConstraint": {
+        "caseId": "ID",
+        "plotId": "ID",
+        "observedConditions": "string[]",
+        "sharedResourceIds": "ID[]",
+        "useRestrictions": "string[]"
+      },
+      "GardenPlan": {
+        "caseId": "ID",
+        "plotIds": "ID[]",
+        "plantingConcept": "string",
+        "sharedActivities": "string[]",
+        "requiredResources": "string[]"
+      },
+      "GardenAgreement": {
+        "caseId": "ID",
+        "memberIds": "ID[]",
+        "plotAssignments": "string[]",
+        "sharedDuties": "string[]",
+        "acceptanceRefs": "Ref[]"
+      },
+      "GardenTask": {
+        "caseId": "ID",
+        "agreementId": "ID",
+        "activity": "string",
+        "ownerId": "ID",
+        "dueWindow": "string"
+      }
+    },
+    "071": {
+      "Consultation": {
+        "topic": "string",
+        "submissionIds": "ID[]",
+        "scopeStatementId": "ID",
+        "analystId": "ID",
+        "responseOwnerId": "ID"
+      },
+      "ConsultationArgument": {
+        "caseId": "ID",
+        "submissionId": "ID",
+        "position": "string",
+        "reason": "string",
+        "proposedAction": "string",
+        "affectedContext": "string"
+      },
+      "SubmissionRelation": {
+        "caseId": "ID",
+        "submissionIds": "ID[]",
+        "relation": "'template'|'duplicate'|'independent'|'unknown'",
+        "uniqueContribution": "string"
+      },
+      "ConsultationTheme": {
+        "caseId": "ID",
+        "argumentIds": "ID[]",
+        "commonConcern": "string",
+        "minorityPositions": "string[]",
+        "unresolvedDisagreement": "string"
+      },
+      "ConsultationResponseOption": {
+        "caseId": "ID",
+        "themeId": "ID",
+        "proposedResponse": "string",
+        "supportingRefs": "Ref[]",
+        "tradeoff": "string"
+      },
+      "ConsultationReport": {
+        "caseId": "ID",
+        "themeIds": "ID[]",
+        "countArtifactId": "ID",
+        "omissionFindings": "string[]",
+        "approvalRefs": "Ref[]"
+      }
+    },
+    "072": {
+      "BudgetRound": {
+        "communityId": "ID",
+        "proposalIds": "ID[]",
+        "availableBudget": "Money",
+        "ruleSetId": "ID",
+        "facilitatorId": "ID"
+      },
+      "CivicProposal": {
+        "caseId": "ID",
+        "proposerId": "ID",
+        "intendedBenefit": "string",
+        "requiredWork": "string",
+        "beneficiaryScope": "string"
+      },
+      "ProposalRelationship": {
+        "caseId": "ID",
+        "proposalIds": "ID[]",
+        "relation": "'duplicate'|'complementary'|'conflicting'|'independent'",
+        "preservedIntent": "string"
+      },
+      "ProposalFeasibility": {
+        "caseId": "ID",
+        "proposalId": "ID",
+        "costEstimate": "Money",
+        "constraints": "string[]",
+        "missingAssessment": "string"
+      },
+      "CivicPortfolio": {
+        "caseId": "ID",
+        "proposalIds": "ID[]",
+        "totalCost": "Money",
+        "sharedWorkIds": "ID[]",
+        "tradeoff": "string"
+      },
+      "BudgetDecisionPacket": {
+        "caseId": "ID",
+        "portfolioIds": "ID[]",
+        "explanation": "string",
+        "unresolvedQuestions": "string[]",
+        "decisionRule": "string"
+      }
+    },
+    "073": {
+      "ServiceNavigation": {
+        "applicantId": "ID",
+        "statedSituation": "string",
+        "serviceCatalogId": "ID",
+        "coordinatorId": "ID",
+        "consentScope": "string"
+      },
+      "ServiceSituation": {
+        "caseId": "ID",
+        "statedNeeds": "string[]",
+        "knownFacts": "string[]",
+        "unknownFacts": "string[]",
+        "urgentRoutingFlag": "string"
+      },
+      "ServicePathway": {
+        "caseId": "ID",
+        "serviceId": "ID",
+        "potentialFit": "string",
+        "requiredConditions": "string[]",
+        "unresolvedConditions": "string[]"
+      },
+      "NavigationQuestion": {
+        "caseId": "ID",
+        "pathwayIds": "ID[]",
+        "requestedFact": "string",
+        "acceptableEvidence": "string",
+        "purpose": "string"
+      },
+      "ApplicationTask": {
+        "caseId": "ID",
+        "pathwayId": "ID",
+        "requiredDocument": "string",
+        "ownerId": "ID",
+        "completionCondition": "string"
+      },
+      "ServiceApplicationStatus": {
+        "caseId": "ID",
+        "pathwayId": "ID",
+        "submissionRef": "Ref",
+        "agencyStatus": "string",
+        "nextRequiredAction": "string"
+      }
+    },
+    "074": {
+      "VolunteerMission": {
+        "missionId": "ID",
+        "objective": "string",
+        "volunteerIds": "ID[]",
+        "coordinatorId": "ID",
+        "missionWindow": "string"
+      },
+      "MissionRequirement": {
+        "caseId": "ID",
+        "task": "string",
+        "requiredSkill": "string",
+        "accessCondition": "string",
+        "completionEvidence": "string"
+      },
+      "VolunteerCapability": {
+        "caseId": "ID",
+        "volunteerId": "ID",
+        "statedSkills": "string[]",
+        "verifiedQualifications": "Ref[]",
+        "availability": "string",
+        "consentScope": "string"
+      },
+      "VolunteerTeam": {
+        "caseId": "ID",
+        "volunteerIds": "ID[]",
+        "requirementIds": "ID[]",
+        "coverageGaps": "string[]",
+        "supervisionPlan": "string"
+      },
+      "VolunteerBriefing": {
+        "caseId": "ID",
+        "teamId": "ID",
+        "roleInstructions": "string[]",
+        "escalationContactIds": "ID[]",
+        "acknowledgmentRequired": "boolean"
+      },
+      "VolunteerRevision": {
+        "caseId": "ID",
+        "changedVolunteerIds": "ID[]",
+        "affectedRoleIds": "ID[]",
+        "replacementTeamId": "ID",
+        "acceptanceRefs": "Ref[]"
+      }
+    },
+    "075": {
+      "CommunityDispute": {
+        "participantIds": "ID[]",
+        "sharedResourceIds": "ID[]",
+        "issue": "string",
+        "facilitatorId": "ID",
+        "agreementHistoryIds": "ID[]"
+      },
+      "ExistingAgreement": {
+        "caseId": "ID",
+        "participantIds": "ID[]",
+        "acceptedTerms": "string[]",
+        "effectiveWindow": "string",
+        "disputedTerm": "string"
+      },
+      "MediationPosition": {
+        "caseId": "ID",
+        "participantId": "ID",
+        "desiredOutcome": "string",
+        "underlyingConcern": "string",
+        "statedLimit": "string"
+      },
+      "CommunityOption": {
+        "caseId": "ID",
+        "positionIds": "ID[]",
+        "proposedArrangement": "string",
+        "concessions": "string[]",
+        "unresolvedConflict": "string"
+      },
+      "AgreementTrial": {
+        "caseId": "ID",
+        "optionId": "ID",
+        "duration": "string",
+        "successCriteria": "string[]",
+        "exitConditions": "string[]"
+      },
+      "AgreementReview": {
+        "caseId": "ID",
+        "trialId": "ID",
+        "participantResponses": "Ref[]",
+        "observedOutcomes": "string[]",
+        "proposedRevision": "string"
+      }
+    },
+    "076": {
+      "ReferralCase": {
+        "patientId": "ID",
+        "referringOrganizationId": "ID",
+        "receivingServiceId": "ID",
+        "coordinatorId": "ID",
+        "clinicianPriorityRef": "Ref"
+      },
+      "ReferralRequirement": {
+        "caseId": "ID",
+        "serviceId": "ID",
+        "requiredDocument": "string",
+        "validityRule": "string",
+        "acceptingRole": "string"
+      },
+      "ReferralRecordMatch": {
+        "caseId": "ID",
+        "patientId": "ID",
+        "documentId": "ID",
+        "identityEvidence": "string",
+        "mismatch": "string"
+      },
+      "ReferralGap": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "documentIds": "ID[]",
+        "status": "'met'|'missing'|'expired'|'uncertain'",
+        "missingDetail": "string"
+      },
+      "ReferralRequest": {
+        "caseId": "ID",
+        "gapIds": "ID[]",
+        "recipientId": "ID",
+        "requestedMaterial": "string",
+        "purpose": "string"
+      },
+      "ReferralPacket": {
+        "caseId": "ID",
+        "documentIds": "ID[]",
+        "approvalRef": "Ref",
+        "deliveryReceipt": "Ref",
+        "receivingStatus": "string"
+      }
+    },
+    "077": {
+      "CareTransition": {
+        "patientId": "ID",
+        "approvedPlanId": "ID",
+        "destinationId": "ID",
+        "coordinatorId": "ID",
+        "transitionWindow": "string"
+      },
+      "TransitionRequirement": {
+        "caseId": "ID",
+        "planRef": "Ref",
+        "logisticalOutcome": "string",
+        "prerequisite": "string",
+        "responsibleRole": "string"
+      },
+      "TransitionParticipant": {
+        "caseId": "ID",
+        "participantId": "ID",
+        "role": "string",
+        "acceptedResponsibility": "string",
+        "consentScope": "string"
+      },
+      "TransitionTask": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "prerequisiteIds": "ID[]",
+        "scheduledWindow": "string",
+        "completionEvidence": "string"
+      },
+      "TransitionOption": {
+        "caseId": "ID",
+        "affectedTaskIds": "ID[]",
+        "logisticalAlternative": "string",
+        "clinicalReviewNeeded": "boolean",
+        "approvalRef": "Ref"
+      },
+      "TransitionReadiness": {
+        "caseId": "ID",
+        "taskIds": "ID[]",
+        "confirmationRefs": "Ref[]",
+        "unresolvedBlockers": "string[]",
+        "releaseAuthorityRef": "Ref"
+      }
+    },
+    "078": {
+      "AppointmentPreparation": {
+        "patientId": "ID",
+        "appointmentId": "ID",
+        "approvedInstructionId": "ID",
+        "coordinatorId": "ID",
+        "communicationPreferences": "string[]"
+      },
+      "PreparationRequirement": {
+        "caseId": "ID",
+        "instructionRef": "Ref",
+        "requiredAction": "string",
+        "timingRule": "string",
+        "exception": "string"
+      },
+      "PreparationContext": {
+        "caseId": "ID",
+        "statedConstraint": "string",
+        "communicationNeed": "string",
+        "authorizedRepresentativeId": "ID",
+        "unresolvedQuestion": "string"
+      },
+      "PreparationChecklist": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "accessibleText": "string[]",
+        "exactTimingArtifactId": "ID",
+        "staffQuestionIds": "ID[]"
+      },
+      "PreparationQuestion": {
+        "caseId": "ID",
+        "requirementId": "ID",
+        "patientQuestion": "string",
+        "responsibleServiceId": "ID",
+        "responseRef": "Ref"
+      },
+      "PreparationStatus": {
+        "caseId": "ID",
+        "checklistId": "ID",
+        "acknowledgedItems": "ID[]",
+        "unresolvedItems": "ID[]",
+        "contactOutcome": "string"
+      }
+    },
+    "079": {
+      "HealthRecordRequest": {
+        "requesterId": "ID",
+        "patientId": "ID",
+        "requestedScope": "string",
+        "authorizationId": "ID",
+        "recordsOfficerId": "ID"
+      },
+      "RecordAuthorization": {
+        "caseId": "ID",
+        "authorizedRecipientId": "ID",
+        "permittedCategories": "string[]",
+        "dateWindow": "string",
+        "expiresAt": "DateTime"
+      },
+      "RecordSelection": {
+        "caseId": "ID",
+        "patientId": "ID",
+        "episodeIds": "ID[]",
+        "documentIds": "ID[]",
+        "missingCoverage": "string"
+      },
+      "RecordDisclosureFinding": {
+        "caseId": "ID",
+        "documentId": "ID",
+        "responsiveSpans": "SpanRef[]",
+        "thirdPartySpans": "SpanRef[]",
+        "reviewReason": "string"
+      },
+      "RecordFulfillment": {
+        "caseId": "ID",
+        "selectionId": "ID",
+        "artifactIds": "ID[]",
+        "withheldReasons": "string[]",
+        "reviewerApprovalRef": "Ref"
+      },
+      "RecordDelivery": {
+        "caseId": "ID",
+        "fulfillmentId": "ID",
+        "recipientBinding": "string",
+        "deliveryReceipt": "Ref",
+        "remainingObligations": "string[]"
+      }
+    },
+    "080": {
+      "ExperienceStudy": {
+        "serviceIds": "ID[]",
+        "researchQuestion": "string",
+        "feedbackCollectionIds": "ID[]",
+        "improvementOwnerId": "ID",
+        "consentPolicyId": "ID"
+      },
+      "ExperienceEpisode": {
+        "caseId": "ID",
+        "serviceId": "ID",
+        "administrativeJourney": "string",
+        "reportedObstacle": "string",
+        "consequence": "string"
+      },
+      "JourneyLink": {
+        "caseId": "ID",
+        "episodeId": "ID",
+        "eventIds": "ID[]",
+        "relationship": "string",
+        "uncertainty": "string"
+      },
+      "ServiceMechanism": {
+        "caseId": "ID",
+        "episodeIds": "ID[]",
+        "proposedExplanation": "string",
+        "rivalExplanation": "string",
+        "neededEvidence": "string"
+      },
+      "ServiceExperiment": {
+        "caseId": "ID",
+        "mechanismId": "ID",
+        "proposedChange": "string",
+        "operationalMetric": "string",
+        "decisionRule": "string"
+      },
+      "ExperienceOutcome": {
+        "caseId": "ID",
+        "experimentId": "ID",
+        "exactResultArtifactId": "ID",
+        "qualitativeRefs": "Ref[]",
+        "limitation": "string"
+      }
+    },
+    "081": {
+      "LocalizationRelease": {
+        "sourceReleaseId": "ID",
+        "localeIds": "ID[]",
+        "contentIds": "ID[]",
+        "managerId": "ID",
+        "glossaryVersion": "string"
+      },
+      "LocalizationSegment": {
+        "caseId": "ID",
+        "sourceRef": "Ref",
+        "contextKey": "string",
+        "locale": "string",
+        "protectedTokens": "string[]",
+        "semanticPurpose": "string"
+      },
+      "LocaleTermDecision": {
+        "caseId": "ID",
+        "segmentId": "ID",
+        "conceptId": "ID",
+        "approvedTerm": "string",
+        "grammaticalContext": "string",
+        "exception": "string"
+      },
+      "LocalizedSegment": {
+        "caseId": "ID",
+        "segmentId": "ID",
+        "translatedText": "string",
+        "adaptationRationale": "string",
+        "unresolvedIssue": "string"
+      },
+      "LocaleQualityFinding": {
+        "caseId": "ID",
+        "segmentIds": "ID[]",
+        "issueKind": "string",
+        "exactCheckIds": "ID[]",
+        "reviewerFinding": "string"
+      },
+      "LocaleReleasePacket": {
+        "caseId": "ID",
+        "segmentIds": "ID[]",
+        "sourceHash": "string",
+        "reviewRefs": "Ref[]",
+        "fallbackPolicy": "string"
+      }
+    },
+    "082": {
+      "PlainLanguageProject": {
+        "documentIds": "ID[]",
+        "audienceDescription": "string",
+        "purpose": "string",
+        "reviewerId": "ID",
+        "fidelityPolicyId": "ID"
+      },
+      "MeaningUnit": {
+        "caseId": "ID",
+        "proposition": "string",
+        "modality": "string",
+        "condition": "string",
+        "exception": "string",
+        "sourceSpan": "SpanRef"
+      },
+      "ReaderTask": {
+        "caseId": "ID",
+        "audience": "string",
+        "task": "string",
+        "requiredMeaningIds": "ID[]",
+        "likelyAmbiguity": "string"
+      },
+      "PlainLanguageDraft": {
+        "caseId": "ID",
+        "meaningIds": "ID[]",
+        "rewrittenText": "string",
+        "exampleText": "string",
+        "retainedTerminology": "string[]"
+      },
+      "ComprehensionProbe": {
+        "caseId": "ID",
+        "taskId": "ID",
+        "question": "string",
+        "expectedUnderstanding": "string",
+        "misleadingAnswer": "string"
+      },
+      "PlainLanguageRelease": {
+        "caseId": "ID",
+        "draftId": "ID",
+        "fidelityReviewRef": "Ref",
+        "comprehensionFindings": "string[]",
+        "sourceVersion": "string"
+      }
+    },
+    "083": {
+      "AccessibleProduction": {
+        "productionId": "ID",
+        "sourceScriptId": "ID",
+        "sceneMetadataIds": "ID[]",
+        "accessibilityOwnerId": "ID",
+        "outputFormats": "string[]"
+      },
+      "NarrativeInformation": {
+        "caseId": "ID",
+        "sceneId": "ID",
+        "information": "string",
+        "revealTime": "number",
+        "sourceChannel": "string",
+        "importance": "string"
+      },
+      "AccessibilityChannelPlan": {
+        "caseId": "ID",
+        "informationIds": "ID[]",
+        "outputChannel": "string",
+        "timingWindow": "string",
+        "competingAudio": "string"
+      },
+      "AccessibleSegment": {
+        "caseId": "ID",
+        "sceneId": "ID",
+        "channel": "string",
+        "text": "string",
+        "startsAt": "number",
+        "endsAt": "number"
+      },
+      "AccessibilityCheck": {
+        "caseId": "ID",
+        "segmentIds": "ID[]",
+        "timingIssue": "string",
+        "missingInformation": "string",
+        "reviewerFinding": "string"
+      },
+      "AccessibilityPackage": {
+        "caseId": "ID",
+        "artifactIds": "ID[]",
+        "sourceRevision": "string",
+        "reviewRefs": "Ref[]",
+        "deliveryManifestId": "ID"
+      }
+    },
+    "084": {
+      "TrainingAdaptation": {
+        "trainingProgramId": "ID",
+        "audienceGuidanceId": "ID",
+        "competencyIds": "ID[]",
+        "reviewerId": "ID",
+        "targetContext": "string"
+      },
+      "TrainingMechanism": {
+        "caseId": "ID",
+        "competencyId": "ID",
+        "scenarioFunction": "string",
+        "requiredDecision": "string",
+        "incidentalElements": "string[]"
+      },
+      "ContextFitFinding": {
+        "caseId": "ID",
+        "mechanismId": "ID",
+        "sourceElement": "string",
+        "suppliedAudienceIssue": "string",
+        "adaptationNeed": "string"
+      },
+      "AdaptedScenario": {
+        "caseId": "ID",
+        "mechanismId": "ID",
+        "newSetting": "string",
+        "scenarioText": "string",
+        "preservedDecisionStructure": "string"
+      },
+      "AdaptationTest": {
+        "caseId": "ID",
+        "scenarioId": "ID",
+        "expectedCompetency": "string",
+        "responseClasses": "string[]",
+        "driftFinding": "string"
+      },
+      "AdaptedTrainingRelease": {
+        "caseId": "ID",
+        "scenarioIds": "ID[]",
+        "audienceReviewRefs": "Ref[]",
+        "sourceVersion": "string",
+        "limitations": "string[]"
+      }
+    },
+    "085": {
+      "TerminologyProject": {
+        "corpusIds": "ID[]",
+        "languageIds": "ID[]",
+        "domainScope": "string",
+        "terminologyOwnerId": "ID",
+        "releaseContext": "string"
+      },
+      "TermOccurrence": {
+        "caseId": "ID",
+        "term": "string",
+        "language": "string",
+        "context": "string",
+        "candidateConcept": "string",
+        "sourceRef": "Ref"
+      },
+      "MultilingualConcept": {
+        "caseId": "ID",
+        "occurrenceIds": "ID[]",
+        "definition": "string",
+        "broaderConceptIds": "ID[]",
+        "disputedBoundary": "string"
+      },
+      "TermOption": {
+        "caseId": "ID",
+        "conceptId": "ID",
+        "language": "string",
+        "proposedTerm": "string",
+        "usageConditions": "string"
+      },
+      "TerminologyDecision": {
+        "caseId": "ID",
+        "optionIds": "ID[]",
+        "acceptedTermIds": "ID[]",
+        "dissent": "string",
+        "ownerApprovalRef": "Ref"
+      },
+      "TerminologyImpact": {
+        "caseId": "ID",
+        "decisionId": "ID",
+        "affectedSegmentIds": "ID[]",
+        "excludedOccurrences": "ID[]",
+        "migrationReason": "string"
+      }
+    },
+    "086": {
+      "ExhibitionProject": {
+        "collectionIds": "ID[]",
+        "exhibitionBrief": "string",
+        "audience": "string",
+        "curatorId": "ID",
+        "venueConstraintIds": "ID[]"
+      },
+      "CuratorialEvidence": {
+        "caseId": "ID",
+        "artifactId": "ID",
+        "supportedInterpretation": "string",
+        "provenanceLimit": "string",
+        "displayConstraint": "string"
+      },
+      "ExhibitionArgument": {
+        "caseId": "ID",
+        "theme": "string",
+        "centralQuestion": "string",
+        "artifactIds": "ID[]",
+        "competingInterpretation": "string"
+      },
+      "ExhibitionZone": {
+        "caseId": "ID",
+        "argumentId": "ID",
+        "artifactIds": "ID[]",
+        "visitorTask": "string",
+        "spatialRequirements": "string[]"
+      },
+      "ExhibitionLabel": {
+        "caseId": "ID",
+        "artifactId": "ID",
+        "text": "string",
+        "claimRefs": "Ref[]",
+        "audienceLayer": "string"
+      },
+      "ExhibitionRelease": {
+        "caseId": "ID",
+        "zoneIds": "ID[]",
+        "labelIds": "ID[]",
+        "rightsReviewRefs": "Ref[]",
+        "unresolvedConditions": "string[]"
+      }
+    },
+    "087": {
+      "OralHistoryProject": {
+        "interviewIds": "ID[]",
+        "researchScope": "string",
+        "archivistId": "ID",
+        "consentRegisterId": "ID",
+        "publicationAudience": "string"
+      },
+      "OralHistoryAccount": {
+        "caseId": "ID",
+        "speakerId": "ID",
+        "eventDescription": "string",
+        "rememberedTime": "string",
+        "certaintyLanguage": "string"
+      },
+      "OralHistoryReference": {
+        "caseId": "ID",
+        "accountId": "ID",
+        "mentionedName": "string",
+        "candidateEntityIds": "ID[]",
+        "unresolvedIdentity": "string"
+      },
+      "RecollectionComparison": {
+        "caseId": "ID",
+        "accountIds": "ID[]",
+        "sharedEvent": "string",
+        "agreement": "string",
+        "disagreement": "string"
+      },
+      "OralHistoryQuestion": {
+        "caseId": "ID",
+        "accountIds": "ID[]",
+        "unresolvedIssue": "string",
+        "neutralQuestion": "string",
+        "consentConstraint": "string"
+      },
+      "OralHistoryEdition": {
+        "caseId": "ID",
+        "accountIds": "ID[]",
+        "narrative": "string",
+        "restrictionIds": "ID[]",
+        "provenanceManifestId": "ID"
+      }
+    },
+    "088": {
+      "HistoricalLinkage": {
+        "collectionIds": "ID[]",
+        "entityKind": "string",
+        "researchQuestion": "string",
+        "archivistId": "ID",
+        "linkagePolicyId": "ID"
+      },
+      "HistoricalObservation": {
+        "caseId": "ID",
+        "sourceRecordId": "ID",
+        "recordedName": "string",
+        "dateExpression": "string",
+        "placeExpression": "string",
+        "attributes": "string[]"
+      },
+      "HistoricalCandidate": {
+        "caseId": "ID",
+        "leftId": "ID",
+        "rightId": "ID",
+        "sharedEvidence": "string[]",
+        "incompatibleEvidence": "string[]"
+      },
+      "HistoricalIdentityFinding": {
+        "caseId": "ID",
+        "candidateId": "ID",
+        "relation": "'same'|'different'|'related'|'uncertain'",
+        "rationale": "string"
+      },
+      "HistoricalNetwork": {
+        "caseId": "ID",
+        "entityIds": "ID[]",
+        "relationshipIds": "ID[]",
+        "contradictionIds": "ID[]",
+        "unresolvedAlternatives": "string[]"
+      },
+      "HistoricalLinkageEdition": {
+        "caseId": "ID",
+        "networkId": "ID",
+        "acceptedLinkIds": "ID[]",
+        "provisionalLinkIds": "ID[]",
+        "reviewRefs": "Ref[]"
+      }
+    },
+    "089": {
+      "CollectionUse": {
+        "collectionItemIds": "ID[]",
+        "proposedUse": "string",
+        "audience": "string",
+        "requesterId": "ID",
+        "rightsOfficerId": "ID"
+      },
+      "CollectionPermission": {
+        "caseId": "ID",
+        "itemId": "ID",
+        "permittedUse": "string",
+        "prohibitedUse": "string",
+        "attributionRule": "string",
+        "expiry": "string"
+      },
+      "ProposedCollectionUse": {
+        "caseId": "ID",
+        "itemIds": "ID[]",
+        "channel": "string",
+        "transformation": "string",
+        "audience": "string",
+        "duration": "string"
+      },
+      "RightsFinding": {
+        "caseId": "ID",
+        "useId": "ID",
+        "permissionIds": "ID[]",
+        "status": "'allowed'|'restricted'|'unknown'",
+        "unmetCondition": "string"
+      },
+      "ClearanceTask": {
+        "caseId": "ID",
+        "findingId": "ID",
+        "rightsholderId": "ID",
+        "requestedPermission": "string",
+        "requiredEvidence": "string"
+      },
+      "CollectionUseRecord": {
+        "caseId": "ID",
+        "useId": "ID",
+        "approvalRefs": "Ref[]",
+        "attributionText": "string",
+        "expiryTasks": "ID[]"
+      }
+    },
+    "090": {
+      "ArchiveCommission": {
+        "researchQuestion": "string",
+        "requesterId": "ID",
+        "collectionIds": "ID[]",
+        "researcherId": "ID",
+        "effortBudget": "number"
+      },
+      "ResearchCommissionScope": {
+        "caseId": "ID",
+        "subquestions": "string[]",
+        "intendedDeliverable": "string",
+        "excludedClaims": "string[]",
+        "stoppingRule": "string"
+      },
+      "ArchiveSearchPlan": {
+        "caseId": "ID",
+        "questionIds": "ID[]",
+        "collectionIds": "ID[]",
+        "searchTerms": "string[]",
+        "coverageGaps": "string[]"
+      },
+      "ArchiveLead": {
+        "caseId": "ID",
+        "sourceRef": "Ref",
+        "relevantQuestion": "string",
+        "newSearchTask": "string",
+        "reliabilityLimit": "string"
+      },
+      "ArchiveFinding": {
+        "caseId": "ID",
+        "question": "string",
+        "supportingRefs": "Ref[]",
+        "contradictoryRefs": "Ref[]",
+        "conclusion": "string"
+      },
+      "ResearchDossier": {
+        "caseId": "ID",
+        "findingIds": "ID[]",
+        "searchedManifestId": "ID",
+        "remainingLeads": "string[]",
+        "rightsNotes": "string[]"
+      }
+    },
+    "091": {
+      "StorySeries": {
+        "seriesId": "ID",
+        "manuscriptIds": "ID[]",
+        "canonVersion": "string",
+        "editorId": "ID",
+        "creativeBrief": "string"
+      },
+      "CanonFact": {
+        "caseId": "ID",
+        "entityId": "ID",
+        "fact": "string",
+        "validStoryTime": "string",
+        "narratorReliability": "string"
+      },
+      "StoryObligation": {
+        "caseId": "ID",
+        "characterId": "ID",
+        "unresolvedSetup": "string",
+        "motivation": "string",
+        "promisedPayoff": "string"
+      },
+      "StoryProposalFinding": {
+        "caseId": "ID",
+        "proposal": "string",
+        "affectedCanonIds": "ID[]",
+        "continuityConflict": "string",
+        "creativeOpportunity": "string"
+      },
+      "StoryRevision": {
+        "caseId": "ID",
+        "affectedSceneIds": "ID[]",
+        "revisedMaterial": "string",
+        "preservedArcs": "string[]",
+        "tradeoff": "string"
+      },
+      "StoryEdition": {
+        "caseId": "ID",
+        "revisionIds": "ID[]",
+        "canonDeltaIds": "ID[]",
+        "remainingObligations": "string[]",
+        "editorApprovalRef": "Ref"
+      }
+    },
+    "092": {
+      "DocumentaryProject": {
+        "interviewIds": "ID[]",
+        "archiveAssetIds": "ID[]",
+        "editorialBrief": "string",
+        "editorId": "ID",
+        "targetDurationSeconds": "number"
+      },
+      "DocumentarySegment": {
+        "caseId": "ID",
+        "assetId": "ID",
+        "timeRange": "string",
+        "speakerClaim": "string",
+        "context": "string",
+        "rightsStatus": "string"
+      },
+      "DocumentaryStructure": {
+        "caseId": "ID",
+        "centralQuestion": "string",
+        "sectionClaims": "string[]",
+        "supportingSegmentIds": "ID[]",
+        "counterevidenceIds": "ID[]"
+      },
+      "DocumentaryEdit": {
+        "caseId": "ID",
+        "segmentIds": "ID[]",
+        "order": "number[]",
+        "transitionText": "string",
+        "impliedMeaning": "string"
+      },
+      "DocumentaryClearance": {
+        "caseId": "ID",
+        "editIds": "ID[]",
+        "factualIssues": "string[]",
+        "rightsIssues": "string[]",
+        "accessibilityTasks": "ID[]"
+      },
+      "DocumentaryRelease": {
+        "caseId": "ID",
+        "editDecisionListId": "ID",
+        "approvedArtifactIds": "ID[]",
+        "durationSeconds": "number",
+        "approvalRefs": "Ref[]"
+      }
+    },
+    "093": {
+      "MagazineIssue": {
+        "issueTheme": "string",
+        "audience": "string",
+        "sectionIds": "ID[]",
+        "editorId": "ID",
+        "publicationDate": "LocalDate"
+      },
+      "EditorialPitch": {
+        "caseId": "ID",
+        "contributorId": "ID",
+        "proposedAngle": "string",
+        "evidencePlan": "string",
+        "audienceValue": "string"
+      },
+      "IssueCoverage": {
+        "caseId": "ID",
+        "sectionId": "ID",
+        "coveredAngles": "string[]",
+        "missingPerspectives": "string[]",
+        "duplicatePitchIds": "ID[]"
+      },
+      "CommissionBrief": {
+        "caseId": "ID",
+        "pitchId": "ID",
+        "scope": "string",
+        "deliverables": "string[]",
+        "evidenceRequirements": "string[]",
+        "dueAt": "DateTime"
+      },
+      "EditorialTask": {
+        "caseId": "ID",
+        "pieceId": "ID",
+        "revisionNeed": "string",
+        "factCheckIds": "ID[]",
+        "productionDependencies": "ID[]"
+      },
+      "IssueReadiness": {
+        "caseId": "ID",
+        "pieceIds": "ID[]",
+        "layoutArtifactIds": "ID[]",
+        "unresolvedTasks": "ID[]",
+        "approvalRefs": "Ref[]"
+      }
+    },
+    "094": {
+      "BrandProject": {
+        "clientId": "ID",
+        "creativeBrief": "string",
+        "productFactIds": "ID[]",
+        "audienceGuidanceId": "ID",
+        "creativeDirectorId": "ID"
+      },
+      "BrandConstraint": {
+        "caseId": "ID",
+        "desiredAssociation": "string",
+        "factualClaim": "string",
+        "prohibitedClaim": "string",
+        "channelConstraint": "string"
+      },
+      "CreativeDirection": {
+        "caseId": "ID",
+        "conceptName": "string",
+        "organizingIdea": "string",
+        "voicePrinciples": "string[]",
+        "tradeoff": "string"
+      },
+      "BrandSystem": {
+        "caseId": "ID",
+        "directionId": "ID",
+        "terminologyRules": "string[]",
+        "voiceRules": "string[]",
+        "exampleAssets": "string[]"
+      },
+      "BrandAsset": {
+        "caseId": "ID",
+        "systemId": "ID",
+        "channel": "string",
+        "audienceTask": "string",
+        "content": "string"
+      },
+      "BrandReview": {
+        "caseId": "ID",
+        "assetIds": "ID[]",
+        "inconsistency": "string",
+        "unsupportedClaim": "string",
+        "revisionProposal": "string"
+      }
+    },
+    "095": {
+      "MenuProject": {
+        "venueId": "ID",
+        "creativeBrief": "string",
+        "ingredientInventoryIds": "ID[]",
+        "serviceWindow": "string",
+        "chefOwnerId": "ID"
+      },
+      "MenuRequirement": {
+        "caseId": "ID",
+        "desiredExperience": "string",
+        "dietaryConstraints": "string[]",
+        "equipmentLimits": "string[]",
+        "costTarget": "Money"
+      },
+      "DishConcept": {
+        "caseId": "ID",
+        "requirementIds": "ID[]",
+        "concept": "string",
+        "ingredientIds": "ID[]",
+        "preparationApproach": "string"
+      },
+      "MenuComposition": {
+        "caseId": "ID",
+        "dishIds": "ID[]",
+        "courseRoles": "string[]",
+        "sharedPreparationIds": "ID[]",
+        "serviceTradeoff": "string"
+      },
+      "KitchenProductionPlan": {
+        "caseId": "ID",
+        "menuId": "ID",
+        "batchQuantities": "Quantity[]",
+        "preparationTaskIds": "ID[]",
+        "totalCost": "Money"
+      },
+      "CulinaryRevision": {
+        "caseId": "ID",
+        "dishId": "ID",
+        "tastingObservations": "string[]",
+        "proposedChange": "string",
+        "affectedPlanIds": "ID[]"
+      }
+    },
+    "096": {
+      "EscapeRoomProject": {
+        "creativeBrief": "string",
+        "venueId": "ID",
+        "propIds": "ID[]",
+        "designerId": "ID",
+        "targetDurationMinutes": "number"
+      },
+      "EscapeConstraint": {
+        "caseId": "ID",
+        "narrativeGoal": "string",
+        "venueConstraint": "string",
+        "accessibilityRequirement": "string",
+        "prohibitedMechanic": "string"
+      },
+      "PuzzleNode": {
+        "caseId": "ID",
+        "clueInputs": "ID[]",
+        "solutionAction": "string",
+        "unlocks": "ID[]",
+        "alternatePath": "string"
+      },
+      "PuzzleArtifact": {
+        "caseId": "ID",
+        "puzzleId": "ID",
+        "artifactText": "string",
+        "intendedInterpretation": "string",
+        "misleadingInterpretations": "string[]"
+      },
+      "PuzzlePlaytest": {
+        "caseId": "ID",
+        "graphId": "ID",
+        "actionSequence": "string[]",
+        "deadEnd": "string",
+        "hintNeed": "string"
+      },
+      "EscapeOperations": {
+        "caseId": "ID",
+        "puzzleIds": "ID[]",
+        "resetTasks": "string[]",
+        "hintLadder": "string[]",
+        "staffRecoveryRules": "string[]"
+      }
+    },
+    "097": {
+      "LiveEvent": {
+        "eventId": "ID",
+        "agendaIds": "ID[]",
+        "venueId": "ID",
+        "producerId": "ID",
+        "commitmentIds": "ID[]"
+      },
+      "EventCommitment": {
+        "caseId": "ID",
+        "stakeholderId": "ID",
+        "promisedOutcome": "string",
+        "timeWindow": "string",
+        "essentialCondition": "string"
+      },
+      "EventDisruption": {
+        "caseId": "ID",
+        "affectedResourceIds": "ID[]",
+        "unavailableFunction": "string",
+        "expectedDuration": "string",
+        "uncertainty": "string"
+      },
+      "EventRecoveryOption": {
+        "caseId": "ID",
+        "affectedAgendaIds": "ID[]",
+        "alternativeFormat": "string",
+        "preservedPromises": "string[]",
+        "changedPromises": "string[]"
+      },
+      "EventRunPlan": {
+        "caseId": "ID",
+        "optionId": "ID",
+        "taskIds": "ID[]",
+        "resourceReservations": "ID[]",
+        "revisedTiming": "string"
+      },
+      "EventChange": {
+        "caseId": "ID",
+        "runPlanId": "ID",
+        "staffBriefingIds": "ID[]",
+        "audienceMessageIds": "ID[]",
+        "acknowledgmentRefs": "Ref[]"
+      }
+    },
+    "098": {
+      "GameWorld": {
+        "worldId": "ID",
+        "ruleSetId": "ID",
+        "sessionIds": "ID[]",
+        "directorId": "ID",
+        "contentBoundaryIds": "ID[]"
+      },
+      "PlayerIntent": {
+        "caseId": "ID",
+        "playerId": "ID",
+        "intendedAction": "string",
+        "targetIds": "ID[]",
+        "ambiguity": "string"
+      },
+      "CharacterView": {
+        "caseId": "ID",
+        "characterId": "ID",
+        "knownFactIds": "ID[]",
+        "beliefs": "string[]",
+        "goals": "string[]",
+        "obligations": "string[]"
+      },
+      "CharacterAction": {
+        "caseId": "ID",
+        "characterId": "ID",
+        "legalActionId": "ID",
+        "intent": "string",
+        "dialogue": "string"
+      },
+      "WorldConsequence": {
+        "caseId": "ID",
+        "actionIds": "ID[]",
+        "stateEventIds": "ID[]",
+        "relationshipChanges": "string[]",
+        "unresolvedHooks": "string[]"
+      },
+      "WorldContinuity": {
+        "caseId": "ID",
+        "checkpointId": "ID",
+        "unresolvedConflictIds": "ID[]",
+        "proposedEvent": "string",
+        "affectedEntityIds": "ID[]"
+      }
+    },
+    "099": {
+      "NegotiationExercise": {
+        "learningObjectives": "string[]",
+        "participantIds": "ID[]",
+        "scenarioFamily": "string",
+        "instructorId": "ID",
+        "conductPolicyId": "ID"
+      },
+      "NegotiationScenario": {
+        "caseId": "ID",
+        "issues": "string[]",
+        "roleIds": "ID[]",
+        "hiddenPreferences": "string[]",
+        "feasibleAgreementRules": "string[]"
+      },
+      "NegotiationRole": {
+        "caseId": "ID",
+        "participantId": "ID",
+        "privateFacts": "string[]",
+        "authorityLimits": "string[]",
+        "permittedTactics": "string[]"
+      },
+      "TrainingOffer": {
+        "caseId": "ID",
+        "proposerId": "ID",
+        "terms": "string[]",
+        "conditions": "string[]",
+        "status": "'proposal'|'counteroffer'|'accepted'|'withdrawn'"
+      },
+      "CounterpartAction": {
+        "caseId": "ID",
+        "roleId": "ID",
+        "legalActionId": "ID",
+        "response": "string",
+        "privateObjectiveBasis": "string"
+      },
+      "NegotiationDebrief": {
+        "caseId": "ID",
+        "agreementIds": "ID[]",
+        "observedSkills": "string[]",
+        "missedOpportunities": "string[]",
+        "nextExercise": "string"
+      }
+    },
+    "100": {
+      "ImmersiveProduction": {
+        "productionId": "ID",
+        "sceneIds": "ID[]",
+        "castIds": "ID[]",
+        "venueId": "ID",
+        "stageManagerId": "ID"
+      },
+      "TheatreScene": {
+        "caseId": "ID",
+        "prerequisiteFacts": "string[]",
+        "characterKnowledge": "string[]",
+        "intendedBeat": "string",
+        "branchConditions": "string[]"
+      },
+      "TheatreConstraint": {
+        "caseId": "ID",
+        "sceneId": "ID",
+        "castRequirements": "ID[]",
+        "propRequirements": "ID[]",
+        "consentBoundary": "string"
+      },
+      "SceneVariant": {
+        "caseId": "ID",
+        "sceneId": "ID",
+        "variantText": "string",
+        "preservedBeat": "string",
+        "changedDependencies": "string[]"
+      },
+      "TheatreCuePlan": {
+        "caseId": "ID",
+        "variantIds": "ID[]",
+        "cueOrder": "string[]",
+        "responsibleCastIds": "ID[]",
+        "timingWindow": "string"
+      },
+      "TheatreRecovery": {
+        "caseId": "ID",
+        "disruptedSceneIds": "ID[]",
+        "recoveryMaterial": "string",
+        "preservedFacts": "string[]",
+        "approvalRef": "Ref"
+      }
+    }
+  }
+}

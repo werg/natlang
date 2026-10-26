@@ -1,0 +1,616 @@
+[
+  {
+    "id": "044-documentation-behavior-synchronizer-gate-supported",
+    "root": "qualification/extractPromises.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "draft": {
+        "values": {
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ],
+          "caseId": "case-44"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "applicableVersion",
+            "evidenceIds": [
+              "044-documentation-behavior-synchronizer-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "documentation snapshot and source behavior",
+        "evidence": [
+          {
+            "id": "044-documentation-behavior-synchronizer-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Guide example uses `page=2`; current source and tests require an opaque cursor and customer C44 repeats records. Case case-44; current first-stage record values: {\"applicableVersion\": \"current service requires opaque cursor token\", \"behaviorClaim\": \"example sends page=2\", \"documentId\": \"pagination-guide-v3\", \"exampleRefs\": [\"guide-example-44\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Update the example and explain the customer migration against verified current behavior."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "applicableVersion",
+          "value": "current service requires opaque cursor token",
+          "evidenceIds": [
+            "044-documentation-behavior-synchronizer-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "documentation snapshot and source behavior: The guide’s example sends `page=2`; current source and tests use an opaque `cursor` token. Customer configuration C-044 still sends the old parameter and receives duplicate results. Apply the first-stage gate to the record and source versions; Update the example and explain the customer migration against verified current behavior.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-gate-contradictory",
+    "root": "qualification/extractPromises.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "draft": {
+        "values": {
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "page=2 returns unique current results",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ],
+          "caseId": "case-44"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "applicableVersion",
+            "evidenceIds": [
+              "044-documentation-behavior-synchronizer-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "documentation snapshot and source behavior",
+        "evidence": [
+          {
+            "id": "044-documentation-behavior-synchronizer-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Guide example uses `page=2`; current source and tests require an opaque cursor and customer C44 repeats records. Case case-44; current first-stage record values: {\"applicableVersion\": \"current service requires opaque cursor token\", \"behaviorClaim\": \"example sends page=2\", \"documentId\": \"pagination-guide-v3\", \"exampleRefs\": [\"guide-example-44\"]}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "Update the example and explain the customer migration against verified current behavior."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "behaviorClaim",
+          "value": "page=2 returns unique current results",
+          "evidenceIds": [
+            "044-documentation-behavior-synchronizer-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "documentation snapshot and source behavior: The guide’s example sends `page=2`; current source and tests use an opaque `cursor` token. Customer configuration C-044 still sends the old parameter and receives duplicate results. Apply the first-stage gate to the record and source versions; Update the example and explain the customer migration against verified current behavior.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-gate-missing",
+    "root": "qualification/extractPromises.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-44"
+        },
+        "missingFields": [
+          "applicableVersion"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes applicableVersion?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "documentation snapshot and source behavior",
+        "evidence": [],
+        "missing": [
+          "applicableVersion"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "Update the example and explain the customer migration against verified current behavior."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "documentation snapshot and source behavior: The guide’s example sends `page=2`; current source and tests use an opaque `cursor` token. Customer configuration C-044 still sends the old parameter and receives duplicate results. Apply the first-stage gate to the record and source versions; Update the example and explain the customer migration against verified current behavior.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-operational-1",
+    "root": "synchronizeDocumentationEdition.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "documentation": {
+        "reviewId": "044-documentation-behavior-synchronizer-operational-1",
+        "targetRelease": "v2",
+        "sourceEvidence": [
+          {
+            "id": "044-operational-detail-1-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10. This current event is source 044-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-1. The supplied typed prior 044-prior-documentedpromise-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requirements": [],
+        "releaseDecisions": [],
+        "approvedIntent": [],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "exampleSources": [
+          {
+            "id": "044-operational-detail-1-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10. This current event is source 044-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-1. The supplied typed prior 044-prior-documentedpromise-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorPromise": {
+          "id": "044-prior-documentedpromise-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "044-documentation-behavior-synchronizer-operational-1",
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ]
+        },
+        "currentPageBases": [
+          "pagination-guide-v3@current service requires opaque cursor token"
+        ],
+        "translatedEditions": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 044-documentation-behavior-synchronizer-operational-1 against this factual event: Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10. Original §9 detail: An example depends on a deprecated service: mark its environment and provide a reviewed replacement. Correct handling applies “mark its environment and provide a reviewed replacement.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "An example depends on a deprecated service: mark its environment and provide a reviewed replacement.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Pagination guide D44 v3 uses retired endpoint `/search?page=2`; source service v5 rejects page numbers and returns an opaque cursor. The example test in the guide archive is dated 2024-06-10. It links source 044-operational-detail-1-source-v2 v2 with prior typed DocumentedPromise record 044-prior-documentedpromise-detail-1-v1 v1 and keeps unresolved scope visible for D44.",
+      "durable_state": "The proposal retains prior record 044-prior-documentedpromise-detail-1-v1 v1 and versions only the affected state for D44 against source 044-operational-detail-1-source-v2 v2; it applies “mark its environment and provide a reviewed replacement.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D44 and the scope supported by source 044-operational-detail-1-source-v2 v2; it represents “mark its environment and provide a reviewed replacement.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-operational-2",
+    "root": "synchronizeDocumentationEdition.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "documentation": {
+        "reviewId": "044-documentation-behavior-synchronizer-operational-2",
+        "targetRelease": "v2",
+        "sourceEvidence": [
+          {
+            "id": "044-operational-detail-2-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding. This current event is source 044-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-2. The supplied typed prior 044-prior-documentedpromise-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requirements": [],
+        "releaseDecisions": [],
+        "approvedIntent": [],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "exampleSources": [
+          {
+            "id": "044-operational-detail-2-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding. This current event is source 044-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-2. The supplied typed prior 044-prior-documentedpromise-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorPromise": {
+          "id": "044-prior-documentedpromise-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "044-documentation-behavior-synchronizer-operational-2",
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ]
+        },
+        "currentPageBases": [
+          "pagination-guide-v3@current service requires opaque cursor token"
+        ],
+        "translatedEditions": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 044-documentation-behavior-synchronizer-operational-2 against this factual event: English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding. Original §9 detail: A translated page lags the source: track edition mismatch separately from mistranslation. Correct handling applies “track edition mismatch separately from mistranslation.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A translated page lags the source: track edition mismatch separately from mistranslation.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: English source guide edition 5 was published on 2026-10-01. Spanish translation edition 4 still shows the previous cursor parameter; its translation QA record has no mistranslation finding. It links source 044-operational-detail-2-source-v2 v2 with prior typed DocumentedPromise record 044-prior-documentedpromise-detail-2-v1 v1 and keeps unresolved scope visible for 044-documentation-behavior-synchronizer-operational-2.",
+      "durable_state": "The proposal retains prior record 044-prior-documentedpromise-detail-2-v1 v1 and versions only the affected state for 044-documentation-behavior-synchronizer-operational-2 against source 044-operational-detail-2-source-v2 v2; it applies “track edition mismatch separately from mistranslation.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to 044-documentation-behavior-synchronizer-operational-2 and the scope supported by source 044-operational-detail-2-source-v2 v2; it represents “track edition mismatch separately from mistranslation.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-operational-3",
+    "root": "synchronizeDocumentationEdition.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "documentation": {
+        "reviewId": "044-documentation-behavior-synchronizer-operational-3",
+        "targetRelease": "v2",
+        "sourceEvidence": [
+          {
+            "id": "044-operational-detail-3-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history. This current event is source 044-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-3. The supplied typed prior 044-prior-documentedpromise-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requirements": [],
+        "releaseDecisions": [],
+        "approvedIntent": [],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "exampleSources": [
+          {
+            "id": "044-operational-detail-3-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history. This current event is source 044-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-3. The supplied typed prior 044-prior-documentedpromise-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorPromise": {
+          "id": "044-prior-documentedpromise-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "044-documentation-behavior-synchronizer-operational-3",
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ]
+        },
+        "currentPageBases": [
+          "pagination-guide-v3@current service requires opaque cursor token"
+        ],
+        "translatedEditions": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 044-documentation-behavior-synchronizer-operational-3 against this factual event: Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history. Original §9 detail: A behavior bug is fixed later: retain the earlier documentation decision in history. Correct handling applies “retain the earlier documentation decision in history.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A behavior bug is fixed later: retain the earlier documentation decision in history.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Behavior decision B44 on API error handling was approved against service v4. Service v5 fixed the bug on 2026-09-28; the prior decision record and affected examples remain in the documentation history. It links source 044-operational-detail-3-source-v2 v2 with prior typed DocumentedPromise record 044-prior-documentedpromise-detail-3-v1 v1 and keeps unresolved scope visible for B44.",
+      "durable_state": "The proposal retains prior record 044-prior-documentedpromise-detail-3-v1 v1 and versions only the affected state for B44 against source 044-operational-detail-3-source-v2 v2; it applies “retain the earlier documentation decision in history.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to B44 and the scope supported by source 044-operational-detail-3-source-v2 v2; it represents “retain the earlier documentation decision in history.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-operational-4",
+    "root": "synchronizeDocumentationEdition.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "documentation": {
+        "reviewId": "044-documentation-behavior-synchronizer-operational-4",
+        "targetRelease": "v2",
+        "sourceEvidence": [
+          {
+            "id": "044-operational-detail-4-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent. This current event is source 044-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-4. The supplied typed prior 044-prior-documentedpromise-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requirements": [],
+        "releaseDecisions": [],
+        "approvedIntent": [],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "exampleSources": [
+          {
+            "id": "044-operational-detail-4-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent. This current event is source 044-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-4. The supplied typed prior 044-prior-documentedpromise-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorPromise": {
+          "id": "044-prior-documentedpromise-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "044-documentation-behavior-synchronizer-operational-4",
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ]
+        },
+        "currentPageBases": [
+          "pagination-guide-v3@current service requires opaque cursor token"
+        ],
+        "translatedEditions": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 044-documentation-behavior-synchronizer-operational-4 against this factual event: Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent. Original §9 detail: A code sample includes a secret: block export and rotate any exposed credential through operations. Correct handling applies “block export and rotate any exposed credential through operations.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "A code sample includes a secret: block export and rotate any exposed credential through operations.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Code sample C44 in draft D44 contains a credential-looking value `sk-live-EXAMPLE-44` in a public snippet. Secret scanner finding SEC44 is open; export job E44 is queued but not sent. It links source 044-operational-detail-4-source-v2 v2 with prior typed DocumentedPromise record 044-prior-documentedpromise-detail-4-v1 v1 and keeps unresolved scope visible for C44, D44, EXAMPLE-44, SEC44, E44.",
+      "durable_state": "The proposal retains prior record 044-prior-documentedpromise-detail-4-v1 v1 and versions only the affected state for C44, D44, EXAMPLE-44, SEC44, E44 against source 044-operational-detail-4-source-v2 v2; it applies “block export and rotate any exposed credential through operations.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to C44, D44, EXAMPLE-44, SEC44, E44 and the scope supported by source 044-operational-detail-4-source-v2 v2; it represents “block export and rotate any exposed credential through operations.” as pending approval and is not marked dispatched or complete."
+    }
+  },
+  {
+    "id": "044-documentation-behavior-synchronizer-operational-5",
+    "root": "synchronizeDocumentationEdition.nl",
+    "split_group": "044-documentation-behavior-synchronizer",
+    "inputs": {
+      "documentation": {
+        "reviewId": "044-documentation-behavior-synchronizer-operational-5",
+        "targetRelease": "v2",
+        "sourceEvidence": [
+          {
+            "id": "044-operational-detail-5-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7. This current event is source 044-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-5. The supplied typed prior 044-prior-documentedpromise-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "requirements": [],
+        "releaseDecisions": [],
+        "approvedIntent": [],
+        "policyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "exampleSources": [
+          {
+            "id": "044-operational-detail-5-source-v2",
+            "source": "Documentation-behavior synchronizer operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R044 Documentation-behavior steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R044 Documentation-behavior steward records: Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7. This current event is source 044-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 044-documentation-behavior-synchronizer-operational-5. The supplied typed prior 044-prior-documentedpromise-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "priorPromise": {
+          "id": "044-prior-documentedpromise-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "044-documentation-behavior-synchronizer-operational-5",
+          "documentId": "pagination-guide-v3",
+          "behaviorClaim": "example sends page=2",
+          "applicableVersion": "current service requires opaque cursor token",
+          "exampleRefs": [
+            "guide-example-44"
+          ]
+        },
+        "currentPageBases": [
+          "pagination-guide-v3@current service requires opaque cursor token"
+        ],
+        "translatedEditions": []
+      }
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge case 044-documentation-behavior-synchronizer-operational-5 against this factual event: Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7. Original §9 detail: A page is edited during review: rebase and revalidate changed claims. Correct handling applies “rebase and revalidate changed claims.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+    },
+    "scenario": "Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "A page is edited during review: rebase and revalidate changed claims.",
+    "boundary_assertions": {
+      "view": "The accountable reviewer view presents this observed event: Page D44 changed from revision 7 to 8 after reviewer Omar Bell approved revision 7. The diff alters claims in sections 2 and 4; the review binding still points to revision 7. It links source 044-operational-detail-5-source-v2 v2 with prior typed DocumentedPromise record 044-prior-documentedpromise-detail-5-v1 v1 and keeps unresolved scope visible for D44.",
+      "durable_state": "The proposal retains prior record 044-prior-documentedpromise-detail-5-v1 v1 and versions only the affected state for D44 against source 044-operational-detail-5-source-v2 v2; it applies “rebase and revalidate changed claims.” with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D44 and the scope supported by source 044-operational-detail-5-source-v2 v2; it represents “rebase and revalidate changed claims.” as pending approval and is not marked dispatched or complete."
+    }
+  }
+]

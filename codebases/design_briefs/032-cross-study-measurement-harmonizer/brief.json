@@ -1,0 +1,49 @@
+{
+  "application_id": "032",
+  "title": "Cross-study measurement harmonizer",
+  "source_relative_path": "applications/07-scientific-evidence-and-research-operations/032-cross-study-measurement-harmonizer.md",
+  "program_root": "codebases/design_briefs/032-cross-study-measurement-harmonizer",
+  "source_sha256": "4c194bd8011a241561cab55dd814ad519f05f1fc97eea03dd36170c0e65ef4c1",
+  "domain_id": "07",
+  "stages": [
+    {
+      "name": "recoverMeasures",
+      "output_type": "MeasureDefinition",
+      "algorithm": "Read dictionaries, questionnaires, protocols, and usage notes together to recover what each variable measures. Distinguish similar labels from equivalent constructs and record timing, respondent, and collection-method differences that could change interpretation.",
+      "gate": "No mapping based only on column name or numeric range."
+    },
+    {
+      "name": "assessComparability",
+      "output_type": "MeasureRelation",
+      "algorithm": "Compare constructs, scales, recall periods, and populations against the intended analysis. Separate exact unit conversion from inferential harmonization, and identify subsets where comparability holds without claiming it for the entire dataset.",
+      "gate": "Every accepted relation specifies the assumptions and applicable subset."
+    },
+    {
+      "name": "proposeTransforms",
+      "output_type": "HarmonizationRule",
+      "algorithm": "Select documented transformations or category mappings and describe lost distinctions. Delegate arithmetic to exact services, refuse unsupported imputation, and preserve source variables so analysts can inspect or reverse the transformation where possible.",
+      "gate": "Transformation is defined for every accepted input state, including missing and out-of-range values."
+    },
+    {
+      "name": "constructCohort",
+      "output_type": "HarmonizedSlice",
+      "algorithm": "Define comparable cohorts before materialization, apply approved transformations in a sandbox, and reconcile row counts and exclusions. Keep missingness reasons and study membership available rather than flattening them into one generic null category.",
+      "gate": "Exact row lineage, unit consistency, and no unsupported cross-study comparability."
+    },
+    {
+      "name": "auditSensitivity",
+      "output_type": "HarmonizationAudit",
+      "algorithm": "Compare reasonable alternative mappings and cohort restrictions to reveal dependence on harmonization choices. Produce an analyst-facing report distinguishing stable findings from those driven by assumptions and identify measurements that must remain separate.",
+      "gate": "Sensitivity alternatives are justified and do not selectively hide inconvenient results."
+    }
+  ],
+  "operational_details": [
+    "A zero is a valid response in one study but missing in another: preserve distinct missingness semantics.",
+    "A category combines two concepts: do not invent a finer split without evidence.",
+    "A unit changes within a dataset: bind transformations to row-level collection versions.",
+    "Participant overlap exists across studies: retain linkage uncertainty for downstream analysis.",
+    "A mapping is revised: invalidate only derived slices using that rule."
+  ],
+  "representative_episode": "Two studies label a variable weekly activity, but one measures sessions and the other minutes over a different recall window.",
+  "independent_truth_basis": "Hidden construct definitions, exact unit transformations, compatible subsets, and expected row-lineage manifests."
+}

@@ -1,0 +1,617 @@
+[
+  {
+    "id": "080-first-gate-pass",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "world-080-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+        "candidateIds": [
+          "080-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "080-first-e1",
+            "source": "primary case record EXP-80",
+            "version": "v1",
+            "text": "Primary domain record for case EXP-80 states: caseId=\"EXP-80\"; serviceId=\"HOUSING-PORTAL\"; administrativeJourney=\"Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.\"; reportedObstacle=\"Portal showed a blank status page after upload.\"; consequence=\"Two calls made; applicant cannot confirm renewal status.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "080-case-record",
+          "caseId": "EXP-80",
+          "sourceRefs": [
+            "080-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ExperienceEpisode",
+          "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+          "status": "candidate",
+          "evidenceIds": [
+            "080-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "serviceId": "HOUSING-PORTAL",
+          "administrativeJourney": "Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.",
+          "reportedObstacle": "Portal showed a blank status page after upload.",
+          "consequence": "Two calls made; applicant cannot confirm renewal status."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "080-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "080-first-gate-fail",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "world-080-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+        "candidateIds": [
+          "080-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "080-first-e1",
+            "source": "primary case record EXP-80",
+            "version": "v1",
+            "text": "Primary domain record for case EXP-80 states: caseId=\"EXP-80\"; serviceId=\"HOUSING-PORTAL\"; administrativeJourney=\"Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.\"; reportedObstacle=\"Portal showed a blank status page after upload.\"; consequence=\"Two calls made; applicant cannot confirm renewal status.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "080-case-record",
+          "caseId": "EXP-80",
+          "sourceRefs": [
+            "080-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ExperienceEpisode",
+          "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+          "status": "candidate",
+          "evidenceIds": [
+            "080-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "serviceId": "HOUSING-PORTAL",
+          "administrativeJourney": "Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.",
+          "reportedObstacle": "Portal showed a blank status page after upload.",
+          "consequence": "Renewal approved and no further contact needed."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "080-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "080-first-gate-needs-review",
+    "root": "qualification/qualifyOriginal.nl",
+    "split_group": "world-080-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+        "candidateIds": [
+          "080-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "080-first-e1",
+            "source": "primary case record EXP-80",
+            "version": "v1",
+            "text": "Primary domain record for case EXP-80 states: caseId=\"EXP-80\"; serviceId=\"HOUSING-PORTAL\"; administrativeJourney=\"Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.\"; reportedObstacle=\"Portal showed a blank status page after upload.\". No current value is present for consequence.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "consequence"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "080-case-record",
+          "sourceRefs": [
+            "080-first-e1"
+          ],
+          "state": "draft",
+          "kind": "ExperienceEpisode",
+          "subject": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+          "status": "candidate",
+          "evidenceIds": [
+            "080-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "administrativeJourney": "Nora uploaded housing renewal on 2026-04-12; receipt H-18 was issued.",
+          "reportedObstacle": "Portal showed a blank status page after upload.",
+          "caseId": "EXP-80",
+          "serviceId": "HOUSING-PORTAL"
+        },
+        "missingFields": [
+          "consequence"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "080-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "080-workflow-1",
+    "root": "investigateAdministrativeExperience.nl",
+    "split_group": "world-080-workflow-1",
+    "inputs": {
+      "inbox": {
+        "instruction": "Prepare a reviewable Patient Experience Improvement Laboratory proposal from the supplied case records and evidence.",
+        "studies": [
+          {
+            "id": "080-workflow-1-record",
+            "caseId": "080-workflow-1",
+            "sourceRefs": [
+              "080-event-1"
+            ],
+            "state": "draft",
+            "kind": "ExperienceStudy",
+            "subject": "Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80.",
+            "status": "candidate",
+            "evidenceIds": [
+              "080-event-1"
+            ],
+            "fields": {
+              "sourceArtifact": "080-event-1",
+              "sourceVersion": "v1"
+            },
+            "serviceIds": [
+              "HOUSING-PORTAL"
+            ],
+            "researchQuestion": "Where do applicants lose confirmation after uploading a housing renewal?",
+            "feedbackCollectionIds": [
+              "SURVEY-A",
+              "CALL-LOG-80"
+            ],
+            "improvementOwnerId": "OWNER-80",
+            "consentPolicyId": "CONSENT-8"
+          }
+        ],
+        "feedback": [
+          {
+            "id": "080-event-1",
+            "source": "current domain record 080-E1",
+            "version": "v1",
+            "text": "Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "governance": [],
+        "expectedStudyIds": [
+          "080-workflow-1-record"
+        ],
+        "reviewer": "accountable reviewer",
+        "importedRecordIds": [
+          "080-workflow-1-record"
+        ],
+        "changes": [
+          {
+            "id": "080-event-1",
+            "source": "current domain record 080-E1",
+            "version": "v1",
+            "text": "Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "studyState": null
+    },
+    "expected": {
+      "application": "Patient Experience Improvement Laboratory",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here. Use observation Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80. as the source of truth. The proposal should preserve source-linked record 080-workflow-1-record and make a recipient-facing distinction grounded in 080-event-1 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 080-workflow-1-record must accurately preserve observation 080-event-1 (v1): Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80. Apply brief requirement A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExperienceStudy record 080-workflow-1-record and its source link to 080-event-1 version v1, with a disposition matching this observed state: Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80. Carry requirement A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 080-workflow-1-record based on 080-event-1 (v1) and observation Complaint C-80 reports that the portal status failure delayed a patient’s insulin refill and includes a new severe symptom. The experience study’s protocol routes clinical concerns to nurse triage; no triage receipt is attached to C-80. Apply requirement A complaint includes clinical concerns: route them to the appropriate clinical process without interpreting them here. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "080-workflow-2",
+    "root": "investigateAdministrativeExperience.nl",
+    "split_group": "world-080-workflow-2",
+    "inputs": {
+      "inbox": {
+        "instruction": "Prepare a reviewable Patient Experience Improvement Laboratory proposal from the supplied case records and evidence.",
+        "studies": [
+          {
+            "id": "080-workflow-2-record",
+            "caseId": "080-workflow-2",
+            "sourceRefs": [
+              "080-event-2"
+            ],
+            "state": "draft",
+            "kind": "ExperienceStudy",
+            "subject": "Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.”",
+            "status": "candidate",
+            "evidenceIds": [
+              "080-event-2"
+            ],
+            "fields": {
+              "sourceArtifact": "080-event-2",
+              "sourceVersion": "v1"
+            },
+            "serviceIds": [
+              "HOUSING-PORTAL"
+            ],
+            "researchQuestion": "Where do applicants lose confirmation after uploading a housing renewal?",
+            "feedbackCollectionIds": [
+              "SURVEY-A",
+              "CALL-LOG-80"
+            ],
+            "improvementOwnerId": "OWNER-80",
+            "consentPolicyId": "CONSENT-8"
+          }
+        ],
+        "feedback": [
+          {
+            "id": "080-event-2",
+            "source": "current domain record 080-E2",
+            "version": "v1",
+            "text": "Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.”",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "governance": [],
+        "expectedStudyIds": [
+          "080-workflow-2-record"
+        ],
+        "reviewer": "accountable reviewer",
+        "importedRecordIds": [
+          "080-workflow-2-record"
+        ],
+        "changes": [
+          {
+            "id": "080-event-2",
+            "source": "current domain record 080-E2",
+            "version": "v1",
+            "text": "Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.”",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "studyState": null
+    },
+    "expected": {
+      "application": "Patient Experience Improvement Laboratory",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.”"
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: Call volume falls because a channel closes: do not report that as improved access. Use observation Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.” as the source of truth. The proposal should preserve source-linked record 080-workflow-2-record and make a recipient-facing distinction grounded in 080-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.”",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "Call volume falls because a channel closes: do not report that as improved access.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 080-workflow-2-record must accurately preserve observation 080-event-2 (v1): Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.” Apply brief requirement Call volume falls because a channel closes: do not report that as improved access. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExperienceStudy record 080-workflow-2-record and its source link to 080-event-2 version v1, with a disposition matching this observed state: Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.” Carry requirement Call volume falls because a channel closes: do not report that as improved access. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 080-workflow-2-record based on 080-event-2 (v1) and observation Phone channel PH-80 closed on 2026-09-01. Monthly call volume fell from 420 to 210 after closure, while 160 callers appear in abandoned-call logs; the access dashboard currently labels the lower count “improved service.” Apply requirement Call volume falls because a channel closes: do not report that as improved access. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "080-workflow-3",
+    "root": "investigateAdministrativeExperience.nl",
+    "split_group": "world-080-workflow-3",
+    "inputs": {
+      "inbox": {
+        "instruction": "Prepare a reviewable Patient Experience Improvement Laboratory proposal from the supplied case records and evidence.",
+        "studies": [
+          {
+            "id": "080-workflow-3-record",
+            "caseId": "080-workflow-3",
+            "sourceRefs": [
+              "080-event-3"
+            ],
+            "state": "draft",
+            "kind": "ExperienceStudy",
+            "subject": "Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result.",
+            "status": "candidate",
+            "evidenceIds": [
+              "080-event-3"
+            ],
+            "fields": {
+              "sourceArtifact": "080-event-3",
+              "sourceVersion": "v1"
+            },
+            "serviceIds": [
+              "HOUSING-PORTAL"
+            ],
+            "researchQuestion": "Where do applicants lose confirmation after uploading a housing renewal?",
+            "feedbackCollectionIds": [
+              "SURVEY-A",
+              "CALL-LOG-80"
+            ],
+            "improvementOwnerId": "OWNER-80",
+            "consentPolicyId": "CONSENT-8"
+          }
+        ],
+        "feedback": [
+          {
+            "id": "080-event-3",
+            "source": "current domain record 080-E3",
+            "version": "v1",
+            "text": "Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "governance": [],
+        "expectedStudyIds": [
+          "080-workflow-3-record"
+        ],
+        "reviewer": "accountable reviewer",
+        "importedRecordIds": [
+          "080-workflow-3-record"
+        ],
+        "changes": [
+          {
+            "id": "080-event-3",
+            "source": "current domain record 080-E3",
+            "version": "v1",
+            "text": "Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "studyState": null
+    },
+    "expected": {
+      "application": "Patient Experience Improvement Laboratory",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A small group faces severe barriers: preserve its experience despite aggregate improvement. Use observation Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result. as the source of truth. The proposal should preserve source-linked record 080-workflow-3-record and make a recipient-facing distinction grounded in 080-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A small group faces severe barriers: preserve its experience despite aggregate improvement.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 080-workflow-3-record must accurately preserve observation 080-event-3 (v1): Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result. Apply brief requirement A small group faces severe barriers: preserve its experience despite aggregate improvement. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExperienceStudy record 080-workflow-3-record and its source link to 080-event-3 version v1, with a disposition matching this observed state: Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result. Carry requirement A small group faces severe barriers: preserve its experience despite aggregate improvement. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 080-workflow-3-record based on 080-event-3 (v1) and observation Overall completion improved from 62% to 71% after portal change P-80. Six screen-reader users in cohort SR-6 still cannot reach the submit button; their barrier log remains separate from the aggregate result. Apply requirement A small group faces severe barriers: preserve its experience despite aggregate improvement. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "080-workflow-4",
+    "root": "investigateAdministrativeExperience.nl",
+    "split_group": "world-080-workflow-4",
+    "inputs": {
+      "inbox": {
+        "instruction": "Prepare a reviewable Patient Experience Improvement Laboratory proposal from the supplied case records and evidence.",
+        "studies": [
+          {
+            "id": "080-workflow-4-record",
+            "caseId": "080-workflow-4",
+            "sourceRefs": [
+              "080-event-4"
+            ],
+            "state": "draft",
+            "kind": "ExperienceStudy",
+            "subject": "Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays.",
+            "status": "candidate",
+            "evidenceIds": [
+              "080-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "080-event-4",
+              "sourceVersion": "v1"
+            },
+            "serviceIds": [
+              "HOUSING-PORTAL"
+            ],
+            "researchQuestion": "Where do applicants lose confirmation after uploading a housing renewal?",
+            "feedbackCollectionIds": [
+              "SURVEY-A",
+              "CALL-LOG-80"
+            ],
+            "improvementOwnerId": "OWNER-80",
+            "consentPolicyId": "CONSENT-8"
+          }
+        ],
+        "feedback": [
+          {
+            "id": "080-event-4",
+            "source": "current domain record 080-E4",
+            "version": "v1",
+            "text": "Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "governance": [],
+        "expectedStudyIds": [
+          "080-workflow-4-record"
+        ],
+        "reviewer": "accountable reviewer",
+        "importedRecordIds": [
+          "080-workflow-4-record"
+        ],
+        "changes": [
+          {
+            "id": "080-event-4",
+            "source": "current domain record 080-E4",
+            "version": "v1",
+            "text": "Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "studyState": null
+    },
+    "expected": {
+      "application": "Patient Experience Improvement Laboratory",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: Feedback consent is withdrawn: remove attributable material and reassess derivatives. Use observation Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays. as the source of truth. The proposal should preserve source-linked record 080-workflow-4-record and make a recipient-facing distinction grounded in 080-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "Feedback consent is withdrawn: remove attributable material and reassess derivatives.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 080-workflow-4-record must accurately preserve observation 080-event-4 (v1): Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays. Apply brief requirement Feedback consent is withdrawn: remove attributable material and reassess derivatives. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExperienceStudy record 080-workflow-4-record and its source link to 080-event-4 version v1, with a disposition matching this observed state: Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays. Carry requirement Feedback consent is withdrawn: remove attributable material and reassess derivatives. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 080-workflow-4-record based on 080-event-4 (v1) and observation Participant F-80 withdrew feedback consent on 2026-10-24. Quote Q-80 is present in the interview report and derived chart C-80; withdrawal form W-80 covers attributable quotes and derivative displays. Apply requirement Feedback consent is withdrawn: remove attributable material and reassess derivatives. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "080-workflow-5",
+    "root": "investigateAdministrativeExperience.nl",
+    "split_group": "world-080-workflow-5",
+    "inputs": {
+      "inbox": {
+        "instruction": "Prepare a reviewable Patient Experience Improvement Laboratory proposal from the supplied case records and evidence.",
+        "studies": [
+          {
+            "id": "080-workflow-5-record",
+            "caseId": "080-workflow-5",
+            "sourceRefs": [
+              "080-event-5"
+            ],
+            "state": "draft",
+            "kind": "ExperienceStudy",
+            "subject": "Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure.",
+            "status": "candidate",
+            "evidenceIds": [
+              "080-event-5"
+            ],
+            "fields": {
+              "sourceArtifact": "080-event-5",
+              "sourceVersion": "v1"
+            },
+            "serviceIds": [
+              "HOUSING-PORTAL"
+            ],
+            "researchQuestion": "Where do applicants lose confirmation after uploading a housing renewal?",
+            "feedbackCollectionIds": [
+              "SURVEY-A",
+              "CALL-LOG-80"
+            ],
+            "improvementOwnerId": "OWNER-80",
+            "consentPolicyId": "CONSENT-8"
+          }
+        ],
+        "feedback": [
+          {
+            "id": "080-event-5",
+            "source": "current domain record 080-E5",
+            "version": "v1",
+            "text": "Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "governance": [],
+        "expectedStudyIds": [
+          "080-workflow-5-record"
+        ],
+        "reviewer": "accountable reviewer",
+        "importedRecordIds": [
+          "080-workflow-5-record"
+        ],
+        "changes": [
+          {
+            "id": "080-event-5",
+            "source": "current domain record 080-E5",
+            "version": "v1",
+            "text": "Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "studyState": null
+    },
+    "expected": {
+      "application": "Patient Experience Improvement Laboratory",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: An experiment shifts work to another team: measure the downstream burden before adoption. Use observation Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure. as the source of truth. The proposal should preserve source-linked record 080-workflow-5-record and make a recipient-facing distinction grounded in 080-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "An experiment shifts work to another team: measure the downstream burden before adoption.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 080-workflow-5-record must accurately preserve observation 080-event-5 (v1): Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure. Apply brief requirement An experiment shifts work to another team: measure the downstream burden before adoption. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed ExperienceStudy record 080-workflow-5-record and its source link to 080-event-5 version v1, with a disposition matching this observed state: Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure. Carry requirement An experiment shifts work to another team: measure the downstream burden before adoption. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 080-workflow-5-record based on 080-event-5 (v1) and observation Experiment E-80 reduces portal calls by 30 per week but adds an estimated 45 weekly case-review minutes for Team B, based on workload log WL-80 v2. The adoption proposal contains no downstream burden measure. Apply requirement An experiment shifts work to another team: measure the downstream burden before adoption. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

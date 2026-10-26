@@ -1,0 +1,5 @@
+---
+args: { history: ObservedAction[], plannedAction: TypedTrainingAction, transition: PracticeWorldTransition, challenge: SeededPracticeChallenge }
+returns: ProcedureDebrief
+---
+Keep the planned TypedTrainingAction distinct from observed history and from the simulator's returned transition. Match a current action-history record to transition.actionId only when its ID is exact; do not treat the plan alone as proof that the learner performed a step. Compare each procedure obligation with recorded action IDs, the planned kind/target, and the transition's actionId and consequence; mark currentActionObserved false when no exact learner observation exists. Assess outcome separately from process: a fortunate simulated result cannot erase a missed check, and an adverse result does not make a correct procedure unsound. Return plannedActionKind, plannedTarget, simulatedActionId, simulatedTransitionId, simulatedConsequence, actionEvidence, currentActionObserved, missedObligations, effectiveChecks, outcomeLuck, and nextPracticeTarget.

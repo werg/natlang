@@ -1,0 +1,104 @@
+{
+  "schema": "natlang.application/1",
+  "id": "020",
+  "title": "Multi-party sourcing negotiator",
+  "entrypoint": "negotiateSupplyRound.nl",
+  "interfaces": [
+    {
+      "name": "negotiateSupplyRound",
+      "path": "negotiateSupplyRound.nl",
+      "purpose": "Advance a confidential multi-supplier negotiation while preserving conditional packages, mandate changes and actual acceptance receipts.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "supplier-negotiation-book"
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "negotiateSupplyRound.nl",
+    "negotiateSupplyRound/proposeSealedCounteroffers.nl",
+    "negotiateSupplyRound/proposeSealedCounteroffers/redactRivalInformation.nl",
+    "negotiateSupplyRound/readBuyerMandate.nl",
+    "negotiateSupplyRound/readQuotationBook.nl",
+    "negotiateSupplyRound/readQuotationBook/recognizeConditionalOffer.nl",
+    "negotiateSupplyRound/readQuotationBook/segmentCommercialTerms.nl",
+    "negotiateSupplyRound/recheckCommitmentBoundary.nl",
+    "negotiateSupplyRound/reconcileSupplierReplies.nl",
+    "negotiateSupplyRound/reconcileSupplierReplies/separateReplyTerms.nl",
+    "negotiateSupplyRound/searchFeasiblePackages.nl",
+    "negotiateSupplyRound/searchFeasiblePackages/expandBundleFrontier.nl",
+    "negotiateSupplyRound/searchFeasiblePackages/expandBundleFrontier/comparePackageConditions.nl",
+    "negotiateSupplyRound/suspendUnapprovedOffers.nl",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "modelPackage",
+        "paths": [
+          "negotiateSupplyRound/readBuyerMandate.nl"
+        ]
+      },
+      {
+        "stage": "normalizeOffers",
+        "paths": [
+          "negotiateSupplyRound/readQuotationBook/recognizeConditionalOffer.nl"
+        ]
+      },
+      {
+        "stage": "constructPackages",
+        "paths": [
+          "negotiateSupplyRound/searchFeasiblePackages/expandBundleFrontier/comparePackageConditions.nl"
+        ]
+      },
+      {
+        "stage": "formCounteroffers",
+        "paths": [
+          "negotiateSupplyRound/proposeSealedCounteroffers/redactRivalInformation.nl"
+        ]
+      },
+      {
+        "stage": "reconcileAgreement",
+        "paths": [
+          "negotiateSupplyRound/recheckCommitmentBoundary.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "negotiateSupplyRound/searchFeasiblePackages/expandBundleFrontier/comparePackageConditions.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "negotiateSupplyRound/recheckCommitmentBoundary.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "negotiateSupplyRound/reconcileSupplierReplies/separateReplyTerms.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "negotiateSupplyRound/recheckCommitmentBoundary.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "negotiateSupplyRound/suspendUnapprovedOffers.nl"
+        ]
+      }
+    ]
+  }
+}

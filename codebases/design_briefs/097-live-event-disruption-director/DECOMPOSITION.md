@@ -1,0 +1,5 @@
+# Live Event Disruption Director
+
+A live program is a dependency-timed promise ledger. Public commitments, contract duties, accessibility arrangements and internal preferences retain separate authority and priority. A disruption event changes a capability state only when confirmed; estimates remain uncertain and never become a presumed recovery time.
+
+Alternative formats are evaluated against preserved outcomes and hard access/safety constraints. Run-of-show revision uses exact venue close, setup/teardown, staff, room and technical-resource intervals, including the last feasible switching deadline. A resource reservation precedes public change. Each role receives only its relevant revision and must acknowledge it; conflicting acknowledgements keep the event in a held state. The live controller branches on new telemetry: emergency activation suspends replanning for the approved command protocol, while ordinary disruption recomputes only affected segments. Execution events update actual state without retroactively rewriting the planned run sheet.

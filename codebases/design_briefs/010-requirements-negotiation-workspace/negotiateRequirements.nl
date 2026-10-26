@@ -1,0 +1,15 @@
+---
+description: Reconcile stakeholder positions into a phased specification with exact conflict witnesses and replayed acceptance cases.
+args: { request: NegotiationRequest; dossier: NegotiationDossier; prior?: NegotiationCheckpoint | null }
+returns: NegotiationRun
+---
+Bind saved = prior when supplied, otherwise null. Treat null as a first run; preserve all original task and evidence inputs.
+Bind scope = `frameNegotiation(request, dossier.project)`. Keep product boundary, release target, sponsor authority and prior baseline version explicit. Bind positions = `extractPositionsDomain(scope, dossier)`; classify desired outcome, implementation suggestion, mandatory constraint and preference separately. A successor role must confirm future changes, and verbal-only assent remains pending.
+
+Bind conflicts = `findRequirementConflicts(scope, positions, dossier.constraintEvidence)`; accept a hard conflict only with a supplied constraint witness, and retain semantic counterexamples as explanation rather than claiming exact impossibility. Bind compromises = `designNegotiationOptions(scope, positions, conflicts, dossier.agreementRecords, dossier.interfaceOwners)`; each option names preserved outcomes, concessions, assumptions, affected parties and confirmation state, including no agreement.
+
+Bind specification = `compileAcceptedRequirements(scope, positions, compromises, dossier.agreementRecords)`. Only confirmed outcomes and authorized concessions become atomic clauses; unresolved choices remain outside baseline and each clause carries owner, release phase, failure behavior and source position. Bind scenarios = `replayRequirementAcceptance(scope, specification, dossier.simulatorSchemas, dossier.simulatorResults)`. Bindings must match scenario and schema versions. Reopen only clauses named by a counterexample; preserve unrelated stakeholder acceptance.
+
+Bind proposal = { caseId: request.caseId, version: dossier.version, positions, conflicts, compromises, specification, scenarios, pendingConfirmations: confirmations still lacking source-bound assent, successorAuthorityChecks: successor roles lacking verified authority, interfaceReviews: affected owners' unresolved reviews, phasedRequirements: accepted clauses grouped by release phase, blockingCounterexamples: scenario counterexamples that remain unexplained, questions: unresolved source-backed negotiation issues, commitAllowed: false } as NegotiationProposal.
+Bind checkpoint = reconcileNegotiationState(saved, request, dossier, proposal). Preserve earlier signed positions and accepted requirement revisions; a successor confirmation applies only to its exact requirement version and authorized signer. Duplicate evidence is a no-op. A revised clause reopens only its dependent interface reviews and acceptance scenarios.
+Return { proposal, checkpoint, newlyConfirmedRequirementIds: checkpoint.confirmedRequirementIds, unresolvedAuthorityIds: proposal.successorAuthorityChecks } as NegotiationRun. Negotiation does not dispatch work.

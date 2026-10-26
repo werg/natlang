@@ -1,0 +1,12 @@
+[Unit]
+Description=Natlang checkpoint storage headroom monitor
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/werg/natlang/scripts/memory_ledger.py run --unit natlang-continuous-storage-manager --budget-gb 1 --priority low --class service --no-resumable -- /home/werg/natlang/.venv-neuralese/bin/python /home/werg/natlang/scripts/continuous_storage_manager.py --once
+Nice=10
+IOSchedulingClass=idle
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true

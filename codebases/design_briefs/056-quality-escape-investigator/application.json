@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.application/1",
+  "id": "056",
+  "title": "Quality escape investigator",
+  "entrypoint": "investigateQualityEscape.nl",
+  "interfaces": [
+    {
+      "name": "investigateQualityEscape",
+      "path": "investigateQualityEscape.nl",
+      "purpose": "Trace escaped defects through preserved rework genealogy, compare inspection regimes, scope containment by unit, and reopen recurrence failures."
+    },
+    {
+      "name": "reconcileQualityDisposition",
+      "path": "reconcileQualityDisposition.nl",
+      "purpose": "Record actual lot/unit hold, release, partial and unknown physical disposition receipts against containment and effectiveness evidence.",
+      "stateParameter": "book",
+      "stateResultPath": [
+        "book"
+      ],
+      "stateKey": "quality-escape-disposition-ledger"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeDefects",
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "stage": "traceExposure",
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "stage": "compareCauses",
+        "paths": [
+          "investigateQualityEscape/reviewCausalMechanisms.nl"
+        ]
+      },
+      {
+        "stage": "planCorrection",
+        "paths": [
+          "investigateQualityEscape/reconcileUnitHoldScope.nl"
+        ]
+      },
+      {
+        "stage": "verifyEffectiveness",
+        "paths": [
+          "investigateQualityEscape/retestPriorClosure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "investigateQualityEscape/compareInspectionRegimes.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "investigateQualityEscape/reviewCausalMechanisms.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "investigateQualityEscape/reconcileUnitHoldScope.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "investigateQualityEscape/retestPriorClosure.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "unit-scoped quality holds and append-only disposition receipts",
+    "history": "physical release outside qualified containment records as released-unverified and triggers urgent containment; it is not rewritten as held",
+    "closure": "a lot disposition receipt does not close effectiveness review or causal corrective actions"
+  },
+  "effects": [
+    "lot-specific hold/release proposal",
+    "corrective-action retest request"
+  ],
+  "source_files": [
+    "investigateQualityEscape.nl",
+    "investigateQualityEscape/compareInspectionRegimes.nl",
+    "investigateQualityEscape/compareInspectionRegimes/compareMethodValidityWindows.nl",
+    "investigateQualityEscape/compareInspectionRegimes/compareSamplingFrame.nl",
+    "investigateQualityEscape/reconcileUnitHoldScope.nl",
+    "investigateQualityEscape/retestPriorClosure.nl",
+    "investigateQualityEscape/reviewCausalMechanisms.nl",
+    "investigateQualityEscape/reviewCausalMechanisms/formCompetingMechanisms.nl",
+    "investigateQualityEscape/reviewCausalMechanisms/testRivalMechanismsAgainstEvidence.nl",
+    "investigateQualityEscape/traceReworkedLotExposure.nl",
+    "investigateQualityEscape/traceReworkedLotExposure/expandValidatedLotBranches.nl",
+    "investigateQualityEscape/traceReworkedLotExposure/validateGenealogyEdges.nl",
+    "qualification/normalizeDefects.nl",
+    "reconcileQualityDisposition.nl",
+    "reconcileQualityDisposition/qualifyLotRelease.nl",
+    "types.ts"
+  ]
+}

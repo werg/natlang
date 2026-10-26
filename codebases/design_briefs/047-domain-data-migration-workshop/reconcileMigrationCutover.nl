@@ -1,0 +1,9 @@
+---
+args: { book: MigrationCutoverBook, proposal: DomainMigrationProposal, receipt: MigrationCutoverReceipt }
+returns: MigrationCutoverReview
+---
+1. For a consumed receiptId compare every field with the stored receipt. Exact replay binds priorAssessment = verifyCutoverReceipt(book, proposal, stored receipt) and returns { book, outcome: "replayed", unresolvedSourceIds: priorAssessment.unresolvedSourceIds, followUp: priorAssessment.reasons }. Conflicting or unbound identity returns { book, outcome: "held", unresolvedSourceIds: proposal.dispositions where status is accepted and no matching applied source ID exists, followUp: ["reconcile cutover receipt identity and live target state"] }; neither branch mutates the book.
+2. Bind assessment = verifyCutoverReceipt(book, proposal, receipt). A stale migration ID, mapping version, target version, or missing target-write protection remains held; preserve the actual event but do not move currentTargetVersion.
+3. For a switched receipt, set currentTargetVersion to observedTargetVersion only when assessment.safeToAdvance is true. For partial or unknown work, set currentTargetVersion to null until the migration host supplies an authoritative observed version; block further writes while it is null.
+4. For rolled-back, restore currentTargetVersion to the prior target only when assessment confirms the rollback evidence. Never mark a migration complete from a command response without the applied record and write reconciliation evidence.
+5. Append every newly observed receipt once and increment revision once. Bind followUp to assessment.reasons and the unresolved source, delta, or target-write tasks. Bind outcome to "switched", "rolled-back", "partial", "unknown", or "held" from receipt.outcome and assessment.safeToAdvance. Bind review = { book: updatedBook, outcome, unresolvedSourceIds: assessment.unresolvedSourceIds, followUp }; return review.

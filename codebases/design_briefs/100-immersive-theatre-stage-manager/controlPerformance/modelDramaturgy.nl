@@ -1,0 +1,10 @@
+---
+description: Build scene reveal dependencies and character/audience knowledge from approved production evidence.
+args: { production: ImmersiveProduction; sceneIds: string[]; showEvidence: EvidenceItem[] }
+returns: DramaturgyMap
+---
+1. Bind graph = traceSceneReveals(production, sceneIds, showEvidence), then knowledge = advanceKnowledgeByRoute(graph, showEvidence). The graph describes permitted future reveals; the knowledge ledger contains only source-established knowledge at the reviewed moment. A planned reveal is not an observation.
+2. For each requested sceneId, bind evidence = gatherSceneEvidence(production, sceneId, showEvidence), and candidate as SceneCandidate { production, sceneId, evidence, knowledge, graph }. Bind draft = draftSceneFromKnowledge(candidate), then audit = auditScene(candidate, draft). Retain this scene's independent verdict and all repair targets.
+3. When audit.verdict is pass, construct one complete TheatreScene from this draft's evidenced values, the exact sceneId, production.caseId and this scene's incoming graph edges. Use the explicit draft identity, or a stable identity derived from production.productionId and sceneId. Its intendedBeat, prerequisites, branch conditions, character knowledge and per-group audience knowledge must be supported; an absent required value reopens the audit rather than becoming an empty successful field. Record the current source IDs and state qualified.
+4. For fail or needs-review, retain the candidate in unresolved, and add precise scene- and source-specific strings to questions. Do not put an unresolved scene in scenes. Keep the scene's source evidence and graph available for a later targeted repair.
+5. Return a complete DramaturgyMap { graph, knowledge, scenes, unresolved, affectedScenes: sceneIds, questions, ready }. Set ready only when requested scenes are qualified, graph.gaps and graph.blockedRoutes are empty, and no required knowledge transfer is unproven. Unrelated missing knowledge must not invalidate an independently supported scene. Do not merge character or audience identities merely because their paths converge.

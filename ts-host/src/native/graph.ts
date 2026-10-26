@@ -81,13 +81,34 @@ export function hasProducerOccurrence(block: string, node: string, scope: object
   const index = PRODUCERS.get(scope);
   return index?.byNode.get(node) === block && (index.byBlock.get(block)?.has(node) ?? false);
 }
+/** Authenticated writers in this task's scope; never consult another task's index. */
+export function producerOccurrences(block: string, scope: object | undefined): string[] {
+  return scope ? [...(PRODUCERS.get(scope)?.byBlock.get(block) ?? [])] : [];
+}
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
 export function blockInput(block: string, port?: string, sourceOccurrence?: string, scope?: object): GraphInput {
   const occurrences = scope ? PRODUCERS.get(scope)?.byBlock.get(block) : undefined;
   const producer = occurrences?.size ? [...occurrences].at(-1) : undefined;
-  const node = sourceOccurrence !== undefined ?
-    (scope && hasProducerOccurrence(block, sourceOccurrence, scope) ? sourceOccurrence : 'external') :
-    (isNativeStateId(block) ? 'external' : producer ?? 'external');
+  // A recorded trajectory can contain separately opened task invocations. Its
+  // authenticated writer ledger is the same authority used by modelTurnNode;
+  // do not detach those real dependencies because their local budgets differ.
+  const recorded = activeRecorder()?.nativeStateWriters?.(block) ?? [];
+  let node: string;
+  if (sourceOccurrence !== undefined) {
+    const exactLocal = Boolean(scope && hasProducerOccurrence(block, sourceOccurrence, scope));
+    if (exactLocal || recorded.includes(sourceOccurrence)) node = sourceOccurrence;
+    else if (isNativeStateId(block) && (Boolean(occurrences?.size) || recorded.length > 0))
+      throw Object.assign(new Error(
+        `neuralese-native-grad-invalid: native state ${block} names no matching in-trajectory writer ${sourceOccurrence}`),
+      { code: 'neuralese-native-grad-invalid' });
+    else node = 'external';
+  } else if (isNativeStateId(block)) {
+    const writers = new Set([...(occurrences ?? []), ...recorded]);
+    if (writers.size > 1) throw Object.assign(
+      new Error(`neuralese-native-grad-invalid: native state ${block} has multiple in-trajectory writers and no occurrence binding`),
+      { code: 'neuralese-native-grad-invalid' });
+    node = writers.values().next().value ?? 'external';
+  } else node = producer ?? 'external';
   return { node, block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */

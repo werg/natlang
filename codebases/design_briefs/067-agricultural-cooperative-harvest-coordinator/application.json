@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.application/1",
+  "id": "067",
+  "title": "Agricultural cooperative harvest coordinator",
+  "entrypoint": "coordinateHarvest.nl",
+  "interfaces": [
+    {
+      "name": "coordinateHarvest",
+      "path": "coordinateHarvest.nl",
+      "purpose": "Revise one perishable harvest allocation against current lot, customer and physical movement evidence.",
+      "stateParameter": "desk",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "resumeState"
+      ],
+      "stateKey": "cooperative-harvest-checkpoint"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretReadiness",
+        "paths": [
+          "coordinateHarvest.nl",
+          "coordinateHarvest/readFieldChange.nl",
+          "coordinateHarvest/refreshReadiness.nl",
+          "coordinateHarvest/verifyReadiness.nl"
+        ]
+      },
+      {
+        "stage": "recoverCommitments",
+        "paths": [
+          "coordinateHarvest/reconcileCommitments.nl"
+        ]
+      },
+      {
+        "stage": "matchLots",
+        "paths": [
+          "coordinateHarvest/allocateEligibleLots.nl",
+          "coordinateHarvest/allocateEligibleLots/buildLotEligibilityEdges.nl",
+          "coordinateHarvest/allocateEligibleLots/conserveLotSupply.nl"
+        ]
+      },
+      {
+        "stage": "scheduleResources",
+        "paths": [
+          "coordinateHarvest/fitHarvestResources.nl",
+          "coordinateHarvest/fitHarvestResources/enumerateHarvestWindows.nl",
+          "coordinateHarvest/fitHarvestResources/verifyCapacityAndOperators.nl"
+        ]
+      },
+      {
+        "stage": "replanDelivery",
+        "paths": [
+          "coordinateHarvest/reconcilePhysicalMovement.nl",
+          "coordinateHarvest/reconcilePhysicalMovement/comparePlannedAndObserved.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinateHarvest/readFieldChange.nl",
+          "coordinateHarvest/refreshReadiness.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinateHarvest/allocateEligibleLots/buildLotEligibilityEdges.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinateHarvest/fitHarvestResources.nl",
+          "coordinateHarvest/fitHarvestResources/verifyCapacityAndOperators.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinateHarvest/reconcileCommitments.nl",
+          "coordinateHarvest/allocateEligibleLots/buildLotEligibilityEdges.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinateHarvest/reconcilePhysicalMovement.nl",
+          "coordinateHarvest/reconcilePhysicalMovement/comparePlannedAndObserved.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "coordinateHarvest.nl",
+    "coordinateHarvest/allocateEligibleLots.nl",
+    "coordinateHarvest/allocateEligibleLots/buildLotEligibilityEdges.nl",
+    "coordinateHarvest/allocateEligibleLots/conserveLotSupply.nl",
+    "coordinateHarvest/fitHarvestResources.nl",
+    "coordinateHarvest/fitHarvestResources/enumerateHarvestWindows.nl",
+    "coordinateHarvest/fitHarvestResources/verifyCapacityAndOperators.nl",
+    "coordinateHarvest/readFieldChange.nl",
+    "coordinateHarvest/reconcileCommitments.nl",
+    "coordinateHarvest/reconcilePhysicalMovement.nl",
+    "coordinateHarvest/reconcilePhysicalMovement/comparePlannedAndObserved.nl",
+    "coordinateHarvest/refreshReadiness.nl",
+    "coordinateHarvest/verifyReadiness.nl",
+    "types.ts",
+    "coordinateHarvest/exactHarvestArithmetic/sumMovementQuantities.ts",
+    "natlang.json",
+    "coordinateHarvest/exactHarvestArithmetic/verifyQuantityLimits.ts"
+  ]
+}

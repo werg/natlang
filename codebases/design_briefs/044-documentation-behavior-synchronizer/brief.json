@@ -1,0 +1,89 @@
+{
+  "application_id": "044",
+  "title": "Documentation-behavior synchronizer",
+  "source_relative_path": "applications/09-software-engineering-and-technical-operations/044-documentation-behavior-synchronizer.md",
+  "source_sha256": "c7607452ec5f9ba6f73c20eeabd08e357e7c21a2a187066e605c443d2c921f3a",
+  "domain_id": "09",
+  "stages": [
+    {
+      "name": "extractPromises",
+      "output_type": "DocumentedPromise",
+      "algorithm": "Extract checkable statements about inputs, outputs, defaults, errors, and supported workflows from documentation and examples. Preserve version and audience scope, distinguishing normative promises from illustrative suggestions or historical notes.",
+      "gate": "Every promise has an applicable version and source span."
+    },
+    {
+      "name": "probeBehavior",
+      "output_type": "BehaviorObservation",
+      "algorithm": "Form bounded sandbox probes using approved capabilities and representative inputs. Record environment and release identity, compare observed outcomes with the documented promise, and avoid treating one failed environment as proof of a product defect.",
+      "gate": "Probe is reproducible and isolates the behavior under review."
+    },
+    {
+      "name": "classifyMismatch",
+      "output_type": "DocumentationMismatch",
+      "algorithm": "Reconcile requirements, release decisions, tests, and observed behavior to determine which artifact is wrong. Do not automatically rewrite documentation to match a bug; preserve unresolved intent questions for the responsible product or engineering owner.",
+      "gate": "Repair direction has authoritative support rather than convenience."
+    },
+    {
+      "name": "constructRepairs",
+      "output_type": "DocumentationPatch",
+      "algorithm": "Draft coordinated changes to pages, examples, tests, and release notes according to the reviewed repair direction. Preserve unaffected claims, update cross-links and terminology, and keep code examples executable under their stated environment.",
+      "gate": "Exact patch bases and semantic preservation checks pass."
+    },
+    {
+      "name": "verifyConsistency",
+      "output_type": "DocumentationRelease",
+      "algorithm": "Re-extract changed promises, rerun examples and targeted behavior probes, and inspect linked pages for stale repetitions. Publish the reviewed bundle only when its examples and claims correspond to the same release version.",
+      "gate": "No unresolved blocking mismatch or broken executable example in the released bundle."
+    }
+  ],
+  "operational_details": [
+    "An example depends on a deprecated service: mark its environment and provide a reviewed replacement.",
+    "A translated page lags the source: track edition mismatch separately from mistranslation.",
+    "A behavior bug is fixed later: retain the earlier documentation decision in history.",
+    "A code sample includes a secret: block export and rotate any exposed credential through operations.",
+    "A page is edited during review: rebase and revalidate changed claims."
+  ],
+  "domain_records": {
+    "DocumentationReview": [
+      "repositoryId: ID",
+      "documentIds: ID[]",
+      "targetRelease: string",
+      "ownerId: ID",
+      "behaviorSnapshotId: ID"
+    ],
+    "DocumentedPromise": [
+      "caseId: ID",
+      "documentId: ID",
+      "behaviorClaim: string",
+      "applicableVersion: string",
+      "exampleRefs: Ref[]"
+    ],
+    "BehaviorObservation": [
+      "caseId: ID",
+      "promiseId: ID",
+      "probeSpecId: ID",
+      "observedOutcome: string",
+      "environmentHash: string"
+    ],
+    "DocumentationMismatch": [
+      "caseId: ID",
+      "promiseId: ID",
+      "kind: 'stale-doc'|'product-defect'|'intentional-change'|'uncertain'",
+      "rationale: string"
+    ],
+    "DocumentationPatch": [
+      "caseId: ID",
+      "artifactIds: ID[]",
+      "baseHashes: string[]",
+      "proposedText: string",
+      "protectedClaims: string[]"
+    ],
+    "DocumentationRelease": [
+      "caseId: ID",
+      "patchIds: ID[]",
+      "exampleTestIds: ID[]",
+      "residualMismatchIds: ID[]",
+      "approvalRefs: Ref[]"
+    ]
+  }
+}

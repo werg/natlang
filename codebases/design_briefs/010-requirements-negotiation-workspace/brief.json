@@ -1,0 +1,49 @@
+{
+  "application_id": "010",
+  "title": "Requirements negotiation workspace",
+  "source_relative_path": "applications/02-customer-research-and-product-intelligence/010-requirements-negotiation-workspace.md",
+  "program_root": "codebases/design_briefs/010-requirements-negotiation-workspace",
+  "source_sha256": "e2c7c1eb622305dab9cd5cc030b3c3755b192d626b9372fc39d0aa92f165ad83",
+  "domain_id": "02",
+  "stages": [
+    {
+      "name": "extractPositions",
+      "output_type": "StakeholderPosition",
+      "algorithm": "Read each request with its rationale and authority. Separate desired outcomes, proposed solutions, non-negotiable constraints, and preferences; do not upgrade emphatic language into a mandatory requirement without an explicit basis.",
+      "gate": "Each strength classification has evidence or remains unknown."
+    },
+    {
+      "name": "modelConflicts",
+      "output_type": "RequirementConflict",
+      "algorithm": "Identify requirements that cannot jointly hold under the supplied technical, time, or resource constraints. Distinguish true contradictions from terminology differences and propose the smallest clarification or relaxation that would make the pair compatible.",
+      "gate": "Exact conflicts have a constraint witness; semantic conflicts retain explanatory counterexamples."
+    },
+    {
+      "name": "designCompromises",
+      "output_type": "CompromiseOption",
+      "algorithm": "Invent alternatives such as phased delivery, differentiated modes, or reduced scope while preserving mandatory constraints. Explicitly identify who gives up what and which new assumptions the compromise introduces; include a no-agreement option.",
+      "gate": "No concession is represented as accepted until the affected stakeholder confirms it."
+    },
+    {
+      "name": "writeSpecification",
+      "output_type": "Requirement",
+      "algorithm": "Write atomic, testable requirements from accepted positions and compromises. Define terms, negative requirements, and failure behavior; keep unresolved choices outside the committed baseline and link every clause to its negotiated source.",
+      "gate": "No orphan requirement, hidden assumption, or mutually inconsistent accepted clause."
+    },
+    {
+      "name": "replayAcceptance",
+      "output_type": "AcceptanceScenario",
+      "algorithm": "Generate ordinary, boundary, and adverse scenarios, then replay the specification through the available simulator. Use counterexamples to reopen only the implicated agreements, preserving unrelated acceptance and recording revised stakeholder acknowledgment.",
+      "gate": "Every mandatory requirement has a discriminating scenario and no blocking scenario remains unexplained."
+    }
+  ],
+  "operational_details": [
+    "A stakeholder changes role: retain historical assent and require successor authority for future changes.",
+    "A requirement is verbally agreed but not recorded: keep it pending and issue a focused confirmation request.",
+    "One compromise changes another team’s interface: require affected-party review before baseline acceptance.",
+    "An acceptance test encodes an implementation preference: separate the outcome from the proposed method.",
+    "Delivery is phased: tag each requirement with the release in which it becomes binding."
+  ],
+  "representative_episode": "Sales requests immediate export, security requires review, and operations cannot support manual review for every low-risk export.",
+  "independent_truth_basis": "Generated stakeholder positions, hard constraints, accepted concessions, and simulator-based requirement feasibility."
+}

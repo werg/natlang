@@ -21,6 +21,10 @@
 # Node packages come from `npm install` at the workspace root (never `npm ci` while other sessions run).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# Runtime inventories in tests must describe this checkout. A linked worktree
+# otherwise falls back to the live machine checkout and concurrent development
+# can change a frozen task policy in the middle of a test.
+export NATLANG_REPO="$ROOT"
 # A linked worktree has no venv of its own: use the main checkout's.
 MAIN=$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 # Share installed third-party packages with linked worktrees while keeping

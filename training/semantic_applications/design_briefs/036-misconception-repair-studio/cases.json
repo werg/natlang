@@ -1,0 +1,589 @@
+[
+  {
+    "id": "036-misconception-repair-studio-gate-supported",
+    "root": "learningRepairSession/response/audit/qualify.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "taskId": "T-036-fractions",
+          "responseRef": "worksheet-scan-036-v1",
+          "observedStrategy": "adds denominators directly and records 2/6 for 1/4 + 1/2",
+          "errorLocation": "denominator addition in the written response",
+          "caseId": "case-36"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "observedStrategy",
+            "evidenceIds": [
+              "036-misconception-repair-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "fraction worksheet and response audit",
+        "evidence": [
+          {
+            "id": "036-misconception-repair-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "Worksheet scan W36 records 2/6 for T-036; response audit links learner L-036 to the same task version. Case case-36; current first-stage record values: {\"errorLocation\": \"denominator addition in the written response\", \"observedStrategy\": \"adds denominators directly and records 2/6 for 1/4 + 1/2\", \"responseRef\": \"worksheet-scan-036-v1\", \"taskId\": \"T-036-fractions\"}",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The response record contains only the observed answer and strategy; it does not establish a stable misconception."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observedStrategy",
+          "value": "adds denominators directly and records 2/6 for 1/4 + 1/2",
+          "evidenceIds": [
+            "036-misconception-repair-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "fraction worksheet and response audit: Learner L-036 answered task T-036, 1/4 + 1/2, with 2/6 by adding the denominators directly. The current worksheet scan and response audit refer to the same task version. Apply the first-stage gate to the record and source versions; The response record contains only the observed answer and strategy; it does not establish a stable misconception.",
+    "difficulty": "medium"
+  },
+  {
+    "id": "036-misconception-repair-studio-gate-contradictory",
+    "root": "learningRepairSession/response/audit/qualify.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "taskId": "T-036-fractions",
+          "responseRef": "worksheet-scan-036-v1",
+          "observedStrategy": "adds denominators directly to produce 2/6",
+          "errorLocation": "denominator addition in the written response",
+          "caseId": "case-36"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidence": [
+          {
+            "field": "observedStrategy",
+            "evidenceIds": [
+              "036-misconception-repair-studio-gate-source-v1"
+            ],
+            "sourceVersions": [
+              "v1"
+            ],
+            "authority": "named source owner, current version",
+            "status": "established"
+          }
+        ],
+        "questions": []
+      },
+      "prepared": {
+        "subject": "fraction worksheet and response audit",
+        "evidence": [
+          {
+            "id": "036-misconception-repair-studio-gate-source-v1",
+            "source": "first-stage source record",
+            "version": "v1",
+            "authority": "named source owner, current version",
+            "observedAt": "2026-10-01",
+            "text": "For case case-36 and task T-036, the current worksheet scan records answer 3/4 for 1/4 + 1/2. The candidate response ledger and scan are the same identified task; the written response must be reconciled.",
+            "supports": [],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "missing": [],
+        "conflicts": [],
+        "alternatives": [
+          "The response record contains only the observed answer and strategy; it does not establish a stable misconception."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observedStrategy",
+          "value": "adds denominators directly to produce 2/6",
+          "evidenceIds": [
+            "036-misconception-repair-studio-gate-source-v1"
+          ],
+          "authority": "named source owner, current version",
+          "status": "established",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "fraction worksheet and response audit: Learner L-036 answered task T-036, 1/4 + 1/2, with 2/6 by adding the denominators directly. The current worksheet scan and response audit refer to the same task version. Apply the first-stage gate to the record and source versions; The response record contains only the observed answer and strategy; it does not establish a stable misconception.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "036-misconception-repair-studio-gate-missing",
+    "root": "learningRepairSession/response/audit/qualify.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "draft": {
+        "values": {
+          "caseId": "case-36"
+        },
+        "missingFields": [
+          "observedStrategy"
+        ],
+        "conflicts": [],
+        "evidence": [],
+        "questions": [
+          {
+            "id": "q1",
+            "question": "What current source establishes observedStrategy?",
+            "respondent": "named case owner",
+            "acceptableEvidence": [
+              "current source record"
+            ]
+          }
+        ]
+      },
+      "prepared": {
+        "subject": "fraction worksheet and response audit",
+        "evidence": [],
+        "missing": [
+          "observedStrategy"
+        ],
+        "conflicts": [],
+        "alternatives": [
+          "The response record contains only the observed answer and strategy; it does not establish a stable misconception."
+        ]
+      },
+      "decisions": [
+        {
+          "field": "observed event",
+          "value": "",
+          "evidenceIds": [],
+          "authority": "named source owner",
+          "status": "unknown",
+          "alternative": "An alternative interpretation must be checked against the same current source, scope, and attribution."
+        }
+      ]
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "fraction worksheet and response audit: Learner L-036 answered task T-036, 1/4 + 1/2, with 2/6 by adding the denominators directly. The current worksheet scan and response audit refer to the same task version. Apply the first-stage gate to the record and source versions; The response record contains only the observed answer and strategy; it does not establish a stable misconception.",
+    "difficulty": "hard"
+  },
+  {
+    "id": "036-misconception-repair-studio-operational-1",
+    "root": "learningRepairSession.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "session": {
+        "caseId": "036-misconception-repair-studio-operational-1",
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-1. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
+          {
+            "id": "036-detail-1-response-v2",
+            "source": "learner response record",
+            "version": "v2",
+            "authority": "Mira Chen, instructor; response source verified",
+            "observedAt": "2026-10-02T09:00:00Z",
+            "text": "Mira Chen recorded in 036-detail-1-response-v2 v2 for case 036-misconception-repair-studio-operational-1: task T-036 prompts “1/4 + 1/2”; learner L-036 writes “2/8 + 4/8 = 6/8 = 3/4.” The typed prior record 036-prior-responseobservation-detail-1-v1 v1 records that response text; no rubric or answer key is included in this evidence record.",
+            "supports": [
+              "task prompt text",
+              "learner response text and version"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "authorizedPolicyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "036-detail-1-response-v2"
+        ],
+        "learnerAudience": "Instructor Mira Chen reviewing learner L-036 evidence.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-1",
+          "taskId": "T-036-fractions-1",
+          "responseRef": "response-036-unconventional-v1",
+          "observedStrategy": "writes “2/8 + 4/8 = 6/8 = 3/4” for the displayed problem 1/4 + 1/2",
+          "errorLocation": "not coded; independent semantic review is pending"
+        }
+      },
+      "checkpoint": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge whether the response is evaluated by mathematical meaning: accept the equivalent 3/4 result, preserve the learner’s actual method and source version, and do not reject only for wording difference. View must show both the expression and the equivalent result. Durable proposal must retain the original observation and add an evidence-linked qualified interpretation. Any grade or record change remains an approval-bound proposal; no score write is claimed."
+    },
+    "scenario": "Task T-036 prompts “1/4 + 1/2.” Learner L-036 writes “2/8 + 4/8 = 6/8 = 3/4” on response version v2; source 036-detail-1-response-v2 records the task and response.",
+    "difficulty": "medium",
+    "operational_detail_id": 1,
+    "brief_detail": "A learner gives a correct unconventional solution: assess its meaning rather than matching wording.",
+    "boundary_assertions": {
+      "view": "Instructor view exposes the exact expression “2/8 + 4/8 = 6/8 = 3/4”, canonical value 3/4, task T-036, and source response v2.",
+      "durable_state": "Proposal preserves ResponseObservation v1 and adds a versioned interpretation linking the learner expression and equivalent value to response source v2; no grade write is claimed.",
+      "effects": "If a score update is proposed, it is scoped to task T-036 and waits for instructor approval; no gradebook operation is dispatched."
+    }
+  },
+  {
+    "id": "036-misconception-repair-studio-operational-2",
+    "root": "learningRepairSession.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "session": {
+        "caseId": "036-misconception-repair-studio-operational-2",
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-2. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
+          {
+            "id": "036-detail-2-task-v2",
+            "source": "assessment item record",
+            "version": "v2",
+            "authority": "Jules Park, assessment editor; item source verified",
+            "observedAt": "2026-10-03T10:30:00Z",
+            "text": "Jules Park records in 036-detail-2-task-v2 v2 for case 036-misconception-repair-studio-operational-2: task T-036-ambiguous says “Choose the larger number: 1/2 or 1/4” and then “write the larger top number.” Learner L-036 selected 1/2; no follow-up response exists. The typed prior record 036-prior-responseobservation-detail-2-v1 v1 is the earlier response observation.",
+            "supports": [
+              "exact task wording",
+              "response linked to task version"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "authorizedPolicyClauses": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ],
+        "authorityStatus": "unclear",
+        "changedEvidenceIds": [
+          "036-detail-2-task-v2"
+        ],
+        "learnerAudience": "Instructor and assessment editor reviewing task T-036-ambiguous.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-2",
+          "taskId": "T-036-fractions-ambiguous",
+          "responseRef": "response-036-ambiguous-v1",
+          "observedStrategy": "selects 1/2 after reading “choose the larger number”; no explanation recorded",
+          "errorLocation": "prompt phrase “larger number” does not specify fraction value versus numerator"
+        }
+      },
+      "checkpoint": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge whether the wording conflict is isolated as an item defect rather than used as evidence of a learner misconception. The proposal should identify the two incompatible comparison criteria, request a clarified/revised item, and leave diagnosis unresolved until a valid item is administered. View shows the precise conflicting phrases and version. Durable proposal retains the response and pins the affected item version. Any item retirement/reissue waits for assessment-editor approval; no learner-model update or external release is claimed."
+    },
+    "scenario": "Task T-036-ambiguous v2 says “Choose the larger number: 1/2 or 1/4” and then “write the larger top number.” Learner L-036 selected 1/2; source 036-detail-2-task-v2 has no follow-up response.",
+    "difficulty": "hard",
+    "operational_detail_id": 2,
+    "brief_detail": "A task contains ambiguous language: repair the task before diagnosing the learner.",
+    "boundary_assertions": {
+      "view": "Instructor/editor view shows item T-036-ambiguous v2, both exact phrases, the selected answer, and unresolved diagnostic status.",
+      "durable_state": "Proposal versions the item clarification against T-036-ambiguous v2, retains the response observation, and does not write a misconception diagnosis.",
+      "effects": "Item withdrawal or replacement is only a scoped pending proposal for editor approval; no item is retired or reissued in the host."
+    }
+  },
+  {
+    "id": "036-misconception-repair-studio-operational-3",
+    "root": "learningRepairSession.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "session": {
+        "caseId": "036-misconception-repair-studio-operational-3",
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-3. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
+          {
+            "id": "036-session-checkpoint-v3",
+            "source": "learning platform session store",
+            "version": "v3",
+            "authority": "Session service; checkpoint signature verified",
+            "observedAt": "2026-10-04T14:10:00Z",
+            "text": "Source 036-session-checkpoint-v3 version v3 for case 036-misconception-repair-studio-operational-3: Session session-036-A for learner L-036 has checkpoint cp-036-88. diagnostic-fractions-1 and diagnostic-fractions-2 have completion receipts task-1-complete-v1 and task-2-complete-v1. diagnostic-fractions-3 has no start or response receipt and is pending. Resume cursor is diagnostic-fractions-3; resume token resume-036-A-v3 is valid. Typed prior 036-prior-responseobservation-detail-3-v1 v1 contains the completed task-2 ResponseObservation.",
+            "supports": [
+              "saved checkpoint version",
+              "completed task receipts",
+              "pending task state"
+            ],
+            "contradicts": [],
+            "status": "current"
+          },
+          {
+            "id": "036-session-visibility-v2",
+            "source": "assessment access policy",
+            "version": "v2",
+            "authority": "Jules Park, assessment moderator; policy version verified",
+            "observedAt": "2026-10-04T14:11:00Z",
+            "text": "Source 036-session-visibility-v2 version v2 for case 036-misconception-repair-studio-operational-3: The learner role may inspect the approved diagnostic-fractions-3 prompt and progress cursor. An instructor-only annotation record exists at private-label-ref-036-2; this learner audience is not authorized to retrieve that record. No diagnostic label value is included in this source.",
+            "supports": [
+              "role and audience binding",
+              "restricted record reference"
+            ],
+            "contradicts": [],
+            "status": "current"
+          },
+          {
+            "id": "036-session-effect-key-v1",
+            "source": "notification effect ledger",
+            "version": "v1",
+            "authority": "Learning platform effect ledger; receipt verified",
+            "observedAt": "2026-10-04T14:12:00Z",
+            "text": "Source 036-session-effect-key-v1 version v1 for case 036-misconception-repair-studio-operational-3: Idempotency key resume-036-A-task-3-v1 for the task-3 resume notification has status delivered with receipt notification-036-441. The ledger has no newer notification key for session session-036-A.",
+            "supports": [
+              "existing delivered effect key",
+              "effect receipt"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "authorizedPolicyClauses": [
+          "Session state is supplied by the learning platform snapshot.",
+          "The learner role may see task status and approved prompt content. Diagnostic labels are restricted to instructor role.",
+          "Effect-ledger facts are read-only evidence; do not repeat an already delivered notification."
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "036-session-checkpoint-v3",
+          "036-session-visibility-v2",
+          "036-session-effect-key-v1"
+        ],
+        "learnerAudience": "Learner L-036 (learner role); instructor-only annotations are outside this audience.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-3",
+          "taskId": "diagnostic-fractions-2",
+          "responseRef": "task-2-completion-receipt-v1",
+          "observedStrategy": "completes the second diagnostic task with a written 3/4 comparison",
+          "errorLocation": "none recorded for the completed task"
+        }
+      },
+      "checkpoint": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge whether the proposal resumes from cp-036-88 at diagnostic-fractions-3, preserves the two completed receipts unchanged, and does not replay the completed tasks. The learner-facing view may show progress, next task and safe prompt, but must not expose the instructor-only label record; any instructor view remains role-restricted. Durable proposal must retain checkpoint v3 and the task status/cursor as proposed state. For notifications, reuse/check resume-036-A-task-3-v1 and do not propose a duplicate dispatch because the ledger already marks it delivered. Reject fabricated writes, repeated delivery, disclosure of restricted content, or a claim of completed resume."
+    },
+    "scenario": "Session session-036-A for learner L-036 stopped after checkpoint cp-036-88. Tasks diagnostic-fractions-1 and -2 have completion receipts; diagnostic-fractions-3 has no start/response and is pending. The learner role may see the task-3 prompt and cursor but cannot retrieve instructor-only record private-label-ref-036-2. Notification key resume-036-A-task-3-v1 is already delivered once.",
+    "difficulty": "medium",
+    "operational_detail_id": 3,
+    "brief_detail": "A session is interrupted: resume from the last completed task without revealing hidden diagnostic labels.",
+    "boundary_assertions": {
+      "view": "Learner view shows session-036-A at cp-036-88, tasks 1–2 completed, task 3 pending/next, and no value from private-label-ref-036-2; the restricted reference remains instructor-only.",
+      "durable_state": "Proposal preserves checkpoint v3 and completion receipts task-1-complete-v1/task-2-complete-v1, with a versioned continuation cursor at diagnostic-fractions-3; no committed session write is claimed.",
+      "effects": "The proposal recognizes resume-036-A-task-3-v1 as already delivered and does not enqueue a duplicate notification; any new continuation dispatch remains approval-bound and idempotently keyed."
+    }
+  },
+  {
+    "id": "036-misconception-repair-studio-operational-4",
+    "root": "learningRepairSession.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "session": {
+        "caseId": "036-misconception-repair-studio-operational-4",
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-4. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
+          {
+            "id": "036-accommodation-plan-v2",
+            "source": "approved accommodation registry",
+            "version": "v2",
+            "authority": "Accessibility coordinator Ren Alvarez; authorization receipt verified",
+            "observedAt": "2026-10-05T08:00:00Z",
+            "text": "Source 036-accommodation-plan-v2 version v2 for case 036-misconception-repair-studio-operational-4: For learner L-036, approved plan A-036-v2 allows an audio response in place of handwriting for the fraction-equivalence competency C-FRAC-1. The prompt, numerical values, scoring criterion and permitted time remain unchanged. Response audio A36 contains the learner’s explanation that 1/2 equals 4/8. Typed prior 036-prior-responseobservation-detail-4-v1 v1 is retained as the initial observation.",
+            "supports": [
+              "approved presentation accommodation",
+              "same competency and scoring criterion"
+            ],
+            "contradicts": [],
+            "status": "current"
+          },
+          {
+            "id": "036-audio-response-v1",
+            "source": "assessment response archive",
+            "version": "v1",
+            "authority": "Assessment archive; response identity verified",
+            "observedAt": "2026-10-05T08:05:00Z",
+            "text": "Source 036-audio-response-v1 version v1 for case 036-misconception-repair-studio-operational-4: Audio response A36 is linked to task T-036-fractions-accommodation and learner L-036. Transcript: “I changed one half to four eighths, so one fourth plus four eighths is six eighths, which simplifies to three fourths.” Typed prior 036-prior-responseobservation-detail-4-v1 v1 is retained as the initial observation.",
+            "supports": [
+              "actual response content",
+              "task/learner binding"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "authorizedPolicyClauses": [
+          "Approved accommodation changes response presentation only.",
+          "The assessed competency remains fraction equivalence and addition.",
+          "Do not infer additional accommodations or disclose sensitive details beyond the authorized reviewer."
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "036-accommodation-plan-v2",
+          "036-audio-response-v1"
+        ],
+        "learnerAudience": "Instructor Mira Chen and learner L-036; accommodation details are access-scoped.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-4",
+          "taskId": "T-036-fractions-accommodation",
+          "responseRef": "response-036-audio-v1",
+          "observedStrategy": "explains that 1/2 is equivalent to 4/8 in an approved spoken response",
+          "errorLocation": "presentation changed from written response to audio; target competency unchanged"
+        }
+      },
+      "checkpoint": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge whether the audio response is evaluated against the same fraction-equivalence/addition competency and rubric as the written form. Preserve the accommodation’s presentation-only scope; do not change task difficulty, competency, time policy, or infer further sensitive needs. View shows the evidence form and target competency, with accommodation details limited to authorized roles. Durable proposal links the audio evidence and approved plan version to the same competency. Any record update remains pending approval; no certification or learner-profile write is claimed."
+    },
+    "scenario": "Learner L-036 has approved accommodation plan A-036-v2 allowing an audio response for competency C-FRAC-1. Task T-036-fractions-accommodation retains its prompt values, rubric and time; audio A36 contains a fraction-equivalence explanation.",
+    "difficulty": "hard",
+    "operational_detail_id": 4,
+    "brief_detail": "An accommodation changes presentation: preserve the competency being assessed.",
+    "boundary_assertions": {
+      "view": "Authorized instructor view shows audio A36, plan A-036-v2 and unchanged competency C-FRAC-1/rubric; learner view does not expose restricted accommodation details.",
+      "durable_state": "Proposal retains the same competency and scoring criterion and links the audio response to task T-036-fractions-accommodation under plan v2; no additional accommodation is inferred.",
+      "effects": "Any grade/profile update is a scoped approval-bound proposal; no certification or external learner-profile effect is dispatched."
+    }
+  },
+  {
+    "id": "036-misconception-repair-studio-operational-5",
+    "root": "learningRepairSession.nl",
+    "split_group": "036-misconception-repair-studio",
+    "inputs": {
+      "session": {
+        "caseId": "036-misconception-repair-studio-operational-5",
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-5. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
+          {
+            "id": "036-attempt-ledger-v3",
+            "source": "practice platform attempt ledger",
+            "version": "v3",
+            "authority": "Practice platform; attempt receipts verified",
+            "observedAt": "2026-10-06T11:10:00Z",
+            "text": "Source 036-attempt-ledger-v3 version v3 for case 036-misconception-repair-studio-operational-5: For learner L-036 and repair task T-036-fractions-repair, attempts 1, 2 and 3 are recorded as unsuccessful at 10:40, 10:55 and 11:08. No new response follows attempt 3. The learner message at 11:09 says “I am frustrated and want my teacher to help.” Typed prior 036-prior-responseobservation-detail-5-v1 v1 identifies the task-3 attempt observation.",
+            "supports": [
+              "three distinct attempt receipts",
+              "learner request for help"
+            ],
+            "contradicts": [],
+            "status": "current"
+          },
+          {
+            "id": "036-instructor-assignment-v1",
+            "source": "course roster",
+            "version": "v1",
+            "authority": "Course administrator; current assignment verified",
+            "observedAt": "2026-10-06T11:12:00Z",
+            "text": "Source 036-instructor-assignment-v1 version v1 for case 036-misconception-repair-studio-operational-5: Mira Chen is the assigned instructor for learner L-036 in course C-36. Her review queue is open. No handoff task is already present for case 036-misconception-repair-studio-operational-5.",
+            "supports": [
+              "assigned human reviewer",
+              "no existing handoff task"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "authorizedPolicyClauses": [
+          "The case permits at most three guided attempts before instructor review.",
+          "Do not continue automated prompting after the handoff threshold.",
+          "Instructor response is a proposed human task, not an automatically completed intervention."
+        ],
+        "authorityStatus": "authorized",
+        "changedEvidenceIds": [
+          "036-attempt-ledger-v3",
+          "036-instructor-assignment-v1"
+        ],
+        "learnerAudience": "Learner L-036 and assigned instructor Mira Chen; private learner notes remain scoped.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-5",
+          "taskId": "T-036-fractions-repair",
+          "responseRef": "attempt-3-v1",
+          "observedStrategy": "three attempts do not distinguish denominator addition from copied response",
+          "errorLocation": "third unsuccessful attempt; learner asks for instructor help"
+        }
+      },
+      "checkpoint": null
+    },
+    "expected": {
+      "preservePriorVersion": true,
+      "preserveEvidenceVersion": true,
+      "proposalOnly": true,
+      "noExternalCompletionClaim": true
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Judge whether automated practice stops at the configured three-attempt limit and the learner request is retained without blame. The proposal should create one bounded instructor review task for Mira Chen, carry attempts 1–3 and the unresolved rival explanations, and avoid further repeated prompts. View clearly offers the handoff and an understandable wait state. Durable proposal preserves all attempt receipts and proposes a single handoff record. Any notification/task delivery is approval-bound and idempotent; no instructor contact is claimed as sent."
+    },
+    "scenario": "Practice ledger v3 records unsuccessful attempts 1–3 on T-036-fractions-repair for learner L-036. At 11:09 the learner writes “I am frustrated and want my teacher to help.” Mira Chen is the assigned instructor; no handoff task exists yet.",
+    "difficulty": "hard",
+    "operational_detail_id": 5,
+    "brief_detail": "Repeated failure causes frustration: offer a bounded instructor handoff rather than an endless loop.",
+    "boundary_assertions": {
+      "view": "Learner view shows attempts 1–3, the review-wait state and a bounded instructor handoff; instructor view shows Mira Chen, the three receipts and unresolved explanation alternatives.",
+      "durable_state": "Proposal preserves the three attempt receipts and learner request and creates one versioned instructor review-task proposal for Mira Chen; automated prompts do not continue past attempt 3.",
+      "effects": "At most one instructor-notification proposal is keyed to case 036-misconception-repair-studio-operational-5; it remains approval-bound and is not marked sent."
+    }
+  }
+]

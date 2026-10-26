@@ -1,0 +1,90 @@
+{
+  "application_id": "068",
+  "title": "Citizen-science observation curator",
+  "source_relative_path": "applications/14-agriculture-ecology-and-environmental-stewardship/068-citizen-science-observation-curator.md",
+  "source_sha256": "22c7f8cd4ed6559e6a6274b869a6e2a2cb54897918e9c1f6cb0ef89ee50f5352",
+  "domain_id": "14",
+  "stages": [
+    {
+      "name": "normalizeObservations",
+      "output_type": "FieldObservation",
+      "algorithm": "Parse field notes and structured submissions while preserving original wording, location precision, and observation method. Distinguish what was directly seen from inferred identity or cause, and flag missing metadata without inventing exact coordinates or times.",
+      "gate": "Original evidence and uncertainty remain recoverable."
+    },
+    {
+      "name": "resolveTerminology",
+      "output_type": "ObservationInterpretation",
+      "algorithm": "Interpret local names and descriptive phrases against project terminology and context. Retain multiple plausible identities when evidence is insufficient, and avoid forcing unusual observations into familiar categories merely to complete the dataset.",
+      "gate": "Concept assignments have discriminating evidence or remain provisional."
+    },
+    {
+      "name": "detectDuplicates",
+      "output_type": "ObservationLink",
+      "algorithm": "Compare observer, time, location, media hashes, and narrative context to identify repeated submissions of one event. Preserve independent observations of the same phenomenon and avoid merging nearby events solely because they share a likely identity.",
+      "gate": "Event counts distinguish duplicate submissions from independent corroboration."
+    },
+    {
+      "name": "requestVerification",
+      "output_type": "ObservationQuestion",
+      "algorithm": "Form targeted follow-up requests that could distinguish plausible interpretations or correct metadata. Use respectful wording, avoid leading the observer toward the expected label, and route specialist-sensitive cases for expert review.",
+      "gate": "Questions are informative, feasible, and do not request unsafe field activity."
+    },
+    {
+      "name": "publishCurated",
+      "output_type": "CuratedObservation",
+      "algorithm": "Prepare a curated record with confidence categories grounded in evidence, preserved alternatives, and project-specific disclosure controls. Publish provisional and verified statuses distinctly and update derivatives when experts or observers provide corrections.",
+      "gate": "Rare but supported observations are retained; sensitive locations are appropriately generalized."
+    }
+  ],
+  "operational_details": [
+    "A rare report looks implausible: request evidence instead of deleting it as an outlier.",
+    "A device records the wrong timezone: preserve original timestamps and apply a reviewed correction.",
+    "A sensitive location is precise: generalize public coordinates while retaining restricted provenance.",
+    "One observer submits several photos of one event: group media without inflating event counts.",
+    "An expert changes an identification: version the interpretation and notify affected analyses."
+  ],
+  "domain_records": {
+    "ObservationReview": [
+      "collectionId: ID",
+      "projectId: ID",
+      "observationType: string",
+      "curatorId: ID",
+      "disclosurePolicyId: ID"
+    ],
+    "FieldObservation": [
+      "caseId: ID",
+      "observerId: ID",
+      "observedAt: DateTime",
+      "locationRef: Ref",
+      "description: string",
+      "method: string"
+    ],
+    "ObservationInterpretation": [
+      "caseId: ID",
+      "observationId: ID",
+      "candidateConceptIds: ID[]",
+      "interpretation: string",
+      "ambiguity: string"
+    ],
+    "ObservationLink": [
+      "caseId: ID",
+      "observationIds: ID[]",
+      "relation: 'same-event'|'independent'|'related'|'unknown'",
+      "basis: string"
+    ],
+    "ObservationQuestion": [
+      "caseId: ID",
+      "observationId: ID",
+      "decisiveUnknown: string",
+      "requestedEvidence: string",
+      "recipientId: ID"
+    ],
+    "CuratedObservation": [
+      "caseId: ID",
+      "observationId: ID",
+      "acceptedInterpretation: string",
+      "qualityFlags: string[]",
+      "publicLocationPrecision: string"
+    ]
+  }
+}

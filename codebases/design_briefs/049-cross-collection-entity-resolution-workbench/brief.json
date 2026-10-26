@@ -1,0 +1,89 @@
+{
+  "application_id": "049",
+  "title": "Cross-collection entity resolution workbench",
+  "source_relative_path": "applications/10-data-stewardship-and-semantic-analysis/049-cross-collection-entity-resolution-workbench.md",
+  "source_sha256": "29f3d17da111ca4b0a320d09bf9e935ba4dcf87d7cd97e67f27fc17d056f509c",
+  "domain_id": "10",
+  "stages": [
+    {
+      "name": "constructCandidates",
+      "output_type": "IdentityCandidate",
+      "algorithm": "Generate candidate pairs using exact normalized keys, aliases, and bounded semantic retrieval. Preserve blocking provenance and include audit samples outside candidate blocks so recall failures are measurable rather than hidden by the candidate generator.",
+      "gate": "Candidate generation cannot cross access boundaries or omit known hard incompatibilities."
+    },
+    {
+      "name": "judgePairs",
+      "output_type": "IdentityJudgment",
+      "algorithm": "Compare names, attributes, chronology, and context while distinguishing identity from affiliation or succession. Treat missing attributes as unknown rather than matching, and record both positive support and hard cannot-link evidence.",
+      "gate": "Same-entity judgments require compatible identity evidence, not shared names alone."
+    },
+    {
+      "name": "reconcileClusters",
+      "output_type": "IdentityCluster",
+      "algorithm": "Build clusters using constrained graph operations rather than unconditional transitive closure. Before merging components, test all relevant cannot-link and temporal constraints; route inconsistent triangles to review and preserve uncertain alternatives.",
+      "gate": "No cluster contains an established cannot-link pair or impossible identity chronology."
+    },
+    {
+      "name": "constructCanonical",
+      "output_type": "CanonicalEntity",
+      "algorithm": "Assemble a canonical view without overwriting source records or selecting one source globally for every field. Resolve attributes using field-specific authority and effective time, preserve aliases and conflicting claims, and separate historical from current values.",
+      "gate": "Canonical values remain attributable and do not erase meaningful disagreement."
+    },
+    {
+      "name": "maintainIdentity",
+      "output_type": "IdentityRevision",
+      "algorithm": "Process new evidence and reviewer corrections as reversible identity changes. Trace downstream uses, prepare split or merge migrations, and preserve old identifiers as redirects with explicit validity rather than silently changing historical joins.",
+      "gate": "Consumer impact and reversibility verified before promoting an identity revision."
+    }
+  ],
+  "operational_details": [
+    "A parent and subsidiary share an address: represent their relationship without merging identities.",
+    "Two people share a name and employer: require stronger evidence before linking.",
+    "A merge is later reversed: propagate the split to dependent records and preserve audit history.",
+    "A record has a recycled identifier: bind identity to its validity interval.",
+    "A source is revoked: remove its contribution from canonical values and reassess dependent links."
+  ],
+  "domain_records": {
+    "ResolutionProject": [
+      "collectionIds: ID[]",
+      "entityKind: string",
+      "identityPolicyId: ID",
+      "stewardId: ID",
+      "intendedUse: string"
+    ],
+    "IdentityCandidate": [
+      "caseId: ID",
+      "leftRecordId: ID",
+      "rightRecordId: ID",
+      "blockingReasons: string[]",
+      "disqualifyingFacts: string[]"
+    ],
+    "IdentityJudgment": [
+      "caseId: ID",
+      "leftId: ID",
+      "rightId: ID",
+      "relation: 'same'|'different'|'related'|'unknown'",
+      "decisiveEvidence: string"
+    ],
+    "IdentityCluster": [
+      "caseId: ID",
+      "memberIds: ID[]",
+      "cannotLinkIds: ID[]",
+      "unresolvedPairIds: ID[]",
+      "consistencyFinding: string"
+    ],
+    "CanonicalEntity": [
+      "caseId: ID",
+      "memberIds: ID[]",
+      "preferredName: string",
+      "attributeClaims: string[]",
+      "unresolvedAttributes: string[]"
+    ],
+    "IdentityRevision": [
+      "caseId: ID",
+      "clusterId: ID",
+      "operation: 'merge'|'split'|'relabel'|'defer'",
+      "affectedConsumerIds: ID[]"
+    ]
+  }
+}

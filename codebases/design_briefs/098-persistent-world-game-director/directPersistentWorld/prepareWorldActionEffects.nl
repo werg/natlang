@@ -1,0 +1,14 @@
+---
+description: Prepare one idempotent simulator action or read-status effect and persist its pending identity before any retry.
+args: { world: PersistentWorldState; actions: LegalAction[]; checkpoint: GameCheckpoint; reconciliation: WorldReconciliation }
+returns: WorldActionEffectPreparation
+---
+If reconciliation.status is blocked or reconciled, return `effects:[]`, reconciliation.blockers, and the exact checkpoint. Do not issue a second action after a terminal receipt or while proof is blocked.
+
+Require all selected actions to carry exactly one nonempty clientActionId. If actions span IDs or are empty while reconciliation awaits a simulator, return no effect and a specific blocker. Resolve the pending binding by that ID in checkpoint.pendingActions. If an old checkpoint lists the ID in pendingActionIds or unknownReceiptIds but has no full pending action record, return blocked with `pending_payload_missing`; never attach the caller's current action to an uncertain old request.
+
+When a matching pending record exists, use `prepareWorldActionEffects.samePendingWorldActionBinding(pending, pending.worldId, pending.priorRevision, pending.ruleVersion, clientActionId, actions)` for exact identity, revision, rule and payload equality. Any mismatch blocks with the pending record preserved. If it matches, prepare only `read-action-status`, bound to the pending record's original world, revision, rules and payload; a newer current world must not rebind this action. Preserve both pending ID and full payload in the returned checkpoint.
+
+When no prior pending record exists, require reconciliation.pendingActionIds to include this action ID and reconciliation.unknownReceiptIds not to include it. Construct a `PendingWorldAction` from the current world identity, exact pre-action revision/rule version and complete selected actions. Persist it and the pending ID in the returned checkpoint before preparing one `apply-player-actions` effect. If reconciliation reports unknown or inconsistent state instead, return blocked without sending.
+
+Once the domain branch has chosen the effect kind and exact bound payload, call `prepareWorldActionEffects.worldActionEffectKey(kind, worldId, priorRevision, ruleVersion, clientActionId)` only to serialize its stable idempotency key. The logical action identity owns the key, not payload bytes: if the same kind/world/revision/rules/client ID arrives with changed actions, the host must see an effect identity conflict rather than a fresh send key. Return the complete WorldActionEffectPreparation with the one exact effect, updated checkpoint and blockers. Apply versus read-status, pending versus unknown, and recovery decisions are this Natlang operation's policy; the helpers perform no lifecycle choices. A retry must preserve the stored payload and key unchanged.

@@ -1,0 +1,18 @@
+---
+args: { request: SubstituteEvaluationRequest, catalog: SupplierCatalogSnapshot, prior?: SubstitutionCheckpoint|null }
+returns: SubstitutionProgramResult
+uses: [sourcingDesk/frameUse, sourcingDesk/selectSourcingPolicy, sourcingDesk/recoverFunctionalConstraints, sourcingDesk/generateMechanismCandidates, sourcingDesk/invalidateRevisionMatch, sourcingDesk/validateUnitConversion, sourcingDesk/extractRevisionPropertyClaims, sourcingDesk/compareCandidateRequirements, sourcingDesk/verifyLotAcceptance, sourcingDesk/designBoundedQualification, sourcingDesk/priceRequiredAdapter, sourcingDesk/scopeUseApproval, sourcingDesk/assembleUseBoundPacket]
+---
+Bind saved = prior when supplied, otherwise null. Bind goal = frameUse(request, catalog.requests) and policy = selectSourcingPolicy(request, catalog.policyCandidates). Preserve intended function and approved procurement scope.
+1. Bind requirements = recoverFunctionalConstraints(request, goal, catalog.evidencePages). Keep missing safety-critical properties unresolved; their absence blocks compatibility and packet approval.
+2. Bind candidates = generateMechanismCandidates(request, requirements, catalog.evidencePages). Candidate discovery records source-backed alternatives and does not rank an unknown critical property as passing.
+3. Bind revision = invalidateRevisionMatch(request, catalog.revisionChanges, candidates) before compatibility analysis. A silent revision change invalidates only findings tied to the superseded revision.
+4. Bind conversion = validateUnitConversion(request, catalog.conversionReceipts). Preserve original units and use only exact conversion evidence.
+5. Bind properties = extractRevisionPropertyClaims(candidates, catalog.evidencePages). Bind compatibility = compareCandidateRequirements(request, requirements, candidates, properties, conversion). Reject a candidate on any essential critical failure; do not rank unknown critical values as passing.
+6. Bind lotRule = verifyLotAcceptance(request, catalog.lotAcceptanceRules). If sample representativeness is not established under the approved rule, keep production qualification blocked.
+7. Bind qualification = designBoundedQualification(request, compatibility, catalog.evidencePages, catalog.lotAcceptanceRules). Set criteria and technical acceptance role before the supplier supplies a result.
+8. Bind adapter = priceRequiredAdapter(request, catalog.adapterQuotes). Include adapter cost, lead time, and interface risk in total installed comparison.
+9. Bind approval = scopeUseApproval(request, catalog.useApprovals). Reject approval reuse outside its exact machine, environment, and candidate revision.
+10. Initialize packet: StageResultSubstitutionPacket|null = null. Only when every critical requirement is supported, compatibility has no unresolved critical property, and lot, adapter and approval scopes are settled, bind packet = assembleUseBoundPacket(request, candidates, compatibility, qualification, approval, adapter). Otherwise keep packet null and preserve the exact blocker in the corresponding stage or guardrail.
+11. Bind checkpoint = reconcileSubstitutionCheckpoint(saved, request, catalog, candidates, compatibility, qualification, packet). Preserve prior candidate revision lineage; lot acceptance and use approval apply only to the exact part revision, machine and environment. New supplier corrections stale only affected compatibility claims and dependent packet fields; duplicate qualification receipts are not new evidence.
+12. Return { caseId: request.caseId, goal, policy, requirements, candidates, compatibility, qualification, packet, guardrails: [revision, conversion, lotRule, adapter, approval], checkpoint, commitAllowed: false } as SubstitutionProgramResult.

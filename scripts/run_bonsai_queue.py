@@ -35,6 +35,21 @@ class ProviderStreamOverflow(RuntimeError):
     """A tool-call stream outgrew the action's output ceiling without a reply."""
 
 
+def judge_arguments(entry, teacher_model_id):
+    """Forward an explicit independent rubric judge without inventing identities."""
+    judge = entry.get('judge_model')
+    if judge is None:
+        return []
+    if (not isinstance(judge, dict) or set(judge) - {'model_id', 'provider', 'server'}
+            or not isinstance(judge.get('model_id'), str) or not judge['model_id'].strip()
+            or judge['model_id'] == teacher_model_id):
+        raise ValueError('judge_model requires a distinct actual model_id')
+    transports = [name for name in ('provider', 'server') if name in judge]
+    if len(transports) != 1 or not isinstance(judge[transports[0]], str) or not judge[transports[0]].strip():
+        raise ValueError('judge_model requires exactly one nonempty provider or server')
+    return ['--judge-model-id', judge['model_id'], '--judge-' + transports[0], judge[transports[0]]]
+
+
 def jsonl_lines(path):
     # Only LF delimits JSONL. str.splitlines() also splits valid JSON strings
     # containing U+2028, which occurs in several curriculum source datasets.
@@ -611,6 +626,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     entries = [json.loads(line) for line in jsonl_lines(queue) if line.strip()]
     # Validate every batch before starting a collector, including later queue entries.
     for entry in entries:
+        judge_arguments(entry, model_id)
         count = entry.get('count', 1)
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= max_batch_cases:
             raise ValueError(f'entry count exceeds reviewed batch ceiling: {entry.get("key")}')
@@ -708,6 +724,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', str(transport_retries), '--file-tools', entry.get('surface', 'all')]
+        command += judge_arguments(entry, model_id)
         if 'prompt_rendering' in entry:
             if entry['prompt_rendering'] not in ('full', 'program-header'):
                 raise ValueError('entry prompt_rendering must be full or program-header')

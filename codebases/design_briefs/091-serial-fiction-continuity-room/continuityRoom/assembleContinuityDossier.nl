@@ -1,0 +1,10 @@
+---
+description: Assemble a complete continuity review packet without applying an unapproved story change.
+args:{story:BoundStoryContext;canon:CanonAssertion[];knowledge:KnowledgeLedgerAnalysis;findings:ContinuityFinding[];repairs:StoryRevision[];checkpoint:ContinuityCheckpoint}
+returns:ContinuityDossier
+---
+Return editionId from the bound active edition and proposalId from story.change.proposal.id. Include the complete findings and repair alternatives. Build affectedSceneIds as the distinct union of the proposed scene, every finding scene, and every descendant scene named by repair alternatives; preserve prior invalidatedSceneIds in the returned checkpoint.
+
+Keep revisedEdition equal to story.edition unless the separately authorized `verifySerialEdition` operation has actually returned a revised edition. Do not accept a draft, inferred reveal, or proposed repair as canon. Set canonAmendmentRequired when the author requested canon changes but the supplied evidence does not include the matching editorial approval for this series and edition revision. Build the checkpoint with the bound series/edition identity, exact current revision, `knowledge.events` from the active approved scenes plus approved exposures only, current open obligation IDs, all prior invalidated scenes, and the newly affected descendants. Preserve unrelated checkpoint lineage and carry `knowledge.invalidatedEventIds` into the invalidation union.
+
+Set status blocked when story.evidenceGaps is nonempty, the active edition is not approved, or the checkpoint edition identity/revision cannot be reconciled to the bound series. Preserve knowledge.unresolvedExposureIds as needs-editor findings and never include those secrets in a character perspective as established knowledge. Otherwise set status review while any finding needs editor judgment, any repair remains unchosen, or canon amendment approval is absent. Set ready only when every finding is consistent, no repair or canon amendment remains open, and the source evidence establishes the proposal's approval. Return every ContinuityDossier field explicitly; no branch returns only prose or partial findings.

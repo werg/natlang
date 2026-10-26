@@ -1,0 +1,809 @@
+{
+  "schema": "natlang.design-brief-compiler-check/1",
+  "applications": 100,
+  "passed": 100,
+  "all_passed": true,
+  "evidence": "actual repository checkProject; no live-model execution",
+  "results": [
+    {
+      "application": "001-decision-dependency-ledger",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "531589655feec1e4a80814be101dcc545c2ebaf639d6d24ef7a7630a739ec5c2",
+      "source_stable": true
+    },
+    {
+      "application": "002-contradiction-aware-knowledge-publisher",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "b342c6707b02802390a82cd5a755d5dda7c3c5877b8586eec22d9416e9b45b65",
+      "source_stable": true
+    },
+    {
+      "application": "003-handover-continuity-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "1336619adb790d9918051eedee301c0a922ceb3ab56fd496ffbcebe84fa97d24",
+      "source_stable": true
+    },
+    {
+      "application": "004-organizational-knowledge-integration-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "4ab8275ad49561611c72cbcebca0d8134140903b7e1899be4c11187b08a90e5e",
+      "source_stable": true
+    },
+    {
+      "application": "005-exception-and-precedent-steward",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "9fa53ce6d66b157229ab024bef85a1e6fa21c5780be262acd33a60c6cfe3c716",
+      "source_stable": true
+    },
+    {
+      "application": "006-continuous-customer-problem-observatory",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "236d803ede60736ccc6a1f25e553d0efb92dad3b2a960abf92640a3378090ff4",
+      "source_stable": true
+    },
+    {
+      "application": "007-qualitative-research-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "51fb6f85e44bc604c33d0a5a5a77d87974886edafebc68dc7e18c37005b97805",
+      "source_stable": true
+    },
+    {
+      "application": "008-product-opportunity-portfolio-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "bed204a882c3c66397a279438b4e475cb5c968661314af3e0c1e9a43f145f72a",
+      "source_stable": true
+    },
+    {
+      "application": "009-experiment-interpretation-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "fbb0544cfa378f7dd346c5bd59fbc90a05fa2053d127d4a3a2018a1d3aa065af",
+      "source_stable": true
+    },
+    {
+      "application": "010-requirements-negotiation-workspace",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "e90077a7c1d3221f8f34bdcd5675304b29082d75757c6b7b6efd25c4762b27a4",
+      "source_stable": true
+    },
+    {
+      "application": "011-multi-issue-service-recovery-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "568a82406e4baf0d28fa2f89632f7a1c605f36dbc5b41227b26d44bca2a74a68",
+      "source_stable": true
+    },
+    {
+      "application": "012-returns-repair-and-resale-orchestrator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "5b16c810518db4a75e96367168c62ae67846df81ca30418f2a667b5219a5eeb1",
+      "source_stable": true
+    },
+    {
+      "application": "013-marketplace-dispute-case-builder",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "fbaaebd6565a118ce227927585702fe3a5b09361ae60b3789e70e261dc78a739",
+      "source_stable": true
+    },
+    {
+      "application": "014-complex-customer-onboarding-director",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "b5ad980f62e11e53b4d5e3d5f292b0b1290b0c2242538bf4dd7fdfcf88c66212",
+      "source_stable": true
+    },
+    {
+      "application": "015-subscription-change-and-exit-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "35cb4018dc852b9195091a86ee64fe7c28286c755c21e8b0479338e23c694d12",
+      "source_stable": true
+    },
+    {
+      "application": "016-tender-response-factory",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "c1b0c4f50ac251836a4c447895a8110ef920be55d770d45d868610af5bf00bca",
+      "source_stable": true
+    },
+    {
+      "application": "017-functional-substitution-sourcing-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "6242b794e494bdfc78cd83ef296ec4da668627260b47f611b5b20431d94d0552",
+      "source_stable": true
+    },
+    {
+      "application": "018-supplier-incident-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "2944622bbbe40d713057004ed1167b8d88307aa4b9ffe4a4ee7edfff35de79ce",
+      "source_stable": true
+    },
+    {
+      "application": "019-contract-to-purchasing-conformance-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "48721abe741d3421a74bfc28aa33c35c549cc72c5ef3707badefef0f06e338b7",
+      "source_stable": true
+    },
+    {
+      "application": "020-multi-party-sourcing-negotiator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "d56e8863de451e5efc07e676aaee38b194cf05f0cde38c9579fa393972ee024e",
+      "source_stable": true
+    },
+    {
+      "application": "021-accounts-payable-exception-resolver",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "566fa87d6e4b3ca0b8cc3895dbfa68be6e5bd192b9291bc6f6622d41e6c8efad",
+      "source_stable": true
+    },
+    {
+      "application": "022-delivery-to-billing-obligation-reconciler",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "4131fbe46b1be8cd2e2eb9fa611dce5a4a3f005e5103ee001a07bc2b18be08be",
+      "source_stable": true
+    },
+    {
+      "application": "023-expense-policy-casework-system",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "2491271e607468ca45a8471106f71029e724a4586abb7ea1063ec8fedb9d3c61",
+      "source_stable": true
+    },
+    {
+      "application": "024-financial-close-workpaper-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a312900a8fea563636d56643d5e601f5b05b27d7ecfcfe3f416da54ebde778c1",
+      "source_stable": true
+    },
+    {
+      "application": "025-grant-spending-and-reporting-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a76ca372da7700e38986d37578e091af86f567c5a162c42500202bf2f1dfb21e",
+      "source_stable": true
+    },
+    {
+      "application": "026-contract-obligation-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "f11c49daf6757eaf911ea3c2e95649a4a352b0fe067e1b5bd3005cebac4b9f41",
+      "source_stable": true
+    },
+    {
+      "application": "027-amendment-impact-engine",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "14e474533e6086070b50ced842e94839d0709229d5f81f2e8b587b2c52f32f11",
+      "source_stable": true
+    },
+    {
+      "application": "028-negotiation-clause-package-designer",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "4689e3a3c285a015124b49aae4caba091ec0f9af608f0e41d96176dadd69bcd8",
+      "source_stable": true
+    },
+    {
+      "application": "029-policy-change-simulator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "5b558e55dc4802253efd43ab5fc0833f288f902fb657a6b491302d72bf234840",
+      "source_stable": true
+    },
+    {
+      "application": "030-disclosure-and-redaction-review-workspace",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "e4d59a02d074f9d37a2ad0d6bf6bd6986f2928436a0233cd1fcbf72b0ce4ac96",
+      "source_stable": true
+    },
+    {
+      "application": "031-living-evidence-map",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "75004250ad9509aa4431abc6eb2031c78e7d3811b6bc5288c018f0f7d46927d0",
+      "source_stable": true
+    },
+    {
+      "application": "032-cross-study-measurement-harmonizer",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "561159d1249bf4c7194b08c242147afafe949af132d4bf6537a1a0894ee4d343",
+      "source_stable": true
+    },
+    {
+      "application": "033-replication-planning-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "fb4996d5f6e5836c2fe230324c8fd23aa02e46e9e46e7d5eca28965f769306a1",
+      "source_stable": true
+    },
+    {
+      "application": "034-research-resource-and-experiment-rescue-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "63e56b9380305e848f04ef827cd3063f2ef527bb4dad4e679df022de3946b4ee",
+      "source_stable": true
+    },
+    {
+      "application": "035-negative-result-learning-archive",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "7647819e56ee9730ff52cef276cdfcff66ad947f53d5ae5dd3e2839721e75a86",
+      "source_stable": true
+    },
+    {
+      "application": "036-misconception-repair-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "cdfa90708ac1ce0cd20b2d46989dd5e206972fea936226504d668a1ea135ae5f",
+      "source_stable": true
+    },
+    {
+      "application": "037-assessment-production-and-moderation-system",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "124f27ccc0481c01f70f032f26b6a1b7ba71f8a2f8e68045005d0859747d6250",
+      "source_stable": true
+    },
+    {
+      "application": "038-project-based-learning-director",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "bf8c0e0f30bba9d3d4a6bf7ca8b5709e75c7216808dde3d0b3f22f02d2db2735",
+      "source_stable": true
+    },
+    {
+      "application": "039-apprenticeship-practice-simulator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "aa8fa4e60a2a5601bf8cfdb6ae732ba55caedf12129b300560507fba91e22657",
+      "source_stable": true
+    },
+    {
+      "application": "040-learning-portfolio-evidence-assessor",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "f8f56505d45d949d4cdc66bffa02c70e10e6ae42f2093ada898bb62713d531cb",
+      "source_stable": true
+    },
+    {
+      "application": "041-requirement-to-regression-factory",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "fe20a2dca3c64e38c98eb2846bf6c4b7e48f5851ad8d8c3a59a9e3429751ae99",
+      "source_stable": true
+    },
+    {
+      "application": "042-release-compatibility-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "ca7655840728de7a791c12480dd9bfd9149e9239c64bd1b34276abdbf88efbcd",
+      "source_stable": true
+    },
+    {
+      "application": "043-incident-recovery-orchestrator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "448988e3ca7102839b2d08827d039a842c673785182ac602778a40e8ccd6b09d",
+      "source_stable": true
+    },
+    {
+      "application": "044-documentation-behavior-synchronizer",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "3e4dd4eec2eef1a4c3ef3db752f053988feb2baf4f1470425a515597be9f4cb5",
+      "source_stable": true
+    },
+    {
+      "application": "045-technical-debt-campaign-planner",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "49c233b5540482f55428ce8a2cb34c29510282c9385cd1358d026c796f476491",
+      "source_stable": true
+    },
+    {
+      "application": "046-semantic-analysis-work-order-compiler",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "23c0c43e110677a2c4b970dea82a17a94f09de9f044b90c070cb712959e40353",
+      "source_stable": true
+    },
+    {
+      "application": "047-domain-data-migration-workshop",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "4f3380140f0468dbe23230cc8f986d55ce3844d99af0b2715b3a96de55b8e3ab",
+      "source_stable": true
+    },
+    {
+      "application": "048-taxonomy-evolution-service",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "4fe3c23a42b77671925e2cd430bd8e3c1f399f84ed2433198aa44c0fc31d74ce",
+      "source_stable": true
+    },
+    {
+      "application": "049-cross-collection-entity-resolution-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "418fde61634070097edec32eda5ee73c14e27bca224292ddbe3aa73bd0005baf",
+      "source_stable": true
+    },
+    {
+      "application": "050-dataset-specification-and-audit-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a375d979cd5ec7aaa7ce630b4945991e214c5ea65e074dca3108a1eb15a9d2fa",
+      "source_stable": true
+    },
+    {
+      "application": "051-disruption-aware-shipment-replanner",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a3045e753bf0b030d5d4dff6465fbd3491d43b1ea9b441aabafa8a9a1567af2e",
+      "source_stable": true
+    },
+    {
+      "application": "052-warehouse-exception-controller",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "67ab50ca0da967b7d5f32b4df1c57dde3ff3a454da37072e96bdd1077a7dc3b9",
+      "source_stable": true
+    },
+    {
+      "application": "053-industrial-surplus-exchange",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "0c9d50efe2356d8860f636bd104f63df71bd4221070590b72d05f5eaca98323e",
+      "source_stable": true
+    },
+    {
+      "application": "054-donation-redistribution-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "0b440508de9047f510a5384f27619c9627ebd0118cbb1602aca574f6b5fc3306",
+      "source_stable": true
+    },
+    {
+      "application": "055-repair-cooperative-dispatcher",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "5cc09e6bf80d511d01b2f70d2c4ab063d802ceade41d2a4d7fea33a39b4c0bb0",
+      "source_stable": true
+    },
+    {
+      "application": "056-quality-escape-investigator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "33ba67dcd6de6ddcf5a4a2fcbcb1490d84013a4c26c8c3b4e2626f2594c65ee6",
+      "source_stable": true
+    },
+    {
+      "application": "057-work-instruction-adaptation-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "bd8f8a9a9557f28729e54133b88dd5d4974e62c69bcf0f86d8713ce439dfc6bc",
+      "source_stable": true
+    },
+    {
+      "application": "058-maintenance-planning-and-handover-system",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "2a945a0f2a6a2bbe89eea9ed4cdd691036d38bbe6966dc97d2bf970f4b2a82f1",
+      "source_stable": true
+    },
+    {
+      "application": "059-engineering-change-impact-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "ec17fc3d882300a05d5c6a33fa4bac69eab725b6b1eeb317bdd639bcb8358e10",
+      "source_stable": true
+    },
+    {
+      "application": "060-custom-fabrication-quoting-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "b8e451e9c30f727f7251e01636ae5b9e8eae4843e90de75a44c8a06968ac5249",
+      "source_stable": true
+    },
+    {
+      "application": "061-change-order-impact-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "6aacfaf00c4a9071f53f33f156c3c7f98ac9447eadb31d24a06f062c036160f3",
+      "source_stable": true
+    },
+    {
+      "application": "062-tender-scope-gap-resolver",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "0a025852169d3d966b25d77ea4bc3b2e9a65ad843833cb3e380ffbe5e8f73e17",
+      "source_stable": true
+    },
+    {
+      "application": "063-building-handover-dossier-compiler",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "aaa190da66b016ae304c3b22a96af8b6b72882ba042d32e61c8fe938c7175010",
+      "source_stable": true
+    },
+    {
+      "application": "064-facility-complaint-to-work-order-system",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "0563ee6ea602efbbc0cb07be72cecb26eda60e76267a4ea6b27202a2ff2d169a",
+      "source_stable": true
+    },
+    {
+      "application": "065-adaptive-reuse-feasibility-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "91fd25258df6b95c908a86300c1774895597193d4c6ea87e11ee8e9256fc2611",
+      "source_stable": true
+    },
+    {
+      "application": "066-habitat-restoration-planner",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "461700d059d78b15436150accdd6caefec7a7fea1e62d8e954fd69fc811d40f6",
+      "source_stable": true
+    },
+    {
+      "application": "067-agricultural-cooperative-harvest-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "669d8b91d26463a613c47662db6144e538d48bb0e8a2e23338def530acc78fbe",
+      "source_stable": true
+    },
+    {
+      "application": "068-citizen-science-observation-curator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "740eab2ad67131ef26e59c49baf717917ebfcb6211cf65ccd914c8ad3d7ba8c5",
+      "source_stable": true
+    },
+    {
+      "application": "069-environmental-reporting-evidence-assembler",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "1c91b00fe57cb1c2de63841bc7d91eecf31d0c3b0cc8ba1f36e3163a856a688f",
+      "source_stable": true
+    },
+    {
+      "application": "070-community-garden-steward",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "2bfcb007ba9c946881647486c990f5950ebcefc05ef91998a0622ac3df15cfea",
+      "source_stable": true
+    },
+    {
+      "application": "071-public-consultation-synthesis-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a60915d5e39e6939af710d052860623dc18fc1e0e3eacff59468c40ea2f7f4d6",
+      "source_stable": true
+    },
+    {
+      "application": "072-participatory-budgeting-facilitator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a5dd8ec3079bebf71a54c4de1197923e46469f46c21fd150a7ef33124b0f67e4",
+      "source_stable": true
+    },
+    {
+      "application": "073-public-service-application-navigator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "64660446c6eb24002f7c4ea005ad155a96f5c1ecbcc7fc1ab2a4ffe872e6bc82",
+      "source_stable": true
+    },
+    {
+      "application": "074-volunteer-deployment-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "7fbd5a3663cec98e7c49bc2c5f376db0442b9630fac2daff2c996d9e0be9efe1",
+      "source_stable": true
+    },
+    {
+      "application": "075-community-agreement-mediator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "7846dea16be9dcf65bd3103684ca03174c1b0e3bc8269b259d0f51d04011e3a2",
+      "source_stable": true
+    },
+    {
+      "application": "076-referral-packet-completeness-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "828bddf390aa7490f021c9bc7c41ec72bbb2950d6f6306a6e92cc15cd898b59b",
+      "source_stable": true
+    },
+    {
+      "application": "077-care-transition-logistics-coordinator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "459e9669ea3582ed94b9325f07b0f8c8f47c1a19082f4aa51a81294e4bbbf24d",
+      "source_stable": true
+    },
+    {
+      "application": "078-appointment-preparation-service",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "c69fd35a1b0650d6206b26d403f3b69a8f263253d9b262ab94a868bc9cab4280",
+      "source_stable": true
+    },
+    {
+      "application": "079-health-record-request-fulfillment-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "b55e2cc1883b90cd22c0ee6a0088049e2de6ff2f92d54fe5913cf6fd05a2d702",
+      "source_stable": true
+    },
+    {
+      "application": "080-patient-experience-improvement-laboratory",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "30354e19a72d21b25ddc3a5b2fe2d9fe754d5cd4be7f8508368c33c7edf85fb5",
+      "source_stable": true
+    },
+    {
+      "application": "081-localization-release-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "8d5e5b15656e5b8b8ca7697a1e301d7b3af3a5778e33d93f3f91ec3501012de4",
+      "source_stable": true
+    },
+    {
+      "application": "082-plain-language-transformation-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "d3125fa7370de817257fd8a8154c20d2e9f45c3176254a2d53f3ca197033a0e4",
+      "source_stable": true
+    },
+    {
+      "application": "083-accessible-narrative-production-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "eaac200c4fdbebadab30eba022c67067057e87207d270b4760d557cdbca36369",
+      "source_stable": true
+    },
+    {
+      "application": "084-cross-cultural-training-adaptation-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "c280fc47ad2f42ae9bc28905fe85001cb0653af56407cf86e879ac567acd3946",
+      "source_stable": true
+    },
+    {
+      "application": "085-multilingual-terminology-negotiation-workbench",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "896acc5fca9fa4cd360ec1c3dcefbdc3320324c956b7fa89f47339ec70753f00",
+      "source_stable": true
+    },
+    {
+      "application": "086-museum-exhibition-curator",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "f41ea327f4060f58954bf6caabe42773a3c22247e51c8793c8c759cfd6307955",
+      "source_stable": true
+    },
+    {
+      "application": "087-oral-history-reconciliation-archive",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "fdc371a164f4e89cbe1c0eb0ba5e204e1e7c21b9cdf8cf607ce9b0f65e78d8a0",
+      "source_stable": true
+    },
+    {
+      "application": "088-historical-record-linkage-atelier",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "a9ee363188bcb9edd8bf6c6077afe90b9569611d0987227be2a58dcd2c07889c",
+      "source_stable": true
+    },
+    {
+      "application": "089-collection-rights-and-consent-steward",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "5729ac471d7c38962d9ef9a3d4d1099b6aeef1f20c170a34896640a67fed97b2",
+      "source_stable": true
+    },
+    {
+      "application": "090-archive-research-commission-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "6c1e0661dadbd9e48ba5601a1f0e730f0ac99a9877a5639ba1030f1eed42145b",
+      "source_stable": true
+    },
+    {
+      "application": "091-serial-fiction-continuity-room",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "f93703f581abe076dda9c525d71429c9584920f77e4c13bf77b39079ad974753",
+      "source_stable": true
+    },
+    {
+      "application": "092-documentary-assembly-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "acc83c6b71412ca3bce57f86cb83309f19d5df5911d6849b125790b5b16d955a",
+      "source_stable": true
+    },
+    {
+      "application": "093-magazine-commissioning-and-issue-planning-desk",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "5cfb4c3f4ecf199a1e0aab456a70a27a031754657e7924ee3e5d4087ebdadf87",
+      "source_stable": true
+    },
+    {
+      "application": "094-brand-and-design-language-studio",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "3b81526946bf8c59d508339143d8f4f114c661598aa59294842f20382ea6bd50",
+      "source_stable": true
+    },
+    {
+      "application": "095-culinary-concept-development-kitchen",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "49dabd990fef884333c68e9f1eb9cd02a6609e8f47ac046c35d8ca91409d952c",
+      "source_stable": true
+    },
+    {
+      "application": "096-escape-room-foundry",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "61ac03247ffb30d93f2f1e7618062a50a1ee70eb2a28cbb10fccfa9dd908ab17",
+      "source_stable": true
+    },
+    {
+      "application": "097-live-event-disruption-director",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "2ada9bd3ad3389539344537cbcb5d40c34101bcf159db2fc7c40c60649d6591b",
+      "source_stable": true
+    },
+    {
+      "application": "098-persistent-world-game-director",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "14f3004251016daa66596280fa690c9334ba3af4bbd0b0f7816ba227b194e683",
+      "source_stable": true
+    },
+    {
+      "application": "099-negotiation-training-arena",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "e533ee896df7947a2e47805e31cf1e105c5268382777bc5606d0243e27690377",
+      "source_stable": true
+    },
+    {
+      "application": "100-immersive-theatre-stage-manager",
+      "ok": true,
+      "diagnostics": [],
+      "definitions": 1,
+      "source_sha256": "f00da156d82f1b3627c7b576bb7dc7a4af2a817b5fada3e7c16f5bb088ea97a6",
+      "source_stable": true
+    }
+  ]
+}

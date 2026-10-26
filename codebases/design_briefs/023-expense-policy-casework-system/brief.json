@@ -1,0 +1,49 @@
+{
+  "application_id": "023",
+  "title": "Expense policy casework system",
+  "source_relative_path": "applications/05-finance-and-administrative-accounting/023-expense-policy-casework-system.md",
+  "program_root": "codebases/design_briefs/023-expense-policy-casework-system",
+  "source_sha256": "a91ba9a4b02180626100db1da258d42abbfa46d0ae77e13d0c3bb70553607f17",
+  "domain_id": "05",
+  "stages": [
+    {
+      "name": "normalizeClaim",
+      "output_type": "ExpenseLine",
+      "algorithm": "Extract receipt lines and claimant explanations while preserving original currency and dates. Distinguish the merchant’s description from the claimed business purpose, and flag illegible or missing evidence rather than reconstructing amounts through guesswork.",
+      "gate": "Exact totals reconcile to source receipts; unverified values remain blocked."
+    },
+    {
+      "name": "interpretPurpose",
+      "output_type": "PurposeAllocation",
+      "algorithm": "Identify mixed business and personal components using explicit facts and supplied allocation rules. Request a targeted explanation when purpose changes eligibility, and avoid inferring personal behavior from merchant stereotypes or unrelated account history.",
+      "gate": "Shares sum exactly to one; allocation has evidence or remains pending."
+    },
+    {
+      "name": "applyPolicy",
+      "output_type": "ExpenseFinding",
+      "algorithm": "Apply the policy edition effective for the expense and claimant context. Preserve category-specific limits, meal inclusions, and approval conditions; distinguish a documented exception from a persuasive but unauthorized justification.",
+      "gate": "Exact category and period limits; no retroactive policy substitution without authority."
+    },
+    {
+      "name": "requestResolution",
+      "output_type": "ExpenseQuestion",
+      "algorithm": "Group unresolved questions to minimize claimant burden while keeping each decision testable. Ask only for evidence necessary to determine eligibility, explain the applicable rule, and route privacy-sensitive material through restricted upload channels.",
+      "gate": "Do not request information already available or unrelated personal records."
+    },
+    {
+      "name": "prepareExpenseDisposition",
+      "output_type": "ExpenseDisposition",
+      "algorithm": "Produce line-level recommendations and a clear explanation of reductions or holds. Support independent review and appeals with new evidence, then reconcile the approved amount to the reimbursement service without changing the historical original claim.",
+      "gate": "Segregated approval and exact total conservation across paid, rejected, and held portions."
+    }
+  ],
+  "operational_details": [
+    "A receipt includes a personal companion: apply explicit allocation rather than rejecting the whole trip.",
+    "A tax tip or fee is separate: preserve line-level amounts and the relevant rule.",
+    "A claimant resubmits a rejected receipt: link the appeal without creating duplicate reimbursement.",
+    "The policy changes during a trip: evaluate the supplied effective-date rule.",
+    "A manager is also the claimant: route approval to an independent authority."
+  ],
+  "representative_episode": "A hotel receipt includes business nights, a personal extension, bundled breakfast, and an exception approved only for one night.",
+  "independent_truth_basis": "Synthetic receipts, purpose facts, effective policies, exception scopes, and exact reimbursement totals."
+}

@@ -1,0 +1,116 @@
+{
+  "schema": "natlang.design-brief-release-readiness/2",
+  "release": "design-briefs-100-distinct-applications-20261026-v2",
+  "recorded_at": "2026-10-26",
+  "source_checkpoint_commit": "02c16c8ea6f6793a4557f27bba6a0249378f2f73",
+  "source_checkpoint_tree": "01a440ba276c20914a30740d0127d2dbf0b5112b",
+  "original_fixture_baseline": "5648b99b73d3b94af382f9e480dd2fe46915e66e",
+  "status": "source-review-complete-python-gate-blocked-live-qualification-pending",
+  "inventory": {
+    "applications": 100,
+    "domains": 20,
+    "public_operations": 155,
+    "native_functions": 1365,
+    "original_records": 600,
+    "original_domain_fields": 3032,
+    "original_domain_stage_obligations": 500,
+    "original_operational_rules": 500,
+    "fixture_tasks": 800,
+    "exact_gate_tasks": 300,
+    "independently_judged_workflows": 500,
+    "application_splits": {
+      "train": 60,
+      "dev": 20,
+      "test": 20
+    },
+    "applications_with_state_bindings": 100,
+    "state_bindings": 113,
+    "source_bytes": {
+      "natlang": 1101669,
+      "type_declarations": 625797,
+      "typescript_mechanisms": 30584
+    },
+    "removed_unused_type_declarations": 2107
+  },
+  "source_and_fixture_verification": {
+    "compiler_passed": 100,
+    "source_stable_results": 100,
+    "compiler_packet_architecture_source_hashes_match": true,
+    "current_sources_match_packet": true,
+    "independent_fixture_truth_preserved": true,
+    "original_domain_contracts_preserved": true,
+    "unreferenced_packaged_natlang_functions": 0,
+    "maximum_potential_native_depth_histogram": {
+      "2": 88,
+      "3": 11,
+      "6": 1
+    },
+    "depth_unit": "Native call edges from a public operation; potential source references, not observed execution.",
+    "repeated_topology_groups": 17,
+    "diversity_limit": "A shared structural fingerprint is a review prompt, not a failure or a diversity score. Distinct names and fingerprints cannot establish independent semantic approaches."
+  },
+  "validation": {
+    "binding_note": "The pre-push commands ran on the final frozen working tree before and during publication of source_checkpoint_commit. Starting-HEAD labels in logs do not identify a different source snapshot. The published source tree and all application source hashes are recorded above; subsequent publication contains only documentation and evidence.",
+    "node_version": "v24.22.1",
+    "quick_gate": {
+      "source_review_manifest": "pass",
+      "typescript": "pass",
+      "python_setup": "blocked"
+    },
+    "full_repository_gate": "not green: Python environment unavailable",
+    "typescript_test_files": 348,
+    "typescript_test_files_passed": 348,
+    "typescript_tests_passed": 2158,
+    "typescript_tests_failed": 0,
+    "typescript_tests_cancelled": 0,
+    "native_conformance": {
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    "focused_native_application_tests": {
+      "tests": 57,
+      "pass": 57,
+      "fail": 0,
+      "cancelled": 0,
+      "included_in_full_typescript_total": true
+    },
+    "build_checks": [
+      "Node build",
+      "browser build freshness",
+      "273 application files",
+      "browser types",
+      "layering"
+    ],
+    "python_blocker": "No available interpreter provides pytest, PyTorch and the required Transformers APIs. Python suites were not executed; no baseline-failure claim is made.",
+    "evidence": "validation.txt"
+  },
+  "qualification": {
+    "training_admission": false,
+    "models_executed": 0,
+    "teacher_trajectories": 0,
+    "student_rollouts": 0,
+    "optimizer_steps": 0,
+    "generation": "paused under repository instructions",
+    "live_model_behavior": "unmeasured",
+    "external_adapter_deployment": "not observed",
+    "production_readback": "not qualified",
+    "outstanding": [
+      "Run the complete gate in the compatible Python environment before merge qualification.",
+      "Execute source-bound trajectories with the approved self-hosted teacher in an authorized generation window and review the actual domain outcomes.",
+      "Qualify interruption, receipt dispute, evidence correction and state restoration with actual learned execution.",
+      "Configure and exercise real external receivers and domain readbacks before production deployment."
+    ]
+  },
+  "evidence_sha256": {
+    "compiler-check.json": "efa0e518a33baa0895cdcf457c5b01caf09211d571b6ef1fe248a6a0882ec76d",
+    "inventory.json": "70d68bbfd4790d9737914aa1892190ab4553a5765e45a4f996b624a729fdd30c",
+    "packet-manifest.json": "66aeb900c4bd009d437f1e6ddd4770272b4b810919bab2548a2b4a17a13818bc",
+    "architecture.json": "84cc4f21b6edffe9a3379bb264e606522b15e25d12b74314a42f58058b7ce811",
+    "fixture-migration.json": "6ca3fb6dee075bb9146836f9fa12a9f33e828528314fd24c09b76fc782ceefb5",
+    "type-pruning.json": "ca3f43aecc3fcfad84f131a1304c12275aa61acc0d4962ffded13181787f0f79",
+    "obsolete-source-review.json": "85750ad738014e74ddece604696be15f12cf03b4cd33e2082c4b2ef19699e46d",
+    "validation.txt": "8809314ee17f126bb657d41f6aba6534d70e5f7d40c015a2abd4fc76fb7f55f3",
+    "REVIEW.md": "21693c821ec23fa82d55fc86ecdb57316e0faeaf1c205898ae767f107fc24041"
+  }
+}

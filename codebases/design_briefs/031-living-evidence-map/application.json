@@ -1,0 +1,121 @@
+{
+  "schema": "natlang.application/1",
+  "id": "031",
+  "title": "Living evidence map",
+  "entrypoint": "buildEvidenceMap.nl",
+  "interfaces": [
+    {
+      "name": "buildEvidenceMap",
+      "path": "buildEvidenceMap.nl",
+      "purpose": "Maintain a versioned review map linking eligibility decisions, study report lineage, measured outcomes, claims, corrections and re-screening.",
+      "stateParameter": "corpus",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "living-evidence-map"
+    }
+  ],
+  "persistence": [
+    "ReviewFrame",
+    "EligibilitySnapshot",
+    "StudyLineage",
+    "ObservationLedger",
+    "MeasurementAlignment",
+    "EvidenceClaimGraph",
+    "ReviewUpdateLedger"
+  ],
+  "effects": [
+    "invalidate only claims dependent on retracted reports",
+    "retain prior eligibility decisions when criteria change and re-screen under a new version"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "frameEligibility",
+        "paths": [
+          "evidenceMap/frameReview.nl",
+          "evidenceMap/freezeEligibility.nl",
+          "runCase/frameEligibility/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "linkStudyReports",
+        "paths": [
+          "evidenceMap/linkStudyLineage.nl"
+        ]
+      },
+      {
+        "stage": "screenAndExtract",
+        "paths": [
+          "evidenceMap/screenAndExtract.nl",
+          "evidenceMap/alignOutcomeMeasures.nl"
+        ]
+      },
+      {
+        "stage": "mapClaims",
+        "paths": [
+          "evidenceMap/buildClaimGraph.nl"
+        ]
+      },
+      {
+        "stage": "maintainReview",
+        "paths": [
+          "evidenceMap/reconcileRetraction.nl",
+          "evidenceMap/rescreenChangedEligibility.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "evidenceMap/linkStudyLineage.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "evidenceMap/alignOutcomeMeasures.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "evidenceMap/screenAndExtract.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "evidenceMap/reconcileRetraction.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "evidenceMap/rescreenChangedEligibility.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "buildEvidenceMap.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/frameEligibility/audit/qualify.nl",
+    "evidenceMap/frameReview.nl",
+    "evidenceMap/freezeEligibility.nl",
+    "evidenceMap/linkStudyLineage.nl",
+    "evidenceMap/screenAndExtract.nl",
+    "evidenceMap/alignOutcomeMeasures.nl",
+    "evidenceMap/buildClaimGraph.nl",
+    "evidenceMap/reconcileRetraction.nl",
+    "evidenceMap/rescreenChangedEligibility.nl",
+    "buildEvidenceMap/reconcileEvidenceMap.nl",
+    "evidenceMap/screenAndExtract/evaluateStudyRecord.nl",
+    "buildEvidenceMap/summarizeEligibilityImpact.nl"
+  ]
+}

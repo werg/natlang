@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.application/1",
+  "id": "027",
+  "title": "Amendment impact engine",
+  "entrypoint": "reviewAmendment.nl",
+  "interfaces": [
+    {
+      "name": "reviewAmendment",
+      "path": "reviewAmendment.nl",
+      "purpose": "Map amendments onto an executed contract baseline, determine effective scope, trace dependent work, and gate revision release.",
+      "stateParameter": "executed",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "amendment-impact"
+    }
+  ],
+  "persistence": [
+    "AmendmentTarget",
+    "AmendmentScope",
+    "AmendedObligation",
+    "AmendmentImpact",
+    "AmendmentRelease"
+  ],
+  "effects": [
+    "preserve superseded signed versions and billing history",
+    "invalidate only affected downstream approvals",
+    "block release when baseline exceptions disappear without authority"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "identifyTargets",
+        "paths": [
+          "amendmentEngine/resolveTargets.nl"
+        ]
+      },
+      {
+        "stage": "interpretScope",
+        "paths": [
+          "amendmentEngine/resolveTemporalScope.nl"
+        ]
+      },
+      {
+        "stage": "composeObligations",
+        "paths": [
+          "amendmentEngine/applyOperationsToBaseline.nl"
+        ]
+      },
+      {
+        "stage": "traceImpacts",
+        "paths": [
+          "amendmentEngine/walkAffectedDependencies.nl"
+        ]
+      },
+      {
+        "stage": "releaseRevision",
+        "paths": [
+          "amendmentEngine/prepareMigrationRelease.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "amendmentEngine/resolveOldSectionReference.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "amendmentEngine/classifyRetroactiveBilling.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "amendmentEngine/compareOverlappingAmendments.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "amendmentEngine/revalidateCutover.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "amendmentEngine/testExceptionPreservation.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "natlang.json",
+    "types.ts",
+    "reviewAmendment.nl",
+    "amendmentEngine/resolveTargets.nl",
+    "amendmentEngine/resolveTemporalScope.nl",
+    "amendmentEngine/applyOperationsToBaseline.nl",
+    "amendmentEngine/walkAffectedDependencies.nl",
+    "amendmentEngine/prepareMigrationRelease.nl",
+    "amendmentEngine/resolveOldSectionReference.nl",
+    "amendmentEngine/classifyRetroactiveBilling.nl",
+    "amendmentEngine/compareOverlappingAmendments.nl",
+    "amendmentEngine/revalidateCutover.nl",
+    "amendmentEngine/testExceptionPreservation.nl",
+    "runCase/identifyTargets/audit/qualify.nl",
+    "amendmentEngine/frameBaseline.nl",
+    "reviewAmendment/reconcileAmendmentCheckpoint.nl",
+    "amendmentEngine/resolveTargets/resolveOneAmendmentTarget.nl"
+  ]
+}

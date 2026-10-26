@@ -22,6 +22,7 @@ from generation_authority import authority_lock, reconcile_luna_authority
 from freeze_training_runtime import tree_identity
 from start_reviewed_generation_successor import atomic_json, digest
 from luna_source_inventory import verify as verify_luna_source_inventory
+from run_bonsai_queue import judge_arguments
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +156,7 @@ def validate_plan(plan_path, expected_sha256):
     if not isinstance(cases, list) or not cases:
         raise ValueError('Plan requires a nonempty immutable master case list')
     rows = dict(_source_rows(source))
+    judge_arguments(plan, plan['model_id'])
     seen = set()
     normalized_cases = []
     for case in cases:
@@ -163,6 +165,10 @@ def validate_plan(plan_path, expected_sha256):
         index = case['index']
         if index in seen or index not in rows:
             raise ValueError(f'Duplicate or out-of-range source index: {index}')
+        oracle = rows[index].get('semantics', {}).get('oracle', 'exact')
+        level = oracle if isinstance(oracle, str) else oracle.get('level')
+        if level == 'judged' and not plan.get('judge_model'):
+            raise ValueError('Judged cases require an explicit independent judge_model before dispatch')
         seen.add(index)
         seed = case.get('seed')
         if type(seed) is not int or seed < 0:
@@ -188,6 +194,7 @@ def validate_plan(plan_path, expected_sha256):
             **case,
             'program_id': inventory_by_index[case['index']]['program_id'],
             'source_group': inventory_by_index[case['index']]['source_groups'][0],
+            'source_groups': inventory_by_index[case['index']]['source_groups'],
             'split': inventory_by_index[case['index']]['split'],
             'source_row_sha256': inventory_by_index[case['index']]['row_sha256_including_lf'],
         } for case in normalized_cases]
@@ -268,7 +275,7 @@ def _verify_ledger_events(events, identity):
                 raise ValueError('Duplicate or unbound source case in claim ledger')
             expected_case = expected_cases[index]
             if identity.get('source_inventory') is not None:
-                for field in ('seed', 'program_id', 'source_group', 'split', 'source_row_sha256'):
+                for field in ('seed', 'program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
                     if row.get(field) != expected_case.get(field):
                         raise ValueError(f'Claim ledger {field} differs from the source inventory')
             queue = Path(row.get('queue', '')).resolve()
@@ -464,11 +471,13 @@ def _claim_queue(plan, identity, slot, case):
         'transport_retries': identity['max_transport_retries'],
         'text_neuralese_emulation': bool(plan.get('text_neuralese_emulation', False)),
     }
-    for field in ('program_id', 'source_group', 'split', 'source_row_sha256'):
+    for field in ('program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
         if field in case:
             entry[field] = case[field]
     if plan.get('surface') is not None:
         entry['surface'] = plan['surface']
+    if plan.get('judge_model') is not None:
+        entry['judge_model'] = dict(plan['judge_model'])
     payload = (json.dumps(entry, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
     return (entry, str(queue), hashlib.sha256(payload).hexdigest(),
             str(slot_root / 'journal.jsonl'), str(slot_root / 'supervisor.log'), payload)
@@ -656,7 +665,7 @@ def run_dispatcher(plan_path, expected_sha256, *, resume=False):
                              'key': entry['key'], 'queue': queue, 'queue_sha256': queue_sha,
                              'journal': journal, 'source': identity['source'],
                              'runtime': identity['runtime'], 'campaign': identity['campaign_id']}
-                    for field in ('seed', 'program_id', 'source_group', 'split', 'source_row_sha256'):
+                    for field in ('seed', 'program_id', 'source_group', 'source_groups', 'split', 'source_row_sha256'):
                         if field in case:
                             claim[field] = case[field]
                     _append_event(ledger, {'event': 'claim', 'identity_sha256': identity['identity_sha256'],

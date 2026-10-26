@@ -1,0 +1,90 @@
+{
+  "application_id": "045",
+  "title": "Technical debt campaign planner",
+  "source_relative_path": "applications/09-software-engineering-and-technical-operations/045-technical-debt-campaign-planner.md",
+  "source_sha256": "b87b1cb10cdce1af4e650c6b20d9ba54d32630c0b72dc220ee14e8c1ce986620",
+  "domain_id": "09",
+  "stages": [
+    {
+      "name": "collectSymptoms",
+      "output_type": "DebtSymptom",
+      "algorithm": "Process developer reports, incidents, and issue histories to identify recurring friction. Separate specific observed costs from broad complaints, deduplicate repeated descriptions of one event, and preserve minority workflows that may face severe but infrequent problems.",
+      "gate": "Symptom frequency and impact are grounded in observable evidence."
+    },
+    {
+      "name": "formMechanisms",
+      "output_type": "DebtMechanism",
+      "algorithm": "Group symptoms by plausible shared mechanisms such as unstable interfaces or manual coordination. Distinguish architectural causes from staffing or process issues, and formulate checks that could disconfirm the proposed technical explanation.",
+      "gate": "A popular explanation is not treated as established causality."
+    },
+    {
+      "name": "designWorkPackages",
+      "output_type": "DebtWorkPackage",
+      "algorithm": "Convert supported mechanisms into finite improvement packages with explicit interfaces and non-goals. Propose alternatives with different disruption levels, avoid unbounded rewrites, and define completion through changed behavior rather than merged code alone.",
+      "gate": "Each package is executable and tied to the original symptom or validated mechanism."
+    },
+    {
+      "name": "sequenceCampaign",
+      "output_type": "DebtWave",
+      "algorithm": "Order enabling changes, migrations, and cleanup using exact dependency and capacity services. Preserve ongoing delivery constraints, identify irreversible steps, and create milestones that deliver useful improvements before the entire campaign is complete.",
+      "gate": "Feasible capacity, acyclic dependencies, and safe migration sequencing."
+    },
+    {
+      "name": "verifyImprovement",
+      "output_type": "DebtOutcome",
+      "algorithm": "Compare post-change workflow evidence with the original problem definition, accounting for changes in workload and observation. Distinguish successful delivery from actual improvement and reopen mechanisms that the completed work did not address.",
+      "gate": "Completion requires evidence of the intended operational effect, not only task closure."
+    }
+  ],
+  "operational_details": [
+    "A cleanup removes an undocumented integration: require consumer discovery before deletion.",
+    "A campaign spans teams: assign interface ownership and acceptance explicitly.",
+    "A metric improves because usage fell: preserve exposure and workload denominators.",
+    "A package grows during discovery: rebaseline scope rather than hiding an expanding rewrite.",
+    "A workaround is retired: verify all dependent runbooks and alerts are updated."
+  ],
+  "domain_records": {
+    "DebtCampaign": [
+      "repositoryIds: ID[]",
+      "serviceIds: ID[]",
+      "planningHorizon: string",
+      "sponsorId: ID",
+      "capacityBudget: number"
+    ],
+    "DebtSymptom": [
+      "caseId: ID",
+      "affectedWorkflow: string",
+      "observation: string",
+      "frequencyBasis: string",
+      "evidenceRefs: Ref[]"
+    ],
+    "DebtMechanism": [
+      "caseId: ID",
+      "symptomIds: ID[]",
+      "proposedCause: string",
+      "rivalCause: string",
+      "validationTask: string"
+    ],
+    "DebtWorkPackage": [
+      "caseId: ID",
+      "mechanismId: ID",
+      "boundedChange: string",
+      "excludedScope: string",
+      "completionEvidence: string"
+    ],
+    "DebtWave": [
+      "caseId: ID",
+      "packageIds: ID[]",
+      "prerequisiteIds: ID[]",
+      "capacityUse: number",
+      "rollbackPlan: string"
+    ],
+    "DebtOutcome": [
+      "caseId: ID",
+      "packageId: ID",
+      "beforeMeasure: string",
+      "afterMeasure: string",
+      "residualSymptoms: string[]"
+    ]
+  }
+}

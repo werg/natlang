@@ -1,0 +1,7 @@
+# Returns, Repair, and Resale Orchestrator
+
+The unit of handling is one serial-identified device tied to its original order and purchase terms. Condition evidence remains partitioned into cosmetic observation, functional symptom and unverified allegation; uncertainty chooses inspection, not a fabricated diagnosis. Routing combines purchase-date entitlement, approved hazardous-work restrictions and the customer's stated preference, with specialist inspection retained where evidence is insufficient.
+
+A repair plan is gated on exact part/model/revision compatibility, approved procedure and a live workshop capacity receipt. Custody is an append-only handoff chain: each event carries item serial, from/to custodians, condition and receipt; a serial mismatch blocks inventory movement and each transit dispute stays separate from prior condition. Resale is a final derivative available only after current title transfer, verified erasure and functional tests. Marketplace grade rules govern disclosure language; label expiry regenerates the logistics artifact under the same entitlement identity rather than creating a second return.
+
+Optional repair and resale judgments are initialized as absent until their own gates run. The returned proposal includes both fields consistently, so a blocked repair or resale path cannot expose a prior turn's or unbound judgment.

@@ -1,0 +1,50 @@
+{
+  "application_id": "081",
+  "title": "Localization Release Manager",
+  "source_relative_path": "applications/17-localization-accessibility-and-cross-cultural-communication/081-localization-release-manager.md",
+  "source_sha256": "a0c1098e93a1bb19f335e159fb3a614b947e9be2498546e30ae177ba191c0294",
+  "domain_id": "17",
+  "stages": [
+    {
+      "name": "segmentWithContext",
+      "output_type": "LocalizationSegment",
+      "algorithm": "Parse source content into translatable units while preserving structured markup, placeholders, plurals, and surrounding context. Distinguish identical strings used for different purposes and attach the product state or audience needed to choose the correct meaning.",
+      "gate": "Exact token and markup structure preserved; context is not discarded during deduplication."
+    },
+    {
+      "name": "resolveTerminology",
+      "output_type": "LocaleTermDecision",
+      "algorithm": "Match terms to concepts and approved locale guidance, considering polysemy, grammatical role, and product meaning. Preserve scoped exceptions and route genuine terminology conflicts to the owner rather than choosing whichever translation appears most often.",
+      "gate": "Term choice is concept- and context-specific, with versioned authority."
+    },
+    {
+      "name": "transformContent",
+      "output_type": "LocalizedSegment",
+      "algorithm": "Translate or adapt according to communicative purpose while preserving product facts, obligations, and constraints. Generate alternatives for culturally or linguistically sensitive phrasing using supplied guidance, and keep unresolved meaning questions visible rather than hiding them in fluent text.",
+      "gate": "Meaning, protected tokens, and required product terminology survive transformation."
+    },
+    {
+      "name": "validateLocale",
+      "output_type": "LocaleQualityFinding",
+      "algorithm": "Run exact placeholder, markup, length, plural-form, and link checks, then review semantic fidelity and naturalness independently. Inspect cross-segment consistency and context screenshots or metadata, distinguishing harmless variation from contradictory terminology or behavior.",
+      "gate": "Exact structural gates pass and no unresolved material semantic defect remains."
+    },
+    {
+      "name": "assembleLocaleRelease",
+      "output_type": "LocaleReleasePacket",
+      "algorithm": "Build a locale bundle bound to source, glossary, context, and review versions. Identify stale translations after source changes, apply explicit fallback rules, and release only approved segments without mixing incompatible editions in one user journey.",
+      "gate": "Bundle is internally version-consistent and every fallback is declared and safe."
+    }
+  ],
+  "operational_details": [
+    "The same word labels both an action and a status: keep separate context keys.",
+    "A placeholder moves grammatically: allow reordering while enforcing exact identity and multiplicity.",
+    "A source edit changes only punctuation: assess semantic impact before invalidating all translations.",
+    "One locale is delayed: apply an explicit fallback rather than mixing old and new critical instructions.",
+    "A glossary term changes: re-evaluate only segments using the affected concept and sense."
+  ],
+  "scenario": {
+    "representative_episode": "A product release reuses the word charge in billing and device contexts, changes a pluralized message, and has one locale awaiting terminology approval.",
+    "independent_truth": "Hidden source meanings, exact message ASTs, approved concept-level terminology, locale constraints, and independent fidelity review."
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "schema": "natlang.application/1",
+  "id": "019",
+  "title": "Contract-to-purchasing conformance desk",
+  "entrypoint": "reviewProcurement.nl",
+  "interfaces": [
+    {
+      "name": "reviewProcurement",
+      "path": "reviewProcurement.nl",
+      "purpose": "Route line-item purchases through entity-scoped agreement coverage, bundle terms, cumulative commitment thresholds, current catalog revisions, and expiry checks.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "procurement-review"
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretRequest",
+        "paths": [
+          "procurementDesk/interpretPurchaseNeed.nl"
+        ]
+      },
+      {
+        "stage": "selectAgreement",
+        "paths": [
+          "procurementDesk/scopeAgreementToLegalEntity.nl"
+        ]
+      },
+      {
+        "stage": "judgeConformance",
+        "paths": [
+          "procurementDesk/compareLineTerms.nl"
+        ]
+      },
+      {
+        "stage": "proposeAlternatives",
+        "paths": [
+          "procurementDesk/constructCompliantOptions.nl"
+        ]
+      },
+      {
+        "stage": "routeApproval",
+        "paths": [
+          "procurementDesk/routeCumulativeApproval.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "procurementDesk/aggregateCommitments.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "procurementDesk/repriceBundleRemoval.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "procurementDesk/verifyEntityCoverage.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "procurementDesk/pinCatalogVersion.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "procurementDesk/recheckExpiredTerms.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "request, entity-scoped agreement terms, current catalog revision, cumulative commitments",
+    "writes": "purchase disposition proposal only"
+  },
+  "effects": [
+    "approval packet",
+    "contract exception route",
+    "term refresh request"
+  ],
+  "source_files": [
+    "natlang.json",
+    "procurementDesk/aggregateCommitments.nl",
+    "procurementDesk/compareLineTerms.nl",
+    "procurementDesk/constructCompliantOptions.nl",
+    "procurementDesk/frameNeed.nl",
+    "procurementDesk/interpretPurchaseNeed.nl",
+    "procurementDesk/pinCatalogVersion.nl",
+    "procurementDesk/recheckExpiredTerms.nl",
+    "procurementDesk/repriceBundleRemoval.nl",
+    "procurementDesk/routeCumulativeApproval.nl",
+    "procurementDesk/scopeAgreementToLegalEntity.nl",
+    "procurementDesk/selectCurrentProcurementPolicy.nl",
+    "procurementDesk/verifyEntityCoverage.nl",
+    "qualification/interpretRequest.nl",
+    "reviewProcurement.nl",
+    "types.ts",
+    "reviewProcurement/reconcileProcurementCheckpoint.nl",
+    "procurementDesk/constructCompliantOptions/constructOptionForRequestLine.nl"
+  ]
+}

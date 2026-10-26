@@ -1,0 +1,649 @@
+[
+  {
+    "id": "071-first-gate-pass",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
+    "split_group": "world-071-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "S17 weekend-bus-lane position",
+        "candidateIds": [
+          "S17"
+        ],
+        "supporting": [
+          {
+            "id": "071-S17-evidence",
+            "source": "case record 071-071-first-gate-pass",
+            "version": "v1",
+            "text": "Source 071-S17-evidence v1 for S17 supports weekend bus lanes because wheelchair boarding is slower. records: caseId=\"071-S17\"; submissionId=\"S17\"; position=\"supports weekend bus lanes\"; reason=\"wheelchair boarding is slower\"; proposedAction=\"add weekend bus lanes\"; affectedContext=\"weekend transit and wheelchair boarding\".",
+            "status": "current",
+            "authority": "primary record export"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete submission S17"
+      },
+      "draft": {
+        "values": {
+          "id": "071-S17-record",
+          "caseId": "071-S17",
+          "sourceRefs": [
+            "071-S17-evidence"
+          ],
+          "state": "draft",
+          "kind": "ConsultationArgument",
+          "subject": "S17 from resident R9",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-S17-evidence"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "submissionId": "S17",
+          "position": "supports weekend bus lanes",
+          "reason": "wheelchair boarding is slower",
+          "proposedAction": "add weekend bus lanes",
+          "affectedContext": "weekend transit and wheelchair boarding"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "071-S17-evidence"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "S17 supports weekend bus lanes because wheelchair boarding is slower.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "071-first-gate-fail",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
+    "split_group": "world-071-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "S17 weekend-bus-lane position",
+        "candidateIds": [
+          "S17"
+        ],
+        "supporting": [
+          {
+            "id": "071-S17-evidence",
+            "source": "case record 071-071-first-gate-pass",
+            "version": "v1",
+            "text": "Source 071-S17-evidence v1 for S17 supports weekend bus lanes because wheelchair boarding is slower. records: caseId=\"071-S17\"; submissionId=\"S17\"; position=\"supports weekend bus lanes\"; reason=\"wheelchair boarding is slower\"; proposedAction=\"add weekend bus lanes\"; affectedContext=\"weekend transit and wheelchair boarding\".",
+            "status": "current",
+            "authority": "primary record export"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete submission S17"
+      },
+      "draft": {
+        "values": {
+          "id": "071-S17-record",
+          "caseId": "071-S17",
+          "sourceRefs": [
+            "071-S17-evidence"
+          ],
+          "state": "draft",
+          "kind": "ConsultationArgument",
+          "subject": "S17 from resident R9",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-S17-evidence"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "submissionId": "S17",
+          "position": "opposes weekend bus lanes",
+          "reason": "wants free parking",
+          "proposedAction": "add weekend bus lanes",
+          "affectedContext": "weekend transit and wheelchair boarding"
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "071-S17-evidence"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "S17 supports weekend bus lanes because wheelchair boarding is slower.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "071-first-gate-needs-review",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
+    "split_group": "world-071-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "S17 weekend-bus-lane position",
+        "candidateIds": [
+          "S17"
+        ],
+        "supporting": [
+          {
+            "id": "071-S17-evidence",
+            "source": "case record 071-071-first-gate-needs-review",
+            "version": "v1",
+            "text": "Source 071-S17-evidence v1 for S17 supports weekend bus lanes because wheelchair boarding is slower. records: reason=\"\"; proposedAction=\"add weekend bus lanes\"; affectedContext=\"weekend transit and wheelchair boarding\". The export contains no value for position.",
+            "status": "current",
+            "authority": "primary record export"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "position"
+        ],
+        "searchedScope": "one complete submission S17"
+      },
+      "draft": {
+        "values": {
+          "id": "071-S17-record",
+          "sourceRefs": [
+            "071-S17-evidence"
+          ],
+          "state": "draft",
+          "kind": "ConsultationArgument",
+          "subject": "S17 from resident R9",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-S17-evidence"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "reason": "",
+          "proposedAction": "add weekend bus lanes",
+          "affectedContext": "weekend transit and wheelchair boarding"
+        },
+        "missingFields": [
+          "position"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "071-S17-evidence"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "S17 supports weekend bus lanes because wheelchair boarding is slower.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "071-workflow-1",
+    "root": "synthesizeConsultation.nl",
+    "split_group": "world-071-workflow-1",
+    "inputs": {
+      "docket": {
+        "consultation": {
+          "id": "071-workflow-1-record",
+          "caseId": "071-workflow-1",
+          "sourceRefs": [
+            "071-wf-1-source"
+          ],
+          "state": "draft",
+          "kind": "Consultation",
+          "subject": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-wf-1-source"
+          ],
+          "fields": {
+            "sourceArtifact": "071-wf-1-source",
+            "sourceVersion": "v1"
+          },
+          "topic": "Weekend bus lane proposal",
+          "submissionIds": [
+            "S11",
+            "S12"
+          ],
+          "scopeStatementId": "SCOPE-7",
+          "analystId": "A4",
+          "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-1-source",
+            "source": "consultation packet 1",
+            "version": "v1",
+            "text": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-1-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
+        }
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Consultation Synthesis Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A campaign produces many identical submissions: report participation volume and shared argument structure separately. Use observation S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion. as the source of truth. The proposal should preserve source-linked record 071-workflow-1-record and make a recipient-facing distinction grounded in 071-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A campaign produces many identical submissions: report participation volume and shared argument structure separately.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 071-workflow-1-record must accurately preserve observation 071-wf-1-source (v1): S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion. Apply brief requirement A campaign produces many identical submissions: report participation volume and shared argument structure separately. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed Consultation record 071-workflow-1-record and its source link to 071-wf-1-source version v1, with a disposition matching this observed state: S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion. Carry requirement A campaign produces many identical submissions: report participation volume and shared argument structure separately. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 071-workflow-1-record based on 071-wf-1-source (v1) and observation S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion. Apply requirement A campaign produces many identical submissions: report participation volume and shared argument structure separately. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "071-workflow-2",
+    "root": "synthesizeConsultation.nl",
+    "split_group": "world-071-workflow-2",
+    "inputs": {
+      "docket": {
+        "consultation": {
+          "id": "071-workflow-2-record",
+          "caseId": "071-workflow-2",
+          "sourceRefs": [
+            "071-wf-2-source"
+          ],
+          "state": "draft",
+          "kind": "Consultation",
+          "subject": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-wf-2-source"
+          ],
+          "fields": {
+            "sourceArtifact": "071-wf-2-source",
+            "sourceVersion": "v1"
+          },
+          "topic": "Weekend bus lane proposal",
+          "submissionIds": [
+            "S17"
+          ],
+          "scopeStatementId": "SCOPE-7",
+          "analystId": "A4",
+          "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-2-source",
+            "source": "consultation packet 2",
+            "version": "v1",
+            "text": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-2-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
+        }
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Consultation Synthesis Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”"
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A submission supports one part and opposes another: preserve both scoped positions. Use observation S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.” as the source of truth. The proposal should preserve source-linked record 071-workflow-2-record and make a recipient-facing distinction grounded in 071-wf-2-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A submission supports one part and opposes another: preserve both scoped positions.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 071-workflow-2-record must accurately preserve observation 071-wf-2-source (v1): S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.” Apply brief requirement A submission supports one part and opposes another: preserve both scoped positions. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed Consultation record 071-workflow-2-record and its source link to 071-wf-2-source version v1, with a disposition matching this observed state: S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.” Carry requirement A submission supports one part and opposes another: preserve both scoped positions. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 071-workflow-2-record based on 071-wf-2-source (v1) and observation S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.” Apply requirement A submission supports one part and opposes another: preserve both scoped positions. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "071-workflow-3",
+    "root": "synthesizeConsultation.nl",
+    "split_group": "world-071-workflow-3",
+    "inputs": {
+      "docket": {
+        "consultation": {
+          "id": "071-workflow-3-record",
+          "caseId": "071-workflow-3",
+          "sourceRefs": [
+            "071-wf-3-source"
+          ],
+          "state": "draft",
+          "kind": "Consultation",
+          "subject": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-wf-3-source"
+          ],
+          "fields": {
+            "sourceArtifact": "071-wf-3-source",
+            "sourceVersion": "v2"
+          },
+          "topic": "Weekend bus lane proposal",
+          "submissionIds": [
+            "S18"
+          ],
+          "scopeStatementId": "SCOPE-7",
+          "analystId": "A4",
+          "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-3-source",
+            "source": "consultation submission S18 and consent form C-18",
+            "version": "v2",
+            "text": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-3-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
+        }
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Consultation Synthesis Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: A quoted example reveals a private circumstance: anonymize with consent-aware review. Independently assess the privacy use case. The recipient view must omit the identifying quote and clinic name while retaining a non-identifying theme only if supported by C-18. The durable proposal retains the restricted original source and consent scope; it must not broaden consent. Any anonymization or publication action remains a proposal for accountable review and host authorization. Use the supplied evidence as the source of truth, preserve record 071-workflow-3-record and source 071-wf-3-source version v2, and keep persistence and external effects at the host boundary."
+    },
+    "scenario": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "A quoted example reveals a private circumstance: anonymize with consent-aware review.",
+    "boundary_assertions": {
+      "view": "Recipient-facing report must not reproduce the insulin-pump quotation or clinic name from S18. It may identify the accessible-transit theme only as an anonymous, source-linked summary within C-18’s authorized scope; flag public quotation permission as absent.",
+      "durable_state": "Proposed record retains S18 and consent form C-18 as restricted source references, stores the signed scope (anonymous theme summaries only), and marks verbatim/public identity use unapproved. No persisted edit is claimed.",
+      "effects": "Effect ledger may propose privacy review and a consent-scoped anonymized theme for the public report; it must not propose publishing the quote or clinic name. Publication remains pending accountable approval and host receipt."
+    }
+  },
+  {
+    "id": "071-workflow-4",
+    "root": "synthesizeConsultation.nl",
+    "split_group": "world-071-workflow-4",
+    "inputs": {
+      "docket": {
+        "consultation": {
+          "id": "071-workflow-4-record",
+          "caseId": "071-workflow-4",
+          "sourceRefs": [
+            "071-wf-4-source"
+          ],
+          "state": "draft",
+          "kind": "Consultation",
+          "subject": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-wf-4-source"
+          ],
+          "fields": {
+            "sourceArtifact": "071-wf-4-source",
+            "sourceVersion": "v1"
+          },
+          "topic": "Weekend bus lane proposal",
+          "submissionIds": [
+            "S23"
+          ],
+          "scopeStatementId": "SCOPE-7",
+          "analystId": "A4",
+          "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-4-source",
+            "source": "consultation packet 4",
+            "version": "v1",
+            "text": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-4-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
+        }
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Consultation Synthesis Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A late submission is accepted under an exception: record its inclusion basis. Use observation S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00. as the source of truth. The proposal should preserve source-linked record 071-workflow-4-record and make a recipient-facing distinction grounded in 071-wf-4-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A late submission is accepted under an exception: record its inclusion basis.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 071-workflow-4-record must accurately preserve observation 071-wf-4-source (v1): S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00. Apply brief requirement A late submission is accepted under an exception: record its inclusion basis. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed Consultation record 071-workflow-4-record and its source link to 071-wf-4-source version v1, with a disposition matching this observed state: S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00. Carry requirement A late submission is accepted under an exception: record its inclusion basis. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 071-workflow-4-record based on 071-wf-4-source (v1) and observation S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00. Apply requirement A late submission is accepted under an exception: record its inclusion basis. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "071-workflow-5",
+    "root": "synthesizeConsultation.nl",
+    "split_group": "world-071-workflow-5",
+    "inputs": {
+      "docket": {
+        "consultation": {
+          "id": "071-workflow-5-record",
+          "caseId": "071-workflow-5",
+          "sourceRefs": [
+            "071-wf-5-source"
+          ],
+          "state": "draft",
+          "kind": "Consultation",
+          "subject": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
+          "status": "candidate",
+          "evidenceIds": [
+            "071-wf-5-source"
+          ],
+          "fields": {
+            "sourceArtifact": "071-wf-5-source",
+            "sourceVersion": "v1"
+          },
+          "topic": "Weekend bus lane proposal",
+          "submissionIds": [
+            "S17"
+          ],
+          "scopeStatementId": "SCOPE-7",
+          "analystId": "A4",
+          "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-5-source",
+            "source": "consultation packet 5",
+            "version": "v1",
+            "text": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-5-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
+        }
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
+    },
+    "expected": {
+      "application": "Public Consultation Synthesis Studio",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: A report is challenged for omission: trace the concern back to coverage and revise transparently. Use observation Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme. as the source of truth. The proposal should preserve source-linked record 071-workflow-5-record and make a recipient-facing distinction grounded in 071-wf-5-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "A report is challenged for omission: trace the concern back to coverage and revise transparently.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 071-workflow-5-record must accurately preserve observation 071-wf-5-source (v1): Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme. Apply brief requirement A report is challenged for omission: trace the concern back to coverage and revise transparently. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed Consultation record 071-workflow-5-record and its source link to 071-wf-5-source version v1, with a disposition matching this observed state: Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme. Carry requirement A report is challenged for omission: trace the concern back to coverage and revise transparently. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 071-workflow-5-record based on 071-wf-5-source (v1) and observation Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme. Apply requirement A report is challenged for omission: trace the concern back to coverage and revise transparently. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

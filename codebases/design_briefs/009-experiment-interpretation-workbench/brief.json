@@ -1,0 +1,49 @@
+{
+  "application_id": "009",
+  "title": "Experiment interpretation workbench",
+  "source_relative_path": "applications/02-customer-research-and-product-intelligence/009-experiment-interpretation-workbench.md",
+  "program_root": "codebases/design_briefs/009-experiment-interpretation-workbench",
+  "source_sha256": "8e6a40c8260a377ade4135294f37a7ded5fc25b069789d229067bd9e656e21ff",
+  "domain_id": "02",
+  "stages": [
+    {
+      "name": "recoverDesign",
+      "output_type": "ExperimentDesign",
+      "algorithm": "Read the original plan and subsequent amendments in temporal order. Distinguish preregistered criteria from retrospective choices, identify the assignment and observation units, and preserve deviations that could change interpretation even when the experiment ran successfully.",
+      "gate": "Every design claim links to its effective plan version."
+    },
+    {
+      "name": "auditMeasurement",
+      "output_type": "MeasurementFinding",
+      "algorithm": "Compare metric definitions, event schemas, instrumentation notes, and missingness reports. Identify whether treatment changed the measurement process itself; formulate exact diagnostic queries instead of assuming a numerical difference reflects changed customer behavior.",
+      "gate": "Incomparable measurement windows cannot enter an unqualified pooled result."
+    },
+    {
+      "name": "interpretResults",
+      "output_type": "ResultClaim",
+      "algorithm": "Consume approved statistical outputs rather than calculating inference through prose. Relate results to the specified estimand, inspect multiplicity and subgroup selection, and distinguish evidence of little effect from an underpowered or compromised experiment.",
+      "gate": "Claimed population, direction, and uncertainty match the actual computed analysis."
+    },
+    {
+      "name": "reconcileFeedback",
+      "output_type": "MechanismFinding",
+      "algorithm": "Compare qualitative accounts with result patterns to formulate plausible mechanisms, not causal proof. Seek dissatisfied successes and satisfied failures that challenge the simple explanation, and identify evidence capable of distinguishing rival accounts.",
+      "gate": "Anecdotes cannot override valid numerical results or establish unmeasured causality."
+    },
+    {
+      "name": "compileFollowups",
+      "output_type": "AnalysisOrder",
+      "algorithm": "Convert unresolved issues into typed analysis plans with cohorts, time windows, allowed operations, and interpretation rules. Separate confirmatory follow-up from exploratory searching and require a fresh data or holdout plan where the proposed claim needs one.",
+      "gate": "Work orders compile against available schemas and expose every post-hoc choice."
+    }
+  ],
+  "operational_details": [
+    "An event name changes halfway through: bind metrics to schema versions before aggregation.",
+    "A subgroup looks exceptional after many searches: label it exploratory and preserve the search history.",
+    "Assignment is by team but rows are users: reject analyses with the wrong independence unit.",
+    "A result arrives after the decision meeting: version the recommendation rather than silently editing minutes.",
+    "A metric has no trustworthy denominator: withhold the rate and request exposure reconstruction."
+  ],
+  "representative_episode": "A treatment appears to increase activation because its logging event fires earlier; qualitative feedback suggests a separate genuine usability benefit.",
+  "independent_truth_basis": "Synthetic assignment and observation processes with planted instrumentation faults; independently computed statistics and claim-scope labels."
+}

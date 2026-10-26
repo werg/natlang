@@ -1382,10 +1382,37 @@ def _semantic_completion_dependencies(completion_path,completion):
                 task=json.loads(path.read_text())
                 if task.get('score_path'):
                     add({'path':task['score_path'],'sha256':task['score_sha256']})
+                runtime=task.get('task_runtime_identity')
+                if runtime is not None:
+                    if runtime.get('schema')!='natlang.task-eval-runtime-identity/1':
+                        raise ValueError('task execution receipt has an unknown evaluator runtime binding')
+                    for reference in runtime.get('files')or[]:add(reference)
+    for baseline in (completion.get('source_task_baselines')or{}).values():
+        if not isinstance(baseline,dict):raise ValueError('source task baseline dependency is malformed')
+        task_path=add(baseline['task_execution_receipt'])
+        task=json.loads(task_path.read_text())
+        if task.get('score_path'):
+            add({'path':task['score_path'],'sha256':task['score_sha256']})
+        runtime=baseline.get('task_runtime_identity')or{}
+        if (runtime.get('schema')!='natlang.task-eval-runtime-identity/1'
+                or task.get('task_runtime_identity')!=runtime):
+            raise ValueError('source task baseline omitted its exact evaluator runtime identity')
+        for reference in runtime.get('files')or[]:add(reference)
+    if completion.get('resolved_curriculum') is not None:
+        add(completion['resolved_curriculum'])
     curriculum=json.loads(_bound(completion['curriculum']).read_text())
     for key in ('pairs','held_pairs'):
         if key not in curriculum:raise ValueError('shared completion curriculum omitted its paired source')
         add(curriculum[key])
+    policies=[curriculum]
+    if completion.get('resolved_curriculum') is not None:
+        policies.append(json.loads(_bound(completion['resolved_curriculum']).read_text()))
+    for policy in policies:
+        declarations=[policy.get('task_eval')]
+        declarations.extend((value or {}).get('task_eval') for value in (policy.get('models')or{}).values())
+        for declaration in declarations:
+            if isinstance(declaration,dict) and isinstance(declaration.get('packet'),dict):
+                add(declaration['packet'])
     def add_bundle(reference):
         path=add(reference);bundle=json.loads(path.read_text())
         if bundle.get('schema')!='natlang.rl-block-bundle/1':
@@ -1579,6 +1606,67 @@ def install_metadata(package):
     return [item['source']for item in package]
 
 
+def _validate_resolved_source_task_baselines(preparation, curriculum, model_ids):
+    """Revalidate frozen source TaskEval evidence and its effective policy."""
+    from ..eval.native_state import validate_task_execution_receipt
+    from ..eval.task_cadence import task_eval_policy_identity,parse_task_eval,task_eval_runtime_identity
+    from ..train.native_readiness import _bound
+    source_config=json.loads(_bound(preparation['curriculum']).read_text())
+    participants=(preparation.get('snapshot_preparation')or{}).get('participants',{})
+    baselines=preparation.get('source_task_baselines')
+    if not isinstance(baselines,dict):
+        raise ValueError('frozen preparation omitted source task baseline receipts')
+    for model_id in model_ids:
+        source_spec=source_config.get('models',{}).get(model_id,{}).get('task_eval',source_config.get('task_eval'))
+        effective_spec=curriculum.get('models',{}).get(model_id,{}).get('task_eval',curriculum.get('task_eval'))
+        baseline=baselines.get(model_id);identity=participants.get(model_id)
+        if not all(isinstance(value,dict) for value in (source_spec,effective_spec,baseline,identity)):
+            raise ValueError('source task baseline omitted an exact participant declaration: '+model_id)
+        policy_sha=task_eval_policy_identity(source_spec)
+        runtime_identity=task_eval_runtime_identity(source_spec)
+        normalized_source_spec=parse_task_eval(source_spec)
+        packet_path=_bound(normalized_source_spec['packet'])
+        if sha256_file_hex_cached(packet_path)!=normalized_source_spec['packet']['sha256']:
+            raise ValueError('source TaskEval packet bytes changed: '+model_id)
+        if task_eval_policy_identity(effective_spec)!=policy_sha:
+            raise ValueError('resolved curriculum changed the source TaskEval execution policy: '+model_id)
+        reference=baseline.get('task_execution_receipt')
+        if identity!=baseline.get('native_identity') or not isinstance(reference,dict):
+            raise ValueError('source TaskEval baseline lost its exact source checkpoint: '+model_id)
+        task_path=_bound(reference);task=json.loads(task_path.read_text())
+        if (sha256_file_hex_cached(task_path)!=reference.get('sha256')
+                or not validate_task_execution_receipt(task,identity)
+                or task.get('source_baseline') is not True
+                or task.get('baseline_comparison_floor')!=0
+                or task.get('task_eval_policy_sha256')!=policy_sha
+                or task.get('task_runtime_identity')!=runtime_identity
+                or task.get('packet_sha256')!=normalized_source_spec['packet']['sha256']
+                or task.get('case_indices')!=normalized_source_spec['cases']
+                or task.get('task_successes')!=baseline.get('task_successes')
+                or baseline.get('task_eval_policy_sha256')!=policy_sha
+                or baseline.get('task_runtime_identity')!=runtime_identity):
+            raise ValueError('source TaskEval baseline receipt is incomplete or mismatched: '+model_id)
+        score_ref=baseline.get('score')
+        if (not isinstance(score_ref,dict) or task.get('score_path')!=score_ref.get('path')
+                or task.get('score_sha256')!=score_ref.get('sha256')):
+            raise ValueError('source TaskEval score binding differs from its baseline receipt: '+model_id)
+        score_path=_bound(score_ref)
+        if sha256_file_hex_cached(score_path)!=score_ref['sha256']:
+            raise ValueError('source TaskEval score bytes changed: '+model_id)
+        provenance={'kind':'native-source-task-baseline/1','source_identity':identity,
+            'task_eval_policy_sha256':policy_sha,'task_execution_receipt':reference,
+            'task_runtime_identity':runtime_identity,
+            'score':baseline.get('score'),
+            'superseded_declared_reference':{'reference_successes':source_spec.get('reference_successes'),
+                'reference_provenance':source_spec.get('reference_provenance')}}
+        if (effective_spec.get('reference_successes')!=task.get('task_successes')
+                or effective_spec.get('reference_provenance')!=provenance):
+            raise ValueError('source task comparison reference is not the exact measured current-weight baseline: '+model_id)
+    if set(baselines)!=set(model_ids):
+        raise ValueError('source task baseline set differs from actual participants')
+    return True
+
+
 def post_vae_request(plan,completion,controller):
     """Exact frozen preparation requests fresh descendant work, never release."""
     from ..train.native_readiness import _bound,validate_snapshot_preparation
@@ -1589,17 +1677,31 @@ def post_vae_request(plan,completion,controller):
     published={(proof.get('participants_signature'),proof.get('curriculum_signature')):
         {'execution_signature':canonical_json_sha256_hex(controller)}}
     validate_snapshot_preparation(path,published)
-    full=json.loads(_bound(controller['curriculum']).read_text())
+    source_full=json.loads(_bound(controller['curriculum']).read_text())
     from ..train.native_semantic_stage import validate_config
-    validate_config(full)
+    validate_config(source_full)
+    resolved_ref=proof.get('resolved_curriculum')
+    if not isinstance(resolved_ref,dict):
+        raise ValueError('completed frozen VAE preparation omitted its source-weight-resolved task curriculum')
+    resolved_path=_bound(resolved_ref)
+    if sha256_file_hex_cached(resolved_path)!=resolved_ref['sha256']:
+        raise ValueError('resolved source task curriculum changed after VAE preparation')
+    full=json.loads(resolved_path.read_text());validate_config(full)
+    if (full.get('snapshot_preparation') is not False
+            or not proof.get('source_task_baselines')):
+        raise ValueError('resolved task curriculum is not the exact frozen-source baseline product')
+    model_ids=[row['model_id']for row in contract(plan)['models'].values()]
+    _validate_resolved_source_task_baselines(proof,full,model_ids)
     from ..train.native_deployment import validate_joint_task_specs
     validate_joint_task_specs(full,[row['model_id']for row in contract(plan)['models'].values()])
     if full.get('snapshot_preparation') or not full.get('task_eval') or not full.get('policy_schedule'):
         raise ValueError('post-VAE adoption needs actual joint/task/policy work')
+    joint_controller=dict(controller)
+    joint_controller['curriculum']=resolved_ref
     request={'schema':'natlang.native-post-vae-handoff/1','contract':contract(plan),
         'role':exchange['role'],'mechanism':_publishing_mechanism(plan),
-        'preparation':_inline(completion),'joint_controller':controller,
-        'joint_curriculum':_inline(controller['curriculum']),'readiness_granted':False}
+        'preparation':_inline(completion),'joint_controller':joint_controller,
+        'joint_curriculum':_inline(resolved_ref),'readiness_granted':False}
     active=preparation_handoff(plan,check_assets=False)
     if active:
         # The VAE completion is already fully authenticated above. Consume only
@@ -1636,6 +1738,8 @@ def validate_handoff_request(plan,request):
             or not curriculum.get('policy_schedule')
             or request['joint_controller'].get('curriculum')!=request['joint_curriculum']['source']):
         raise ValueError('descendant handoff requires frozen VAE and executable joint work')
+    _validate_resolved_source_task_baselines(proof,curriculum,
+        [row['model_id']for row in contract(plan)['models'].values()])
     return request
 
 

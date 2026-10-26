@@ -30,6 +30,12 @@
       "family": "musique_answer_hops",
       "primarySourceId": null,
       "reason": "The answer-phrase variant shares musique_hops' relation-unverified source decomposition. Hold generated cases and rendered training members until per-hop semantic review or a reviewed replacement; do not make preference negatives."
+    },
+    {
+      "dataset": "ag_news",
+      "family": "edit_stream",
+      "primarySourceId": null,
+      "reason": "2026-10-26 controlled task-contract probe: unrelated repeated words pass current length/keyword constraints while violating sequential editing and change-nothing-else instructions. Hold positive training admission until task-specific edit fidelity is verified; preserve raw trajectories. Evidence: /home/werg/data/luna-generation-20261026/failure-analysis/task-and-training-contract-audit/oracle-adversarial-probe.json. Five accepted v6 candidates require regrading; this is not proof those five exploited the grader."
     }
   ]
 }

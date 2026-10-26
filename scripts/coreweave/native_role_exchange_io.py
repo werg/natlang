@@ -31,13 +31,17 @@ class NativeRoleExchangeIO:
         local=provider.get('local_source_host')
         if local is not None:
             required={'source_host_id','runtime','python','read_roots','write_roots'}
-            if (not isinstance(local,dict)or set(local)-required-{'role_controls','reserve_bytes','cpu_helpers','cpu_helper_loader','private_exports','private_export_inventory','private_export_role','readonly_input_roots'}
+            if (not isinstance(local,dict)or set(local)-required-{'role_controls','reserve_bytes','cpu_helpers','cpu_helper_loader','private_exports','private_export_inventory','private_export_role','readonly_input_roots','exporter_python'}
                     or not required<=set(local)
                     or not all(isinstance(local.get(key),str)and local[key] for key in
                         ('source_host_id','runtime','python'))
                     or not Path(local['runtime']).is_absolute()or not Path(local['python']).is_absolute()
                     or not Path(local['runtime']).is_dir()or not Path(local['python']).is_file()):
                 raise ValueError('local source host must bind its exact runtime, interpreter and path roots')
+            if ('exporter_python' in local and (not isinstance(local['exporter_python'],str)
+                    or not Path(local['exporter_python']).is_absolute()
+                    or not Path(local['exporter_python']).is_file())):
+                raise ValueError('local shared-bundle exporter must bind its exact SDK interpreter')
             for name in ('read_roots','write_roots'):
                 roots=local[name]
                 if not isinstance(roots,list)or not roots or any(not isinstance(root,str)

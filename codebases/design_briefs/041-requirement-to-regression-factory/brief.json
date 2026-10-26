@@ -1,0 +1,89 @@
+{
+  "application_id": "041",
+  "title": "Requirement-to-regression factory",
+  "source_relative_path": "applications/09-software-engineering-and-technical-operations/041-requirement-to-regression-factory.md",
+  "source_sha256": "68b1b838bfcb0d3bd036ed859a2dfc5a2afc8a8ccd6c1169d184149ecc3666b7",
+  "domain_id": "09",
+  "stages": [
+    {
+      "name": "recoverBehavior",
+      "output_type": "BehavioralRequirement",
+      "algorithm": "Interpret prose requirements, bug reports, and relevant discussion to identify observable behavior, preconditions, and exclusions. Separate implementation suggestions from requirements and preserve ambiguous expectations for owner resolution before encoding them as tests.",
+      "gate": "Every assertion traces to a requirement or explicitly approved interpretation."
+    },
+    {
+      "name": "modelPartitions",
+      "output_type": "TestPartition",
+      "algorithm": "Partition input and state space by behaviorally meaningful distinctions, including invalid inputs and interacting requirements. Identify boundary cases and previously untested combinations rather than generating many superficial variants of the same happy path.",
+      "gate": "Partitions cover each requirement’s decisive conditions and failure behavior."
+    },
+    {
+      "name": "constructTests",
+      "output_type": "RegressionTest",
+      "algorithm": "Create executable test specifications using approved harness capabilities and isolated fixtures. Define deterministic setup, observable assertions, and cleanup; avoid brittle checks on incidental wording or timing unless those are actually contractual.",
+      "gate": "Tests compile and have independent expected behavior, not output copied from the implementation."
+    },
+    {
+      "name": "interpretFailures",
+      "output_type": "TestFailureFinding",
+      "algorithm": "Compare failures with requirements, execution traces, and fixture health. Distinguish a product defect from a bad oracle, flaky setup, or unavailable dependency; propose the smallest repair without weakening a valid assertion to match defective behavior.",
+      "gate": "Failure classification is evidence-backed and environment errors are not counted as product coverage."
+    },
+    {
+      "name": "qualifySuite",
+      "output_type": "SuiteQualification",
+      "algorithm": "Run independent seeded defects and mutation tests to evaluate whether the suite detects meaningful violations. Remove redundant tests only when coverage remains, preserve regression cases for repaired bugs, and report uncovered requirements explicitly.",
+      "gate": "Suite catches required seeded defects and does not pass merely because all tests match current behavior."
+    }
+  ],
+  "operational_details": [
+    "A flaky test fails only under load: preserve timing evidence and avoid hiding it through unlimited retries.",
+    "A requirement changes after a test is approved: invalidate affected assertions explicitly.",
+    "A test uses production credentials: block execution before sandbox launch.",
+    "A generated fixture contains personal data: replace it with approved synthetic records.",
+    "A patch makes tests pass by deleting an assertion: require independent coverage review."
+  ],
+  "domain_records": {
+    "RegressionProject": [
+      "repositoryId: ID",
+      "requirementIds: ID[]",
+      "targetRevision: string",
+      "testOwnerId: ID",
+      "sandboxProfileId: ID"
+    ],
+    "BehavioralRequirement": [
+      "caseId: ID",
+      "precondition: string",
+      "action: string",
+      "expectedOutcome: string",
+      "forbiddenOutcome: string"
+    ],
+    "TestPartition": [
+      "caseId: ID",
+      "requirementId: ID",
+      "inputClass: string",
+      "boundary: string",
+      "interactionIds: ID[]"
+    ],
+    "RegressionTest": [
+      "caseId: ID",
+      "requirementIds: ID[]",
+      "setupSpec: string",
+      "actionSpec: string",
+      "assertionSpec: string"
+    ],
+    "TestFailureFinding": [
+      "caseId: ID",
+      "testId: ID",
+      "failureKind: 'product'|'test'|'environment'|'uncertain'",
+      "evidenceRefs: Ref[]"
+    ],
+    "SuiteQualification": [
+      "caseId: ID",
+      "testIds: ID[]",
+      "mutationIds: ID[]",
+      "survivingMutations: ID[]",
+      "coverageGaps: string[]"
+    ]
+  }
+}

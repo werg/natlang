@@ -1,0 +1,50 @@
+{
+  "application_id": "085",
+  "title": "Multilingual Terminology Negotiation Workbench",
+  "source_relative_path": "applications/17-localization-accessibility-and-cross-cultural-communication/085-multilingual-terminology-negotiation-workbench.md",
+  "source_sha256": "52c18c12cacc8563e7aa64caf997cd13549752e229b767b8caf11f199445e3e6",
+  "domain_id": "17",
+  "stages": [
+    {
+      "name": "extractSenses",
+      "output_type": "TermOccurrence",
+      "algorithm": "Collect terminology in actual use across expert documents and translations, preserving grammatical and domain context. Separate different senses of the same word and identify cases where different words denote one concept rather than assuming one-to-one lexical equivalence.",
+      "gate": "Every sense has contextual evidence."
+    },
+    {
+      "name": "alignConcepts",
+      "output_type": "MultilingualConcept",
+      "algorithm": "Compare conceptual boundaries across languages and teams, identifying exact, broader, narrower, and partial equivalence. Preserve concepts that do not map cleanly and avoid forcing one language’s categorization onto all others.",
+      "gate": "Concept alignment is supported by definitions and counterexamples, not dictionary matching alone."
+    },
+    {
+      "name": "constructTermOptions",
+      "output_type": "TermOption",
+      "algorithm": "Propose terms and scoped usage rules considering approved domain conventions, grammatical forms, and audience needs. Explain tradeoffs among clarity, continuity, and precision, and retain regional or contextual variants where one universal term would change meaning.",
+      "gate": "Each option preserves the intended concept in its stated context."
+    },
+    {
+      "name": "negotiateDecision",
+      "output_type": "TerminologyDecision",
+      "algorithm": "Present alternatives and concrete usage examples to the relevant experts, reconcile their comments, and distinguish stylistic preference from conceptual disagreement. Record scoped acceptance and unresolved dissent rather than treating a majority vote as proof of semantic equivalence.",
+      "gate": "Decision authority and applicability are explicit; unresolved conceptual conflict remains visible."
+    },
+    {
+      "name": "propagateTerminology",
+      "output_type": "TerminologyImpact",
+      "algorithm": "Identify content using the affected concept and sense, propose context-aware revisions, and preserve unrelated homographs. Revalidate grammar and meaning after replacement and version the glossary and dependent release artifacts together.",
+      "gate": "No global search-and-replace across different senses; affected content passes fidelity checks."
+    }
+  ],
+  "operational_details": [
+    "A term has two meanings in one product: bind terminology to concept and context.",
+    "A regional variant is required: preserve its scope rather than declaring it inconsistent.",
+    "A term changes grammatical form: generate context-aware inflections and review them.",
+    "Experts disagree on the concept boundary: keep the issue open instead of choosing the most common word.",
+    "A glossary decision affects released content: stage a versioned migration and avoid mixed terminology in one workflow."
+  ],
+  "scenario": {
+    "representative_episode": "Two teams translate a technical term differently because they mean overlapping but nonidentical concepts, while a third use is merely a homograph.",
+    "independent_truth": "Hidden concept and sense relations, approved usage constraints, contextual occurrences, and exact affected-content sets."
+  }
+}

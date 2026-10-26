@@ -1,0 +1,90 @@
+{
+  "application_id": "039",
+  "title": "Apprenticeship practice simulator",
+  "source_relative_path": "applications/08-education-assessment-and-professional-learning/039-apprenticeship-practice-simulator.md",
+  "source_sha256": "44b45faff848562d8af36e36324b10f3a93e8eb6ffd78ba62ecd3bad5d5c36e8",
+  "domain_id": "08",
+  "stages": [
+    {
+      "name": "authorSituation",
+      "output_type": "PracticeScenario",
+      "algorithm": "Construct a realistic situation requiring the supplied procedure and meaningful information gathering. Separate facts visible at the start from facts revealed by appropriate questions, and include complications that test judgment without requiring unauthorized actions.",
+      "gate": "Scenario has a feasible compliant path and no hidden prerequisite the learner cannot discover."
+    },
+    {
+      "name": "interpretAction",
+      "output_type": "LearnerAction",
+      "algorithm": "Interpret the learner’s natural-language response against the available action set. Distinguish a proposed action from an executed one, ask for clarification when ambiguity affects consequences, and avoid rewarding jargon without the corresponding operational behavior.",
+      "gate": "Action maps to a permitted typed operation or remains unexecuted."
+    },
+    {
+      "name": "advanceWorld",
+      "output_type": "PracticeTransition",
+      "algorithm": "Apply the exact simulator’s legal transition rules, then formulate context-appropriate responses from actors who know only their own information. Preserve consequences across turns and do not reveal hidden facts merely to help the learner succeed.",
+      "gate": "Resource, knowledge, and procedure invariants remain valid after every transition."
+    },
+    {
+      "name": "introduceChallenge",
+      "output_type": "PracticeComplication",
+      "algorithm": "Select a complication appropriate to the learner’s progress and learning objective. Ensure it changes a meaningful decision, preserves a safe recovery path, and does not retroactively invalidate an action that was correct under earlier visible facts.",
+      "gate": "Complication is fair, procedurally relevant, and reproducible from the scenario seed."
+    },
+    {
+      "name": "debriefPerformance",
+      "output_type": "PracticeFeedback",
+      "algorithm": "Compare the observable trajectory with procedure requirements and scenario facts. Explain specific effective and ineffective decisions, distinguish outcome luck from sound process, and propose a next scenario targeting demonstrated gaps rather than generic advice.",
+      "gate": "Feedback cites actual actions and does not infer unobserved intentions."
+    }
+  ],
+  "operational_details": [
+    "A learner asks an unexpected useful question: answer from world facts rather than rejecting it for not matching a script.",
+    "A network interruption occurs mid-turn: resume without duplicating the action.",
+    "An unsafe action is proposed: simulate refusal or consequences within the approved training policy, not real execution.",
+    "A scenario is reused: vary surface details while preserving its learning objective.",
+    "A learner succeeds by chance: distinguish final outcome from procedural competence."
+  ],
+  "domain_records": {
+    "PracticeSession": [
+      "learnerId: ID",
+      "scenarioFamily: string",
+      "procedureId: ID",
+      "instructorId: ID",
+      "difficulty: string"
+    ],
+    "PracticeScenario": [
+      "caseId: ID",
+      "initialFacts: string[]",
+      "hiddenFacts: string[]",
+      "actorGoals: string[]",
+      "allowedActions: string[]"
+    ],
+    "LearnerAction": [
+      "caseId: ID",
+      "utterance: string",
+      "intendedAction: string",
+      "targetId: ID",
+      "ambiguity: string"
+    ],
+    "PracticeTransition": [
+      "caseId: ID",
+      "actionId: ID",
+      "stateDelta: string",
+      "revealedFacts: string[]",
+      "consequence: string"
+    ],
+    "PracticeComplication": [
+      "caseId: ID",
+      "trigger: string",
+      "newFact: string",
+      "affectedObligationIds: ID[]",
+      "recoveryPaths: string[]"
+    ],
+    "PracticeFeedback": [
+      "caseId: ID",
+      "actionIds: ID[]",
+      "demonstratedSkills: string[]",
+      "missedEvidence: string[]",
+      "nextPractice: string"
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "application_id": "050",
+  "title": "Dataset specification and audit studio",
+  "source_relative_path": "applications/10-data-stewardship-and-semantic-analysis/050-dataset-specification-and-audit-studio.md",
+  "source_sha256": "a0f57946b71859c90ab3c71127bfeef6d7a02a16b55ad839264e6aab97d4d4ef",
+  "domain_id": "10",
+  "stages": [
+    {
+      "name": "defineUseContract",
+      "output_type": "DatasetUse",
+      "algorithm": "Interpret the intended application and decisions the dataset will support. Define target population, task boundaries, prohibited uses, and meaningful evaluation slices; avoid treating easily available data as representative of the intended use.",
+      "gate": "Every required slice and restriction has a use-based rationale."
+    },
+    {
+      "name": "writeAnnotationSpec",
+      "output_type": "AnnotationRule",
+      "algorithm": "Draft operational labeling instructions with examples, counterexamples, and uncertainty handling. Separate observable labels from inferred attributes, define adjudication, and test whether independent annotators can apply the rule consistently.",
+      "gate": "Labels are grounded in available evidence and ambiguous cases have an explicit disposition."
+    },
+    {
+      "name": "auditCandidates",
+      "output_type": "DatasetRecordAudit",
+      "algorithm": "Inspect candidate records for task relevance, data quality, provenance, consent, and leakage risks. Distinguish missing coverage from invalid records, and quarantine material whose rights or source integrity cannot be established.",
+      "gate": "No release candidate without verified provenance and permitted intended use."
+    },
+    {
+      "name": "measureCoverage",
+      "output_type": "CoverageFinding",
+      "algorithm": "Compute exact slice coverage and overlap using the approved population definitions. Interpret whether apparent balance masks duplicated sources or missing mechanisms, and identify the most consequential acquisition gaps rather than optimizing superficial counts.",
+      "gate": "Exact counts, independent-source accounting, and no false representativeness claim."
+    },
+    {
+      "name": "commissionAndRelease",
+      "output_type": "DatasetRelease",
+      "algorithm": "Create targeted acquisition or annotation tasks, rerun audits on new material, and assemble a release manifest with known limits. Freeze splits by source and world family, prevent leakage, and require owner approval for the specific release use.",
+      "gate": "Rights, quality, split integrity, and required coverage gates pass or limitations block release."
+    }
+  ],
+  "operational_details": [
+    "A source license permits research but not redistribution: enforce the release boundary.",
+    "Near-duplicate records cross train and test: group by underlying source before splitting.",
+    "A label requires information not present: revise the task or mark it unobservable.",
+    "A coverage target is met through copied examples: count independent mechanisms and sources.",
+    "Consent is withdrawn after release: maintain traceable removal and downstream notification obligations."
+  ],
+  "domain_records": {
+    "DatasetProject": [
+      "intendedUse: string",
+      "targetPopulation: string",
+      "sourceCollectionIds: ID[]",
+      "ownerId: ID",
+      "releaseAudience: string"
+    ],
+    "DatasetUse": [
+      "caseId: ID",
+      "task: string",
+      "targetPopulation: string",
+      "prohibitedUses: string[]",
+      "requiredSlices: string[]"
+    ],
+    "AnnotationRule": [
+      "caseId: ID",
+      "label: string",
+      "inclusionRule: string",
+      "exclusionRule: string",
+      "ambiguityPolicy: string"
+    ],
+    "DatasetRecordAudit": [
+      "caseId: ID",
+      "recordId: ID",
+      "eligibility: string",
+      "qualityIssues: string[]",
+      "rightsStatus: string"
+    ],
+    "CoverageFinding": [
+      "caseId: ID",
+      "slice: string",
+      "eligibleCount: number",
+      "targetCount: number",
+      "gapDescription: string"
+    ],
+    "DatasetRelease": [
+      "caseId: ID",
+      "acquisitionTaskIds: ID[]",
+      "annotationVersion: string",
+      "artifactIds: ID[]",
+      "unresolvedLimits: string[]"
+    ]
+  }
+}

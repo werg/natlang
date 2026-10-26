@@ -1,0 +1,50 @@
+{
+  "application_id": "089",
+  "title": "Collection Rights And Consent Steward",
+  "source_relative_path": "applications/18-archives-museums-and-cultural-heritage/089-collection-rights-and-consent-steward.md",
+  "source_sha256": "3efc7160b2498ee76e2386c08f2ebad028dda6e04c649d746bc6c29b711dc304",
+  "domain_id": "18",
+  "stages": [
+    {
+      "name": "extractPermissions",
+      "output_type": "CollectionPermission",
+      "algorithm": "Read donation agreements, licenses, consent statements, and amendments to identify permissions and restrictions. Distinguish ownership of a physical object from rights to reproduce or publish it, and preserve missing or conflicting documentation as uncertainty.",
+      "gate": "Absence of a restriction record is not treated as permission."
+    },
+    {
+      "name": "interpretUse",
+      "output_type": "ProposedCollectionUse",
+      "algorithm": "Translate the proposed exhibition, publication, or derivative use into concrete acts and distribution scope. Identify cropping, translation, online access, commercial use, and duration where relevant, rather than treating all publication as one undifferentiated permission.",
+      "gate": "Proposed use is specific enough to compare with the governing records."
+    },
+    {
+      "name": "assessCompatibility",
+      "output_type": "RightsFinding",
+      "algorithm": "Compare each proposed act with supplied rights and consent conditions, including interactions among multiple rightsholders. Preserve scoped exceptions and refer ambiguous legal interpretation to the rights officer rather than selecting the most permissive reading.",
+      "gate": "Every allowed use has positive authority and all applicable conditions are satisfied."
+    },
+    {
+      "name": "requestClearance",
+      "output_type": "ClearanceTask",
+      "algorithm": "Form a precise clearance request describing the actual use, audience, modifications, and duration. Track responses and conditions without treating informal enthusiasm as a license, and maintain restricted access to private donor or participant information.",
+      "gate": "Clearance closes a gap only with appropriate documented authority."
+    },
+    {
+      "name": "maintainUseRegister",
+      "output_type": "CollectionUseRecord",
+      "algorithm": "Record approved uses, required attribution, expiry, and downstream distribution. Recheck conditions before release, schedule removals or renewals where needed, and propagate consent changes to affected derivatives and public surfaces.",
+      "gate": "Approved use, actual distribution, attribution, and duration remain aligned."
+    }
+  ],
+  "operational_details": [
+    "A donor owns the object but not reproduction rights: require the appropriate separate clearance.",
+    "A license allows print but not online use: prevent automatic web publication.",
+    "Consent is time-limited: schedule expiry review and removal obligations.",
+    "A derivative combines several items: check every relevant permission.",
+    "Attribution changes after a name correction: update affected publications through a traceable process."
+  ],
+  "scenario": {
+    "representative_episode": "An exhibition may display an object physically, but its online catalog image and translated interview excerpt require separate permissions.",
+    "independent_truth": "Fictional licenses and consent scopes, specific proposed uses, rightsholder authority, and exact expiry and attribution conditions."
+  }
+}

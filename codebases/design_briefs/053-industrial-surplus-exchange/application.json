@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.application/1",
+  "id": "053",
+  "title": "Industrial surplus exchange",
+  "entrypoint": "assembleReuseExchange.nl",
+  "interfaces": [
+    {
+      "name": "assembleReuseExchange",
+      "path": "assembleReuseExchange.nl",
+      "purpose": "Develop and qualify functional reuse concepts, coordinate dependent transfers, and reconcile actual partial acceptance and residual material.",
+      "stateParameter": "exchange",
+      "stateResultPath": [
+        "exchange"
+      ]
+    }
+  ],
+  "source_files": [
+    "assembleReuseExchange.nl",
+    "assembleReuseExchange/invalidateDependentTransfers.nl",
+    "assembleReuseExchange/inventQualifiedReuse.nl",
+    "assembleReuseExchange/inventQualifiedReuse/challengeEssentialFit.nl",
+    "assembleReuseExchange/planDependentExchangeLegs.nl",
+    "assembleReuseExchange/planDependentExchangeLegs/establishConversionBasis.nl",
+    "assembleReuseExchange/qualifyOfferedMaterial.nl",
+    "assembleReuseExchange/qualifyOfferedMaterial/distinguishMaterialEvidence.nl",
+    "assembleReuseExchange/reconcileRecipientAcceptance.nl",
+    "assembleReuseExchange/reconcileRecipientAcceptance/verifyPartialHandoff.nl",
+    "assembleReuseExchange/recoverFunctionalNeeds.nl",
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretOffers",
+        "paths": [
+          "assembleReuseExchange/qualifyOfferedMaterial/distinguishMaterialEvidence.nl"
+        ]
+      },
+      {
+        "stage": "interpretNeeds",
+        "paths": [
+          "assembleReuseExchange/recoverFunctionalNeeds.nl"
+        ]
+      },
+      {
+        "stage": "generateReuse",
+        "paths": [
+          "assembleReuseExchange/inventQualifiedReuse/challengeEssentialFit.nl"
+        ]
+      },
+      {
+        "stage": "assembleExchange",
+        "paths": [
+          "assembleReuseExchange/planDependentExchangeLegs.nl"
+        ]
+      },
+      {
+        "stage": "verifyTransfer",
+        "paths": [
+          "assembleReuseExchange/reconcileRecipientAcceptance/verifyPartialHandoff.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "assembleReuseExchange/planDependentExchangeLegs/establishConversionBasis.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "assembleReuseExchange/invalidateDependentTransfers.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "assembleReuseExchange/qualifyOfferedMaterial/distinguishMaterialEvidence.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "assembleReuseExchange/reconcileRecipientAcceptance.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "assembleReuseExchange/inventQualifiedReuse/challengeEssentialFit.nl"
+        ]
+      }
+    ]
+  }
+}

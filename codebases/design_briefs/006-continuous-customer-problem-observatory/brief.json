@@ -1,0 +1,49 @@
+{
+  "application_id": "006",
+  "title": "Continuous customer-problem observatory",
+  "source_relative_path": "applications/02-customer-research-and-product-intelligence/006-continuous-customer-problem-observatory.md",
+  "program_root": "codebases/design_briefs/006-continuous-customer-problem-observatory",
+  "source_sha256": "d150081d5174b60294b16baeeb09b7942a45097edc259a99823f8ece5e30b98b",
+  "domain_id": "02",
+  "stages": [
+    {
+      "name": "extractEpisodes",
+      "output_type": "ProblemEpisode",
+      "algorithm": "Read enough surrounding conversation to identify the attempted job, the obstacle, and its consequence. Separate a product complaint from a requested feature, and split independently resolvable problems while retaining links to the original interaction.",
+      "gate": "Every episode preserves the customer's actual situation and does not invent severity."
+    },
+    {
+      "name": "linkIncidents",
+      "output_type": "IncidentGroup",
+      "algorithm": "Compare accounts for the same customer, event, and time window. Group follow-ups and copied messages into one incident while retaining repeat failures that actually occurred on different occasions; leave identity ambiguity unresolved.",
+      "gate": "Counts distinguish messages, incidents, and customers; no transitive merge across incompatible events."
+    },
+    {
+      "name": "maintainProblemMap",
+      "output_type": "ProblemConcept",
+      "algorithm": "Cluster by the failed outcome and mechanism rather than shared vocabulary. Propose new concepts when existing boundaries do not fit, preserve meaningful subtypes, and review counterexamples before moving historical episodes between concepts.",
+      "gate": "Reclassification preserves raw episode IDs and records concept-version lineage."
+    },
+    {
+      "name": "computeTrends",
+      "output_type": "TrendSlice",
+      "algorithm": "Define an observable population and comparable time windows before invoking exact aggregation. Interpret changes in collection channels and exposure; distinguish a rise in complaints from a rise in the complaint rate among eligible customers.",
+      "gate": "Numerators are subsets of denominators; missing exposure forbids unsupported rate claims."
+    },
+    {
+      "name": "commissionInvestigation",
+      "output_type": "InvestigationBrief",
+      "algorithm": "Select unresolved explanations that would change a product decision. Formulate a bounded investigation with relevant cohorts, contradictory cases, and evidence needed to distinguish mechanisms rather than recommending the loudest requested feature.",
+      "gate": "Each task answers a named uncertainty and cites both support and known counterevidence."
+    }
+  ],
+  "operational_details": [
+    "A single outage creates thousands of tickets: separate event volume from independent problem discovery.",
+    "A survey channel disappears: mark trend comparability as broken rather than reporting improvement.",
+    "Consent is withdrawn: remove attributable quotations and recompute restricted derivatives.",
+    "Customer IDs change after account migration: version identity mappings before updating counts.",
+    "A topic is renamed: preserve stable concept IDs so dashboards do not reset history."
+  ],
+  "representative_episode": "A billing outage creates repeated follow-ups while a new navigation issue affects fewer customers but independent incidents.",
+  "independent_truth_basis": "Hidden customer and incident identities, concept memberships, observation exposure, and exact cohort aggregates."
+}

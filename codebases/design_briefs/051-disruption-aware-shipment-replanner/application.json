@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.application/1",
+  "id": "051",
+  "title": "Disruption-aware shipment replanner",
+  "entrypoint": "replanShipmentLegs.nl",
+  "interfaces": [
+    {
+      "name": "replanShipmentLegs",
+      "path": "replanShipmentLegs.nl",
+      "purpose": "Repair only affected transport legs while preserving handling requirements, separate customer appointments and exact scarce-capacity operation receipts.",
+      "stateParameter": "dispatchBook",
+      "stateResultPath": [
+        "dispatchBook"
+      ]
+    }
+  ],
+  "source_files": [
+    "natlang.json",
+    "qualification/qualifyOriginal.nl",
+    "qualification/types.ts",
+    "replanShipmentLegs.nl",
+    "replanShipmentLegs/allocateScarceLegs.nl",
+    "replanShipmentLegs/enumerateHandlingSafePaths.nl",
+    "replanShipmentLegs/enumerateHandlingSafePaths/testLegHandoff.nl",
+    "replanShipmentLegs/enumerateHandlingSafePaths/testLegHandoff/interpretHandlingCompatibility.nl",
+    "replanShipmentLegs/interpretClassScopedDisruption.nl",
+    "replanShipmentLegs/qualifyRevisedPromises.nl",
+    "replanShipmentLegs/reconcileCarrierTransactions.nl",
+    "replanShipmentLegs/reconcileCarrierTransactions/interpretCarrierOutcome.nl",
+    "replanShipmentLegs/recoverDistinctAppointments.nl",
+    "types.ts"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretDisruption",
+        "paths": [
+          "replanShipmentLegs/interpretClassScopedDisruption.nl"
+        ]
+      },
+      {
+        "stage": "recoverPromises",
+        "paths": [
+          "replanShipmentLegs/recoverDistinctAppointments.nl"
+        ]
+      },
+      {
+        "stage": "constructAlternatives",
+        "paths": [
+          "replanShipmentLegs/enumerateHandlingSafePaths/testLegHandoff.nl"
+        ]
+      },
+      {
+        "stage": "allocateCapacity",
+        "paths": [
+          "replanShipmentLegs/allocateScarceLegs.nl"
+        ]
+      },
+      {
+        "stage": "coordinateRecovery",
+        "paths": [
+          "replanShipmentLegs/qualifyRevisedPromises.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "replanShipmentLegs/reconcileCarrierTransactions/interpretCarrierOutcome.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "replanShipmentLegs/recoverDistinctAppointments.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "replanShipmentLegs/interpretClassScopedDisruption.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "replanShipmentLegs/allocateScarceLegs.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "replanShipmentLegs/reconcileCarrierTransactions.nl"
+        ]
+      }
+    ]
+  }
+}

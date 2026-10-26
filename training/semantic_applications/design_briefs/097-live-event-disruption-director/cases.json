@@ -1,0 +1,752 @@
+[
+  {
+    "id": "097-first-gate-pass",
+    "root": "runCase/recoverEventPromises/audit/qualify.nl",
+    "split_group": "world-097-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+        "candidateIds": [
+          "097-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "097-first-e1",
+            "source": "primary case record EVENT-97",
+            "version": "v1",
+            "text": "Primary domain record for case EVENT-97 states: caseId=\"EVENT-97\"; stakeholderId=\"SPK-97\"; promisedOutcome=\"Captioned 20-minute keynote and reserved wheelchair seating.\"; timeWindow=\"2026-06-10 14:00–14:30 local.\"; essentialCondition=\"Speaker files and captions due for approval by 2026-06-05.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "097-case-record",
+          "caseId": "EVENT-97",
+          "sourceRefs": [
+            "097-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EventCommitment",
+          "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+          "status": "candidate",
+          "evidenceIds": [
+            "097-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "stakeholderId": "SPK-97",
+          "promisedOutcome": "Captioned 20-minute keynote and reserved wheelchair seating.",
+          "timeWindow": "2026-06-10 14:00–14:30 local.",
+          "essentialCondition": "Speaker files and captions due for approval by 2026-06-05."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "097-first-e1"
+        ]
+      }
+    },
+    "expected": "pass",
+    "oracle": "exact",
+    "scenario": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+    "difficulty": "pass"
+  },
+  {
+    "id": "097-first-gate-fail",
+    "root": "runCase/recoverEventPromises/audit/qualify.nl",
+    "split_group": "world-097-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+        "candidateIds": [
+          "097-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "097-first-e1",
+            "source": "primary case record EVENT-97",
+            "version": "v1",
+            "text": "Primary domain record for case EVENT-97 states: caseId=\"EVENT-97\"; stakeholderId=\"SPK-97\"; promisedOutcome=\"Captioned 20-minute keynote and reserved wheelchair seating.\"; timeWindow=\"2026-06-10 14:00–14:30 local.\"; essentialCondition=\"Speaker files and captions due for approval by 2026-06-05.\".",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "097-case-record",
+          "caseId": "EVENT-97",
+          "sourceRefs": [
+            "097-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EventCommitment",
+          "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+          "status": "candidate",
+          "evidenceIds": [
+            "097-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "stakeholderId": "SPK-97",
+          "promisedOutcome": "Captioned 20-minute keynote and reserved wheelchair seating.",
+          "timeWindow": "2026-06-10 14:00–14:30 local.",
+          "essentialCondition": "Speaker files may be submitted after event; approval not needed."
+        },
+        "missingFields": [],
+        "conflicts": [],
+        "evidenceIds": [
+          "097-first-e1"
+        ]
+      }
+    },
+    "expected": "fail",
+    "oracle": "exact",
+    "scenario": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+    "difficulty": "fail"
+  },
+  {
+    "id": "097-first-gate-needs-review",
+    "root": "runCase/recoverEventPromises/audit/qualify.nl",
+    "split_group": "world-097-first-gate",
+    "inputs": {
+      "evidence": {
+        "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+        "candidateIds": [
+          "097-candidate-1"
+        ],
+        "supporting": [
+          {
+            "id": "097-first-e1",
+            "source": "primary case record EVENT-97",
+            "version": "v1",
+            "text": "Primary domain record for case EVENT-97 states: caseId=\"EVENT-97\"; stakeholderId=\"SPK-97\"; promisedOutcome=\"Captioned 20-minute keynote and reserved wheelchair seating.\"; timeWindow=\"2026-06-10 14:00–14:30 local.\". No current value is present for essentialCondition.",
+            "status": "current",
+            "authority": "primary domain record"
+          }
+        ],
+        "conflicting": [],
+        "missing": [
+          "essentialCondition"
+        ],
+        "searchedScope": "one complete named source record"
+      },
+      "draft": {
+        "values": {
+          "id": "097-case-record",
+          "sourceRefs": [
+            "097-first-e1"
+          ],
+          "state": "draft",
+          "kind": "EventCommitment",
+          "subject": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+          "status": "candidate",
+          "evidenceIds": [
+            "097-first-e1"
+          ],
+          "fields": {
+            "sourceVersion": "v1",
+            "purpose": "synthetic training case"
+          },
+          "promisedOutcome": "Captioned 20-minute keynote and reserved wheelchair seating.",
+          "timeWindow": "2026-06-10 14:00–14:30 local.",
+          "caseId": "EVENT-97",
+          "stakeholderId": "SPK-97"
+        },
+        "missingFields": [
+          "essentialCondition"
+        ],
+        "conflicts": [],
+        "evidenceIds": [
+          "097-first-e1"
+        ]
+      }
+    },
+    "expected": "needs-review",
+    "oracle": "exact",
+    "scenario": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+    "difficulty": "needs-review"
+  },
+  {
+    "id": "097-workflow-1",
+    "root": "directLiveEvent.nl",
+    "split_group": "world-097-workflow-1",
+    "inputs": {
+      "event": {
+        "id": "097-workflow-1",
+        "revision": 1,
+        "closingMinute": 100,
+        "commitments": [
+          {
+            "id": "097-workflow-1-record",
+            "sourceId": "097-workflow-1-record",
+            "kind": "public-promise",
+            "priority": 1,
+            "outcome": "Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00.",
+            "dependencies": [],
+            "owner": "producer"
+          }
+        ],
+        "resources": [],
+        "segments": [
+          {
+            "id": "097-workflow-1-segment",
+            "start": 0,
+            "end": 60,
+            "duration": 30,
+            "setupBefore": 0,
+            "teardownAfter": 0,
+            "resourceIds": [],
+            "ownerRoles": [
+              "producer"
+            ],
+            "commitmentIds": [
+              "097-workflow-1-record"
+            ],
+            "format": "stage",
+            "accessibility": []
+          }
+        ],
+        "disruptions": [],
+        "staffAcks": [],
+        "publicRevision": "v1"
+      },
+      "newReports": [],
+      "checkpoint": {
+        "eventId": "097-workflow-1",
+        "revision": 0,
+        "runSheetRevision": "v0",
+        "reservedResourceIds": [],
+        "acknowledgements": [],
+        "executionEvents": [],
+        "emergencyActive": false
+      },
+      "sourceRecord": {
+        "id": "097-workflow-1-record",
+        "caseId": "097-workflow-1",
+        "sourceRefs": [
+          "097-wf-1-source"
+        ],
+        "state": "draft",
+        "kind": "LiveEvent",
+        "subject": "Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00.",
+        "status": "candidate",
+        "evidenceIds": [
+          "097-wf-1-source"
+        ],
+        "fields": {
+          "sourceArtifact": "097-wf-1-source",
+          "sourceVersion": "v1"
+        },
+        "eventId": "EVENT-97",
+        "agendaIds": [
+          "KEYNOTE-97",
+          "ACCESS-97"
+        ],
+        "venueId": "HALL-2",
+        "producerId": "PROD-7",
+        "commitmentIds": [
+          "SPEAKER-97",
+          "CAPTION-97",
+          "WHEELCHAIR-SEATS"
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "id": "097-wf-1-source",
+          "source": "primary case artifact 097-E1",
+          "version": "v1",
+          "text": "Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Live Event Disruption Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 1: A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats. Use observation Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00. as the source of truth. The proposal should preserve source-linked record 097-workflow-1-record and make a recipient-facing distinction grounded in 097-wf-1-source (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 1,
+    "brief_detail": "A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 097-workflow-1-record must accurately preserve observation 097-wf-1-source (v1): Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00. Apply brief requirement A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed LiveEvent record 097-workflow-1-record and its source link to 097-wf-1-source version v1, with a disposition matching this observed state: Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00. Carry requirement A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 097-workflow-1-record based on 097-wf-1-source (v1) and observation Speaker S-97 is delayed to 14:25 but remains available. Captioned 20-minute keynote is still scheduled for 14:00. Apply requirement A speaker is delayed but not absent: preserve an explicit decision deadline for switching formats. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "097-workflow-2",
+    "root": "directLiveEvent.nl",
+    "split_group": "world-097-workflow-2",
+    "inputs": {
+      "event": {
+        "id": "097-workflow-2",
+        "revision": 1,
+        "closingMinute": 100,
+        "commitments": [
+          {
+            "id": "097-workflow-2-record",
+            "sourceId": "097-workflow-2-record",
+            "kind": "public-promise",
+            "priority": 1,
+            "outcome": "Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests.",
+            "dependencies": [],
+            "owner": "producer"
+          }
+        ],
+        "resources": [],
+        "segments": [
+          {
+            "id": "097-workflow-2-segment",
+            "start": 0,
+            "end": 60,
+            "duration": 30,
+            "setupBefore": 0,
+            "teardownAfter": 0,
+            "resourceIds": [],
+            "ownerRoles": [
+              "producer"
+            ],
+            "commitmentIds": [
+              "097-workflow-2-record"
+            ],
+            "format": "stage",
+            "accessibility": []
+          }
+        ],
+        "disruptions": [],
+        "staffAcks": [],
+        "publicRevision": "v1"
+      },
+      "newReports": [],
+      "checkpoint": {
+        "eventId": "097-workflow-2",
+        "revision": 0,
+        "runSheetRevision": "v0",
+        "reservedResourceIds": [],
+        "acknowledgements": [],
+        "executionEvents": [],
+        "emergencyActive": false
+      },
+      "sourceRecord": {
+        "id": "097-workflow-2-record",
+        "caseId": "097-workflow-2",
+        "sourceRefs": [
+          "097-event-2"
+        ],
+        "state": "draft",
+        "kind": "LiveEvent",
+        "subject": "Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests.",
+        "status": "candidate",
+        "evidenceIds": [
+          "097-event-2"
+        ],
+        "fields": {
+          "sourceArtifact": "097-event-2",
+          "sourceVersion": "v1"
+        },
+        "eventId": "EVENT-97",
+        "agendaIds": [
+          "KEYNOTE-97",
+          "ACCESS-97"
+        ],
+        "venueId": "HALL-2",
+        "producerId": "PROD-7",
+        "commitmentIds": [
+          "SPEAKER-97",
+          "CAPTION-97",
+          "WHEELCHAIR-SEATS"
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "id": "097-event-2",
+          "source": "current domain record 097-E2",
+          "version": "v1",
+          "text": "Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Live Event Disruption Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 2: A technical fallback lacks accessibility support: reject it or add an approved equivalent. Use observation Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests. as the source of truth. The proposal should preserve source-linked record 097-workflow-2-record and make a recipient-facing distinction grounded in 097-event-2 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 2,
+    "brief_detail": "A technical fallback lacks accessibility support: reject it or add an approved equivalent.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 097-workflow-2-record must accurately preserve observation 097-event-2 (v1): Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests. Apply brief requirement A technical fallback lacks accessibility support: reject it or add an approved equivalent. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed LiveEvent record 097-workflow-2-record and its source link to 097-event-2 version v1, with a disposition matching this observed state: Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests. Carry requirement A technical fallback lacks accessibility support: reject it or add an approved equivalent. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 097-workflow-2-record based on 097-event-2 (v1) and observation Outdoor stage closes at 13:10 for rain; technical fallback room H-2 has no caption receiver or hearing loop. Approved accessible equivalent ALT-97 is a captioned stream in Room H-3, but it seats 120 against 180 registered guests. Apply requirement A technical fallback lacks accessibility support: reject it or add an approved equivalent. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "097-workflow-3",
+    "root": "directLiveEvent.nl",
+    "split_group": "world-097-workflow-3",
+    "inputs": {
+      "event": {
+        "id": "097-workflow-3",
+        "revision": 1,
+        "closingMinute": 100,
+        "commitments": [
+          {
+            "id": "097-workflow-3-record",
+            "sourceId": "097-workflow-3-record",
+            "kind": "public-promise",
+            "priority": 1,
+            "outcome": "Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank.",
+            "dependencies": [],
+            "owner": "producer"
+          }
+        ],
+        "resources": [],
+        "segments": [
+          {
+            "id": "097-workflow-3-segment",
+            "start": 0,
+            "end": 60,
+            "duration": 30,
+            "setupBefore": 0,
+            "teardownAfter": 0,
+            "resourceIds": [],
+            "ownerRoles": [
+              "producer"
+            ],
+            "commitmentIds": [
+              "097-workflow-3-record"
+            ],
+            "format": "stage",
+            "accessibility": []
+          }
+        ],
+        "disruptions": [],
+        "staffAcks": [],
+        "publicRevision": "v1"
+      },
+      "newReports": [],
+      "checkpoint": {
+        "eventId": "097-workflow-3",
+        "revision": 0,
+        "runSheetRevision": "v0",
+        "reservedResourceIds": [],
+        "acknowledgements": [],
+        "executionEvents": [],
+        "emergencyActive": false
+      },
+      "sourceRecord": {
+        "id": "097-workflow-3-record",
+        "caseId": "097-workflow-3",
+        "sourceRefs": [
+          "097-event-3"
+        ],
+        "state": "draft",
+        "kind": "LiveEvent",
+        "subject": "Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank.",
+        "status": "candidate",
+        "evidenceIds": [
+          "097-event-3"
+        ],
+        "fields": {
+          "sourceArtifact": "097-event-3",
+          "sourceVersion": "v1"
+        },
+        "eventId": "EVENT-97",
+        "agendaIds": [
+          "KEYNOTE-97",
+          "ACCESS-97"
+        ],
+        "venueId": "HALL-2",
+        "producerId": "PROD-7",
+        "commitmentIds": [
+          "SPEAKER-97",
+          "CAPTION-97",
+          "WHEELCHAIR-SEATS"
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "id": "097-event-3",
+          "source": "current domain record 097-E3",
+          "version": "v1",
+          "text": "Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Live Event Disruption Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 3: Staff receive conflicting schedule versions: show revision IDs and require acknowledgment. Use observation Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank. as the source of truth. The proposal should preserve source-linked record 097-workflow-3-record and make a recipient-facing distinction grounded in 097-event-3 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 3,
+    "brief_detail": "Staff receive conflicting schedule versions: show revision IDs and require acknowledgment.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 097-workflow-3-record must accurately preserve observation 097-event-3 (v1): Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank. Apply brief requirement Staff receive conflicting schedule versions: show revision IDs and require acknowledgment. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed LiveEvent record 097-workflow-3-record and its source link to 097-event-3 version v1, with a disposition matching this observed state: Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank. Carry requirement Staff receive conflicting schedule versions: show revision IDs and require acknowledgment. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 097-workflow-3-record based on 097-event-3 (v1) and observation Run sheet revision v4 schedules keynote at 14:30; vendor copy v3 schedules it at 14:00. Staff roster shows three teams received different versions, and acknowledgment fields are blank. Apply requirement Staff receive conflicting schedule versions: show revision IDs and require acknowledgment. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "097-workflow-4",
+    "root": "directLiveEvent.nl",
+    "split_group": "world-097-workflow-4",
+    "inputs": {
+      "event": {
+        "id": "097-workflow-4",
+        "revision": 1,
+        "closingMinute": 100,
+        "commitments": [
+          {
+            "id": "097-workflow-4-record",
+            "sourceId": "097-workflow-4-record",
+            "kind": "public-promise",
+            "priority": 1,
+            "outcome": "Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority.",
+            "dependencies": [],
+            "owner": "producer"
+          }
+        ],
+        "resources": [],
+        "segments": [
+          {
+            "id": "097-workflow-4-segment",
+            "start": 0,
+            "end": 60,
+            "duration": 30,
+            "setupBefore": 0,
+            "teardownAfter": 0,
+            "resourceIds": [],
+            "ownerRoles": [
+              "producer"
+            ],
+            "commitmentIds": [
+              "097-workflow-4-record"
+            ],
+            "format": "stage",
+            "accessibility": []
+          }
+        ],
+        "disruptions": [],
+        "staffAcks": [],
+        "publicRevision": "v1"
+      },
+      "newReports": [],
+      "checkpoint": {
+        "eventId": "097-workflow-4",
+        "revision": 0,
+        "runSheetRevision": "v0",
+        "reservedResourceIds": [],
+        "acknowledgements": [],
+        "executionEvents": [],
+        "emergencyActive": false
+      },
+      "sourceRecord": {
+        "id": "097-workflow-4-record",
+        "caseId": "097-workflow-4",
+        "sourceRefs": [
+          "097-event-4"
+        ],
+        "state": "draft",
+        "kind": "LiveEvent",
+        "subject": "Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority.",
+        "status": "candidate",
+        "evidenceIds": [
+          "097-event-4"
+        ],
+        "fields": {
+          "sourceArtifact": "097-event-4",
+          "sourceVersion": "v1"
+        },
+        "eventId": "EVENT-97",
+        "agendaIds": [
+          "KEYNOTE-97",
+          "ACCESS-97"
+        ],
+        "venueId": "HALL-2",
+        "producerId": "PROD-7",
+        "commitmentIds": [
+          "SPEAKER-97",
+          "CAPTION-97",
+          "WHEELCHAIR-SEATS"
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "id": "097-event-4",
+          "source": "current domain record 097-E4",
+          "version": "v1",
+          "text": "Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Live Event Disruption Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 4: A sponsor commitment changes: route commercial approval separately from stage coordination. Use observation Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority. as the source of truth. The proposal should preserve source-linked record 097-workflow-4-record and make a recipient-facing distinction grounded in 097-event-4 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 4,
+    "brief_detail": "A sponsor commitment changes: route commercial approval separately from stage coordination.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 097-workflow-4-record must accurately preserve observation 097-event-4 (v1): Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority. Apply brief requirement A sponsor commitment changes: route commercial approval separately from stage coordination. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed LiveEvent record 097-workflow-4-record and its source link to 097-event-4 version v1, with a disposition matching this observed state: Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority. Carry requirement A sponsor commitment changes: route commercial approval separately from stage coordination. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 097-workflow-4-record based on 097-event-4 (v1) and observation Sponsor agreement SA-97 removes the sponsor-branded opening segment effective 2026-10-26. Stage run sheet still includes it; commercial approval belongs to sponsor liaison CL-4 and is not in stage manager’s authority. Apply requirement A sponsor commitment changes: route commercial approval separately from stage coordination. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  },
+  {
+    "id": "097-workflow-5",
+    "root": "directLiveEvent.nl",
+    "split_group": "world-097-workflow-5",
+    "inputs": {
+      "event": {
+        "id": "097-workflow-5",
+        "revision": 1,
+        "closingMinute": 100,
+        "commitments": [
+          {
+            "id": "097-workflow-5-record",
+            "sourceId": "097-workflow-5-record",
+            "kind": "public-promise",
+            "priority": 1,
+            "outcome": "Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear.",
+            "dependencies": [],
+            "owner": "producer"
+          }
+        ],
+        "resources": [],
+        "segments": [
+          {
+            "id": "097-workflow-5-segment",
+            "start": 0,
+            "end": 60,
+            "duration": 30,
+            "setupBefore": 0,
+            "teardownAfter": 0,
+            "resourceIds": [],
+            "ownerRoles": [
+              "producer"
+            ],
+            "commitmentIds": [
+              "097-workflow-5-record"
+            ],
+            "format": "stage",
+            "accessibility": []
+          }
+        ],
+        "disruptions": [],
+        "staffAcks": [],
+        "publicRevision": "v1"
+      },
+      "newReports": [],
+      "checkpoint": {
+        "eventId": "097-workflow-5",
+        "revision": 0,
+        "runSheetRevision": "v0",
+        "reservedResourceIds": [],
+        "acknowledgements": [],
+        "executionEvents": [],
+        "emergencyActive": false
+      },
+      "sourceRecord": {
+        "id": "097-workflow-5-record",
+        "caseId": "097-workflow-5",
+        "sourceRefs": [
+          "097-event-5"
+        ],
+        "state": "draft",
+        "kind": "LiveEvent",
+        "subject": "Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear.",
+        "status": "candidate",
+        "evidenceIds": [
+          "097-event-5"
+        ],
+        "fields": {
+          "sourceArtifact": "097-event-5",
+          "sourceVersion": "v1"
+        },
+        "eventId": "EVENT-97",
+        "agendaIds": [
+          "KEYNOTE-97",
+          "ACCESS-97"
+        ],
+        "venueId": "HALL-2",
+        "producerId": "PROD-7",
+        "commitmentIds": [
+          "SPEAKER-97",
+          "CAPTION-97",
+          "WHEELCHAIR-SEATS"
+        ]
+      },
+      "sourceEvidence": [
+        {
+          "id": "097-event-5",
+          "source": "current domain record 097-E5",
+          "version": "v1",
+          "text": "Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear.",
+          "status": "current",
+          "authority": "primary domain evidence"
+        }
+      ]
+    },
+    "expected": {
+      "application": "Live Event Disruption Director",
+      "actionBoundary": "proposal only; accountable review required",
+      "mustPreserve": "Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear."
+    },
+    "oracle": {
+      "level": "judged",
+      "rubric": "Independently assess original operational detail 5: An emergency occurs: suspend generated replanning and defer to the approved emergency command process. Use observation Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear. as the source of truth. The proposal should preserve source-linked record 097-workflow-5-record and make a recipient-facing distinction grounded in 097-event-5 (v1); its durable-state proposal should carry the corresponding disposition without claiming a commit; any effect must remain a grounded unexecuted proposal pending host authorization and receipt. Do not award credit for stage-name coverage or instructions copied into evidence."
+    },
+    "scenario": "Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear.",
+    "difficulty": "integrated-workflow",
+    "operational_detail_id": 5,
+    "brief_detail": "An emergency occurs: suspend generated replanning and defer to the approved emergency command process.",
+    "boundary_assertions": {
+      "view": "Recipient-facing view for 097-workflow-5-record must accurately preserve observation 097-event-5 (v1): Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear. Apply brief requirement An emergency occurs: suspend generated replanning and defer to the approved emergency command process. and show unresolved review or consent status instead of asserting a completed outcome.",
+      "durable_state": "Durable-state proposal must retain typed LiveEvent record 097-workflow-5-record and its source link to 097-event-5 version v1, with a disposition matching this observed state: Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear. Carry requirement An emergency occurs: suspend generated replanning and defer to the approved emergency command process. forward as proposed state; do not claim persistence.",
+      "effects": "Effect ledger may propose only a source-grounded follow-up for record 097-workflow-5-record based on 097-event-5 (v1) and observation Safety lead issues emergency code EM-97 for a structural alarm at 13:55. Approved emergency protocol EP-97 assigns command to venue safety officer; replanning service has not received an all-clear. Apply requirement An emergency occurs: suspend generated replanning and defer to the approved emergency command process. without asserting that any contact, publication, approval, delivery, or other external effect occurred; keep dispatch pending a host authorization and receipt."
+    }
+  }
+]

@@ -1,0 +1,121 @@
+{
+  "schema": "natlang.application/1",
+  "id": "030",
+  "title": "Disclosure and redaction review workspace",
+  "entrypoint": "prepareDisclosure.nl",
+  "interfaces": [
+    {
+      "name": "prepareDisclosure",
+      "path": "prepareDisclosure.nl",
+      "purpose": "Construct purpose-limited disclosure artifacts with verified redaction, hidden-text sanitation, recipient authorization and source-span audit mapping.",
+      "stateParameter": "evidence",
+      "stateInputPath": [
+        "checkpoint"
+      ],
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "disclosure-review"
+    }
+  ],
+  "persistence": [
+    "DisclosureScopeDecision",
+    "SpanSelection",
+    "RedactionPlan",
+    "ReleaseArtifact",
+    "DisclosureReleaseProposal"
+  ],
+  "effects": [
+    "withhold artifacts without exact visible/text-layer/metadata sanitization receipts",
+    "invalidate delivery authorization when recipient or artifact hash changes",
+    "retain released-to-source-span audit map"
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretScope",
+        "paths": [
+          "disclosureDesk/resolveDisclosureScope.nl",
+          "runCase/interpretScope/audit/qualify.nl"
+        ]
+      },
+      {
+        "stage": "selectMaterial",
+        "paths": [
+          "disclosureDesk/selectContestedSpans.nl"
+        ]
+      },
+      {
+        "stage": "proposeRedactions",
+        "paths": [
+          "disclosureDesk/mapCombinedInference.nl",
+          "disclosureDesk/preserveQualifierContext.nl"
+        ]
+      },
+      {
+        "stage": "inspectComposition",
+        "paths": [
+          "disclosureDesk/mapCombinedInference.nl",
+          "disclosureDesk/verifyRenderedArtifact.nl"
+        ]
+      },
+      {
+        "stage": "renderAndRelease",
+        "paths": [
+          "disclosureDesk/sanitizeTextAndMetadata.nl",
+          "disclosureDesk/verifyRenderedArtifact.nl",
+          "disclosureDesk/checkRecipientApproval.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "disclosureDesk/sanitizeTextAndMetadata.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "disclosureDesk/sanitizeTextAndMetadata.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "disclosureDesk/checkRecipientApproval.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "disclosureDesk/preserveQualifierContext.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "disclosureDesk/mapChallengeToSources.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "prepareDisclosure.nl",
+    "types.ts",
+    "natlang.json",
+    "runCase/interpretScope/audit/qualify.nl",
+    "disclosureDesk/resolveDisclosureScope.nl",
+    "disclosureDesk/selectContestedSpans.nl",
+    "disclosureDesk/mapCombinedInference.nl",
+    "disclosureDesk/sanitizeTextAndMetadata.nl",
+    "disclosureDesk/preserveQualifierContext.nl",
+    "disclosureDesk/verifyRenderedArtifact.nl",
+    "disclosureDesk/checkRecipientApproval.nl",
+    "disclosureDesk/mapChallengeToSources.nl",
+    "prepareDisclosure/reconcileDisclosureCheckpoint.nl",
+    "disclosureDesk/selectContestedSpans/selectResponsiveSpans.nl",
+    "disclosureDesk/mapCombinedInference/traceCombinedInference.nl"
+  ]
+}

@@ -1,0 +1,11 @@
+export type ID = string;
+export type Decimal = string;
+export type Quantity = { value: Decimal; unit: string };
+export type Evidence = { id: string; source: string; version: string; authority: string; observedAt: string; text: string; supports: string[]; contradicts: string[]; status: "current" | "superseded" | "uncertain" };
+export type PreparedEvidence = { subject: string; evidence: Evidence[]; missing: string[]; conflicts: string[]; alternatives: string[] };
+export type DecisionAtom = { field: string; value: string; evidenceIds: string[]; authority: string; status: "established" | "disputed" | "unknown" | "inapplicable"; alternative: string };
+export type Qualification = "pass" | "fail" | "needs-review";
+export type FieldConflict = { field: string; alternatives: string[]; evidenceIds: string[] };
+export type EvidenceBinding = { field: string; evidenceIds: string[]; sourceVersions: string[]; authority: string; status: "established" | "disputed" | "unknown" | "inapplicable" };
+export type Question = { id: string; question: string; respondent: string; acceptableEvidence: string[] };
+export type DraftStockObservation = { values: { caseId?: ID; locationId?: ID; observedDescription?: string; serial?: string; quantity?: Quantity; condition?: string }; missingFields: string[]; conflicts: FieldConflict[]; evidence: EvidenceBinding[]; questions: Question[] };

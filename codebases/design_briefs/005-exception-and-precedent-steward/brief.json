@@ -1,0 +1,49 @@
+{
+  "application_id": "005",
+  "title": "Exception and precedent steward",
+  "source_relative_path": "applications/01-organizational-knowledge-and-institutional-memory/005-exception-and-precedent-steward.md",
+  "program_root": "codebases/design_briefs/005-exception-and-precedent-steward",
+  "source_sha256": "c323caff81ed58a217c1c2ba9a478ee4eeb2c8eb161a60653d0264f2ff24323c",
+  "domain_id": "01",
+  "stages": [
+    {
+      "name": "normalizeExceptions",
+      "output_type": "ExceptionRecord",
+      "algorithm": "Extract the exact deviation, beneficiary, dates, and conditions of each granted exception. Keep the requirement that was waived separate from prerequisites that remained binding, and record whether the decision explicitly denied precedential value.",
+      "gate": "An exception never inherits broader scope than its authorization."
+    },
+    {
+      "name": "retrievePrecedents",
+      "output_type": "PrecedentCandidate",
+      "algorithm": "Search by the rationale and relevant circumstances rather than matching requested outcomes. Construct analogies and disanalogies, including expired and rejected cases when they explain the boundary of acceptable treatment.",
+      "gate": "Retrieval includes a negative precedent slice; similarity alone cannot authorize a waiver."
+    },
+    {
+      "name": "judgeApplicability",
+      "output_type": "ApplicabilityFinding",
+      "algorithm": "Test every limiting condition against current evidence and identify which differences change the rationale. If a decisive fact is unknown, request that fact; do not grant the exception by treating missing evidence as a match.",
+      "gate": "All mandatory conditions established and current authority confirmed before recommendation."
+    },
+    {
+      "name": "formDecision",
+      "output_type": "ExceptionDisposition",
+      "algorithm": "Construct a scoped recommendation with the original rule, proposed deviation, continuing controls, and expiration. Explain consistency with comparable cases and explicitly surface any departure requiring a higher authority.",
+      "gate": "Required reviewer and expiration present; surviving safeguards not accidentally waived."
+    },
+    {
+      "name": "reviewPatterns",
+      "output_type": "PolicyReviewSignal",
+      "algorithm": "Group substantively similar exceptions while discounting copied requests and a single repeated incident. Formulate a policy revision and boundary examples, then simulate historical outcomes before referring the proposal to the policy owner.",
+      "gate": "Frequency is not automatic justification; proposed revision passes supplied counterexample cases."
+    }
+  ],
+  "operational_details": [
+    "An exception has no expiry: flag a governance defect rather than interpreting it as perpetual.",
+    "A private precedent applies: disclose the rationale only to authorized reviewers.",
+    "The policy changes while approval waits: re-evaluate applicability before signing.",
+    "A rejected request is resubmitted with new wording: link identity without assuming unchanged facts.",
+    "A waiver is revoked: notify dependent owners and preserve prior valid actions in history."
+  ],
+  "representative_episode": "A queue waiver previously applied to emergency replacements but did not waive a safety inspection; a routine replacement cites it.",
+  "independent_truth_basis": "Generated policies, scoped waivers, current case conditions, and exact expected retained obligations."
+}
