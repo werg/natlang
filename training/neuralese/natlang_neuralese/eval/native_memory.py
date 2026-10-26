@@ -8,6 +8,7 @@ import copy
 import math
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import torch
@@ -249,6 +250,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                  'kv_slots':sum(len(item.plan.slot_sources) for item in batch),'status':'running'}
             rows.append(row)
             started=time.monotonic()
+            phase='forward'
             try:
                 with _HostPeak() as host:
                     from ..model.native_weight_carrier import ParameterCotangentScope
@@ -259,7 +261,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                             if objective is not None:packing['objective']=objective
                             loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
                                 chunk_tokens=chunk_tokens,**packing)
+                        phase='backward'
                         loss.backward()
+                        phase='cotangent-finish'
                         cotangents.finish()
                         row['cotangent_accumulators'] = cotangents.allocation_report()
                         if device.type=='cuda':torch.cuda.synchronize(device)
@@ -268,7 +272,11 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                 row.update(status='passed',loss=float(loss.detach()),gradients=dict(observed),
                     host_peak=host.peak)
             except torch.cuda.OutOfMemoryError as error:
-                row.update(status='out_of_memory',error=str(error),host_peak=host.peak)
+                row.update(status='out_of_memory',error=str(error),host_peak=host.peak,
+                    failure_phase=phase,failure_traceback=traceback.format_exc())
+                hook=getattr(model.port,'activation_checkpoint',None)
+                if callable(getattr(hook,'snapshot',None)):
+                    row['checkpoint_input_offload']=hook.snapshot()
             finally:
                 loss=None
                 for _,parameter in named:parameter.grad=None
