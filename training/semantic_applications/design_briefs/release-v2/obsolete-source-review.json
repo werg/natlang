@@ -1,0 +1,55 @@
+{
+  "schema": "natlang.design-brief-obsolete-source-review/1",
+  "evidence": "Explicit file review, caller/import searches, active source manifests, replacement inspection and native checks. Manifest absence alone was not the deletion criterion.",
+  "files": [
+    {
+      "removed": "codebases/design_briefs/034-research-resource-and-experiment-rescue-coordinator/coordinateResearchWindow/findOpenSlots.ts",
+      "replacement": "codebases/design_briefs/034-research-resource-and-experiment-rescue-coordinator/coordinateResearchWindow/solveWindowAssignments.nl",
+      "removed_sha256": "35a90d85024fe400cc2702ec59118370b9374e4b2171b2b3c429ba1b7a359632",
+      "replacement_sha256": "b5a5c07d2f9afc6d48ed945c06514f5ff6bf8c1d5cd3e3f58cd853d9dd7ebc8a",
+      "reason": "Retired recursive scheduler; active Natlang frontier owns candidate expansion, feasibility, ranking and conflicts. No callers or imports remain."
+    },
+    {
+      "removed": "codebases/design_briefs/042-release-compatibility-coordinator/reconcileReleaseWave/auditCandidateWriteRollback.nl",
+      "replacement": "codebases/design_briefs/042-release-compatibility-coordinator/reconcileReleaseWave/assessReleaseWaveReceipt/auditCandidateWriteRollback.nl",
+      "removed_sha256": "5e98c88ae6e17cd6bd71fcfda41b68794126fcad04d1ba63aa62c9ec4b78fade",
+      "replacement_sha256": "5e98c88ae6e17cd6bd71fcfda41b68794126fcad04d1ba63aa62c9ec4b78fade",
+      "reason": "Byte-identical uncalled duplicate of inventoried nested child."
+    },
+    {
+      "removed": "codebases/design_briefs/042-release-compatibility-coordinator/reconcileReleaseWave/qualifyConsumerWave.nl",
+      "replacement": "codebases/design_briefs/042-release-compatibility-coordinator/reconcileReleaseWave/assessReleaseWaveReceipt/qualifyConsumerWave.nl",
+      "removed_sha256": "62695ad9b692e7b7688cc1be22e95702862e8eba2cadd58ed64a9c29760b7f4e",
+      "replacement_sha256": "62695ad9b692e7b7688cc1be22e95702862e8eba2cadd58ed64a9c29760b7f4e",
+      "reason": "Byte-identical uncalled duplicate of inventoried nested child."
+    },
+    {
+      "removed": "codebases/design_briefs/043-incident-recovery-orchestrator/reconcileIncidentAction/verifyRunbookExecution.nl",
+      "replacement": "codebases/design_briefs/043-incident-recovery-orchestrator/reconcileIncidentActionReceipt/verifyRunbookExecution.nl",
+      "removed_sha256": "e4eadb2b8a0fd5db2ac3aa1fb10b4777d893b57a0091479e179ea19d86be71a6",
+      "replacement_sha256": "e4eadb2b8a0fd5db2ac3aa1fb10b4777d893b57a0091479e179ea19d86be71a6",
+      "reason": "Byte-identical uncalled duplicate of inventoried nested child."
+    },
+    {
+      "removed": "codebases/design_briefs/046-semantic-analysis-work-order-compiler/reconcileAnalysisMaterialization/auditRowCoverage.nl",
+      "replacement": "codebases/design_briefs/046-semantic-analysis-work-order-compiler/reconcileAnalysisMaterialization/verifyMaterializedAnalysis/auditRowCoverage.nl",
+      "removed_sha256": "6c85dd028c381b67eb8411e184f56f04aaa0802da2854a8eb63cb7ec543cbfe7",
+      "replacement_sha256": "6c85dd028c381b67eb8411e184f56f04aaa0802da2854a8eb63cb7ec543cbfe7",
+      "reason": "Byte-identical uncalled duplicate of inventoried nested child."
+    },
+    {
+      "removed": "codebases/design_briefs/046-semantic-analysis-work-order-compiler/reconcileAnalysisMaterialization/auditRubricLineage.nl",
+      "replacement": "codebases/design_briefs/046-semantic-analysis-work-order-compiler/reconcileAnalysisMaterialization/verifyMaterializedAnalysis/auditRubricLineage.nl",
+      "removed_sha256": "f5212c163cde3165ca246220c8905759552462f325acdaf239b3415dacb27b81",
+      "replacement_sha256": "f5212c163cde3165ca246220c8905759552462f325acdaf239b3415dacb27b81",
+      "reason": "Byte-identical uncalled duplicate of inventoried nested child."
+    },
+    {
+      "removed": "codebases/design_briefs/095-culinary-concept-development-kitchen/developMenu/exactKitchen.ts",
+      "replacement": "codebases/design_briefs/095-culinary-concept-development-kitchen/developMenu/reconcileKitchenBatches/reconcileScaledBatches.ts",
+      "removed_sha256": "43c0f23df2af8db3ca000fa92ad3614389860ba4f12281ae23036ae4cc5a82a3",
+      "replacement_sha256": "cc39f3b781b6a4f1cfe48cf17699cb632acc213726c53df61fb8d2079f7abd91",
+      "reason": "Retired helper replaced by scoped default export that scales actual composed dishes; real-source native-runtime tests import and exercise the replacement. No callers or imports remain."
+    }
+  ]
+}

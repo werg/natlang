@@ -1,7 +1,11 @@
 # One hundred structured natural-language programs
 
-Browse the [complete application index](INDEX.md) for the 100 entry points,
-independent cases, and fixed application splits.
+Browse the [complete application index](INDEX.md) for the declared native
+operations across all 100 applications, independent cases, and fixed application splits. Release-v2 source
+review and deterministic validation evidence are summarized in the
+[readiness record](../../training/semantic_applications/design_briefs/release-v2/readiness.json)
+and [review notes](../../training/semantic_applications/design_briefs/release-v2/REVIEW.md).
+These records do not qualify learned-model execution or production deployment.
 
 Each numbered directory implements one of the supplied application briefs as a
 standalone native natlang project. Start at the operations declared in

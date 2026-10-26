@@ -149,7 +149,11 @@ traffic or substitute detached state for a missing in-episode producer. Failed
 and unresolved executions retain their actual classification. Existing whole-graph
 materialization and admission run only after actual execution and review.
 
-The current release remains **source-only, live qualification pending**, with
+The v2 source migration and source review are complete. Deterministic validation
+results and review rationale are recorded in [readiness.json](release-v2/readiness.json),
+[REVIEW.md](release-v2/REVIEW.md), and the linked compiler, fixture, architecture,
+type-pruning, and validation artifacts. The release remains **source-only and
+unqualified for live learned-runtime or production deployment**, with
 `training_admission: false`. No teacher trajectories, student rollouts, optimizer
 updates or learner exposure are claimed. Model-facing measurement debt is recorded
 in [`plans/MODEL_FACING_CHANGES.md`](../../../plans/MODEL_FACING_CHANGES.md).
@@ -157,8 +161,11 @@ in [`plans/MODEL_FACING_CHANGES.md`](../../../plans/MODEL_FACING_CHANGES.md).
 ## Release records
 
 [`release-v2`](release-v2/) records the revised inventory, compiler evidence,
-fixture migration, architecture review, packet hashes and validation limits.
-Each changed source release gets a new immutable identity and corpus snapshot.
+fixture migration, architecture review, type pruning, packet hashes and
+validation limits. The [readiness record](release-v2/readiness.json) is the
+summary; [`REVIEW.md`](release-v2/REVIEW.md) explains the source review and its
+limits. Each changed source release gets a new immutable identity and corpus
+snapshot.
 
 [`release-v1`](release-v1/) is historical evidence for the original source at
 commit `5648b99b73d3b94af382f9e480dd2fe46915e66e`. Its source hashes, old fixture

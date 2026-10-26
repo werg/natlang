@@ -1,0 +1,134 @@
+QUICK GATE
+==========
+workspace dependency overlay unchanged
+=== source-review-manifest: python3 scripts/source_review.py verify
+{"manifest": "/workspace/scratch/d4242300147b/natlang/training/corpus-manifests/source-reviews-20261015-v36.json", "sha256": "8d15b6e0ce4cd533b85ea2b8f537aa1d747aff3180a5fc030f0d73d175e31d56", "current": true}
+=== python-setup: python_setup_error Python checks requested, but no compatible Python >=3.11 with pytest, torch and the required Transformers API was found. Set NATLANG_PYTHON or install them in .venv-neuralese.
+Python checks requested, but no compatible Python >=3.11 with pytest, torch and the required Transformers API was found. Set NATLANG_PYTHON or install them in .venv-neuralese.
+=== ts-check: sh -c cd ts-host && npm run --silent check
+=== summary (02c16c8ea)
+source-review-manifest ok              0s
+python-setup           FAILED (2)      0s
+ts-check               ok             16s
+
+FULL REPOSITORY GATE
+====================
+workspace dependency overlay unchanged
+=== source-review-manifest: python3 scripts/source_review.py verify
+{"manifest": "/workspace/scratch/d4242300147b/natlang/training/corpus-manifests/source-reviews-20261015-v36.json", "sha256": "8d15b6e0ce4cd533b85ea2b8f537aa1d747aff3180a5fc030f0d73d175e31d56", "current": true}
+=== ts-build-node: sh -c cd ts-host && npm run --silent build:node
+=== python-setup: python_setup_error Python checks requested, but no compatible Python >=3.11 with pytest, torch and the required Transformers API was found. Set NATLANG_PYTHON or install them in .venv-neuralese.
+Python checks requested, but no compatible Python >=3.11 with pytest, torch and the required Transformers API was found. Set NATLANG_PYTHON or install them in .venv-neuralese.
+=== ts-build-browser: sh -c cd ts-host && if [ -e dist/browser/natlang.js ]; then node scripts/browser-build-freshness.mjs --rebuild; fi
+=== ts-build-apps: sh -c cd ts-host && npm run --silent build:applications
+built 273 application files
+=== ts-browser-types: sh -c cd ts-host && npm run --silent check:browser-types
+=== ts-layering: sh -c cd ts-host && npm run --silent check:layering
+layering: 1 baseline cyclic edge(s) no longer cyclic; shrink the baseline with --update:
+  - model -> neuralese
+layering ok: 67 cyclic edges (baseline 68)
+=== ts-tests: sh -c cd ts-host && node scripts/test-files.mjs --concurrency 2
+
+348 files: 348 ok, 0 not; 2158 tests passed, 0 failed, 0 cancelled
+=== ts-conformance: sh -c cd ts-host && npm run --silent test:conformance
+PASS 01-leaf-judgment.yaml
+PASS 02-leaf-extraction.yaml
+PASS 03-scalar-substitution.yaml
+PASS 04-path-substitution.yaml
+PASS 05-continuation-outside-in.yaml
+PASS 06-map-with-rubric.yaml
+PASS 07-map-partial-repair.yaml
+PASS 08-fold-fuzzy-step.yaml
+PASS 09-fold-crisp-step.yaml
+PASS 10-iterate-crisp-check.yaml
+PASS 11-iterate-degenerate.yaml
+PASS 12-iterate-model-check.yaml
+PASS 13-crisp-lambda-produce.yaml
+PASS 14-eval-side-effect.yaml
+PASS 15-cold-restart.yaml
+PASS 16-quiesce-with-note.yaml
+PASS 17-reopen-refine.yaml
+PASS 18-narrowed-enum-decision.yaml
+PASS 19-recursion-tree.yaml
+PASS 20-reactive-fold.yaml
+PASS 21-data-is-not-code.yaml
+PASS 22-oversize-chunk.yaml
+{"passed":22,"failed":0,"skipped":0}
+=== summary (02c16c8ea)
+source-review-manifest ok              0s
+ts-build-node          ok             20s
+python-setup           FAILED (2)      0s
+ts-build-browser       ok              0s
+ts-build-apps          ok             18s
+ts-browser-types       ok              3s
+ts-layering            ok              1s
+ts-tests               ok            646s
+ts-conformance         ok              3s
+
+FOCUSED NATIVE APPLICATION REGRESSIONS (included in full suite)
+===============================================================
+✔ one atomic native invocation persists result, checkpoint, audit and outbox across restart (21.647345ms)
+✔ different domain operations have independent capabilities; there is no shared approval workflow (12.787615ms)
+✔ concurrent connections replay one request and reject changed request or actor identities (22.794793ms)
+✔ stale snapshots, altered snapshot hashes and competing checkpoint versions cannot partly commit (19.999486ms)
+✔ effect identities are durable: exact repeated intentions never resend, conflicting content rolls back (31.01324ms)
+✔ source refresh keeps typed checkpoints and invalidates in-flight snapshots mechanically (18.620639ms)
+✔ cross-tenant isolation and actor-bound create idempotency survive a second connection (19.69949ms)
+✔ expired or uncertain delivery stays unresolved until an authorized evidence-bound reconciliation (21.567535ms)
+✔ not-sent evidence requeues the same packet without changing its identity or losing attempt count (16.783686ms)
+✔ pagination is scoped and arbitrary native JSON is stored without a common domain record schema (19.29062ms)
+✔ real native runtime preserves unrelated per-program APIs and nested child results (615.821875ms)
+✔ native checkpoint resumes after restart; exact invocation replay avoids new inference (402.515475ms)
+✔ source refresh during inference rejects the stale result without committing or dispatching (35.494737ms)
+✔ invalid native data and wrong operation authority cannot mutate state (28.215976ms)
+✔ external effects are atomically queued by an exact adapter and require a matching receiver receipt (119.334986ms)
+✔ delivery validates configuration before claiming and leases each slow item at its actual send time (135.679053ms)
+✔ HTTP binds the authenticated tenant and exposes no inference or configuration without a credential (84.056984ms)
+✔ different operations restore the same nested domain checkpoint without replacing other dossier inputs (269.210041ms)
+✔ a declared pending effect cannot be silently discarded when its application adapter is missing (50.277745ms)
+✔ cancellation after inference or adapter completion cannot commit a partial invocation (41.551927ms)
+✔ canceling one coalesced caller leaves the remaining invocation waiter intact (43.861723ms)
+✔ last waiter cancellation aborts shared execution, blocks an abort-ignoring executor, and frees retry key (32.318638ms)
+✔ JSON custody rejects lossy values and adapters cannot modify the checked result (124.652432ms)
+✔ the declared split holds entire application families out in all twenty domains (0.739241ms)
+✔ native input and expected-result contracts reject invented or incomplete fixture shapes (7.534684ms)
+✔ domain contracts reject erased enums, missing fields, and floating money amounts (3.741503ms)
+✔ a sibling mentioned in prose must be moved into actual native callable scope (4.168165ms)
+✔ explicit native calls obey positional signatures rather than a single named-argument map (12.365585ms)
+✔ exact TypeScript helpers need actual callable scope and the right export binding (18.313974ms)
+✔ a namespace is not a callable and qualified children retain their actual call edges (6.256143ms)
+✔ existing exact scorer rewards only the finite answer; judged workflow never auto-passes (1.03797ms)
+✔ source snapshots exclude oracle files, generated declarations and symlink escapes (32.862461ms)
+✔ record identity and source hash are deterministic; expected answers stay outside visible source and inputs (5.221969ms)
+✔ explicit source inventories exclude retired implementations and reject unsafe additions (7.295706ms)
+✔ packet validation detects content tampering and unlisted path traversal (6.399238ms)
+✔ only native oracle declarations are accepted (0.382545ms)
+✔ original use cases cannot be replaced by stage descriptions or duplicate workflows (1.262338ms)
+✔ each application owns its native interface; unrelated API shapes stay distinct (2.977495ms)
+✔ potential-call evidence distinguishes referenced children from unused wrappers (3.429395ms)
+✔ saved native state must fit the declared resume parameter and exist in every result (9.486868ms)
+✔ nested checkpoints bind only the state field and optional initial state preserves original fixtures (3.478678ms)
+✔ package uses edges survive source freezing and are counted by native callable identity (17.448094ms)
+✔ original requirements require concrete source owners without prescribing a common graph (0.928856ms)
+✔ application-specific adapters serialize each checked effect kind into durable receiver packets (28.026943ms)
+✔ closed-kind adapters reject unknown effects instead of routing a fallback topic (0.469556ms)
+✔ question turn consumes the classifier and visible-fact answer without advancing state (311.141136ms)
+✔ procedure clarification returns before simulator advancement and preserves the checkpoint (321.268762ms)
+✔ complete turn receipt replays without reclassification and preserves newer checkpoint state (405.21822ms)
+✔ legacy applied turn ID without its complete receipt stays unresolved (357.110511ms)
+✔ reconciles exact integer scaling against the supplied batch ledger (1.358241ms)
+✔ returns typed blockers for invalid covers, malformed/negative quantities, yields and fractional scaling (0.290096ms)
+✔ retains duplicate recipe and supplied rows as discrepancies (0.464548ms)
+✔ Natlang callable resolves the default kitchen scaling module export (245.748169ms)
+✔ effect kind separates apply from status read for the same logical action (0.242194ms)
+✔ same logical action identity keeps one stable key across retries (0.127772ms)
+✔ pending binding comparator rejects changed payload or prior revision (0.165519ms)
+✔ Natlang callable resolves both named helpers through its TypeScript module namespace (110.11651ms)
+ℹ tests 57
+ℹ suites 0
+ℹ pass 57
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4861.919086

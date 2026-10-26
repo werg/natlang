@@ -1,7 +1,7 @@
 {
   "schema": "natlang.design-brief-migration-progress/1",
   "release": "design-briefs-100-distinct-applications-20261026-v2",
-  "status": "source-migration-complete-validation-pending",
+  "status": "source-review-complete-python-gate-blocked-live-qualification-pending",
   "completed_applications": [
     1,
     2,
@@ -107,5 +107,6 @@
   "remaining_applications": [],
   "training_admission": false,
   "models_executed": 0,
-  "note": "Incremental source publication at user request. Final all-application inventory, independent fixture audit and gate evidence follow after all migrations. Full repository gate remains unresolved."
+  "evidence": "readiness.json",
+  "note": "Source review and deterministic application checks complete. Python gate and live model/production qualification remain explicitly outstanding."
 }
