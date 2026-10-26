@@ -129,7 +129,10 @@ def main(argv=None):
         if directory.is_dir():
             import_states(engine, directory)
     state_path = out / 'state.json'
+    # Published family versions are part of the release: archived beside the fit's own residuals.
+    family_artifacts = [item['artifact'] for item in manifest.get('families', [])]
     save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(), *trainer.state['optimizer_states'].values(),
+                                               *family_artifacts,
                                                *trainer.state.get('soft_states', {}).values(),
                                                *trainer.state.get('soft_optimizer_states', {}).values()],
                                       out / 'artifacts', out / 'states'), _write(state_path, trainer.state))
@@ -159,17 +162,36 @@ def main(argv=None):
         print(json.dumps({'step': record['step'], 'objective': record['objective'], 'lr_factor': record['lr_factor'],
                           'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}), flush=True)
     fragment = trainer.manifest_fragment()
+    families = [dict(item) for item in manifest.get('families', [])]
     if 'gguf' in plan.get('exports', []):
         export_nodes(trainer, engine, plan, out, fragment['artifacts'])
+        export_families(trainer, engine, plan, out, families)
     soft_states = trainer.soft_fragment(soft) if soft else []
-    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': [], 'softStates': soft_states,
+    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': families, 'softStates': soft_states,
                                  'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
                                  'receipt': trainer.receipt()})
     return 0
 
 
+def export_families(trainer, engine, plan, out, families):
+    """One unscaled GGUF per published family version this program uses; the binding's gate is the request scale."""
+    import dataclasses
+    for family in families:
+        membership = next((item for item in trainer.memberships
+                           if (item['family'], item['version']) == (family['family'], family['version'])), None)
+        if membership is None:
+            continue  # a family without members in this program is not served by it
+        members, bases = trainer._members([('family', membership)])
+        _export_gguf(trainer, engine, plan, out, family, [dataclasses.replace(member, scale=1.) for member in members], bases)
+
+
 def export_nodes(trainer, engine, plan, out, artifacts):
-    """One GGUF LoRA per scope node, unscaled: llama.cpp sums the loaded residuals of a call's stack with its
+    for artifact in artifacts:
+        _export_gguf(trainer, engine, plan, out, artifact, *trainer.node_members(artifact['node']))
+
+
+def _export_gguf(trainer, engine, plan, out, artifact, members, bases):
+    """One unscaled GGUF LoRA per scope node or family: llama.cpp sums the loaded residuals of a call's stack with its
     per-request scales, which equals the exported-stack sum exactly (§5.3). Each export binds the base GGUF."""
     from ..common.hashing import sha256_file_hex
     from ..model.native_adapters import target_parameters
@@ -179,16 +201,14 @@ def export_nodes(trainer, engine, plan, out, artifacts):
     if not student.get('hfConfigDir') or not student.get('baseGgufSha256'):
         raise ValueError('GGUF export needs student.hfConfigDir and student.baseGgufSha256')
     shapes = {name: tuple(value.shape) for name, value in target_parameters(engine.shared_model).items() if name in trainer.targets}
-    for artifact in artifacts:
-        file = f"exports/{artifact['artifact']}.gguf"
-        target = out / file
-        if not target.exists():
-            members, bases = trainer.node_members(artifact['node'])
-            peft = out / 'exports' / (artifact['artifact'] + '.peft')
-            export_peft(stack_factors(members, bases, shapes), trainer.targets, peft, base_identity=dict(engine.native_identity),
-                        base_model_name_or_path=student['hfConfigDir'], stack_identity=artifact['artifact'])
-            export_gguf(peft, student['hfConfigDir'], target)
-        artifact['exports'] = {'gguf': {'file': file, 'sha256': sha256_file_hex(target), 'baseGgufSha256': student['baseGgufSha256']}}
+    file = f"exports/{artifact['artifact']}.gguf"
+    target = out / file
+    if not target.exists():
+        peft = out / 'exports' / (artifact['artifact'] + '.peft')
+        export_peft(stack_factors(members, bases, shapes), trainer.targets, peft, base_identity=dict(engine.native_identity),
+                    base_model_name_or_path=student['hfConfigDir'], stack_identity=artifact['artifact'])
+        export_gguf(peft, student['hfConfigDir'], target)
+    artifact['exports'] = {'gguf': {'file': file, 'sha256': sha256_file_hex(target), 'baseGgufSha256': student['baseGgufSha256']}}
 
 
 if __name__ == '__main__':
