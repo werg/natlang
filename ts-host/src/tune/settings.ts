@@ -54,6 +54,8 @@ export type TuneSettings = {
   /** Cross-program families (plan §5.5): discovery threshold, minimum programs per cluster, proposal policy mode and
    * the family fit recipe (`rank`, `steps`, ...). */
   readonly families?: { readonly threshold?: number; readonly minPrograms?: number; readonly mode?: PluggableSetting;
+    /** Run families automatically after this many newly activated program releases of this base (§5.5). */
+    readonly every?: number;
     readonly recipe?: Readonly<Record<string, unknown>> };
   /** Placement envelope (plan §5.2). */
   readonly placement?: PlacementSettings;

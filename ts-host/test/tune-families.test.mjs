@@ -7,7 +7,7 @@ import * as host from '../dist/index.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
 import { prepareData, tuneProgram } from '../dist/tune/pipeline.js';
 import { currentRelease, readActive } from '../dist/adaptation/weights/release.js';
-import { crispProposals, proposeFamilies, runFamilies } from '../dist/tune/families.js';
+import { crispProposals, familyRegistry, proposeFamilies, registerTunedProgram, runFamilies } from '../dist/tune/families.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
@@ -70,9 +70,11 @@ test('families: discovery across programs, a fit on training rows only, member r
   const scratch = mkdtempSync(join(tmpdir(), 'natlang-family-store-'));
   const stub = join(scratch, 'stub.mjs');
   writeFileSync(stub, STUB);
-  const a = project('alpha-prog', stub), b = project('beta-prog', stub);
+  const a = project('alpha-prog', stub), b = project('beta-prog', stub), c = project('held-prog', stub);
   try {
-    for (const item of [a, b]) assert.equal((await tuneProgram(item.options)).activated, true);
+    for (const item of [a, b, c]) assert.equal((await tuneProgram(item.options)).activated, true);
+    const heldActive = readActive(c.root).release;
+    const held = [{ options: c.options, data: await prepareData(c.options), release: currentRelease(c.root).manifest, releaseDir: currentRelease(c.root).directory }];
     const before = [a, b].map(item => readActive(item.root).release);
     const programs = [];
     for (const item of [a, b]) {
@@ -80,8 +82,22 @@ test('families: discovery across programs, a fit on training rows only, member r
       programs.push({ options: item.options, data: await prepareData(item.options), release: active.manifest, releaseDir: active.directory });
     }
     const store = join(scratch, 'store');
-    const report = await runFamilies(programs, { store });
+    const report = await runFamilies(programs, { store, held });
     assert.equal(report.published.length, 1);
+    // The held program never entered discovery or the fit; it is only measured zero-shot, and stays as it was.
+    assert.equal(new Set(report.discovery.members.map(([namespace]) => namespace)).size, 2, 'only the two member programs were discovered');
+    assert.equal(report.discovery.members.length, 4);
+    const transfer = report.transfer.filter(item => item.kind === 'held');
+    assert.equal(transfer.length, 1);
+    assert.equal(transfer[0].program, c.options.program.id);
+    assert.ok(transfer[0].development.roots > 0);
+    assert.ok(transfer[0].development.interval.length === 2);
+    assert.equal(readActive(c.root).release, heldActive, 'a transfer measurement never activates');
+    const composed = JSON.parse(readFileSync(join(c.root, '.natlang/tune/releases', transfer[0].release, 'natlang.adapters.json'), 'utf8'));
+    assert.equal(composed.memberships.length, composed.bindings.length, 'the family is applied to every binding at gate 1');
+    assert.ok(composed.memberships.every(entry => entry.gate === 1));
+    assert.ok(c.seen.some(stack => stack[0] === report.published[0].artifact), 'the held program ran with the family first');
+    assert.equal(report.transfer.filter(item => item.kind === 'non-member').length, 0, 'both named programs are members');
     const [family] = report.published;
     assert.equal(family.members.length, 4, 'two bindings in each of two programs');
     assert.ok(family.members.every(member => /^p[0-9a-f]{12}\//.test(member)), 'members are namespaced by program');
@@ -107,7 +123,18 @@ test('families: discovery across programs, a fit on training rows only, member r
     const again = await runFamilies(programs.map(program => ({ ...program })), { store });
     assert.equal(again.published[0].version, family.version);
     assert.equal(readdirSync(join(store, 'jobs')).length, jobs.length);
-  } finally { for (const root of [a.root, b.root, scratch]) rmSync(root, { recursive: true, force: true }); }
+  } finally { for (const root of [a.root, b.root, c.root, scratch]) rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the family registry counts newly tuned releases since the last run', () => {
+  const store = mkdtempSync(join(tmpdir(), 'natlang-family-registry-'));
+  try {
+    assert.equal(registerTunedProgram(store, '/p/a', 'r1', 2), false);
+    assert.equal(registerTunedProgram(store, '/p/a', 'r1', 2), false, 'the same release counts once');
+    assert.equal(registerTunedProgram(store, '/p/b', 'r2', 2), true);
+    assert.equal(registerTunedProgram(store, '/p/c', 'r3', undefined), false, 'no schedule configured');
+    assert.deepEqual(Object.keys(familyRegistry(store).programs).sort(), ['/p/a', '/p/b', '/p/c']);
+  } finally { rmSync(store, { recursive: true, force: true }); }
 });
 
 test('proposals: tags first, clusters span programs, a natural-language answer may only name discovered members', async () => {

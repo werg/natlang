@@ -43,7 +43,7 @@ import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
 import { roundsSelector } from '../tune/schedule.js';
 import { exportDistillation } from '../tune/distill.js';
-import { runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
+import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
@@ -75,7 +75,7 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases', '--held'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
@@ -158,31 +158,46 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     io.out(formatOverview(loadOverview(root, partition)));
     return 0;
   }
-  if (flags.has('--families')) {
-    // Every named program stays open (sessions, data) while families are discovered, fit and members refit.
-    const programs = words.map(word => resolve(word));
-    const open = async (rest: string[], opened: FamilyProgram[]): Promise<FamiliesReport> => {
-      if (rest.length) return withOptions(async options => {
+  // Every named program stays open (sessions, data) while families are discovered, fit and members refit; held
+  // programs are opened too but only measured for transfer.
+  const familiesFor = async (programs: readonly string[], heldPrograms: readonly string[]): Promise<FamiliesReport> => {
+    if (!programs.length) throw new Error('natlang tune --families: name the tuned programs, or tune programs first (none are registered for this base)');
+    // Open members, then held programs, keeping every session open until the run ends.
+    let report: FamiliesReport | undefined;
+    const openAll = async (rest: readonly string[], opened: FamilyProgram[], heldRest: readonly string[], heldOpened: FamilyProgram[]): Promise<void> => {
+      if (rest.length || heldRest.length) return withOptions(async options => {
         const active = currentRelease(options.root);
         if (!active?.active) throw new Error(`natlang tune --families: ${options.root} has no active release; run natlang tune there first`);
-        const data = await prepareData(options, [], io.err);
-        return open(rest.slice(1), [...opened, { options, data, release: active.manifest, releaseDir: active.directory }]);
-      }, rest[0]);
+        const program = { options, data: await prepareData(options, [], io.err), release: active.manifest, releaseDir: active.directory };
+        return rest.length ? openAll(rest.slice(1), [...opened, program], heldRest, heldOpened)
+          : openAll(rest, opened, heldRest.slice(1), [...heldOpened, program]);
+      }, rest[0] ?? heldRest[0]);
       const settings = opened[0]!.options.settings;
       const nl = async (discovery: string) => {
         const runtime = createNatlangRuntime({ model: opened[0]!.options.teacher });
         try { return await runtime.run(() => (loadNatlang(PROPOSE_FAMILIES) as (...args: unknown[]) => Promise<unknown>)(discovery)); }
         finally { runtime.close(); }
       };
-      return runFamilies(opened, { ...settings.families, nl, log: io.err });
+      report = await runFamilies(opened, { ...settings.families, nl, log: io.err, held: heldOpened });
     };
-    const report = await open(programs, []);
+    await openAll(programs, [], heldPrograms, []);
+    return report!;
+  };
+  const familyStoreOf = () => familyStore(loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') }).student.base);
+  if (flags.has('--families')) {
+    // Without program arguments: every program tuned on this base (the family registry).
+    const programs = words.length ? words.map(word => resolve(word)) : Object.keys(familyRegistry(familyStoreOf()).programs);
+    const heldPrograms = (value('--held') ?? '').split(',').filter(Boolean).map(item => resolve(item));
+    const report = await familiesFor(programs.filter(item => !heldPrograms.includes(item)), heldPrograms);
     io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : [
       `families: ${report.published.map(item => `${item.family}@${item.version} (${item.members.length} members)`).join(', ') || 'none published'}` +
         (report.absent.length ? `; absent: ${report.absent.join(', ')}` : ''),
       ...report.programs.map(item => `${item.program}: ${item.activated ? 'activated' : 'kept previous'} ${item.release?.slice(0, 12) ?? ''}` +
         (item.development ? ` (development ${item.development.previous.toFixed(2)} -> ${item.development.refit.toFixed(2)}` +
-          `${item.negativeTransfer ? ', negative transfer' : ''})` : '') + (item.reason ? `: ${item.reason}` : ''))].join('\n'));
+          `${item.negativeTransfer ? ', negative transfer' : ''})` : '') + (item.reason ? `: ${item.reason}` : '')),
+      ...report.transfer.map(item => `transfer ${item.family}@${item.version} -> ${item.kind} ${item.program}: ` + (item.development
+        ? `development ${item.development.current.toFixed(2)} -> ${item.development.withFamily.toFixed(2)} (delta ${item.development.delta.toFixed(3)}` +
+          ` [${item.development.interval.map(value => value.toFixed(3)).join(', ')}]${item.development.underpowered ? ', underpowered' : ''})` : item.reason ?? ''))].join('\n'));
     return 0;
   }
   if (flags.has('--placement')) {
@@ -289,6 +304,15 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   if (!flags.has('--watch')) {
     const report = await once();
     io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : formatReport(report));
+    if (report.activated && report.release) {
+      // Families run after a batch of newly tuned programs (tune.families.every), over every program of this base.
+      const store = familyStoreOf(), every = loadTuneSettings(process.env, { student: value('--student') }).settings.families?.every;
+      if (registerTunedProgram(store, root, report.release, every)) {
+        const programs = Object.keys(familyRegistry(store).programs);
+        io.err(`natlang tune: ${every} newly tuned program release(s) since the last family run; running families over ${programs.length} programs`);
+        if (programs.length >= 2) await familiesFor(programs, []);
+      }
+    }
     return report.activated ? 0 : 1;
   }
   // Watch: coalesce edits, one build at a time; activation compares the pointer, so a stale build cannot win.

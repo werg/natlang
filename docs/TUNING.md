@@ -92,6 +92,14 @@ have an active release on the same exact base model.
    with an L1 penalty, 0 removes it), measured against its previous release on development roots, and activated only
    within `tune.placement.maxSuccessLoss`. The report flags negative transfer; `--rollback` restores the previous
    release. Programs you do not name never contribute data.
+5. Transfer: every published family is also applied zero-shot (gate 1 on every definition, nothing refit) to the
+   named programs that are not its members and to held programs (`--held ./prog-c,./prog-d`), and measured paired
+   on their development roots. Held programs never enter discovery or fitting, and transfer releases are stored but
+   never activated.
+
+Every activated program release is recorded per base (`<store>/programs.json`). With `tune.families.every: N`, a
+successful `natlang tune` runs families over all recorded programs of the base after N new releases since the last
+family run; `natlang tune --families` without program arguments uses the recorded programs.
 
 ## How calls use a release
 
