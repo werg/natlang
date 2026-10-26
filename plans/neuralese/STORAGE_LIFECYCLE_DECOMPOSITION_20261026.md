@@ -42,11 +42,13 @@ that action and records a repairable reason.
    lease only after the new checkpoint is durable. Existing target size alone
    cannot size a first save. One lease per filesystem serializes checkpoint
    writes, reserves concurrent-transfer blocks on that filesystem, and
-   rechecks space after acquisition; model updates continue outside the lease.
+   rechecks space after acquisition. It also preallocates the pending checkpoint
+   inode and refuses serialization beyond its admitted bound, then truncates
+   unused capacity before publication. Model updates continue outside the lease.
    The currently running frozen B1 learner has not been rebound to this guard.
    Its manager status therefore reports an advisory estimate and explicitly
-   records `live_writer_guard_installed: false`; no current runtime qualification
-   is claimed for first-write admission.
+   records `live_writer_guard_installed: false`. The shared writer is qualified
+   separately; adoption into the live frozen learner is still required.
 3. The manager uses `local-checkpoint-retention.py --plan` for LFM. Only an
    exact, currently reviewed plan may reach its apply operation. It never
    implements a second checkpoint ancestry or ownership algorithm.
@@ -66,8 +68,9 @@ that action and records a repairable reason.
    is recorded in the plan. No configured protected path or live fd/mapping may
    name a candidate. A one-candidate deletion plan is durable before unlink;
    the manager does not remove pins from the CoreWeave sandbox. Pruning remains
-   disabled in the checked-in live policy until independent review of the
-   actual plan and lineage binding.
+   disabled in the checked-in archive policy. A separately reviewed worker
+   policy enables guarded one-candidate-at-a-time Mellum cache maintenance;
+   each pass revalidates recovery, ancestry, actual private presence and readers.
 
 ## Tests and operation
 
@@ -78,6 +81,22 @@ floor enforcement, failed LFM retention, Mellum recovery/private receipt
 currency, and idempotent status recovery. A passing test or prepared plan is
 not live protection. The timer is installed and run under the memory ledger; its
 durable status shows the current owner and mount identity, internal headroom,
-recovery parents, or an explicit blocker. The archive plan is root-scoped and
-dry-run only. Root reviews any retention plan whose apply removes a checkpoint
-or moves a retained artifact.
+recovery parents, or an explicit blocker. The archive root and exclusions are
+explicit; bounded verified archive apply is enabled under standing owner
+authorization. Routine payloads use the reviewed mechanism and exact current
+checks rather than requiring a fresh permission.
+
+The deployed LFM ancestry-retention watcher uses the qualified
+`local-checkpoint-retention.py` operator, checks its exact source identity and
+metadata-reader identity, verifies fresh private full-state presence, and applies
+only the currently revalidated reviewed subset. Its records distinguish root's
+mechanism review from automatic payload checks. This operator lives with the
+local recovery controls, separately from the manager's archive timer.
+
+Final writer qualification used an actual 2,981,760,303-byte LFM checkpoint at
+step 39,271. The first-write save and complete reload retained every tensor,
+optimizer value, RNG value and exposure field; the original stayed unchanged.
+The scratch copy was removed after verification. The final focused checkpoint
+suite passed 60 tests, including physical pending-file allocation, over-bound
+write rejection, and ENOSPC preserving the previous complete state. Qualification
+does not imply adoption by an already running frozen runtime.

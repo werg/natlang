@@ -81,6 +81,10 @@ export function hasProducerOccurrence(block: string, node: string, scope: object
   const index = PRODUCERS.get(scope);
   return index?.byNode.get(node) === block && (index.byBlock.get(block)?.has(node) ?? false);
 }
+/** Authenticated writers in this task's scope; never consult another task's index. */
+export function producerOccurrences(block: string, scope: object | undefined): string[] {
+  return scope ? [...(PRODUCERS.get(scope)?.byBlock.get(block) ?? [])] : [];
+}
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
 export function blockInput(block: string, port?: string, sourceOccurrence?: string, scope?: object): GraphInput {
   const occurrences = scope ? PRODUCERS.get(scope)?.byBlock.get(block) : undefined;

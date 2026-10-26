@@ -46,8 +46,8 @@ test('a crisp string at a declared Neuralese<string> argument boundary is writte
   const start = events.find(event => event.kind === 'invocation' && event.phase === 'start');
   assert.equal(write.source_kind, 'typed-text-argument');
   assert.equal(write.inputs[0].node, 'external', 'a root call has an external caller argument source');
-  assert.ok(start.inputs.some(input => input.node === 'external' && input.block === write.block),
-    'the invocation consumes the archived state written from its external text argument');
+  assert.ok(start.inputs.some(input => input.node === write.node && input.block === write.block),
+    'the invocation consumes its actual argument writer, whose input retains the external text boundary');
   assert.equal(write.inputs[0].node, 'external', 'the writer retains the actual source boundary');
   assert.deepEqual(validateGraph(events, GRAPH_SCHEMA), []);
 });

@@ -203,6 +203,69 @@ def test_checkpoint_admission_refuses_insufficient_first_write_without_target(tm
     assert not target.exists()
 
 
+def test_atomic_checkpoint_physically_reserves_pending_bytes_before_serialization(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state as state_module
+    from natlang_neuralese.train.checkpoint_safety import checkpoint_size_upper_bound
+
+    target = tmp_path / 'checkpoint.pt'
+    saved = {'weights': torch.arange(32), 'optimizer': {'age': 17}, 'rng': torch.get_rng_state()}
+    bound = checkpoint_size_upper_bound(saved)
+    real_save = torch.save
+    observed = []
+
+    def inspect_save(state, writer):
+        allocated = os.fstat(writer.stream.fileno())
+        assert allocated.st_size == bound
+        assert allocated.st_blocks * 512 >= bound
+        assert writer.stream.tell() == 0
+        observed.append(bound)
+        return real_save(state, writer)
+
+    monkeypatch.setattr(torch, 'save', inspect_save)
+    state_module.atomic_checkpoint(target, saved)
+    loaded = torch.load(target, weights_only=True)
+    assert observed == [bound]
+    assert target.stat().st_size < bound
+    assert torch.equal(loaded['weights'], saved['weights'])
+    assert torch.equal(loaded['rng'], saved['rng'])
+    assert loaded['optimizer'] == saved['optimizer']
+
+
+def test_pending_preallocation_failure_preserves_the_previous_complete_state(tmp_path, monkeypatch):
+    from natlang_neuralese.train import trajectory_state as state_module
+
+    target = tmp_path / 'checkpoint.pt'
+    state_module.atomic_checkpoint(target, {'age': 17})
+    before = target.read_bytes()
+    real_allocate = os.posix_fallocate
+
+    def fail_pending(fd, offset, length):
+        if os.readlink(f'/proc/self/fd/{fd}').endswith('.pending'):
+            raise OSError(errno.ENOSPC, 'another writer consumed unreserved space')
+        return real_allocate(fd, offset, length)
+
+    monkeypatch.setattr(os, 'posix_fallocate', fail_pending)
+    with pytest.raises(OSError, match='unreserved space'):
+        state_module.atomic_checkpoint(target, {'age': 18})
+    assert target.read_bytes() == before
+    assert not target.with_suffix('.pending').exists()
+
+
+def test_checkpoint_digest_writer_never_extends_beyond_its_admitted_bound(tmp_path):
+    from natlang_neuralese.train.trajectory_state import _CheckpointDigestWriter
+    from natlang_neuralese.train.checkpoint_safety import CheckpointReserveError
+
+    with (tmp_path / 'pending').open('wb') as stream:
+        os.posix_fallocate(stream.fileno(), 0, 8)
+        writer = _CheckpointDigestWriter(stream, write_bound_bytes=8)
+        writer.write(b'first')
+        with pytest.raises(CheckpointReserveError, match='preallocated byte bound'):
+            writer.write(b'overrun')
+        assert writer.bytes == 5
+        assert stream.tell() == 5
+        assert os.fstat(stream.fileno()).st_size == 8
+
+
 def test_checkpoint_admission_serializes_same_filesystem_writers(tmp_path):
     from natlang_neuralese.train.checkpoint_safety import CheckpointWriteAdmission
 

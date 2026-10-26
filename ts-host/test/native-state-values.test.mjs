@@ -715,6 +715,32 @@ test('graph inputs reject ambiguous active-episode native writers unless the exa
   assert.equal(blockInput(block, 'native-state', 'producer-two#write').node, 'producer-two#write');
 });
 
+test('inference reads resolve sibling writers from the task scope without a learning recorder', async t => {
+  const { graphNode, registerTrace, releaseTrace } = await import('../dist/native/graph.js');
+  const { NativeTraceRecorder } = await import('../dist/native/trace.js');
+  const { setRecorderSource } = await import('../dist/native/model-recording.js');
+  setRecorderSource(() => undefined);
+  const store = new MemoryNeuraleseStore();
+  const artifact = await store.putNativeState(nativeStateFixture('inference-sibling-scope'));
+  const session = open({ type: '() => boolean', instructions: 'Return a boolean.' },
+    { neuralese: runtimeFor(store) }).session;
+  const callId = `${session.runtime.options.runId}/producer`;
+  const trace = new NativeTraceRecorder({ run_id: callId });
+  registerTrace(callId, trace, session.runtime.episodeBudget);
+  t.after(() => { releaseTrace(callId); setRecorderSource(() => undefined); });
+  const writer = graphNode(trace, 'block_write', { block: artifact.id }, [], `${callId}#write`);
+  const agent = new NativeToolAgent(Object.assign(async () => ({}), { neuralese: true }),
+    { neuralese: runtimeFor(store) });
+  const response = { text: '', calls: [], raw_response: {
+    x_natlang_rl_capture: { prompt: [{ kind: 'native_state', id: artifact.id }], writes: [] } } };
+  await agent.modelTurnNode(session, [], response, 1);
+  const read = session.runtime.trace.events.find(event => event.kind === 'block_read');
+  assert.equal(read.inputs[0].node, writer);
+  graphNode(trace, 'block_write', { block: artifact.id }, [], `${callId}#second-write`);
+  await assert.rejects(() => agent.modelTurnNode(session, [], response, 2),
+    /multiple in-episode writers and no occurrence binding/);
+});
+
 test('captured native reads retain the exact completed sibling writer and reject a prior execution writer', async (t) => {
   const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture('sibling-occurrence'));
   const invocation = open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
