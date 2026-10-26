@@ -45,8 +45,10 @@ def inventory(source: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
         seen.add(index)
         row_bytes, row = indexed[index]
         source_groups = row.get("source_groups")
-        if not isinstance(source_groups, list) or len(source_groups) != 1 or not isinstance(source_groups[0], str):
-            raise ValueError(f"source row {index} must identify exactly one source group")
+        if (not isinstance(source_groups, list) or not source_groups
+                or any(not isinstance(group, str) or not group for group in source_groups)
+                or len(set(source_groups)) != len(source_groups)):
+            raise ValueError(f"source row {index} must identify its complete distinct source groups")
         program = row.get("curriculum", {}).get("reference", {}).get("root")
         if not isinstance(program, list) or not program or not isinstance(program[0], list) or len(program[0]) < 2:
             raise ValueError(f"source row {index} has no canonical root program")
