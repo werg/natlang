@@ -53,7 +53,7 @@ jobs:
           # which is declared in the train extra but is imported by CPU-safe
           # Neuralese tests as well. Do not install the train extra here: it
           # pins a CUDA-agnostic torch wheel and would replace the CPU build.
-          python -m pip install -e '.[dev,data]' transformers 'triton==3.6.0; sys_platform == "linux"'
+          python -m pip install -e '.[dev,data]' transformers 'accelerate==1.15.0' 'triton==3.6.0; sys_platform == "linux"'
           python -m pytest -q
       - name: Install Chromium for browser smoke tests
         if: ${{ always() && steps.runtime_tests.outcome == 'success' }}
