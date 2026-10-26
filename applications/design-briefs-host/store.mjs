@@ -1,4 +1,4 @@
-/** Durable, exact store shared by the native design-brief applications. No policy or model code lives here. */
+/** Exact invocation/checkpoint/outbox custody. Application lifecycle decisions belong to native sources. */
 import { createHash } from 'node:crypto';
 import { closeSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -45,20 +45,10 @@ function pageArgs({ after = 0, limit = DEFAULT_PAGE } = {}) {
 }
 function snapshotInput(s) {
   if (!s || typeof s !== 'object' || Array.isArray(s)) fail('invalid_snapshot');
-  const out = {};
-  const arrays = ['caseRecords', 'evidencePages', 'policyCandidates', 'searchedPartitions'];
-  for (const name of arrays) {
-    const value = s[name] ?? [];
-    if (!Array.isArray(value)) fail('invalid_snapshot');
-    out[name] = value;
-  }
-  if (s.capturedAt !== undefined) out.capturedAt = s.capturedAt;
-  if (s.previousEvidencePages !== undefined) {
-    if (!Array.isArray(s.previousEvidencePages)) fail('invalid_snapshot');
-    out.previousEvidencePages = s.previousEvidencePages;
-  }
-  json(out);
-  return out;
+  const reserved = ['tenantId', 'appId', 'caseId', 'version', 'snapshotHash', 'domainRecords', 'createdAt', 'updatedAt'];
+  if (reserved.some(name => Object.hasOwn(s, name))) fail('invalid_snapshot');
+  json(s);
+  return structuredClone(s);
 }
 function writePacket(input) {
   if (!Array.isArray(input) || input.length > 500) fail('invalid_write_packet');
@@ -83,6 +73,10 @@ function outboxInput(rows) {
     return { key, topic, payload: row.payload };
   });
 }
+function matchingReceipt(receipt, entryKey) {
+  if (!receipt || receipt.status !== 'delivered' || receipt.idempotencyKey !== entryKey ||
+      typeof receipt.receiptId !== 'string' || !receipt.receiptId.trim()) fail('receipt_mismatch');
+}
 
 export function openDesignBriefStore({ filename, capabilities, clock = () => Date.now() } = {}) {
   if (typeof filename !== 'string' || !filename || !capabilities || typeof capabilities !== 'object' || typeof clock !== 'function')
@@ -106,22 +100,11 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
       PRIMARY KEY(tenant_id, app_id, case_id, record_type, record_id),
       FOREIGN KEY(tenant_id, app_id, case_id) REFERENCES cases(tenant_id, app_id, case_id) ON DELETE CASCADE
     ) STRICT;
-    CREATE TABLE IF NOT EXISTS proposals (
-      tenant_id TEXT NOT NULL, app_id TEXT NOT NULL, case_id TEXT NOT NULL, proposal_id TEXT NOT NULL,
-      snapshot_version INTEGER NOT NULL, snapshot_hash TEXT NOT NULL, source_hash TEXT NOT NULL,
-      proposal_json TEXT NOT NULL, writes_json TEXT NOT NULL, outbox_json TEXT NOT NULL, proposal_hash TEXT NOT NULL, requester TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('proposed','approved','committed','stale','rejected')),
-      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-      PRIMARY KEY(tenant_id, app_id, case_id, proposal_id),
+    CREATE TABLE IF NOT EXISTS invocations (
+      tenant_id TEXT NOT NULL, app_id TEXT NOT NULL, case_id TEXT NOT NULL, invocation_id TEXT NOT NULL,
+      requester TEXT NOT NULL, request_hash TEXT NOT NULL, receipt_json TEXT NOT NULL,
+      PRIMARY KEY(tenant_id, app_id, case_id, invocation_id),
       FOREIGN KEY(tenant_id, app_id, case_id) REFERENCES cases(tenant_id, app_id, case_id)
-    ) STRICT;
-    CREATE TABLE IF NOT EXISTS approvals (
-      tenant_id TEXT NOT NULL, app_id TEXT NOT NULL, case_id TEXT NOT NULL, approval_id TEXT NOT NULL,
-      proposal_id TEXT NOT NULL, proposal_hash TEXT NOT NULL, snapshot_version INTEGER NOT NULL,
-      approver TEXT NOT NULL, approval_hash TEXT NOT NULL, created_at INTEGER NOT NULL,
-      PRIMARY KEY(tenant_id, app_id, case_id, approval_id),
-      UNIQUE(tenant_id, app_id, case_id, proposal_id),
-      FOREIGN KEY(tenant_id, app_id, case_id, proposal_id) REFERENCES proposals(tenant_id, app_id, case_id, proposal_id)
     ) STRICT;
     CREATE TABLE IF NOT EXISTS events (
       seq INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, app_id TEXT NOT NULL, case_id TEXT NOT NULL,
@@ -184,11 +167,17 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
     const domainRecords = records.map(r => ({ recordType: r.record_type, recordId: r.record_id, value: parse(r.value_json), version: r.version }));
     return { ...parse(row.snapshot_json), tenantId: key.tenantId, appId: key.appId, caseId: key.caseId, version: row.version, snapshotHash: row.snapshot_hash, domainRecords, createdAt: row.created_at, updatedAt: row.updated_at };
   }
-  function proposalRow(row) {
+  function invocationRow(row) {
     if (!row) fail('not_found');
-    return { id: row.proposal_id, snapshotVersion: row.snapshot_version, snapshotHash: row.snapshot_hash,
-      sourceHash: row.source_hash, proposal: parse(row.proposal_json), writes: parse(row.writes_json), outbox: parse(row.outbox_json), hash: row.proposal_hash, requester: row.requester,
-      status: row.status, createdAt: row.created_at, updatedAt: row.updated_at };
+    return parse(row.receipt_json);
+  }
+  function readInvocation(key, id) {
+    return db.prepare('SELECT * FROM invocations WHERE tenant_id=? AND app_id=? AND case_id=? AND invocation_id=?')
+      .get(key.tenantId, key.appId, key.caseId, id);
+  }
+  function originalSnapshot(key) {
+    return parse(db.prepare('SELECT snapshot_json FROM cases WHERE tenant_id=? AND app_id=? AND case_id=?')
+      .get(key.tenantId, key.appId, key.caseId).snapshot_json);
   }
 
   return {
@@ -225,110 +214,71 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
         const version=old.version+1,time=now(),domainRecords=db.prepare('SELECT record_type,record_id,value_json,version FROM records WHERE tenant_id=? AND app_id=? AND case_id=? ORDER BY record_type,record_id').all(key.tenantId,key.appId,key.caseId).map(r=>({recordType:r.record_type,recordId:r.record_id,value:parse(r.value_json),version:r.version})),snapshotHash=digest({version,snapshot:snap,domainRecords});
         db.prepare('UPDATE cases SET version=?,snapshot_json=?,snapshot_hash=?,updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND version=?')
           .run(version,json(snap),snapshotHash,time,key.tenantId,key.appId,key.caseId,expectedVersion);
-        const staleIds=db.prepare("SELECT proposal_id FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND status IN ('proposed','approved')").all(key.tenantId,key.appId,key.caseId).map(r=>r.proposal_id);
-        db.prepare("UPDATE proposals SET status='stale',updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND status IN ('proposed','approved')")
-          .run(time,key.tenantId,key.appId,key.caseId);
-        for(const proposalId of staleIds) event(p,key,'proposal.stale',digest({proposalId,version}),{beforeVersion:old.version,afterVersion:version,lifecycle:'stale',detail:{proposalId}});
         const result=current(key);event(p,key,'case.replaced',ic.payloadHash,{beforeVersion:old.version,afterVersion:version,detail:{snapshotHash}});
         saveIdem(p,key,'replaceCase',idempotencyKey,ic.payloadHash,result,time);return result;
       });
     },
-    saveProposal(principalArg,keyArg,input,{idempotencyKey}={}) {
-      const key=keyOf(keyArg),p=authorize(principalArg,key,'propose');
-      if(!input||typeof input!=='object')fail('invalid_proposal');
-      const proposalId=assertId(input.proposalId),snapshotVersion=input.snapshotVersion;
-      if(!Number.isSafeInteger(snapshotVersion)||snapshotVersion<1)fail('invalid_version');
-      const snapshotHash=assertHash(input.snapshotHash),sourceHash=assertHash(input.sourceHash),proposal=input.proposal;
-      json(proposal);
-      const writes=writePacket(input.writes),outbox=outboxInput(input.outbox);
-      for(const w of writes) if(!w.value || typeof w.value!=='object' || Array.isArray(w.value) || w.value.id!==w.recordId || w.value.tenantId!==key.tenantId || w.value.version!==(w.expectedVersion??0)+1) fail('invalid_write_packet');
-      const body={proposalId,snapshotVersion,snapshotHash,sourceHash,proposal,writes,outbox},proposalHash=digest(body),payload={key,...body};
-      return transact(()=>{
-        const ic=idem(p,key,'saveProposal',idempotencyKey,payload);if(ic.replay)return ic.replay;
-        const snap=current(key);if(!snap)fail('not_found');
-        if(snap.version!==snapshotVersion||snap.snapshotHash!==snapshotHash)fail('stale_version');
-        const prior=db.prepare('SELECT proposal_id FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId);
-        if(prior)fail('already_exists');
-        for(const w of writes){const row=db.prepare('SELECT version FROM records WHERE tenant_id=? AND app_id=? AND case_id=? AND record_type=? AND record_id=?').get(key.tenantId,key.appId,key.caseId,w.recordType,w.recordId);if((row?.version??null)!==w.expectedVersion)fail('record_version_mismatch');}
-        const time=now();db.prepare('INSERT INTO proposals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          .run(key.tenantId,key.appId,key.caseId,proposalId,snapshotVersion,snapshotHash,sourceHash,json(proposal),json(writes),json(outbox),proposalHash,p.id,'proposed',time,time);
-        const row=db.prepare('SELECT * FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId);
-        const result=proposalRow(row);event(p,key,'proposal.saved',ic.payloadHash,{beforeVersion:snap.version,afterVersion:snap.version,lifecycle:'proposed',detail:{proposalId,proposalHash}});
-        saveIdem(p,key,'saveProposal',idempotencyKey,ic.payloadHash,result,time);return result;
-      });
+    readInvocation(principalArg, keyArg, invocationId) {
+      const key = keyOf(keyArg); authorize(principalArg, key, 'read'); assertId(invocationId);
+      return invocationRow(readInvocation(key, invocationId));
     },
-    readProposal(principalArg,keyArg,proposalIdArg) {
-      const key=keyOf(keyArg);authorize(principalArg,key,'read');const proposalId=assertId(proposalIdArg);
-      return proposalRow(db.prepare('SELECT * FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId));
-    },
-    approveProposal(principalArg,keyArg,proposalIdArg,binding,{idempotencyKey}={}) {
-      const key=keyOf(keyArg),p=authorize(principalArg,key,'approve'),proposalId=assertId(proposalIdArg);
-      if(!binding||typeof binding!=='object')fail('invalid_approval');
-      const proposalHash=assertHash(binding.proposalHash),snapshotVersion=binding.snapshotVersion;
-      if(!Number.isSafeInteger(snapshotVersion)||snapshotVersion<1)fail('invalid_version');
-      const approvalId=assertId(binding.approvalId ?? `approval:${digest([proposalId,proposalHash,p.id]).slice(0,32)}`);
-      const body={proposalId,proposalHash,snapshotVersion,approvalId};
-      return transact(()=>{
-        const ic=idem(p,key,'approveProposal',idempotencyKey,{key,...body});if(ic.replay)return ic.replay;
-        const row=db.prepare('SELECT * FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId);
-        const proposal=proposalRow(row);if(proposal.hash!==proposalHash||proposal.snapshotVersion!==snapshotVersion)fail('binding_mismatch');if(proposal.requester===p.id)fail('separation_of_duties');
-        const snap=current(key);if(!snap)fail('not_found');
-        if(snap.version!==snapshotVersion||snap.snapshotHash!==proposal.snapshotHash)fail('stale_version');
-        if(proposal.status!=='proposed')fail('invalid_lifecycle');
-        const time=now(),approvalHash=digest({...body,approver:p.id});
-        db.prepare('INSERT INTO approvals VALUES(?,?,?,?,?,?,?,?,?,?)').run(key.tenantId,key.appId,key.caseId,approvalId,proposalId,proposalHash,snapshotVersion,p.id,approvalHash,time);
-        db.prepare("UPDATE proposals SET status='approved',updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=? AND status='proposed'").run(time,key.tenantId,key.appId,key.caseId,proposalId);
-        const result={id:approvalId,proposalId,proposalHash,snapshotVersion,approver:p.id,hash:approvalHash,createdAt:time};
-        event(p,key,'proposal.approved',ic.payloadHash,{beforeVersion:snap.version,afterVersion:snap.version,lifecycle:'approved',detail:{proposalId,approvalId,approvalHash}});
-        saveIdem(p,key,'approveProposal',idempotencyKey,ic.payloadHash,result,time);return result;
-      });
-    },
-    commitProposal(principalArg,keyArg,proposalIdArg,binding,{idempotencyKey}={}) {
-      const key=keyOf(keyArg),p=authorize(principalArg,key,'commit'),proposalId=assertId(proposalIdArg);
-      if(!binding||typeof binding!=='object')fail('invalid_commit');
-      const proposalHash=assertHash(binding.proposalHash),approvalId=assertId(binding.approvalId),approvalHash=assertHash(binding.approvalHash),snapshotVersion=binding.snapshotVersion;
-      if(!Number.isSafeInteger(snapshotVersion)||snapshotVersion<1)fail('invalid_version');
-      const body={proposalId,proposalHash,approvalId,approvalHash,snapshotVersion};
-      return transact(()=>{
-        const ic=idem(p,key,'commitProposal',idempotencyKey,{key,...body});if(ic.replay)return ic.replay;
-        const row=db.prepare('SELECT * FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId),proposal=proposalRow(row);
-        const approval=db.prepare('SELECT * FROM approvals WHERE tenant_id=? AND app_id=? AND case_id=? AND approval_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,approvalId,proposalId);
-        if(proposal.hash!==proposalHash||proposal.snapshotVersion!==snapshotVersion||!approval||approval.approval_hash!==approvalHash||approval.proposal_hash!==proposalHash||approval.snapshot_version!==snapshotVersion)fail('binding_mismatch');
-        const snap=current(key);if(!snap)fail('not_found');
-        if(snap.version!==snapshotVersion||snap.snapshotHash!==proposal.snapshotHash)fail('stale_version');
-        if(proposal.status!=='approved')fail('invalid_lifecycle');
-        const time=now(),newVersion=snap.version+1;
-        for(const w of proposal.writes) {if(!w.value || typeof w.value!=='object' || w.value.id!==w.recordId || w.value.tenantId!==key.tenantId || w.value.version!==(w.expectedVersion??0)+1)fail('binding_mismatch');const existing=db.prepare('SELECT version FROM records WHERE tenant_id=? AND app_id=? AND case_id=? AND record_type=? AND record_id=?').get(key.tenantId,key.appId,key.caseId,w.recordType,w.recordId);if((existing?.version??null)!==w.expectedVersion)fail('record_version_mismatch');}
-        for(const w of proposal.writes) {
-          const recordVersion=(w.expectedVersion??0)+1;
-          db.prepare(`INSERT INTO records VALUES(?,?,?,?,?,?,?) ON CONFLICT(tenant_id,app_id,case_id,record_type,record_id) DO UPDATE SET value_json=excluded.value_json,version=excluded.version`)
-            .run(key.tenantId,key.appId,key.caseId,w.recordType,w.recordId,json(w.value),recordVersion);
+    commitInvocation(principalArg, keyArg, input) {
+      const key = keyOf(keyArg);
+      if (!input || typeof input !== 'object') fail('invalid_invocation');
+      const invocationId = assertId(input.invocationId), operation = assertId(input.operation);
+      const p = authorize(principalArg, key, `invoke:${operation}`);
+      const requestHash = assertHash(input.requestHash), sourceHash = assertHash(input.sourceHash);
+      const interfaceHash = assertHash(input.interfaceHash), snapshotHash = assertHash(input.snapshotHash);
+      const snapshotVersion = input.snapshotVersion;
+      if (!Number.isSafeInteger(snapshotVersion) || snapshotVersion < 1) fail('invalid_version');
+      const invocation = input.invocation; json(invocation);
+      const writes = writePacket(input.writes), outbox = outboxInput(input.outbox);
+      if (new Set(outbox.map(entry => entry.key)).size !== outbox.length) fail('invalid_outbox');
+      return transact(() => {
+        const previous = readInvocation(key, invocationId);
+        if (previous) {
+          if (previous.requester !== p.id || previous.request_hash !== requestHash ||
+              invocationRow(previous).operation !== operation) fail('idempotency_conflict');
+          return invocationRow(previous);
         }
-        const snapshotJson=json(snapshotInput({...snap,domainRecords:undefined,version:undefined,snapshotHash:undefined,createdAt:undefined,updatedAt:undefined}));
-        const newHash=digest({version:newVersion,snapshot:parse(snapshotJson),domainRecords:[...db.prepare('SELECT record_type,record_id,value_json,version FROM records WHERE tenant_id=? AND app_id=? AND case_id=? ORDER BY record_type,record_id').all(key.tenantId,key.appId,key.caseId).map(r=>({recordType:r.record_type,recordId:r.record_id,value:parse(r.value_json),version:r.version}))]});
-        db.prepare('UPDATE cases SET version=?,snapshot_hash=?,updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND version=?')
-          .run(newVersion,newHash,time,key.tenantId,key.appId,key.caseId,snap.version);
-        const inserted=[];
-        for(const entry of proposal.outbox){db.prepare("INSERT INTO outbox(tenant_id,app_id,case_id,entry_key,topic,payload_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'pending',?,?)")
-          .run(key.tenantId,key.appId,key.caseId,entry.key,entry.topic,json(entry.payload),time,time);inserted.push({key:entry.key,topic:entry.topic});}
-        const staleIds=db.prepare("SELECT proposal_id FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id<>? AND status IN ('proposed','approved')").all(key.tenantId,key.appId,key.caseId,proposalId).map(r=>r.proposal_id);
-        db.prepare("UPDATE proposals SET status='stale',updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id<>? AND status IN ('proposed','approved')").run(time,key.tenantId,key.appId,key.caseId,proposalId);
-        for(const staleId of staleIds) event(p,key,'proposal.stale',digest({proposalId:staleId,version:newVersion}),{beforeVersion:snap.version,afterVersion:newVersion,lifecycle:'stale',detail:{proposalId:staleId}});
-        db.prepare("UPDATE proposals SET status='committed',updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=? AND status='approved'").run(time,key.tenantId,key.appId,key.caseId,proposalId);
-        const result={proposalId,status:'committed',version:newVersion,snapshotHash:newHash,writes:proposal.writes.length,outbox:inserted};
-        event(p,key,'proposal.committed',ic.payloadHash,{beforeVersion:snap.version,afterVersion:newVersion,lifecycle:'committed',detail:{proposalId,approvalId,proposalHash,outbox:inserted}});
-        saveIdem(p,key,'commitProposal',idempotencyKey,ic.payloadHash,result,time);return result;
-      });
-    },
-    rejectProposal(principalArg,keyArg,proposalIdArg,{proposalHash,reasonCode},{idempotencyKey}={}) {
-      const key=keyOf(keyArg),p=authorize(principalArg,key,'reject'),proposalId=assertId(proposalIdArg),hash=assertHash(proposalHash),reason=assertId(reasonCode);
-      return transact(()=>{
-        const ic=idem(p,key,'rejectProposal',idempotencyKey,{key,proposalId,hash,reason});if(ic.replay)return ic.replay;
-        const row=db.prepare('SELECT * FROM proposals WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?').get(key.tenantId,key.appId,key.caseId,proposalId),proposal=proposalRow(row);
-        if(proposal.hash!==hash)fail('binding_mismatch');if(!['proposed','approved'].includes(proposal.status))fail('invalid_lifecycle');
-        const time=now();db.prepare("UPDATE proposals SET status='rejected',updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=? AND proposal_id=?").run(time,key.tenantId,key.appId,key.caseId,proposalId);
-        const result={...proposal,status:'rejected',updatedAt:time};event(p,key,'proposal.rejected',ic.payloadHash,{lifecycle:'rejected',detail:{proposalId,reasonCode:reason}});
-        saveIdem(p,key,'rejectProposal',idempotencyKey,ic.payloadHash,result,time);return result;
+        const snap = current(key); if (!snap) fail('not_found');
+        if (snap.version !== snapshotVersion || snap.snapshotHash !== snapshotHash) fail('stale_version');
+        for (const write of writes) {
+          const row = db.prepare('SELECT version FROM records WHERE tenant_id=? AND app_id=? AND case_id=? AND record_type=? AND record_id=?')
+            .get(key.tenantId,key.appId,key.caseId,write.recordType,write.recordId);
+          if ((row?.version ?? null) !== write.expectedVersion) fail('record_version_mismatch');
+        }
+        // Repeated domain delivery identities are safe only for byte-identical intentions.
+        for (const entry of outbox) {
+          const row = db.prepare('SELECT topic,payload_json FROM outbox WHERE tenant_id=? AND app_id=? AND case_id=? AND entry_key=?')
+            .get(key.tenantId,key.appId,key.caseId,entry.key);
+          if (row && (row.topic !== entry.topic || row.payload_json !== json(entry.payload))) fail('effect_identity_conflict');
+        }
+        const time = now(), version = snap.version + 1;
+        for (const write of writes) db.prepare(`INSERT INTO records VALUES(?,?,?,?,?,?,?)
+          ON CONFLICT(tenant_id,app_id,case_id,record_type,record_id) DO UPDATE SET value_json=excluded.value_json,version=excluded.version`)
+          .run(key.tenantId,key.appId,key.caseId,write.recordType,write.recordId,json(write.value),(write.expectedVersion ?? 0)+1);
+        const saved = current(key);
+        const nextHash = digest({version,snapshot:originalSnapshot(key),domainRecords:saved.domainRecords});
+        db.prepare('UPDATE cases SET version=?,snapshot_hash=?,updated_at=? WHERE tenant_id=? AND app_id=? AND case_id=?')
+          .run(version,nextHash,time,key.tenantId,key.appId,key.caseId);
+        const delivered = [];
+        for (const entry of outbox) {
+          db.prepare(`INSERT INTO outbox(tenant_id,app_id,case_id,entry_key,topic,payload_json,status,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,'pending',?,?) ON CONFLICT(tenant_id,app_id,case_id,entry_key) DO NOTHING`)
+            .run(key.tenantId,key.appId,key.caseId,entry.key,entry.topic,json(entry.payload),time,time);
+          const row = db.prepare('SELECT id,status FROM outbox WHERE tenant_id=? AND app_id=? AND case_id=? AND entry_key=?')
+            .get(key.tenantId,key.appId,key.caseId,entry.key);
+          delivered.push({id:row.id,key:entry.key,topic:entry.topic,status:row.status});
+        }
+        const body = {id:invocationId,requester:p.id,requestHash,operation,snapshotVersion,snapshotHash,
+          sourceHash,interfaceHash,invocation,version,nextSnapshotHash:nextHash,writes:writes.length,outbox:delivered,createdAt:time};
+        const receipt = {...body,hash:digest(body)};
+        db.prepare('INSERT INTO invocations VALUES(?,?,?,?,?,?,?)')
+          .run(key.tenantId,key.appId,key.caseId,invocationId,p.id,requestHash,json(receipt));
+        event(p,key,'invocation.committed',receipt.hash,{beforeVersion:snapshotVersion,afterVersion:version,
+          detail:{invocationId,operation,sourceHash,interfaceHash,outbox:delivered}});
+        return receipt;
       });
     },
     listEvents(principalArg,keyArg,{after=0,limit=DEFAULT_PAGE}={}) {
@@ -354,7 +304,7 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
     ackOutbox(principalArg,entryId,workerId,receipt) {
       const p=principalOf(principalArg);if(!Number.isSafeInteger(entryId)||entryId<1)fail('invalid_input');assertId(workerId);json(receipt);
       return transact(()=>{const r=db.prepare('SELECT * FROM outbox WHERE id=?').get(entryId);if(!r||r.tenant_id!==p.tenantId)fail('not_found');authorize(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'dispatch');
-        if(r.status!=='leased'||r.worker_id!==workerId||r.lease_until<=now())fail('lease_lost');const time=now();db.prepare("UPDATE outbox SET status='delivered',receipt_json=?,worker_id=NULL,lease_until=NULL,updated_at=? WHERE id=? AND status='leased'").run(json(receipt),time,entryId);
+        if(r.status!=='leased'||r.worker_id!==workerId||r.lease_until<=now())fail('lease_lost');matchingReceipt(receipt,r.entry_key);const time=now();db.prepare("UPDATE outbox SET status='delivered',receipt_json=?,worker_id=NULL,lease_until=NULL,updated_at=? WHERE id=? AND status='leased'").run(json(receipt),time,entryId);
         event(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'outbox.delivered',digest(receipt),{detail:{entryId}});return {id:entryId,status:'delivered'};});
     },
     failOutbox(principalArg,entryId,workerId,{code='delivery_failed',ambiguous=false}={}) {
@@ -376,7 +326,7 @@ export function openDesignBriefStore({ filename, capabilities, clock = () => Dat
           typeof evidence.assertion!=='string'||!evidence.assertion.trim()||evidence.assertion.length>4000)fail('evidence_required');
       json(evidence);
       return transact(()=>{const r=db.prepare('SELECT * FROM outbox WHERE id=?').get(entryId);if(!r||r.tenant_id!==p.tenantId)fail('not_found');authorize(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'reconcile');
-        if(!['unknown','failed'].includes(r.status))fail('invalid_lifecycle');const time=now();
+        if(!['unknown','failed'].includes(r.status))fail('invalid_lifecycle');if(outcome==='delivered')matchingReceipt(receipt,r.entry_key);const time=now();
         if(outcome==='delivered')db.prepare("UPDATE outbox SET status='delivered',receipt_json=?,failure_code=NULL,reconciliation_json=?,updated_at=? WHERE id=? AND status IN ('unknown','failed')").run(json(receipt),json(evidence),time,entryId);
         else db.prepare("UPDATE outbox SET status='pending',failure_code=NULL,reconciliation_json=?,updated_at=? WHERE id=? AND status IN ('unknown','failed')").run(json(evidence),time,entryId);
         event(p,{tenantId:r.tenant_id,appId:r.app_id,caseId:r.case_id},'outbox.reconciled',digest({entryId,outcome,receipt:outcome==='delivered'?receipt:null,evidence}),{detail:{entryId,outcome,evidence}});

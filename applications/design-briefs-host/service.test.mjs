@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { loadApplications, nativeExecutor } from './runtime.mjs';
+import { loadApplications, nativeExecutor, jsonCopy } from './runtime.mjs';
 import { openDesignBriefStore } from './store.mjs';
 import { createApplicationService } from './service.mjs';
 import { serveApplications } from './server.mjs';
@@ -13,8 +13,8 @@ import { scriptedModel } from '../../ts-host/test/support/natlang.mjs';
 const op = { id: 'operator', tenantId: 'tenant', roles: ['operator'] };
 const reviewer = { id: 'reviewer', tenantId: 'tenant', roles: ['reviewer'] };
 const worker = { id: 'delivery', tenantId: 'tenant', roles: ['dispatcher'] };
-const capability = { read: ['operator','reviewer'], write: ['operator'], propose: ['operator'],
-  approve: ['reviewer'], commit: ['operator'], reject: ['reviewer'], dispatch: ['dispatcher'] };
+const capability = { read: ['operator','reviewer'], write: ['operator'],
+  'invoke:postLedger': ['operator'], 'invoke:applyAdjustment': ['operator'], 'invoke:inspectPassages': ['operator'], dispatch: ['dispatcher'] };
 const capabilities = { '001': capability, '002': capability };
 const codeIs = name => error => error.code === name;
 const key = { tenantId: 'tenant', appId: '001', caseId: 'engineering-case' };
@@ -27,7 +27,7 @@ async function environment(t, overrides = {}) {
   await mkdir(a); await mkdir(b); await mkdir(join(a, 'postLedger'));
   const bundles = [
     [a, { schema:'natlang.application/1',id:'001',title:'Engineering ledger',entrypoint:'postLedger.nl',
-      interfaces:[{name:'postLedger',path:'postLedger.nl',purpose:'Exercise a carried ledger state.',stateParameter:'ledger',stateResultPath:['next']}] }, {
+      interfaces:[{name:'postLedger',path:'postLedger.nl',purpose:'Exercise a carried ledger state.',stateParameter:'ledger',stateResultPath:['next'],stateKey:'ledger'}] }, {
       'postLedger.nl': source('ledger: { balance: number }, delta: number','{ next: { balance: number }; posting: number }',
         'Call calculatePosting(delta), add its actual result to ledger.balance and return the next state.'),
       'postLedger/calculatePosting.nl': source('delta: number','number','Return the supplied delta as the engineering posting.'),
@@ -37,6 +37,7 @@ async function environment(t, overrides = {}) {
       'inspectPassages.nl': source('passages: string[], search: string','string[]','Select passages containing search exactly.'),
     }],
   ];
+  overrides.configure?.(bundles);
   for (const [dir, manifest, files] of bundles) {
     manifest.source_files = Object.keys(files);
     await writeFile(join(dir,'application.json'), JSON.stringify(manifest));
@@ -46,6 +47,7 @@ async function environment(t, overrides = {}) {
   const catalog = await loadApplications(root);
   const scripted = scriptedModel(opening => opening.includes('engineering posting') ? 'return delta;' :
     opening.includes('Select passages containing') ? 'return passages.filter(p => p.includes(search));' :
+    opening.includes('Carry nested checkpoint') ? 'return { updated: { balance: dossier.checkpoint.balance + dossier.delta }, accepted: true };' :
     'const posting = await calculatePosting(delta); return { next: { balance: ledger.balance + posting }, posting };');
   const execute = overrides.execute ?? nativeExecutor({ driver: scripted.driver });
   const filename = join(root,'state.sqlite');
@@ -59,41 +61,34 @@ async function environment(t, overrides = {}) {
 function create(service) {
   return service.create(op,'001',key.caseId,{interface:'postLedger',inputs:{ledger:{balance:7},delta:3},idempotencyKey:'create'});
 }
-function accept(service, proposal) {
-  const approval = service.approve(reviewer,'001',key.caseId,proposal.id,
-    {proposalHash:proposal.hash,snapshotVersion:proposal.snapshotVersion,idempotencyKey:'approve-'+proposal.id});
-  return service.commit(op,'001',key.caseId,proposal.id,{proposalHash:proposal.hash,snapshotVersion:proposal.snapshotVersion,
-    approvalId:approval.id,approvalHash:approval.hash,idempotencyKey:'commit-'+proposal.id});
-}
-
 test('real native runtime preserves unrelated per-program APIs and nested child results', async t => {
   const e=await environment(t);create(e.service);
   const p=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'post-1'});
-  assert.deepEqual(p.proposal.result,{next:{balance:10},posting:3});
+  assert.deepEqual(p.invocation.result,{next:{balance:10},posting:3});
   assert.equal(e.scripted.openings.length,2,'the root and its native child must actually execute');
-  assert.equal(e.store.readCase(op,key).domainRecords.length,0,'inference cannot commit');
+  assert.equal(e.store.readCase(op,key).domainRecords[0].value.state.balance,10,'the checked checkpoint is durably available to the next turn');
   e.service.create(op,'002','other',{interface:'inspectPassages',inputs:{passages:['alpha','beta','alphabet'],search:'alpha'},idempotencyKey:'text-create'});
   const q=await e.service.invoke(op,'002','other',{interface:'inspectPassages',expectedVersion:1,idempotencyKey:'text-call'});
-  assert.deepEqual(q.proposal.result,['alpha','alphabet']);
+  assert.deepEqual(q.invocation.result,['alpha','alphabet']);
   assert.deepEqual(e.service.describe(op,'001').interfaces[0].parameters.map(x=>x.name),['ledger','delta']);
   assert.deepEqual(e.service.describe(op,'002').interfaces[0].parameters.map(x=>x.name),['passages','search']);
 });
 
-test('approved native checkpoint resumes after restart; exact invocation replay avoids new inference', async t => {
+test('native checkpoint resumes after restart; exact invocation replay avoids new inference', async t => {
   const e=await environment(t);create(e.service);
   const p=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'first'});
-  accept(e.service,p);const before=e.scripted.openings.length;
+  const before=e.scripted.openings.length;
   const reopened=e.reopen();
   assert.equal((await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'first'})).hash,p.hash);
   assert.equal(e.scripted.openings.length,before);
   const resumed=await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:2,idempotencyKey:'saved-source-resume'});
-  assert.deepEqual(resumed.proposal.inputs,{delta:3,ledger:{balance:10}});
-  assert.deepEqual(resumed.proposal.result,{next:{balance:13},posting:3});
-  const q=await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{delta:4},expectedVersion:2,idempotencyKey:'second'});
-  assert.deepEqual(q.proposal.inputs,{delta:4,ledger:{balance:10}});
-  assert.deepEqual(q.proposal.result,{next:{balance:14},posting:4});
-  await assert.rejects(reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{ledger:{balance:0},delta:4},expectedVersion:2,idempotencyKey:'override'}),codeIs('state_override'));
-  await assert.rejects(reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{delta:5},expectedVersion:2,idempotencyKey:'second'}),codeIs('idempotency_conflict'));
+  assert.deepEqual(resumed.invocation.inputs,{delta:3,ledger:{balance:10}});
+  assert.deepEqual(resumed.invocation.result,{next:{balance:13},posting:3});
+  const q=await reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{delta:4},expectedVersion:3,idempotencyKey:'second'});
+  assert.deepEqual(q.invocation.inputs,{delta:4,ledger:{balance:13}});
+  assert.deepEqual(q.invocation.result,{next:{balance:17},posting:4});
+  await assert.rejects(reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{ledger:{balance:0},delta:4},expectedVersion:4,idempotencyKey:'override'}),codeIs('state_override'));
+  await assert.rejects(reopened.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{delta:5},expectedVersion:3,idempotencyKey:'second'}),codeIs('idempotency_conflict'));
 });
 
 test('source refresh during inference rejects the stale result without committing or dispatching', async t => {
@@ -106,7 +101,7 @@ test('source refresh during inference rejects the stale result without committin
   assert.equal(e.store.readCase(op,key).domainRecords.length,0);
 });
 
-test('invalid native data and wrong authority cannot become a proposal', async t => {
+test('invalid native data and wrong operation authority cannot mutate state', async t => {
   const e=await environment(t,{execute:async()=>({next:{balance:'invalid'},posting:3})});create(e.service);
   await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'invalid'}),codeIs('invalid_result'));
   await assert.rejects(e.service.invoke(reviewer,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'forbidden'}),codeIs('forbidden'));
@@ -114,11 +109,11 @@ test('invalid native data and wrong authority cannot become a proposal', async t
   assert.deepEqual(e.store.listEvents(op,key).items.map(x=>x.operation),['case.created']);
 });
 
-test('external effects require a configured application adapter, commit and matching receiver receipt', async t => {
+test('external effects are atomically queued by an exact adapter and require a matching receiver receipt', async t => {
   const e=await environment(t,{effectAdapters:{'001':{postLedger:({result})=>[{key:'posting-1',topic:'ledger.posted',payload:{posting:result.posting}}]}}});create(e.service);
   const p=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'effect'});
-  assert.deepEqual(e.store.claimOutbox(worker,{tenantId:'tenant',appId:'001',workerId:'empty'}),[]);
-  accept(e.service,p);let calls=0;
+  assert.equal(p.outbox.length,1);
+  let calls=0;
   const results=await dispatchOnce({store:e.store,principal:worker,appId:'001',workerId:'worker-1',routes:{'001':{'ledger.posted':{endpoint:'https://receiver.invalid/receive'}}},
     fetchImpl:async(url,options)=>{calls++;assert.equal(options.redirect,'error');assert.match(options.headers['idempotency-key'],/tenant:001:engineering-case:posting-1/);return {ok:true,json:async()=>({status:'delivered',idempotencyKey:'posting-1',receiptId:'receipt-1'})};}});
   assert.equal(calls,1);assert.equal(results[0].status,'delivered');
@@ -132,7 +127,6 @@ test('delivery validates configuration before claiming and leases each slow item
     {key:'three',topic:'ledger.posted',payload:{n:3}},
   ]}}});create(e.service);
   const p=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'slow-deliveries'});
-  accept(e.service,p);
   await assert.rejects(dispatchOnce({store:e.store,principal:worker,appId:'001',workerId:'w',
     routes:{'001':{'ledger.posted':{endpoint:'not a URL'}}}}),codeIs('invalid_delivery_route'));
   assert.equal(e.store.readOutbox(worker,1).attempts,0);
@@ -158,4 +152,55 @@ test('HTTP binds the authenticated tenant and exposes no inference or configurat
   assert.equal(created.status,201);assert.equal((await created.json()).tenantId,'tenant');
   const invalid=await fetch(server.url+'/applications/001/cases/bad',{method:'POST',headers,body:'{'});
   assert.equal(invalid.status,400);assert.deepEqual(await invalid.json(),{error:'invalid_json'});
+});
+
+test('different operations restore the same nested domain checkpoint without replacing other dossier inputs', async t => {
+  const e=await environment(t,{configure:bundles=>{
+    const [,manifest,files]=bundles[0];
+    manifest.interfaces.push({name:'applyAdjustment',path:'applyAdjustment.nl',purpose:'Carry a checkpoint through an unrelated dossier field.',
+      stateParameter:'dossier',stateInputPath:['checkpoint'],stateResultPath:['updated'],stateKey:'ledger'});
+    files['applyAdjustment.nl']=source('dossier: { checkpoint?: { balance: number }; delta: number }',
+      '{ updated: { balance: number }; accepted: boolean }','Carry nested checkpoint and add the supplied dossier delta.');
+  }});
+  create(e.service);
+  await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'initial'});
+  const result=await e.service.invoke(op,'001',key.caseId,{interface:'applyAdjustment',inputs:{dossier:{delta:5}},
+    expectedVersion:2,idempotencyKey:'adjust'});
+  assert.deepEqual(result.invocation.inputs,{dossier:{checkpoint:{balance:10},delta:5}});
+  assert.deepEqual(result.invocation.result,{updated:{balance:15},accepted:true});
+  const resumed=await e.service.invoke(op,'001',key.caseId,{interface:'postLedger',inputs:{delta:2},expectedVersion:3,idempotencyKey:'back'});
+  assert.equal(resumed.invocation.result.next.balance,17);
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'applyAdjustment',
+    inputs:{dossier:{checkpoint:{balance:0},delta:2}},expectedVersion:4,idempotencyKey:'overwritten'}),codeIs('state_override'));
+});
+
+test('a declared pending effect cannot be silently discarded when its application adapter is missing', async t => {
+  const e=await environment(t,{configure:bundles=>{
+    bundles[0][1].interfaces[0].effectsPath=['intentions'];
+    bundles[0][2]['postLedger.nl']=source('ledger: { balance: number }, delta: number',
+      '{ next: { balance: number }; posting: number; intentions: string[] }','Produce the typed engineering intention.');
+  },execute:async()=>({next:{balance:10},posting:3,intentions:['deliver-this']})});
+  create(e.service);
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'effect-missing'}),codeIs('effect_adapter_required'));
+  assert.equal(e.store.readCase(op,key).version,1);
+  assert.equal(e.store.readCase(op,key).domainRecords.length,0);
+});
+
+test('cancellation after inference or adapter completion cannot commit a partial invocation', async t => {
+  const controller=new AbortController();
+  const e=await environment(t,{execute:async()=>{controller.abort();return {next:{balance:10},posting:3};}});
+  create(e.service);
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'cancelled'},
+    {signal:controller.signal}),codeIs('invocation_cancelled'));
+  assert.equal(e.store.readCase(op,key).version,1);
+  assert.deepEqual(e.store.listEvents(op,key).items.map(e=>e.operation),['case.created']);
+});
+
+test('JSON custody rejects lossy values and adapters cannot modify the checked result', async t => {
+  for (const bad of [undefined,NaN,Infinity,{x:undefined},[undefined],new Date()]) assert.throws(()=>jsonCopy(bad),codeIs('invalid_json'));
+  const cycle={};cycle.self=cycle;assert.throws(()=>jsonCopy(cycle),codeIs('invalid_json'));
+  const e=await environment(t,{effectAdapters:{'001':{postLedger:({result})=>{result.next.balance=0;return [];}}}});
+  create(e.service);
+  await assert.rejects(e.service.invoke(op,'001',key.caseId,{interface:'postLedger',expectedVersion:1,idempotencyKey:'mutation'}),TypeError);
+  assert.equal(e.store.readCase(op,key).version,1);
 });

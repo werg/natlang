@@ -7,7 +7,12 @@
     {
       "name": "interpretExperiment",
       "path": "interpretExperiment.nl",
-      "purpose": "Assess approved experiment outputs against effective design history, measurement comparability, estimands, counterexperience, and follow-up evidence."
+      "purpose": "Assess approved experiment outputs against effective design history, measurement comparability, estimands, counterexperience, and follow-up evidence.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "experiment-review"
     }
   ],
   "persistence": [
@@ -102,6 +107,8 @@
     "runCase/auditMeasurement/checkMeasurementComparability.nl",
     "runCase/interpretResults/checkEstimandAndSearchHistory.nl",
     "runCase/reconcileFeedback/seekContraryExperience.nl",
-    "experimentCore/collectReviewQuestions.nl"
+    "experimentCore/collectReviewQuestions.nl",
+    "interpretExperiment/compareReviewRevision.nl",
+    "interpretExperiment/reconcileExperimentCheckpoint.nl"
   ]
 }

@@ -221,10 +221,25 @@ test('saved native state must fit the declared resume parameter and exist in eve
   assert.equal(checkApplicationInterfaces(sources, manifest, metadata).interfaces.length, 1);
   const change = path => ({ ...manifest, interfaces: [{ ...manifest.interfaces[0], stateResultPath: path }] });
   assert.throws(() => checkApplicationInterfaces(sources, change(['revision']), metadata), /does not fit/);
-  assert.throws(() => checkApplicationInterfaces(sources, change(['absent']), metadata), /every result/);
+  assert.throws(() => checkApplicationInterfaces(sources, change(['absent']), metadata), /declared type/);
   assert.throws(() => checkApplicationInterfaces(sources, change(['__proto__']), metadata), /safe property path/);
   const optional = { ...sources, 'review.nl': sources['review.nl'].replace('next: Ledger', 'next?: Ledger') };
-  assert.throws(() => checkApplicationInterfaces(optional, manifest, metadata), /every result/);
+  assert.throws(() => checkApplicationInterfaces(optional, manifest, metadata), /declared type/);
+});
+
+test('nested checkpoints bind only the state field and optional initial state preserves original fixtures', () => {
+  const sources = {
+    'types.ts':'export type Ledger = { entries: string[] };',
+    'review.nl':'---\nargs: { dossier: { text: string; checkpoint?: Ledger } }\nreturns: { next: Ledger }\n---\nRead dossier.text and return the actual revised ledger.\n',
+  };
+  const manifest={schema:'natlang.application/1',id:'001',title:'Nested ledger',entrypoint:'review.nl',
+    interfaces:[{name:'review',path:'review.nl',purpose:'Carry just the nested ledger.',
+      stateParameter:'dossier',stateInputPath:['checkpoint'],stateResultPath:['next']}]};
+  assert.equal(checkApplicationInterfaces(sources,manifest,{...app,title:'Nested ledger'}).interfaces.length,1);
+  const bad=structuredClone(manifest);bad.interfaces[0].stateInputPath=['text'];
+  assert.throws(()=>checkApplicationInterfaces(sources,bad,{...app,title:'Nested ledger'}),/does not fit/);
+  const optional={...files,'qualify.nl':files['qualify.nl'].replace('  claim: string','  claim: string\n  prior?: string')};
+  assert.equal(checkFixture(optional,fixture).level,'exact');
 });
 
 test('package uses edges survive source freezing and are counted by native callable identity', async t => {

@@ -228,27 +228,30 @@ export function checkApplicationInterfaces(files, manifest, metadata) {
     const definition = programDefinition({ semantics: { root: item.path, files } });
     if (item.stateParameter !== undefined && !definition.params.some(param => param.name === item.stateParameter))
       throw new Error(`${item.name}: stateParameter is not a declared native parameter`);
-    for (const key of ['stateResultPath', 'effectsPath']) if (item[key] !== undefined &&
+    for (const key of ['stateInputPath', 'stateResultPath', 'effectsPath']) if (item[key] !== undefined &&
         (!Array.isArray(item[key]) || item[key].some(part => typeof part !== 'string' || !part ||
           ['__proto__', 'constructor', 'prototype'].includes(part))))
       throw new Error(`${item.name}: ${key} must be an explicit safe property path`);
     const node = programNode({ semantics: { root: item.path, files } });
     const env = new TypeEnv(node.types);
-    const resultAtPath = (type, path) => {
+    const typeAtPath = (type, path, input = false) => {
       if (!path.length) return type;
       const resolved = env.resolve(type);
-      if (resolved.kind === 'union') return { kind: 'union', members: resolved.members.map(member => resultAtPath(member, path)) };
+      if (resolved.kind === 'union') return { kind: 'union', members: resolved.members.map(member => typeAtPath(member, path, input)) };
       const field = resolved.kind === 'record' && resolved.fields.find(field => field.name === path[0]);
-      if (!field || field.optional) throw new Error(`${item.name}: result path ${path.join('.')} must exist in every result`);
-      return resultAtPath(field.type, path.slice(1));
+      if (!field || (!input && field.optional)) throw new Error(`${item.name}: ${input ? 'state input' : 'result'} path ${path.join('.')} must exist in its declared type`);
+      return typeAtPath(field.type, path.slice(1), input);
     };
     if (item.stateResultPath !== undefined || item.stateParameter !== undefined) {
-      const state = resultAtPath(node.type.returns, item.stateResultPath ?? []);
+      const state = typeAtPath(node.type.returns, item.stateResultPath ?? []);
       const parameter = node.type.params.fields.find(field => field.name === item.stateParameter);
-      if (parameter && !fitsType(state, parameter.type, env))
+      const inputType = parameter && typeAtPath(parameter.type, item.stateInputPath ?? [], true);
+      if (inputType && !fitsType(state, inputType, env))
         throw new Error(`${item.name}: saved result state does not fit stateParameter ${item.stateParameter}`);
     }
-    if (item.effectsPath !== undefined) resultAtPath(node.type.returns, item.effectsPath);
+    if (item.stateInputPath !== undefined && item.stateParameter === undefined)
+      throw new Error(`${item.name}: stateInputPath requires a stateParameter`);
+    if (item.effectsPath !== undefined) typeAtPath(node.type.returns, item.effectsPath);
     if (item.stateKey !== undefined && (typeof item.stateKey !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,100}$/.test(item.stateKey)))
       throw new Error(`${item.name}: stateKey must be an explicit safe record identifier`);
     return { name: item.name, path: item.path, parameters: definition.params.map(param => param.name),
@@ -327,6 +330,7 @@ export function checkFixture(files, fixture) {
   const node = programNode(record);
   const env = new TypeEnv(node.types);
   for (const parameter of node.type.params.fields) {
+    if (parameter.optional && !Object.hasOwn(fixture.inputs, parameter.name)) continue;
     const value = coerce(fixture.inputs[parameter.name], parameter.type, env, `input.${parameter.name}`);
     const missing = problems(value, parameter.type, env, `input.${parameter.name}`).holes;
     if (missing.length) throw new Error(`${fixture.id}: incomplete input: ${JSON.stringify(missing)}`);

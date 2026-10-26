@@ -4,16 +4,21 @@ Browse the [complete application index](INDEX.md) for the 100 entry points,
 independent cases, and fixed application splits.
 
 Each numbered directory implements one of the supplied application briefs as a
-standalone native natlang project. Start at `runCase.nl`, read the concrete
-domain contracts in `types.ts`, and follow the callable folder into its five
-domain stages and their nested procedures. `brief.json` binds the original
+standalone native natlang project. Start at the operations declared in
+`application.json`, read the concrete domain contracts in `types.ts`, and follow
+the callable folders and explicit imports into the program's own reasoning graph.
+The original brief's algorithms are coverage obligations, not a stage sequence. `brief.json` binds the original
 brief, algorithms, gates, and operational details. `DECOMPOSITION.md` explains
 the semantic responsibilities and exact host boundary.
 
-The programs produce typed, evidence-backed review proposals. They do not imply
-that external approvals, database commits, integrations, or user interfaces have
-been deployed. Authority and exact external effects belong to independently
-implemented host services.
+The programs own their domain decisions, interactive events, durable state and
+recovery. Their outputs include revised ledgers, diagnosed learner sessions,
+shipment reservations, consent withdrawals and audience knowledge. The
+[optional application host](../../applications/design-briefs-host/README.md)
+executes those native operations and atomically saves their typed checkpoints.
+It does not impose a shared proposal/approval/commit business process. Actual
+external effects use configured exact adapters and verified receiver receipts;
+a source application is not evidence of a deployed integration.
 
 Independent scenario inputs and oracles, reproducible native IR packaging,
 teacher commands, RL preparation, split rules, and validation evidence live in

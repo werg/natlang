@@ -7,7 +7,12 @@
     {
       "name": "observeCustomerProblems",
       "path": "observeCustomerProblems.nl",
-      "purpose": "Turn the supplied customer problem evidence, privacy changes, identity history and exposure frames into a deduplicated, comparable, provenance-preserving observatory proposal."
+      "purpose": "Turn the supplied customer problem evidence, privacy changes, identity history and exposure frames into a deduplicated, comparable, provenance-preserving observatory proposal.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "customer-observatory"
     }
   ],
   "persistence": [
@@ -105,6 +110,10 @@
     "customerObservatory/revokeAttributionDerivatives.nl",
     "customerObservatory/compareTrendCoverage.nl",
     "customerObservatory/bindTrendAggregates.nl",
-    "customerObservatory/commissionDiscriminatingInvestigation.nl"
+    "customerObservatory/commissionDiscriminatingInvestigation.nl",
+    "customerObservatory/compareObservatoryRevisions.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint/reconcileConsentEffects.nl",
+    "customerObservatory/reconcileObservatoryCheckpoint/reconcileTrendLineage.nl"
   ]
 }

@@ -63,11 +63,8 @@ export async function serveApplications({ service, credentials, port = 0, host =
             return reply(200, await service.invoke(principal, appId, caseId, await body(), { signal: controller.signal }));
           if (parts.length === 5 && parts[4] === 'events' && request.method === 'GET')
             return reply(200, service.events(principal, appId, caseId, { after: Number(url.searchParams.get('after') ?? 0), limit: Number(url.searchParams.get('limit') ?? 50) }));
-          if (parts[4] === 'proposals' && parts[5]) {
-            if (parts.length === 6 && request.method === 'GET') return reply(200, service.proposal(principal, appId, caseId, parts[5]));
-            if (parts.length === 7 && ['approve','commit','reject'].includes(parts[6]) && request.method === 'POST')
-              return reply(200, service[parts[6]](principal, appId, caseId, parts[5], await body()));
-          }
+          if (parts[4] === 'invocations' && parts[5] && parts.length === 6 && request.method === 'GET')
+            return reply(200, service.invocation(principal, appId, caseId, parts[5]));
         }
       }
       if (parts[0] === 'outbox' && parts.length === 2 && request.method === 'GET') return reply(200, service.outbox(principal, Number(parts[1])));

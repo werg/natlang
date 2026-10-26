@@ -3,158 +3,155 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { openDesignBriefStore, StoreError } from './store.mjs';
+import { openDesignBriefStore } from './store.mjs';
 
 const capabilities = { brief: {
-  read: ['reader','operator','reviewer'], write: ['operator'], propose: ['operator'], approve: ['reviewer'],
-  commit: ['operator'], reject: ['reviewer','operator'], dispatch: ['dispatcher'], reconcile: ['reconciler'],
+  read: ['reader','operator'], write: ['operator'], 'invoke:post': ['operator'],
+  'invoke:release': ['releaser'], dispatch: ['dispatcher'], reconcile: ['reconciler'],
 } };
 const op = { id: 'op-1', tenantId: 'tenant-1', roles: ['operator'] };
-const reviewer = { id: 'reviewer-1', tenantId: 'tenant-1', roles: ['reviewer'] };
-const dispatcher = { id: 'worker-principal', tenantId: 'tenant-1', roles: ['dispatcher'] };
-const reconciler = { id: 'ops-reconciler', tenantId: 'tenant-1', roles: ['reconciler'] };
-const reader = { id: 'reader-1', tenantId: 'tenant-1', roles: ['reader'] };
+const dispatcher = { id: 'worker', tenantId: 'tenant-1', roles: ['dispatcher'] };
+const reconciler = { id: 'reconciler', tenantId: 'tenant-1', roles: ['reconciler'] };
+const reader = { id: 'reader', tenantId: 'tenant-1', roles: ['reader'] };
 const key = { tenantId: 'tenant-1', appId: 'brief', caseId: 'case-1' };
-const snapshot = () => ({ caseRecords: [{ customer: { id: 'c-1' } }], capturedAt: '2026-10-26T00:00:00Z', previousEvidencePages: [{ id: 'previous-1' }], evidencePages: [{ id: 'page-1' }], policyCandidates: [], searchedPartitions: [] });
+const snapshot = () => ({ initial: { interface: 'post', inputs: { passage: 'original', edition: 4 } } });
 const hash = value => createHash('sha256').update(value).digest('hex');
-const tempDb = () => {
-  const dir = mkdtempSync(join(process.cwd(), '.test-design-brief-'));
-  return { filename: join(dir, 'store.sqlite'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
-};
-const open = (filename, clock) => openDesignBriefStore({ filename, capabilities, ...(clock ? { clock } : {}) });
-function proposalFrom(caseSnapshot, { id = 'proposal-1', writes = [{ recordType: 'decision', recordId: 'd-1', value: { id: 'd-1', tenantId: key.tenantId, version: 1, result: 'hold' }, expectedVersion: null }], outbox = [{ key: 'notify-1', topic: 'review.ready', payload: { caseId: key.caseId } }] } = {}) {
-  return { proposalId: id, snapshotVersion: caseSnapshot.version, snapshotHash: caseSnapshot.snapshotHash, sourceHash: hash('source'),
-    proposal: { disposition: 'review', explanation: 'Evidence retained.' }, writes, outbox };
+const code = expected => error => error.code === expected;
+const receipt = entryKey => ({ status: 'delivered', idempotencyKey: entryKey, receiptId: 'receiver-' + entryKey });
+const evidence = {kind:'operator_assertion',reference:'receiver-audit',assertion:'Checked the receiver journal for this exact key.'};
+
+function environment(t, clock) {
+  const root = mkdtempSync(join(process.cwd(), '.test-design-brief-'));
+  const filename = join(root, 'state.sqlite'), stores = [];
+  const open = () => {
+    const store = openDesignBriefStore({filename,capabilities,...(clock ? {clock} : {})});
+    stores.push(store); return store;
+  };
+  t.after(() => { for (const store of stores) try { store.close(); } catch {} rmSync(root,{recursive:true,force:true}); });
+  return {store:open(),open};
 }
-function make(store, opts) {
-  const c = store.createCase(op, key, snapshot(), { idempotencyKey: opts?.createKey ?? 'create-1' });
-  const p = store.saveProposal(op, key, proposalFrom(c, opts), { idempotencyKey: opts?.proposalKey ?? 'save-1' });
-  return { c, p };
+function invocation(snap, overrides = {}) {
+  return {invocationId:'inv-1',operation:'post',requestHash:hash('request-1'),snapshotVersion:snap.version,
+    snapshotHash:snap.snapshotHash,sourceHash:hash('source'),interfaceHash:hash('interface'),
+    invocation:{result:{edition:5,acknowledged:false}},
+    writes:[{recordType:'NativeCheckpoint',recordId:'edition',expectedVersion:null,value:{state:{edition:5}}}],
+    outbox:[{key:'notify-1',topic:'edition.ready',payload:{edition:5}}],...overrides};
 }
-function approve(store, p, { idempotencyKey = 'approve-1' } = {}) {
-  return store.approveProposal(reviewer, key, p.id, { proposalHash: p.hash, snapshotVersion: p.snapshotVersion }, { idempotencyKey });
+function create(store, caseKey = key) {
+  return store.createCase(op,caseKey,snapshot(),{idempotencyKey:'create'});
 }
-function commit(store, p, a, { idempotencyKey = 'commit-1' } = {}) {
-  return store.commitProposal(op, key, p.id, { proposalHash: p.hash, approvalId: a.id, approvalHash: a.hash,
-    snapshotVersion: p.snapshotVersion }, { idempotencyKey });
+function commit(store, overrides) {
+  const snap = store.readCase(reader,key) ?? create(store);
+  return store.commitInvocation(op,key,invocation(snap,overrides));
 }
-const code = (error, expected) => error instanceof StoreError && error.code === expected;
 
-test('durable case/proposal/approval/commit survive close and reopen with typed inputs separate from materialized domain records', () => {
-  const t = tempDb();
-  try {
-    let store = open(t.filename); const { c, p } = make(store); const a = approve(store,p); const result = commit(store,p,a);
-    assert.equal(result.status, 'committed'); assert.equal(result.version, 2);
-    store.close();
-    store = open(t.filename);
-    const restored = store.readCase(reader,key);
-    assert.equal(restored.caseRecords[0].customer.id, 'c-1');
-    assert.equal(restored.caseId,key.caseId);assert.equal(restored.capturedAt,'2026-10-26T00:00:00Z');assert.deepEqual(restored.previousEvidencePages,[{id:'previous-1'}]);
-    assert.equal(restored.domainRecords[0].recordType, 'decision');
-    assert.deepEqual(restored.domainRecords[0].value,{id:'d-1',tenantId:key.tenantId,version:1,result:'hold'});
-    assert.equal(restored.domainRecords[0].version,1);assert.equal(restored.domainRecords[0].value.version,1);
-    assert.deepEqual(store.listCases(reader,{tenantId:key.tenantId,appId:key.appId,limit:1}).next,null);
-    assert.equal(store.readProposal(reader,key,p.id).status,'committed');
-    assert.equal(store.readOutbox(dispatcher,1).status,'pending');
-    assert.deepEqual(store.listEvents(reader,key).items.map(e=>e.operation),['case.created','proposal.saved','proposal.approved','proposal.committed']);
-    store.close();
-  } finally { t.cleanup(); }
+test('one atomic native invocation persists result, checkpoint, audit and outbox across restart', t => {
+  const e=environment(t), first=commit(e.store);
+  assert.equal(first.version,2);
+  const reopened=e.open(), snap=reopened.readCase(reader,key);
+  assert.deepEqual(snap.initial,snapshot().initial);
+  assert.equal(Object.hasOwn(snap,'policyCandidates'),false);
+  assert.deepEqual(snap.domainRecords[0].value,{state:{edition:5}});
+  assert.equal(snap.domainRecords[0].version,1);
+  assert.deepEqual(reopened.readInvocation(reader,key,first.id),first);
+  assert.equal(reopened.readOutbox(dispatcher,1).status,'pending');
+  assert.deepEqual(reopened.listEvents(reader,key).items.map(e=>e.operation),['case.created','invocation.committed']);
 });
 
-test('approval is a separate authorized exact binding; requester cannot approve and tampering blocks commit', () => {
-  const t=tempDb();try{const s=open(t.filename);const {p}=make(s);
-    assert.throws(()=>s.approveProposal(op,key,p.id,{proposalHash:p.hash,snapshotVersion:p.snapshotVersion},{idempotencyKey:'self'}),e=>code(e,'forbidden'));
-    const selfAllowed={id:op.id,tenantId:op.tenantId,roles:['reviewer']};
-    assert.throws(()=>s.approveProposal(selfAllowed,key,p.id,{proposalHash:p.hash,snapshotVersion:p.snapshotVersion},{idempotencyKey:'self2'}),e=>code(e,'separation_of_duties'));
-    const a=approve(s,p);assert.throws(()=>s.commitProposal(op,key,p.id,{proposalHash:p.hash,approvalId:a.id,approvalHash:hash('tampered'),snapshotVersion:p.snapshotVersion},{idempotencyKey:'bad'}),e=>code(e,'binding_mismatch'));
-    assert.equal(s.readProposal(reader,key,p.id).status,'approved');s.close();}finally{t.cleanup();}
+test('different domain operations have independent capabilities; there is no shared approval workflow', t => {
+  const {store}=environment(t), snap=create(store);
+  assert.throws(()=>store.commitInvocation(op,key,invocation(snap,{operation:'release'})),code('forbidden'));
+  assert.throws(()=>store.commitInvocation(reader,key,invocation(snap)),code('forbidden'));
+  assert.equal(store.readCase(reader,key).version,1);
+  assert.equal('approveProposal' in store,false);
 });
 
-test('cross-tenant and role isolation fail closed without revealing whether another tenant has a case', () => {
-  const t=tempDb();try{const s=open(t.filename);make(s);
-    assert.throws(()=>s.readCase({...reader,tenantId:'tenant-2'},{...key,tenantId:'tenant-1'}),e=>code(e,'not_found'));
-    assert.throws(()=>s.createCase(reader,{...key,caseId:'case-2'},snapshot(),{idempotencyKey:'x'}),e=>code(e,'forbidden')); 
-    assert.throws(()=>s.readProposal(reader,{...key,tenantId:'tenant-2'},'proposal-1'),e=>code(e,'not_found'));
-    s.close();}finally{t.cleanup();}
+test('concurrent connections replay one request and reject changed request or actor identities', t => {
+  const e=environment(t), snap=create(e.store), other=e.open(), input=invocation(snap);
+  const first=e.store.commitInvocation(op,key,input);
+  assert.deepEqual(other.commitInvocation(op,key,{...input,invocation:{result:'another model completion'}}),first);
+  assert.throws(()=>other.commitInvocation(op,key,{...input,requestHash:hash('changed')}),code('idempotency_conflict'));
+  assert.throws(()=>other.commitInvocation({...op,id:'another'},key,input),code('idempotency_conflict'));
+  assert.equal(other.readCase(reader,key).version,2);
+  assert.equal(other.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker'}).length,1);
 });
 
-test('concurrent proposals bind versions, commit makes sibling proposals stale, record versions are optimistic', () => {
-  const t=tempDb();try{const s=open(t.filename);const c=s.createCase(op,key,snapshot(),{idempotencyKey:'create'});
-    const a=s.saveProposal(op,key,proposalFrom(c,{id:'p-a'}),{idempotencyKey:'save-a'});
-    const b=s.saveProposal(op,key,proposalFrom(c,{id:'p-b'}),{idempotencyKey:'save-b'});
-    const aa=approve(s,a,{idempotencyKey:'approve-a'});commit(s,a,aa);
-    assert.equal(s.readProposal(reader,key,'p-b').status,'stale');
-    assert.throws(()=>approve(s,b,{idempotencyKey:'approve-b'}),e=>code(e,'stale_version'));
-    const after=s.readCase(reader,key);
-    assert.throws(()=>s.saveProposal(op,key,{...proposalFrom(after,{id:'p-c',writes:[{recordType:'decision',recordId:'d-1',value:{id:'d-1',tenantId:key.tenantId,version:1,result:'new'},expectedVersion:null}]}),sourceHash:hash('src')},{idempotencyKey:'save-c'}),e=>code(e,'record_version_mismatch'));
-    s.close();}finally{t.cleanup();}
+test('stale snapshots, altered snapshot hashes and competing checkpoint versions cannot partly commit', t => {
+  const {store}=environment(t), before=create(store);
+  assert.throws(()=>store.commitInvocation(op,key,invocation(before,{snapshotHash:hash('different')})),code('stale_version'));
+  const first=store.commitInvocation(op,key,invocation(before));
+  assert.throws(()=>store.commitInvocation(op,key,invocation(before,{invocationId:'inv-2',requestHash:hash('request-2')})),code('stale_version'));
+  const now=store.readCase(reader,key);
+  assert.throws(()=>store.commitInvocation(op,key,invocation(now,{invocationId:'inv-2',requestHash:hash('request-2')})),code('record_version_mismatch'));
+  assert.equal(store.readCase(reader,key).version,first.version);
+  assert.throws(()=>store.readInvocation(reader,key,'inv-2'),code('not_found'));
 });
 
-test('durable idempotency returns exact replay and rejects key reuse with changed payload', () => {
-  const t=tempDb();try{const s=open(t.filename);const a=s.createCase(op,key,snapshot(),{idempotencyKey:'same'});assert.deepEqual(s.createCase(op,key,snapshot(),{idempotencyKey:'same'}),a);
-    assert.throws(()=>s.createCase(op,key,{...snapshot(),evidencePages:[{id:'other'}]},{idempotencyKey:'same'}),e=>code(e,'idempotency_conflict'));s.close();}finally{t.cleanup();}
+test('effect identities are durable: exact repeated intentions never resend, conflicting content rolls back', t => {
+  const {store}=environment(t);commit(store);
+  const [item]=store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker'});
+  store.ackOutbox(dispatcher,item.id,'worker',receipt(item.key));
+  const now=store.readCase(reader,key);
+  const next=invocation(now,{invocationId:'inv-2',requestHash:hash('request-2'),
+    writes:[{recordType:'NativeCheckpoint',recordId:'edition',expectedVersion:1,value:{state:{edition:6}}}]});
+  assert.throws(()=>store.commitInvocation(op,key,{...next,outbox:[{key:'notify-1',topic:'edition.ready',payload:{edition:6}}]}),code('effect_identity_conflict'));
+  assert.equal(store.readCase(reader,key).version,2);
+  assert.equal(store.readCase(reader,key).domainRecords[0].value.state.edition,5);
+  const second=store.commitInvocation(op,key,next);
+  assert.equal(second.outbox[0].status,'delivered');
+  assert.deepEqual(store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'next'}),[]);
 });
 
-test('expired outbox lease after a lost acknowledgment becomes unknown and is reconciled explicitly after restart', () => {
-  const t=tempDb();try{let now=1000;let s=open(t.filename,()=>now);const {p}=make(s);const a=approve(s,p);commit(s,p,a);const [claim]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-1',leaseMs:100,limit:1});
-    now=1200;s.close();s=open(t.filename,()=>now);
-    assert.equal(s.readOutbox(dispatcher,claim.id).status,'leased');
-    assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:100,limit:1}),[]);
-    assert.equal(s.readOutbox(dispatcher,claim.id).status,'unknown');
-    assert.deepEqual(s.reconcileOutbox(reconciler,claim.id,{outcome:'delivered',receipt:{remoteId:'receipt-1'},evidence:{kind:'operator_assertion',reference:'receipt-1',assertion:'I confirmed the receiver receipt in its audit console.'}}),{id:claim.id,status:'delivered',evidence:{kind:'operator_assertion',reference:'receipt-1',assertion:'I confirmed the receiver receipt in its audit console.'}});
-    assert.equal(s.readOutbox(dispatcher,claim.id).receipt.remoteId,'receipt-1');
-    assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-3',leaseMs:100,limit:1}),[]);s.close();
-  }finally{t.cleanup();}
+test('source refresh keeps typed checkpoints and invalidates in-flight snapshots mechanically', t => {
+  const {store}=environment(t);commit(store);
+  const old=store.readCase(reader,key);
+  const changed=store.replaceCase(op,key,old.version,{initial:{interface:'post',inputs:{passage:'revised',edition:6}}},{idempotencyKey:'refresh'});
+  assert.equal(changed.initial.inputs.passage,'revised');
+  assert.deepEqual(changed.domainRecords,old.domainRecords);
+  assert.throws(()=>store.commitInvocation(op,key,invocation(old,{invocationId:'slow',requestHash:hash('slow')})),code('stale_version'));
 });
 
-test('failed and unknown sends are not automatically retried; only explicit not-sent reconciliation requeues', () => {
-  const t=tempDb();try{const s=open(t.filename);const {p}=make(s);const a=approve(s,p);commit(s,p,a);const [claim]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-1',leaseMs:1000,limit:1});
-    assert.deepEqual(s.failOutbox(dispatcher,claim.id,'worker-1',{code:'timeout',ambiguous:true}),{id:claim.id,status:'unknown',code:'timeout'});
-    assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:1000,limit:1}),[]);
-    assert.deepEqual(s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:{kind:'operator_assertion',reference:'operator-check-22',assertion:'I verified the receiver did not accept this key.'}}),{id:claim.id,status:'pending',evidence:{kind:'operator_assertion',reference:'operator-check-22',assertion:'I verified the receiver did not accept this key.'}});
-    assert.equal(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-2',leaseMs:1000,limit:1})[0].attempt,2);s.close();
-  }finally{t.cleanup();}
+test('cross-tenant isolation and actor-bound create idempotency survive a second connection', t => {
+  const e=environment(t), created=create(e.store), other=e.open();
+  assert.deepEqual(create(other),created);
+  assert.throws(()=>other.createCase({...op,id:'other'},key,snapshot(),{idempotencyKey:'create'}),code('idempotency_conflict'));
+  assert.throws(()=>other.readCase({...reader,tenantId:'tenant-2'},key),code('not_found'));
+  assert.throws(()=>other.createCase(reader,key,snapshot(),{idempotencyKey:'reader'}),code('forbidden'));
+  assert.throws(()=>other.readInvocation({...reader,tenantId:'tenant-2'},key,'inv-1'),code('not_found'));
 });
 
-
-test('case pagination returns stable case ids and domain writes require exact tenant/id/record-version data', () => {
-  const t=tempDb();try{const s=open(t.filename);s.createCase(op,{...key,caseId:'case-a'},snapshot(),{idempotencyKey:'a'});s.createCase(op,{...key,caseId:'case-b'},snapshot(),{idempotencyKey:'b'});
-    const first=s.listCases(reader,{tenantId:key.tenantId,appId:key.appId,limit:1});assert.equal(first.items[0].caseId,'case-a');assert.equal(first.next,'case-a');
-    assert.equal(s.listCases(reader,{tenantId:key.tenantId,appId:key.appId,after:first.next,limit:1}).items[0].caseId,'case-b');
-    const current=s.readCase(reader,{...key,caseId:'case-a'});
-    const bad=[{value:{id:'different',tenantId:key.tenantId,version:1},expectedVersion:null},{value:{id:'d',tenantId:'other-tenant',version:1},expectedVersion:null},{value:{id:'d',tenantId:key.tenantId,version:7},expectedVersion:null}];
-    for(let i=0;i<bad.length;i++) assert.throws(()=>s.saveProposal(op,{...key,caseId:'case-a'},{...proposalFrom(current,{id:`bad-${i}`,writes:[{recordType:'decision',recordId:'d',...bad[i]}]}),sourceHash:hash('src')},{idempotencyKey:`bad-${i}`}),e=>code(e,'invalid_write_packet'));
-    s.close();}finally{t.cleanup();}
+test('expired or uncertain delivery stays unresolved until an authorized evidence-bound reconciliation', t => {
+  let time=1000;const e=environment(t,()=>time);commit(e.store);
+  const [item]=e.store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker',leaseMs:100});
+  assert.throws(()=>e.store.ackOutbox(dispatcher,item.id,'worker',receipt('another-key')),code('receipt_mismatch'));
+  time=1200;const reopened=e.open();
+  assert.deepEqual(reopened.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'next'}),[]);
+  assert.equal(reopened.readOutbox(dispatcher,item.id).status,'unknown');
+  assert.throws(()=>reopened.ackOutbox(dispatcher,item.id,'worker',receipt(item.key)),code('lease_lost'));
+  assert.throws(()=>reopened.reconcileOutbox(dispatcher,item.id,{outcome:'not_sent',evidence}),code('forbidden'));
+  assert.throws(()=>reopened.reconcileOutbox(reconciler,item.id,{outcome:'delivered',receipt:receipt('wrong'),evidence}),code('receipt_mismatch'));
+  reopened.reconcileOutbox(reconciler,item.id,{outcome:'delivered',receipt:receipt(item.key),evidence});
+  assert.equal(reopened.readOutbox(dispatcher,item.id).status,'delivered');
+  assert.ok(reopened.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'&&e.actor===reconciler.id));
 });
 
-test('idempotency is actor-bound and replay lookup works across two open SQLite connections', () => {
-  const t=tempDb();try{const a=open(t.filename),b=open(t.filename);const created=a.createCase(op,key,snapshot(),{idempotencyKey:'shared'});
-    assert.deepEqual(b.createCase(op,key,snapshot(),{idempotencyKey:'shared'}),created);
-    const approvalKey={...key,caseId:'actor-case'};const c=a.createCase(op,approvalKey,snapshot(),{idempotencyKey:'actor-case-create'});
-    const p=a.saveProposal(op,approvalKey,proposalFrom(c,{id:'actor-proposal'}),{idempotencyKey:'p1'});
-    const first=a.approveProposal(reviewer,approvalKey,p.id,{proposalHash:p.hash,snapshotVersion:p.snapshotVersion},{idempotencyKey:'shared-approval'});
-    const secondReviewer={id:'reviewer-2',tenantId:key.tenantId,roles:['reviewer']};
-    assert.throws(()=>b.approveProposal(secondReviewer,approvalKey,p.id,{proposalHash:p.hash,snapshotVersion:p.snapshotVersion},{idempotencyKey:'shared-approval'}),e=>code(e,'idempotency_conflict'));
-    assert.equal(first.approver,reviewer.id);a.close();b.close();}finally{t.cleanup();}
+test('not-sent evidence requeues the same packet without changing its identity or losing attempt count', t => {
+  const {store}=environment(t);commit(store);
+  const [item]=store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker'});
+  store.failOutbox(dispatcher,item.id,'worker',{code:'timeout',ambiguous:true});
+  assert.deepEqual(store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'next'}),[]);
+  assert.throws(()=>store.reconcileOutbox(reconciler,item.id,{outcome:'not_sent'}),code('evidence_required'));
+  store.reconcileOutbox(reconciler,item.id,{outcome:'not_sent',evidence});
+  const [retry]=store.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'next'});
+  assert.equal(retry.id,item.id);assert.equal(retry.key,item.key);assert.equal(retry.attempt,2);
 });
 
-test('only separate reconciliation authority can make an auditable operator assertion to release an outbox entry', () => {
-  const t=tempDb();try{let now=3000;const s=open(t.filename,()=>now);const {p}=make(s);const a=approve(s,p);commit(s,p,a);
-    const [claim]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-x',leaseMs:100,limit:1});
-    assert.deepEqual(s.failOutbox(dispatcher,claim.id,'worker-x',{code:'remote_rejected'}),{id:claim.id,status:'failed',code:'remote_rejected'});
-    const assertion={kind:'operator_assertion',reference:'receiver-audit-3',assertion:'I confirmed no acceptance for this idempotency key.'};
-    assert.throws(()=>s.reconcileOutbox(dispatcher,claim.id,{outcome:'not_sent',evidence:assertion}),e=>code(e,'forbidden'));
-    assert.equal(s.readOutbox(dispatcher,claim.id).status,'failed','unauthorized reconciliation leaves the item unreleased');
-    assert.throws(()=>s.reconcileOutbox({...reconciler,tenantId:'tenant-2'},claim.id,{outcome:'not_sent',evidence:assertion}),e=>code(e,'not_found'));
-    assert.throws(()=>s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:{kind:'remote_negative_receipt',reference:'receipt-negative-3'}}),e=>code(e,'evidence_required'));
-    const result=s.reconcileOutbox(reconciler,claim.id,{outcome:'not_sent',evidence:assertion});
-    assert.equal(result.status,'pending');assert.deepEqual(s.readOutbox(dispatcher,claim.id).reconciliation,assertion);
-    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'&&e.actor===reconciler.id&&e.detail.evidence.assertion===assertion.assertion));
-    const [next]=s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-y',leaseMs:100,limit:1});now=3200;
-    assert.deepEqual(s.claimOutbox(dispatcher,{tenantId:key.tenantId,appId:key.appId,workerId:'worker-z',leaseMs:100,limit:1}),[]);
-    assert.equal(s.readOutbox(dispatcher,next.id).status,'unknown');
-    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.claimed'));
-    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.unknown'));
-    assert.ok(s.listEvents(reader,key).items.some(e=>e.operation==='outbox.reconciled'&&e.actor===reconciler.id));
-    s.close();}finally{t.cleanup();}
+test('pagination is scoped and arbitrary native JSON is stored without a common domain record schema', t => {
+  const {store}=environment(t);create(store,{...key,caseId:'case-a'});create(store,{...key,caseId:'case-b'});
+  const first=store.listCases(reader,{tenantId:key.tenantId,appId:key.appId,limit:1});
+  assert.equal(first.next,'case-a');
+  assert.equal(store.listCases(reader,{tenantId:key.tenantId,appId:key.appId,after:first.next,limit:1}).items[0].caseId,'case-b');
+  const snap=create(store);
+  store.commitInvocation(op,key,invocation(snap,{writes:[{recordType:'NativeCheckpoint',recordId:'poem',expectedVersion:null,value:['line one','line two']}],outbox:[]}));
+  assert.deepEqual(store.readCase(reader,key).domainRecords[0].value,['line one','line two']);
 });

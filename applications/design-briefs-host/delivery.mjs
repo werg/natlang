@@ -1,4 +1,4 @@
-/** Deliver previously approved outbox packets only to explicitly configured targets. */
+/** Deliver atomically committed domain outbox packets only to explicitly configured targets. */
 import { ApplicationError } from './runtime.mjs';
 
 export async function dispatchOnce({ store, principal, appId, workerId, routes, fetchImpl = fetch,

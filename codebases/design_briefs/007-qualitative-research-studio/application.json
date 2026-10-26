@@ -7,7 +7,12 @@
     {
       "name": "studyAnalysis",
       "path": "studyAnalysis.nl",
-      "purpose": "Plan and analyze a bounded qualitative study with decision contrasts, a frozen sample, versioned code boundaries, independent-coder review, counterevidence, and quotation privacy."
+      "purpose": "Plan and analyze a bounded qualitative study with decision contrasts, a frozen sample, versioned code boundaries, independent-coder review, counterevidence, and quotation privacy.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "qualitative-study"
     }
   ],
   "persistence": [
@@ -110,6 +115,8 @@
     "runCase/selectSample/freezeSamplingManifest.nl",
     "runCase/codeAndReconcile/alignTranslationPassages.nl",
     "runCase/codeAndReconcile/compareIndependentCoders.nl",
-    "runCase/synthesizeFindings/searchCounterevidence.nl"
+    "runCase/synthesizeFindings/searchCounterevidence.nl",
+    "studyAnalysis/compareStudyRevision.nl",
+    "studyAnalysis/reconcileStudyCheckpoint.nl"
   ]
 }

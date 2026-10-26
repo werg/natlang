@@ -54,6 +54,9 @@ export type MetricMeasurementAudit = { metricId: string; beforeSchema: string; a
 export type EstimandCheck = { analysisId: string; populationMatch: boolean; unitMatch: boolean; outcomeMatch: boolean; multiplicityHandling: string; subgroupStatus: 'prespecified'|'exploratory'|'unknown'; uncertaintyMatches: boolean; issues: string[]; outputEvidenceIds: string[] };
 export type FeedbackMechanism = { mechanism: string; supportiveAccounts: string[]; dissatisfiedSuccesses: string[]; satisfiedFailures: string[]; rivalExplanation: string; discriminatingObservation: string; causalProof: boolean };
 export type FeedbackReview = { analysisId: string; disposition: 'assessed'|'withheld'; mechanisms: FeedbackMechanism[]; blockers: string[]; evidenceRefs: string[] };
+export type ExperimentReviewCheckpoint = { caseId: string; revision: number; activeReviewVersion: string; interpretationEditions: ExperimentInterpretation[]; staleAnalysisIds: string[]; invalidMeasurementKeys: string[]; supersededRecommendationIds: string[]; exactOutputReceiptIds: string[]; unresolvedApprovalRefs: string[] };
+export type ExperimentReviewRun = { interpretation: ExperimentInterpretation; checkpoint: ExperimentReviewCheckpoint; newlyInvalidatedAnalysisIds: string[]; preservedAnalysisIds: string[]; followupReopenedBy: string[] };
+export type ExperimentChangeImpact = { newlyInvalidatedAnalysisIds: string[]; preservedAnalysisIds: string[]; followupReopenedBy: string[]; changedDesignIds: string[]; changedMetricIds: string[] };
 
 export type EffectiveDesignTimeline = { planVersions: string[]; effectiveCriteria: string[]; retrospectiveChoices: string[]; assignmentUnit: string; observationUnit: string; deviations: string[]; unresolved: string[] };
 

@@ -52,13 +52,16 @@ Supply its own native inputs when creating or invoking an application case. The
 service executes real native source with a configured model. It does not load
 fixture answers or replace domain reasoning with a crisp implementation.
 
-Applications own any carried state. A declared `stateParameter` and
-`stateResultPath` bind a committed native checkpoint to the next invocation.
-The service provides tenant isolation, role checks, immutable proposals,
-separate approval, optimistic versions, durable idempotency, audit history and
+Applications own any carried state. A declared `stateParameter`, optional nested
+`stateInputPath`, and `stateResultPath` bind a native checkpoint to the next
+invocation. The service provides tenant isolation, per-operation role checks,
+immutable invocation receipts, optimistic versions, durable idempotency, audit history and
 transactional outbox storage. Only a configured application-specific adapter can
 serialize domain intentions for delivery. Actual receiver receipts determine
 outcomes; ambiguous sends require evidenced reconciliation before resending.
+The host no longer requires the same proposal, second-person approval and commit
+sequence for every program. Domain approvals, reviews and interruptions belong
+to each application's own Natlang operations and saved domain state.
 See the service documentation for configuration, routes and the receiver contract.
 
 These are runnable source applications with a tested custody and transport

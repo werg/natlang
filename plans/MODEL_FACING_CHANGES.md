@@ -1419,3 +1419,27 @@ The prepared source retains `qualification: source-only-live-pending`; it is not
 an admitted production RL source or SFT corpus. Generation remains paused under
 the standing operational instructions. This PR performs source preparation only. No trajectories,
 optimizer updates, learner exposure, or capability lift are claimed by this PR.
+
+
+## 2026-10-26: PR 4 operational depth and independent application state
+
+The continuing review of `codebases/design_briefs/` repairs missing carried state,
+real domain follow-up operations and callable subgraphs. The optional host now
+commits checked invocation/checkpoint/outbox receipts atomically; it no longer
+requires every program to follow the same proposal/second-person approval/commit
+workflow. Direct and nested state bindings preserve each application's actual
+types and allow different operations to share only their explicitly named state.
+Per-operation capabilities, exact invocation replay and evidence-bound delivery
+remain host mechanisms. No generic domain state or semantic recovery code is
+introduced in JavaScript.
+
+New and revised Natlang signatures, numbered algorithms, operational children and
+checkpoint types are **unmeasured source candidates**. The original fixture truth,
+source observations, split assignments and exact gate inputs are preserved.
+Compiler checks, potential-call graphs, type checks and scripted native host
+executions are engineering evidence only. Measure the changed source with the
+approved self-hosted teacher in the next authorized window, including interrupted
+interactive sessions, state restoration, disputed receipts, evidence corrections
+and branch-specific child-result use. Record actual actor/runtime/source identities
+and complete trajectories; retain the approximately 48-sample convention per
+measured variant. `training_admission` stays false and generation remains paused.

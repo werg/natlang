@@ -7,7 +7,12 @@
     {
       "name": "planPortfolio",
       "path": "planPortfolio.nl",
-      "purpose": "Translate evidence-backed outcomes into distinct mechanisms, shared dependency packages, learning tests, and an explicit solver-receipt review state."
+      "purpose": "Translate evidence-backed outcomes into distinct mechanisms, shared dependency packages, learning tests, and an explicit solver-receipt review state.",
+      "stateParameter": "prior",
+      "stateResultPath": [
+        "checkpoint"
+      ],
+      "stateKey": "opportunity-portfolio"
     }
   ],
   "persistence": [
@@ -106,6 +111,7 @@
     "runCase/estimateDependencies/decomposeOpportunityWork.nl",
     "runCase/estimateDependencies/identifySharedPortfolioWork.nl",
     "portfolioCore/reviewExactPortfolioReceipt.nl",
-    "portfolioCore/compareReceiptedOptions.nl"
+    "portfolioCore/compareReceiptedOptions.nl",
+    "planPortfolio/reconcilePortfolioCheckpoint.nl"
   ]
 }
