@@ -728,7 +728,7 @@ export class NativeToolAgent {
         for (const use of uses) {
           const block=use.block;
           const artifact = await this.options.neuralese?.store.getNativeState?.(block);
-          if (!artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
+          if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${block} is unavailable for provenance`);
           const source = resolveReadSource(block, use.source);
           const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
             ...(use.stop?{stop_gradient:true}:{}),
@@ -756,7 +756,7 @@ export class NativeToolAgent {
         throw new Error('neuralese-native-grad-invalid: scoped native read has invalid prepared prompt positions');
       const [messageIndex, partIndex] = item.positions[0] as [number, number];
       const artifact = await this.options.neuralese?.store.getNativeState?.(item.id);
-      if (!artifact) throw new Error(`native-state consumer artifact ${item.id} is unavailable for provenance`);
+      if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${item.id} is unavailable for provenance`);
       const source = resolveReadSource(item.id, typeof item.source_occurrence === 'string' ? item.source_occurrence : undefined);
       const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: item.id,
         ...(item.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {
@@ -796,7 +796,7 @@ export class NativeToolAgent {
           continue;
         }
         const artifact = await this.options.neuralese?.store.getNativeState?.(sourceBlock);
-        if (!artifact) throw new Error(`native-state consumer artifact ${sourceBlock} is unavailable for provenance`);
+        if (!artifact) throw new NeuraleseUnsupportedError(`native-state consumer artifact ${sourceBlock} is unavailable for provenance`);
         const source = resolveReadSource(sourceBlock, typeof segment.source_occurrence === 'string' ? segment.source_occurrence : undefined);
         const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block: sourceBlock,
           ...(segment.stop_gradient === true ? { stop_gradient: true } : {}), format: 'native-state', native_identity: {

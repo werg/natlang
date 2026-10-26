@@ -13,3 +13,12 @@ export function tuneModel(driver: ModelDriver, execution?: TuneExecution): Model
   return { driver, ...execution };
 }
 export const executionKey = (execution?: TuneExecution): string => createHash('sha256').update(canonicalJson(execution ?? {})).digest('hex').slice(0, 16);
+
+/** Bind the same native artifact store used by transport, including provenance reads and typed writes. */
+export async function tuneRuntime(driver: ModelDriver, execution?: TuneExecution) {
+  const neuralese = await driver.neuraleseRuntime?.();
+  return { model: tuneModel(driver, execution), ...(neuralese ? { neuralese } : {}) };
+}
+export function rethrowInfrastructureFailure(error: unknown): void {
+  if (error && typeof error === 'object' && (error as { code?: unknown }).code === 'neuralese-unsupported-backend') throw error;
+}

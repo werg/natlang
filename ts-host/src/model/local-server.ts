@@ -31,6 +31,7 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
   /** Requests carry native content parts (native-state imports); wrappers must keep this marker. */
   readonly neuralese?: boolean;
+  neuraleseRuntime?(): Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
   vllmStacks?(names: Iterable<string>): void;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
   turn(request: ModelTurnRequest, signal?: AbortSignal, options?: SessionTurnOptions): Promise<ModelTurn>;
@@ -336,6 +337,10 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
     neuralese: !!external?.neuraleseServer,
+    async neuraleseRuntime() {
+      if (!external?.neuraleseServer) return undefined;
+      await start(); return nativeDriver().neuraleseRuntime();
+    },
     /** Record stacks the vLLM server has loaded (by serving name). */
     vllmStacks(names: Iterable<string>) { for (const name of names) vllmLoaded.add(name); },
     slotPlan() { return plan; },

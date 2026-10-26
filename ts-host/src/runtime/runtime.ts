@@ -23,7 +23,10 @@ import { RefinementChecker, JUDGE_CALL_INSTRUCTIONS, callJudge, decisionJudge, t
 export type SpecializationMode = 'off' | 'shadow' | 'on';
 const MODE_RANK: Record<SpecializationMode, number> = { off: 0, shadow: 1, on: 2 };
 
-export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn;
+export type ModelDriver = ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn> | ModelTurn) & {
+  /** The backend's complete native store, reader identity and available writer; wrappers retain this binding. */
+  neuraleseRuntime?: () => Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
+};
 export type ModelConfig = { driver: ModelDriver;
   promptRendering?: import('../native/system-prompts.js').PromptRendering;
   /** Model identity and revision, recorded in execution-graph manifests (spec/NEURALESE_GRAPH.md). */

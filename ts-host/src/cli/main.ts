@@ -296,9 +296,10 @@ async function discoverWeights(parsed: Parsed, root: string, program: ProgramDes
   return serving;
 }
 
-function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Pick<NatlangRuntimeOptions, 'model' | 'seed'> {
+async function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Promise<Pick<NatlangRuntimeOptions, 'model' | 'seed' | 'neuralese'>> {
   const { seed, ...settings } = choice.runtime ?? {};
-  return { model: { ...settings, promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
+  const neuralese = await driver.neuraleseRuntime?.();
+  return { ...(neuralese ? { neuralese } : {}), model: { ...settings, promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
 }
 
 
@@ -459,12 +460,12 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
-      ...(model.neuralese ? { neuralese: true as const } : {}) });
+      ...(model.neuralese ? { neuralese: true as const, neuraleseRuntime: () => model.neuraleseRuntime!() } : {}) });
   const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
   // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
   const refinements = manifest.refinements;
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
+  const runtime = createNatlangRuntime({ ...await runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory),
     ...(tuned.weights ? { weights: tuned.weights } : {}),
     programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
   try {
@@ -563,9 +564,9 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
+  const runtime = createNatlangRuntime({ ...await runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
-      ...(model.neuralese ? { neuralese: true as const } : {}) })), program, adaptation, executorIdentity,
+      ...(model.neuralese ? { neuralese: true as const, neuraleseRuntime: () => model.neuraleseRuntime!() } : {}) })), program, adaptation, executorIdentity,
     ...(tuned.weights ? { weights: tuned.weights } : {}), ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }
   finally { runtime.close(); await model.close(); }

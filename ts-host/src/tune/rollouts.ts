@@ -1,4 +1,4 @@
-import { tuneModel, executionKey, type TuneExecution } from './execution.js';
+import { tuneRuntime, rethrowInfrastructureFailure, executionKey, type TuneExecution } from './execution.js';
 /**
  * Student rollouts for program RL (plans/HIERARCHICAL_LORA_TUNING.md §5.1a).
  *
@@ -140,17 +140,17 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
   const decide = (options.driver as unknown as { decide?: (...args: unknown[]) => unknown }).decide;
   if (decide) (driver as unknown as { decide: unknown }).decide = (...args: unknown[]) => { decided = true; return decide(...args); };
-  const runtime = createNatlangRuntime({ program: options.program, model: tuneModel(driver, options.execution), weights: options.weights,
+  const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: options.weights,
     ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
     if (weights) stacks.push(weights);
     events.push(...trace.events.filter(event => typeof event.node === 'string' && Array.isArray(event.inputs)));
   } });
-  let value: unknown, failed = false;
+  let value: unknown, failed = false, executionFailure: string | undefined;
   try {
     const fn = loadNatlang(resolve(options.root, example.function), options.root);
     value = await runtime.run(() => fn(...exampleArguments(fn, example.input)));
-  } catch { failed = true; } finally { runtime.close(); }
+  } catch (error) { rethrowInfrastructureFailure(error); failed = true; executionFailure = error instanceof Error ? error.message : String(error); } finally { runtime.close(); }
   if (fatal) throw fatal;
   if (refused) throw new Skip(refused);
   if (transport) throw new Skip(`model transport failed: ${transport instanceof Error ? transport.message : String(transport)}`.slice(0, 300));
@@ -163,5 +163,5 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
     ...(options.execution ? { execution: options.execution } : {}), reward: { quality, source: 'root-oracle' }, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
     episode: { task_id: example.id, split: 'train', sample, group, reward: { quality },
       policy: { checkpoint_sha256: options.policyCheckpointSha256, release: options.release.digest, temperature: options.temperature },
-      turns, execution_graph: events } };
+      turns, execution_graph: events, ...(executionFailure ? { execution_failure: executionFailure.slice(0, 1000) } : {}) } };
 }

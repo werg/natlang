@@ -1,4 +1,4 @@
-import { tuneModel, type TuneExecution } from './execution.js';
+import { tuneRuntime, rethrowInfrastructureFailure, type TuneExecution } from './execution.js';
 /**
  * Whole-program data collection for `natlang tune` (plans/HIERARCHICAL_LORA_TUNING.md §4).
  *
@@ -151,7 +151,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
     const services = options.services ? journaledServices(options.services(example), world) : undefined;
-    const runtime = createNatlangRuntime({ program: options.program, model: tuneModel(driver, options.execution), weights: [binding], ...(services ? { services } : {}),
+    const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: [binding], ...(services ? { services } : {}),
       trace: trace => { outcomes.set(trace.callId, trace.outcome); events.set(trace.callId, trace.events ?? []); } });
     let ok = false, oracle: boolean | null = null, error: string | undefined;
     try {
@@ -163,7 +163,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
       const value = await runtime.run(() => fn(...args));
       ok = true;
       if ('expected' in example) oracle = equal(value, example.expected);
-    } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
+    } catch (failure) { rethrowInfrastructureFailure(failure); error = failure instanceof Error ? failure.message : String(failure); }
     finally { runtime.close(); }
     roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}), ...(services ? { world } : {}) });
     const failedIds = new Set<string>();

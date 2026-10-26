@@ -296,3 +296,23 @@ test('tune execution limits bound invalid-action loops and are recorded on evalu
     assert.equal(data.roots[0].ok, false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('native tune operations bind the driver store before executing and propagate infrastructure failure', async () => {
+  const { tuneRuntime } = await import('../dist/tune/execution.js');
+  const { evaluateRoots } = await import('../dist/tune/evaluate.js');
+  const { NeuraleseUnsupportedError } = await import('../dist/native/neuralese.js');
+  const root = project();
+  try {
+    const store = new host.MemoryNeuraleseStore();
+    const binding = { store, dialect: 'native-state/lfm2' };
+    let setup = 0;
+    const driver = Object.assign(scriptedModel(respond).driver, { neuraleseRuntime: async () => { setup++; return binding; } });
+    assert.equal((await tuneRuntime(driver)).neuralese, binding);
+    const descriptor = program(root), examples = splitExamples(readRootExamples(root)).slice(0, 1);
+    await evaluateRoots({ root, program: descriptor, driver, weights: [], examples, arm: 'bound', release: null, partition: 'train' });
+    assert.equal(setup, 2);
+    const broken = async () => { throw new NeuraleseUnsupportedError('consumer state missing for provenance'); };
+    await assert.rejects(evaluateRoots({ root, program: descriptor, driver: broken, weights: [], examples,
+      arm: 'invalid', release: null, partition: 'train' }), /consumer state missing for provenance/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

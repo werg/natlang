@@ -409,7 +409,7 @@ export async function archiveNeuraleseReplyArtifacts(reply: Json, remote: Neural
 
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
-    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; artifacts: HttpNeuraleseStore; decide: DecisionScorer } {
+    ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; artifacts: HttpNeuraleseStore; decide: DecisionScorer; neuraleseRuntime: () => Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions> } {
   const { store, request: extra, onExchange, onTurn, owner, nativeStateModes,
     ...connection } = options;
   const http = { ...connection, headers: { ...connection.headers,
@@ -714,5 +714,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     scopes.set(request, here());
     return coalesced(request, signal);
   }, { scoreMany: coalesced.scoreMany });
-  return Object.assign(driver, { neuralese: true as const, artifacts: remote, decide: scoped });
+  return Object.assign(driver, { neuralese: true as const, artifacts: remote, decide: scoped,
+    neuraleseRuntime: async () => (await import('./native-state-client.js')).nativeStateRuntimeOptions(
+      { endpoint: http.endpoint, headers: http.headers, store: remote }, { write: 'available' }) });
 }

@@ -356,8 +356,9 @@ export async function evaluateRelease(options: TuneOptions, data: TuneData, mani
   try {
     const weights = manifest ? [new WeightBinding(manifest, { program: options.program, available: served.loaded,
       nativeState: !!served.nativeState, strict: true })] : [];
-    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services, execution: options.settings.execution,
-      release: manifest?.digest ?? null, partition });
+    const result = await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services, execution: options.settings.execution,
+      release: manifest?.digest ?? null, partition, log: options.log });
+    saveArm(options.root, result); return result;
   } finally { await served.close(); }
 }
 

@@ -65,7 +65,7 @@ type Session = ReturnType<typeof createResolvedModelSession>;
 const driverOf = (session: Session): ModelDriver => Object.assign(
   (request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
   { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
-    ...(session.neuralese ? { neuralese: true as const } : {}) });
+    ...(session.neuralese ? { neuralese: true as const, neuraleseRuntime: () => session.neuraleseRuntime!() } : {}) });
 
 function formatReport(report: TuneReport): string {
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;

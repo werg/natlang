@@ -96,6 +96,10 @@ test('rollouts record every turn with its invocation, binding, seed and the root
   await assert.rejects(runRollouts({ ...options, driver: student({ capture: false }).driver, out: join(root, 'none.jsonl') }),
     /x_natlang_rl_capture/);
   await assert.rejects(runRollouts({ ...options, samples: 1 }), /at least two/);
+  const { NeuraleseUnsupportedError } = await import('../dist/native/neuralese.js');
+  const broken = async () => { throw new NeuraleseUnsupportedError('consumer state missing for provenance'); };
+  await assert.rejects(runRollouts({ ...options, driver: broken, out: join(root, 'invalid-infrastructure.jsonl') }),
+    /consumer state missing for provenance/);
 });
 
 test('rounds keep the best development release, continue it, stop early and resume', async () => {

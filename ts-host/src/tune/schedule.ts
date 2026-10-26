@@ -35,7 +35,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
   if (schedule.includes('rl') && options.settings.backend !== 'native')
     throw new Error('RL rounds sample the student with exact sampling receipts: set tune.backend to "native" (a neuraleseServer profile), or use an SFT-only schedule');
   return async (data, _timings, log) => {
-    const directory = join(tuneDirectory(options.root), 'rounds', options.settings.execution ? `${data.dataKey}-execution-${executionKey(options.settings.execution)}` : data.dataKey);
+    const directory = join(tuneDirectory(options.root), 'rounds', `native-runtime-v2-${options.settings.execution ? `${data.dataKey}-execution-${executionKey(options.settings.execution)}` : data.dataKey}`);
     const development = data.examples.filter(example => example.partition === 'development');
     if (!development.length) throw new Error('rounds are selected on development roots; this program has none');
     const journal = await runRounds({ journal: join(directory, 'journal.json'), schedule, patience: settings.patience, minDelta: settings.minDelta, log,
