@@ -158,6 +158,40 @@ def _resolve_config_file(path,routes):
     return binding(matches[0])
 
 
+def _validate_typescript_host(runtime_source,archive_path):
+    host=runtime_source.get('typescript_host')
+    if host is None:return None
+    required={'root','build','node_minimum','collector_asset','stage_npm_helper',
+        'package_lock_in_archive','source_revision'}
+    root=runtime_source['runtime_root']
+    if (not isinstance(host,dict)or set(host)!=required
+            or host.get('root')!=root+'/ts-host'
+            or host.get('build')!='npm ci --ignore-scripts && npm run build:node'
+            or host.get('node_minimum')!='22.13'
+            or host.get('collector_asset')!=root+'/scripts/run_bonsai_queue.py'
+            or host.get('stage_npm_helper')!=root+'/scripts/stage-npm-package.mjs'
+            or host.get('package_lock_in_archive') is not True
+            or host.get('source_revision')!=runtime_source['source_revision']):
+        raise ValueError('future TypeScript task runtime must bind its exact root, lockfile, build, collector, and source revision')
+    import tarfile
+    required_members={'ts-host/package-lock.json','scripts/run_bonsai_queue.py','scripts/stage-npm-package.mjs'}
+    try:
+        with tarfile.open(archive_path,'r|') as archive:
+            names=set()
+            for member in archive:
+                if member.name in required_members:names.add(member.name)
+                if names==required_members:break
+    except (OSError,tarfile.TarError) as error:
+        raise ValueError('future runtime archive is not a readable exact source tar') from error
+    if names!=required_members:
+        raise ValueError('future runtime archive omits its TypeScript package lock or required collector helpers')
+    return {'root':host['root'],'node_minimum':host['node_minimum'],
+        'package_lock':host['root']+'/package-lock.json',
+        'build_commands':[['npm','ci','--ignore-scripts'],['npm','run','build:node']],
+        'collector_asset':host['collector_asset'],'stage_npm_helper':host['stage_npm_helper'],
+        'source_revision':host['source_revision'],'package_lock_present_in_archive':True}
+
+
 def build_role_declarations(role_inputs):
     """Derive fresh bootstrap rows from exact owner config, recipe and readiness receipt bytes."""
     if set(role_inputs)!={'lfm','mellum'}:raise ValueError('fresh role construction requires both actual owners')
@@ -414,8 +448,10 @@ def prepare(spec_path,out):
     runtime_source=spec.get('runtime_source_archive')
     if runtime_source is not None:
         if (not isinstance(runtime_source,dict)
-                or set(runtime_source)!={'source','target','runtime_root','source_revision','archive_schema',
-                    'must_extract_before_role_resume'}
+                or set(runtime_source)-{'source','target','runtime_root','source_revision','archive_schema',
+                    'must_extract_before_role_resume','typescript_host'}
+                or not {'source','target','runtime_root','source_revision','archive_schema',
+                    'must_extract_before_role_resume'}<=set(runtime_source)
                 or runtime_source.get('archive_schema')!='git-archive-tar-v1'
                 or runtime_source.get('must_extract_before_role_resume') is not True
                 or not isinstance(runtime_source.get('source_revision'),str)
@@ -426,6 +462,7 @@ def prepare(spec_path,out):
             raise ValueError('future shared Python runtime needs its exact immutable archive and extraction target')
         archive=binding(runtime_source['source']['path'],runtime_source['source'])
         archive={**archive,'bytes':Path(archive['path']).stat().st_size}
+        typescript_host=_validate_typescript_host(runtime_source,archive['path'])
         cloud_roots=_host_roots(provider,'mellum',spec['roles']['mellum']['source_host_id'])
         if not _under(runtime_source['target'],cloud_roots):
             raise ValueError('future Mellum Python runtime archive escaped its current source host writable roots')
@@ -439,7 +476,8 @@ def prepare(spec_path,out):
             'actor_runtime_config_binding':by_role['mellum']['source_identity']['config'],
             'install_argv':{'mkdir':['mkdir','-p',runtime_source['runtime_root']],
                 'extract':['tar','--extract','--file',runtime_source['target'],
-                    '--directory',runtime_source['runtime_root']]}}
+                    '--directory',runtime_source['runtime_root']]},
+            **({'typescript_host':typescript_host}if typescript_host is not None else {})}
     # TaskEval imports this Python entrypoint through the frozen logical
     # NATLANG_REPO on each owner. Bind and stage the exact collector alongside
     # the already-inventoried compiled TypeScript task runtime.

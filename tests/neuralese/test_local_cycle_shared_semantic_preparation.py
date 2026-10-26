@@ -6,7 +6,33 @@ from pathlib import Path
 import pytest
 from natlang_neuralese.common.jsonio import write_json_durable as write
 from natlang_neuralese.train.native_deployment import binding
-from scripts.coreweave.prepare_local_cycle_shared_semantic import build_role_declarations
+from scripts.coreweave.prepare_local_cycle_shared_semantic import build_role_declarations,_validate_typescript_host
+
+
+def test_runtime_archive_binds_real_typescript_task_collector_closure(tmp_path):
+    import io,tarfile
+    archive_path=tmp_path/'runtime.tar'
+    with tarfile.open(archive_path,'w') as archive:
+        for name in ('ts-host/package-lock.json','scripts/run_bonsai_queue.py','scripts/stage-npm-package.mjs'):
+            payload=b'fixture source bytes'
+            info=tarfile.TarInfo(name);info.size=len(payload);archive.addfile(info,io.BytesIO(payload))
+    host={'root':'/work/shared-runtime/repo/ts-host','build':'npm ci --ignore-scripts && npm run build:node',
+        'node_minimum':'22.13','collector_asset':'/work/shared-runtime/repo/scripts/run_bonsai_queue.py',
+        'stage_npm_helper':'/work/shared-runtime/repo/scripts/stage-npm-package.mjs',
+        'package_lock_in_archive':True,'source_revision':'74476a49b'}
+    runtime={'runtime_root':'/work/shared-runtime/repo','source_revision':'74476a49b',
+        'typescript_host':host}
+    result=_validate_typescript_host(runtime,archive_path)
+    assert result['build_commands']==[['npm','ci','--ignore-scripts'],['npm','run','build:node']]
+    assert result['package_lock_present_in_archive'] is True
+    with pytest.raises(ValueError,match='source revision'):
+        _validate_typescript_host({**runtime,'typescript_host':{**host,'source_revision':'different'}},archive_path)
+    incomplete=tmp_path/'incomplete.tar'
+    with tarfile.open(incomplete,'w') as archive:
+        payload=b'fixture source bytes';info=tarfile.TarInfo('ts-host/package-lock.json');info.size=len(payload)
+        archive.addfile(info,io.BytesIO(payload))
+    with pytest.raises(ValueError,match='omits'):
+        _validate_typescript_host(runtime,incomplete)
 
 
 def source_rows(tmp_path):
