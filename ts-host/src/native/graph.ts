@@ -36,9 +36,14 @@ export const invocationNodeId = (callId: string): string => `call:${callId}`;
 /** Traces of running invocations by call ID, so host-side operations (iteration, rebinding) record into their caller. */
 const TRACES = new Map<string, NativeTraceRecorder>();
 const TRACE_SCOPES = new WeakMap<NativeTraceRecorder, object>();
+export function bindTraceScope(trace: NativeTraceRecorder, scope: object): void { TRACE_SCOPES.set(trace, scope); }
 export function registerTrace(callId: string, trace: NativeTraceRecorder, scope: object = trace): void {
   TRACES.set(callId, trace);
-  TRACE_SCOPES.set(trace, scope);
+  bindTraceScope(trace, scope);
+}
+/** Scope used for block provenance emitted by this trace. Traces without an explicitly bound scope are isolated to themselves. */
+export function producerScopeForTrace(trace: NativeTraceRecorder | undefined): object | undefined {
+  return trace ? TRACE_SCOPES.get(trace) ?? trace : undefined;
 }
 export function releaseTrace(callId: string): void { TRACES.delete(callId); }
 export const traceFor = (callId: string | undefined): NativeTraceRecorder | undefined => callId ? TRACES.get(callId) : undefined;
@@ -46,22 +51,22 @@ export const traceFor = (callId: string | undefined): NativeTraceRecorder | unde
 /** Exact block-to-writer occurrences, shared only by calls with the same task-owned scope object. */
 type ProducerIndex = { byBlock: Map<string, Set<string>>; byNode: Map<string, string> };
 const PRODUCERS = new WeakMap<object, ProducerIndex>();
-const LATEST_PRODUCER = new Map<string, string>();
 const PRODUCER_LIMIT = 100_000;
-function rememberProducer(block: string, node: string, scope: object): void {
-  const index = PRODUCERS.get(scope) ?? { byBlock: new Map<string, Set<string>>(), byNode: new Map<string, string>() };
-  const previousBlock = index.byNode.get(node);
+function assertProducerOccurrenceAvailable(block: string, node: string, scope: object): void {
+  const previousBlock = PRODUCERS.get(scope)?.byNode.get(node);
   if (previousBlock !== undefined && previousBlock !== block)
     throw new Error(`neuralese-native-grad-invalid: writer occurrence ${node} was reused for a different native block`);
+}
+function rememberProducer(block: string, node: string, scope: object): void {
+  assertProducerOccurrenceAvailable(block, node, scope);
+  const index = PRODUCERS.get(scope) ?? { byBlock: new Map<string, Set<string>>(), byNode: new Map<string, string>() };
+  const previousBlock = index.byNode.get(node);
   if (previousBlock === block) return;
   const occurrences = index.byBlock.get(block) ?? new Set<string>();
   occurrences.add(node);
   index.byBlock.set(block, occurrences);
   index.byNode.set(node, block);
   PRODUCERS.set(scope, index);
-  LATEST_PRODUCER.delete(block);
-  LATEST_PRODUCER.set(block, node);
-  while (LATEST_PRODUCER.size > PRODUCER_LIMIT) LATEST_PRODUCER.delete(LATEST_PRODUCER.keys().next().value!);
   while (index.byNode.size > PRODUCER_LIMIT) {
     const oldest = index.byNode.keys().next().value!;
     const oldBlock = index.byNode.get(oldest)!;
@@ -69,11 +74,6 @@ function rememberProducer(block: string, node: string, scope: object): void {
     const values = index.byBlock.get(oldBlock)!;
     values.delete(oldest);
     if (!values.size) index.byBlock.delete(oldBlock);
-    if (LATEST_PRODUCER.get(oldBlock) === oldest) {
-      const latest = [...values].at(-1);
-      if (latest) LATEST_PRODUCER.set(oldBlock, latest);
-      else LATEST_PRODUCER.delete(oldBlock);
-    }
   }
 }
 /** Whether this exact occurrence was observed writing this block in the same task scope. */
@@ -82,15 +82,20 @@ export function hasProducerOccurrence(block: string, node: string, scope: object
   return index?.byNode.get(node) === block && (index.byBlock.get(block)?.has(node) ?? false);
 }
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
-export function blockInput(block: string, port?: string, sourceOccurrence?:string): GraphInput {
-  return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : LATEST_PRODUCER.get(block) ?? 'external'), block, ...(port ? { port } : {}) };
+export function blockInput(block: string, port?: string, sourceOccurrence?: string, scope?: object): GraphInput {
+  const occurrences = scope ? PRODUCERS.get(scope)?.byBlock.get(block) : undefined;
+  const producer = occurrences?.size ? [...occurrences].at(-1) : undefined;
+  const node = sourceOccurrence !== undefined ?
+    (scope && hasProducerOccurrence(block, sourceOccurrence, scope) ? sourceOccurrence : 'external') :
+    (isNativeStateId(block) ? 'external' : producer ?? 'external');
+  return { node, block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */
-export function valueInputs(value: unknown, port: string): GraphInput[] {
+export function valueInputs(value: unknown, port: string, scope?: object): GraphInput[] {
   const found: GraphInput[] = [];
   const visit = (item: unknown, path: string, depth: number) => {
     if (depth > 32 || item === null || typeof item !== 'object') return;
-    if (isNeuraleseRef(item)) { found.push(blockInput(item.$neuralese.id, path,item.$neuralese.source_occurrence)); return; }
+    if (isNeuraleseRef(item)) { found.push(blockInput(item.$neuralese.id, path, item.$neuralese.source_occurrence, scope)); return; }
     if (Array.isArray(item)) item.forEach((entry, index) => visit(entry, `${path}[${index}]`, depth + 1));
     else for (const [key, entry] of Object.entries(item)) visit(entry, `${path}.${key}`, depth + 1);
   };
@@ -107,10 +112,13 @@ export function graphNode(trace: NativeTraceRecorder | undefined, kind: GraphNod
   if (!trace) return;
   const callId = String(trace.events[0]?.run_id ?? 'run');
   const node = id ?? `${callId}#${trace.events.length}`;
+  const producerScope = producerScopeForTrace(trace)!;
+  if (kind === 'block_write' && typeof data.block === 'string')
+    assertProducerOccurrenceAvailable(data.block, node, producerScope);
   trace.emit(kind, { ...data, node, inputs: [...inputs] });
   activeRecorder()?.recordGraphNode?.(structuredClone(trace.events.at(-1)!) as Record<string,unknown>);
   if (kind === 'block_write' && typeof data.block === 'string')
-    rememberProducer(data.block, node, TRACE_SCOPES.get(trace) ?? trace);
+    rememberProducer(data.block, node, producerScope);
   return node;
 }
 

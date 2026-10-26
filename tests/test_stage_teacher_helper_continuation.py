@@ -197,21 +197,30 @@ def _stage_portable_inputs(path: Path, monkeypatch):
     )
     old_api.parent.mkdir(parents=True)
     old_builder.parent.mkdir(parents=True)
-    old_api.write_bytes(
-        subprocess.check_output(
-            ["git", "show", f"0aad212b5:{stage.custody.LEGACY_API_RELATIVE}"],
-            cwd=stage.ROOT,
-        )
+    # These are deliberately tiny, test-only historical-source stand-ins. The
+    # portable case exercises binding, staging, and tamper detection against
+    # real bytes without requiring the historical 0aad212b5 Git object to be
+    # present in this checkout. Strict historical coverage still uses the
+    # independently pinned assets.
+    original_check_output = subprocess.check_output
+
+    def reject_historical_git_show(args, *call_args, **call_kwargs):
+        if isinstance(args, (list, tuple)) and list(args[:2]) == ["git", "show"]:
+            raise AssertionError(
+                "portable staging must not retrieve historical Git objects"
+            )
+        return original_check_output(args, *call_args, **call_kwargs)
+
+    monkeypatch.setattr(subprocess, "check_output", reject_historical_git_show)
+    old_api.write_text(
+        "# unit-test-only legacy API fixture; not an admission implementation\n"
+        "def file_binding(path):\n"
+        "    raise RuntimeError('test fixture is not executable authority')\n"
     )
-    old_builder.write_bytes(
-        subprocess.check_output(
-            [
-                "git",
-                "show",
-                "0aad212b5:scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py",
-            ],
-            cwd=stage.ROOT,
-        )
+    old_builder.write_text(
+        "# unit-test-only legacy builder fixture; not a production converter\n"
+        "def build(*args, **kwargs):\n"
+        "    raise RuntimeError('test fixture is not executable authority')\n"
     )
     files = {
         stage.custody.LEGACY_API_RELATIVE: stage.file_binding(old_api),
@@ -224,6 +233,9 @@ def _stage_portable_inputs(path: Path, monkeypatch):
         json.dumps(
             {
                 "schema": "natlang.immutable-source-helper-authority/1",
+                # The verifier requires this historical identity even in the
+                # portable unit case. The adjacent marker and synthetic files
+                # make clear that no production authority is being asserted.
                 "commit": "0aad212b5",
                 "training_admission": False,
                 "unit_test_only": True,

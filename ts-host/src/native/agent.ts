@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId } from './graph.js';
+import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -729,7 +729,7 @@ export class NativeToolAgent {
               architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
               embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source)]);
+            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
           if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
         }
       }
@@ -756,7 +756,7 @@ export class NativeToolAgent {
           architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
-        [blockInput(item.id, 'block', source)]);
+        [blockInput(item.id, 'block', source, producerScopeForTrace(trace))]);
       if (node) reads.push({ node, port: 'read', block: item.id, source, stop: item.stop_gradient === true });
     }
     // The model server's captured prompt is the authoritative record of what
@@ -796,7 +796,7 @@ export class NativeToolAgent {
             architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
             tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
             embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-          positions: [0, promptIndex], position_source: 'captured_prompt_segment' }, [blockInput(sourceBlock, 'block', source)]);
+          positions: [0, promptIndex], position_source: 'captured_prompt_segment' }, [blockInput(sourceBlock, 'block', source, producerScopeForTrace(trace))]);
         if (node) reads.push({ node, port: 'read', block: sourceBlock, source, stop: segment.stop_gradient === true });
       }
       if (remaining.length)
