@@ -14,6 +14,40 @@ from ..data.native_graph_schema import SCHEMA as GRAPH_SCHEMA
 from . import TuneMathError
 
 TURN_SCHEMA = 'natlang.tune-turn/v1'
+ACTION_POLICY = 'natlang.tune-action-outcome/2'
+
+
+def verify_action_evidence(turn):
+    evidence = turn.get('evidence') or {}
+    if evidence.get('actionPolicy') != ACTION_POLICY:
+        raise TuneMathError('turn lacks the current authenticated action-outcome policy; re-lower the source record')
+    if not isinstance(evidence.get('failedHistory'), bool):
+        raise TuneMathError('turn lacks a boolean failed-history masking disposition')
+    calls = (turn.get('reply') or {}).get('calls') or []
+    actions = evidence.get('actionEvents')
+    if not isinstance(actions, list) or len(actions) != len(calls):
+        raise TuneMathError('turn action evidence does not bind every assistant tool call')
+    disposition = 'admissible'
+    seen = set()
+    for call, action in zip(calls, actions):
+        if (not isinstance(call, (list, tuple)) or len(call) != 2 or not isinstance(call[0], str)
+                or not isinstance(action, dict) or not isinstance(action.get('toolCallId'), str)
+                or not action['toolCallId'] or action['toolCallId'] in seen
+                or action.get('name') != call[0]
+                or action.get('argumentsSha256') != canonical_json_sha256_hex(call[1])
+                or not isinstance(action.get('outcome'), str)):
+            raise TuneMathError('turn action evidence differs from its recorded teacher tool call')
+        seen.add(action['toolCallId'])
+        outcome = action['outcome']
+        if outcome in ('rejected', 'refused', 'error', 'failed'):
+            disposition = 'rejected'
+        elif outcome == 'blocked' and evidence.get('rootOracle') is True and call[0] == 'return_result':
+            pass  # The importer only emits this for the exact reviewed honest blocked root.
+        elif outcome not in ('ok', 'completed', 'done'):
+            disposition = 'unverified'
+    if evidence.get('actionDisposition') != disposition:
+        raise TuneMathError('turn action disposition disagrees with its recorded action outcomes')
+    return disposition
 
 
 def reply_message(reply):
@@ -50,6 +84,11 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
         if verification.get('rootOracle') is not True or verification.get('prefix') != 'observed-identical':
             raise TuneMathError('a correction row needs a verified continuation and an identically observed prefix')
         prompt_weight = 0.
+    if verify_action_evidence(turn) != 'admissible':
+        raise TuneMathError('a rejected or unverified assistant action is not a positive target')
+    if turn['evidence'].get('failedHistory') is True:
+        # Keep failed assistant replies in the rendered request as context; no prompt token in that history is a target.
+        prompt_weight = 0.
     weight = evidence_weight(turn)
     from ..serve.targets import target_items
     from .soft import import_name, place_states, soft_items_to_node
@@ -83,6 +122,8 @@ def evidence_weight(turn):
     """Separate evidence, conservatively combined until development calibration exists (§4.3): an oracle-confirmed
     root gives full weight; a successful enclosing program without an oracle is weak attribution."""
     evidence = turn['evidence']
+    if verify_action_evidence(turn) != 'admissible':
+        raise TuneMathError('a rejected or unverified assistant action is not a positive target')
     if evidence.get('rootOracle') is True:
         return 1.
     if evidence.get('enclosingSuccess'):

@@ -12,7 +12,7 @@ import { collect, scaffoldManifest } from '../dist/tune/collect.js';
 import { currentSplit, tuneProgram, validRootRecord } from '../dist/tune/pipeline.js';
 import { sharedSourceHash } from '../dist/tune/keys.js';
 import { programSites } from '../dist/tune/sites.js';
-import { exportCases, importCases, honestTuneBlockedRoot } from '../dist/tune/pool.js';
+import { exportCases, importCases, honestTuneBlockedRoot, actionEvidenceForTrajectory } from '../dist/tune/pool.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
 import { canonicalJson } from '../dist/package/archive.js';
 import { scriptedModel } from './support/natlang.mjs';
@@ -21,6 +21,29 @@ const COLLECTOR = fileURLToPath(new URL('../dist/teacher/cli.js', import.meta.ur
 const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
 const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
 const respond = opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
+
+test('accepted roots do not make rejected intermediate actions positive, and later turns mark failed history', () => {
+  const invocation = 'ticket-root/execution-1';
+  const calls = [
+    ['eval', { code: 'const s = await severity(ticket); console.log(s);' }],
+    ['eval', { code: 'const lane = await pickLane(ticket);' }],
+    ['eval', { code: 'const lane = await pickLane(ticket);' }],
+    ['eval', { code: 'const lane = await pickLane(ticket, ticket.vip, ticket.ageMinutes);' }],
+  ];
+  const steps = calls.map(([name, args], index) => ({ phase: 'action', invocation_id: invocation,
+    context: index > 1 ? [{ role: 'assistant', tool_calls: Array.from({ length: index - 1 }, (_, prior) => ({ id: `tool-${prior + 1}` })) }] : [],
+    model_response: { calls: [[name, args]], raw_calls: [{ id: `tool-${index}`, function: { name, arguments: JSON.stringify(args) } }] } }));
+  const row = { outcome: { action_ledger: [
+    { call_id: invocation, tool_call_id: 'tool-0', name: 'eval', arguments: calls[0][1], outcome: 'ok' },
+    { call_id: invocation, name: 'eval', arguments: calls[1][1], outcome: 'rejected' },
+    { call_id: invocation, tool_call_id: 'tool-2', name: 'eval', arguments: calls[2][1], outcome: 'rejected' },
+    { call_id: invocation, tool_call_id: 'tool-3', name: 'eval', arguments: calls[3][1], outcome: 'ok' },
+  ] } };
+  const evidence = actionEvidenceForTrajectory(row, steps, false);
+  assert.deepEqual(evidence.map(item => item.actionDisposition), ['admissible', 'rejected', 'rejected', 'admissible']);
+  assert.deepEqual(evidence.map(item => item.failedHistory), [false, false, true, true]);
+  // The `ok` severity inspection remains admissible, and the repaired action stays supervised after failed context.
+});
 
 function project() {
   const root = mkdtempSync(join(tmpdir(), 'natlang-pool-'));
@@ -111,6 +134,20 @@ test('pool cases: export, the real collector, import, and a tune that reuses the
     assert.ok(custodyRecord, 'the exact imported result row has a durable tune-root record');
     assert.equal(custodyRecord.imported.campaign.plan.sha256, custody.plan.sha256);
     assert.equal(custodyRecord.imported.campaign.runtime_receipt.sha256, custody.runtime.receipt.sha256);
+    assert.equal(custodyRecord.imported.action_policy, 'natlang.tune-action-outcome/2');
+    const recordPath = join(root, '.natlang/tune/data/roots', readdirSync(join(root, '.natlang/tune/data/roots'))
+      .find(file => JSON.parse(readFileSync(join(root, '.natlang/tune/data/roots', file), 'utf8')).imported?.result_row_sha256 === custody.selected_rows[0].result_row_sha256));
+    const oldPolicy = JSON.parse(readFileSync(recordPath, 'utf8'));
+    oldPolicy.imported.action_policy = 'natlang.tune-action-outcome/legacy';
+    oldPolicy.turns[0].evidence.actionPolicy = 'natlang.tune-action-outcome/legacy';
+    writeFileSync(recordPath, JSON.stringify(oldPolicy));
+    assert.equal(importCases(context, join(work, 'results'), custody).imported, rows.length,
+      'the same actor result can be explicitly re-lowered under the new action policy');
+    const migratedPolicy = JSON.parse(readFileSync(recordPath, 'utf8'));
+    assert.equal(migratedPolicy.imported.action_policy, 'natlang.tune-action-outcome/2');
+    assert.ok(migratedPolicy.turns.every(turn => turn.evidence.actionPolicy === 'natlang.tune-action-outcome/2'));
+    assert.equal(migratedPolicy.imported.campaign.claim_ledger.snapshot.sha256,
+      custodyRecord.imported.campaign.claim_ledger.snapshot.sha256, 're-lowering retains the original immutable campaign evidence');
     assert.ok(existsSync(custodyRecord.imported.campaign.claim_ledger.snapshot.path));
     const retainedLedgerSnapshot = custodyRecord.imported.campaign.claim_ledger.snapshot.sha256;
     writeFileSync(custody.claim_ledger.observed.path,
@@ -237,6 +274,26 @@ test('reviewed tune import accepts only an exact honest blocked root, never a bl
       action_ledger: [{ call_id: 'root', name: 'return_result', outcome: 'blocked', arguments: expected, seq: 3 }] },
     trajectory: [{ invocation_id: 'root', assistant: { calls: [{ source_tool: 'return_result', arguments: expected }] } }] };
   assert.equal(honestTuneBlockedRoot(row, expected), true);
+  const blockedStep = { phase: 'action', invocation_id: 'root', model_response: { calls: [['return_result', expected]],
+    raw_calls: [{ id: 'root-stop', function: { name: 'return_result', arguments: JSON.stringify(expected) } }] } };
+  const blockedActionRow = structuredClone(row);
+  blockedActionRow.trajectory = [blockedStep];
+  blockedActionRow.outcome.action_ledger[0].tool_call_id = 'root-stop';
+  assert.equal(actionEvidenceForTrajectory(blockedActionRow, blockedActionRow.trajectory, true)[0].actionDisposition, 'admissible',
+    'only the independently verified expected root stop is an admissible blocked action');
+  const ledgerWithoutCallId = structuredClone(blockedActionRow);
+  delete ledgerWithoutCallId.outcome.action_ledger[0].tool_call_id;
+  const recoveredEvidence = actionEvidenceForTrajectory(ledgerWithoutCallId, ledgerWithoutCallId.trajectory, true)[0];
+  assert.equal(recoveredEvidence.actionDisposition, 'admissible', 'a unique exact invocation/name/arguments event can bind a ledger that omitted its call ID');
+  assert.equal(recoveredEvidence.actionEvents[0].toolCallId, 'root-stop', 'the exact raw response ID remains the bound occurrence ID');
+  const conflictingCallId = structuredClone(blockedActionRow);
+  conflictingCallId.outcome.action_ledger[0].tool_call_id = 'different-call';
+  assert.equal(actionEvidenceForTrajectory(conflictingCallId, conflictingCallId.trajectory, true)[0].actionDisposition, 'unverified',
+    'an explicit conflicting ledger ID cannot use the missing-ID fallback');
+  const child = { ...blockedStep, invocation_id: 'child' };
+  blockedActionRow.outcome.action_ledger[0].call_id = 'child';
+  assert.equal(actionEvidenceForTrajectory(blockedActionRow, [child], true)[0].actionDisposition, 'unverified',
+    'a blocked child cannot inherit the root-stop exception');
   const failedRoot = structuredClone(row); failedRoot.outcome.checks.answer = false;
   assert.equal(honestTuneBlockedRoot(failedRoot, expected), false);
   const blockedChild = structuredClone(row);

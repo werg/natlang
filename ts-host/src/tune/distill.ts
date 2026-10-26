@@ -43,9 +43,10 @@ export async function exportDistillation(options: TuneOptions, data: TuneData, r
       teacher: served.driver, teacherId: `student-stack:${release.base.checkpoint_sha256}:${release.digest}`, weights });
     correct = collected.roots.filter(root => root.oracle === true).length;
     // Reverified: the tuned stack's turns count only when its whole root run met the oracle.
-    stack = collected.turns.filter(turn => turn.evidence.rootOracle === true && turn.binding && !turn.reply.truncated);
+    stack = collected.turns.filter(turn => turn.evidence.rootOracle === true && turn.evidence.actionDisposition === 'admissible' &&
+      turn.binding && !turn.reply.truncated);
   } finally { await served.close(); }
-  const teacher = data.trainRows.filter(turn => turn.evidence.rootOracle !== false);
+  const teacher = data.trainRows.filter(turn => turn.evidence.rootOracle !== false && turn.evidence.actionDisposition === 'admissible');
   const seen = new Set<string>(), rows: CollectedTurn[] = [];
   let duplicates = 0;
   for (const turn of [...teacher, ...stack]) {

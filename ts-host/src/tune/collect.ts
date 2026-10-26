@@ -20,6 +20,7 @@ import { createNatlangRuntime, type Services } from '../runtime/runtime.js';
 import { journaledServices, type World } from './world.js';
 import { currentFrame } from '../runtime/context.js';
 import { loadNatlang } from '../runtime/node-files.js';
+import { canonicalJson } from '../package/archive.js';
 
 export type Partition = 'train' | 'development' | 'confirmation';
 export type RootExample = { readonly function: string; readonly input: unknown; readonly expected?: unknown;
@@ -37,7 +38,10 @@ export type CollectedTurn = {
   /** The invocation's exact instruction text and disclosed skill documents, where training places soft states. */
   readonly texts: { readonly instructions?: string; readonly skills?: Readonly<Record<string, string>> };
   /** Separate evidence (§4.3); never collapsed into one flag. */
-  readonly evidence: { readonly rootOracle: boolean | null; readonly enclosingSuccess: boolean; readonly callOutcome: string | null };
+  readonly evidence: { readonly rootOracle: boolean | null; readonly enclosingSuccess: boolean; readonly callOutcome: string | null;
+    readonly actionPolicy: 'natlang.tune-action-outcome/2'; readonly actionDisposition: 'admissible' | 'rejected' | 'unverified';
+    readonly failedHistory: boolean; readonly actionEvents: { readonly toolCallId: string; readonly name: string;
+      readonly outcome: string; readonly argumentsSha256: string }[] };
   /** When a tuned release served the turn: its requested/effective stack (on-policy provenance, §4.4). */
   readonly stack?: { readonly identity: string; readonly status: string; readonly requested: readonly string[]; readonly effective: readonly string[] };
   /** An on-policy correction row (tune/repairs.ts): its prompt holds the student's prefix and is never a target. */
@@ -98,6 +102,15 @@ export function scaffoldManifest(program: ProgramDescriptor, base: NativeModelId
 }
 
 const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+const canonicalActionArgs = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
+function hasFailedAssistantHistory(messages: unknown[], failedIds: ReadonlySet<string>): boolean {
+  return messages.some(message => {
+    if (!message || typeof message !== 'object') return false;
+    const item = message as { tool_call_id?: unknown; tool_calls?: { id?: unknown }[] };
+    return (typeof item.tool_call_id === 'string' && failedIds.has(item.tool_call_id)) ||
+      (Array.isArray(item.tool_calls) && item.tool_calls.some(call => typeof call.id === 'string' && failedIds.has(call.id)));
+  });
+}
 
 /**
  * Run each example's root function with the teacher and capture every inner model turn. A failing root is still
@@ -114,8 +127,9 @@ export async function collect(options: { root: string; program: ProgramDescripto
   const binding = options.weights ?? new WeightBinding(options.scaffold);
   for (const example of options.examples) {
     if (options.partitions && !options.partitions.includes(example.partition)) continue;
-    const pending: Omit<CollectedTurn, 'evidence'>[] = [];
+    const pending: (Omit<CollectedTurn, 'evidence'> & { rawCallIds: (string | null)[] })[] = [];
     const outcomes = new Map<string, string>();
+    const events = new Map<string, Record<string, unknown>[]>();
     const counters = new Map<string, number>();
     const driver: ModelDriver = Object.assign(async (request: ModelTurnRequest, signal?: AbortSignal, turnOptions?: unknown) => {
       const frame = currentFrame();
@@ -127,6 +141,8 @@ export async function collect(options: { root: string; program: ProgramDescripto
         messages: structuredClone(request.messages), tools: structuredClone(request.tools),
         reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
           ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
+        rawCallIds: (reply.raw_calls ?? []).map(item => item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string'
+          ? (item as { id: string }).id : null),
         teacher: options.teacherId, source: example.source ?? 'real', texts: structuredClone(frame?.invocationTexts ?? {}),
         ...(options.weights && frame?.weights ? { stack: { identity: frame.weights.identity, status: frame.weights.status,
           requested: frame.weights.requested.map(entry => entry.id), effective: frame.weights.effective.map(entry => entry.id) } } : {}) });
@@ -135,7 +151,7 @@ export async function collect(options: { root: string; program: ProgramDescripto
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
     const services = options.services ? journaledServices(options.services(example), world) : undefined;
     const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding], ...(services ? { services } : {}),
-      trace: trace => { outcomes.set(trace.callId, trace.outcome); } });
+      trace: trace => { outcomes.set(trace.callId, trace.outcome); events.set(trace.callId, trace.events ?? []); } });
     let ok = false, oracle: boolean | null = null, error: string | undefined;
     try {
       const fn = loadNatlang(resolve(options.root, example.function), options.root);
@@ -149,9 +165,52 @@ export async function collect(options: { root: string; program: ProgramDescripto
     } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); }
     finally { runtime.close(); }
     roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}), ...(services ? { world } : {}) });
+    const failedIds = new Set<string>();
+    const failedInvocations = new Set<string>();
+    const actionEvents = new Map<string, Record<string, unknown>[]>();
+    for (const [invocation, items] of events) actionEvents.set(invocation, items.filter(item => item.kind === 'action'));
+    const actionOffsets = new Map<string, number>();
     for (const turn of pending) {
-      const record: CollectedTurn = { ...turn, evidence: { rootOracle: oracle, enclosingSuccess: ok && oracle !== false,
-        callOutcome: turn.call ? outcomes.get(turn.call) ?? null : null } };
+      const calls = turn.reply.calls ?? [];
+      const inv = turn.call ?? '';
+      const available = actionEvents.get(inv) ?? [];
+      let offset = actionOffsets.get(inv) ?? 0;
+      let disposition: 'admissible' | 'rejected' | 'unverified' = 'admissible';
+      const matchedIds: string[] = [];
+      const matchedActions: { toolCallId: string; name: string; outcome: string; argumentsSha256: string }[] = [];
+      for (let index = 0; index < calls.length; index++) {
+        const [name, args] = calls[index]!;
+        const rawId = turn.rawCallIds[index];
+        const candidateIndexes = available.flatMap((item, at) => at >= offset && item.name === name &&
+          canonicalActionArgs(item.arguments, args) ? [at] : []);
+        let eventIndex = rawId ? candidateIndexes.find(at => available[at]!.tool_call_id === rawId) : undefined;
+        if (eventIndex === undefined) {
+          const withoutId = candidateIndexes.filter(at => available[at]!.tool_call_id === undefined);
+          if (!rawId && candidateIndexes.length === 1) eventIndex = candidateIndexes[0];
+          else if (withoutId.length === 1 && candidateIndexes[0] === withoutId[0]) eventIndex = withoutId[0];
+        }
+        if (eventIndex === undefined) { disposition = 'unverified'; break; }
+        const event = available[eventIndex]!;
+        offset = eventIndex + 1;
+        if (typeof event.tool_call_id === 'string') matchedIds.push(event.tool_call_id);
+        const boundToolCallId = typeof event.tool_call_id === 'string' ? event.tool_call_id : rawId;
+        if (typeof boundToolCallId === 'string' && boundToolCallId) matchedActions.push({ toolCallId: boundToolCallId, name,
+          outcome: String(event.outcome), argumentsSha256: digest(canonicalJson(args)) });
+        else { disposition = 'unverified'; break; }
+        if (['rejected', 'refused', 'error', 'failed'].includes(String(event.outcome))) disposition = 'rejected';
+        else if (!['ok', 'completed', 'done'].includes(String(event.outcome))) disposition = 'unverified';
+      }
+      actionOffsets.set(inv, offset);
+      const failedHistory = hasFailedAssistantHistory(turn.messages, failedIds) || failedInvocations.has(inv);
+      if (disposition !== 'admissible') {
+        failedInvocations.add(inv);
+        for (const id of turn.rawCallIds) if (id) failedIds.add(id);
+        for (const id of matchedIds) failedIds.add(id);
+      }
+      const { rawCallIds: _rawCallIds, ...turnRecord } = turn;
+      const record: CollectedTurn = { ...turnRecord, evidence: { rootOracle: oracle, enclosingSuccess: ok && oracle !== false,
+        callOutcome: turn.call ? outcomes.get(turn.call) ?? null : null, actionPolicy: 'natlang.tune-action-outcome/2',
+        actionDisposition: disposition, failedHistory, actionEvents: matchedActions.length === calls.length ? matchedActions : [] } };
       turns.push(record); options.onTurn?.(record);
     }
   }

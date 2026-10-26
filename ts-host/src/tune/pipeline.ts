@@ -146,6 +146,9 @@ export function validRootRecord(root: string, example: SplitExample, scaffold: W
     const path = rootRecordPath(root, example, teacher);
     if (!existsSync(path)) continue;
     const record = JSON.parse(readFileSync(path, 'utf8')) as RootRecord;
+    if (!Array.isArray(record.turns) || record.turns.some(turn => turn.evidence?.actionPolicy !== 'natlang.tune-action-outcome/2' ||
+        !Array.isArray(turn.evidence?.actionEvents) || typeof turn.evidence?.failedHistory !== 'boolean' ||
+        !['admissible', 'rejected', 'unverified'].includes(turn.evidence?.actionDisposition))) continue;
     if (record.imported && (typeof record.imported.result_row_sha256 !== 'string' ||
         !(record.imported.campaign as Record<string, unknown> | undefined)?.plan ||
         !(record.imported.campaign as Record<string, unknown> | undefined)?.runtime_receipt ||
@@ -207,10 +210,12 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
     }
   }, reusedData);
   const turns = collectable.flatMap(example => records.get(example.id)?.turns ?? []);
-  const dataKey = sha(['natlang.tune-data/v2', collectable.map(example => [example.id, example.partition, records.has(example.id)
+  const dataKey = sha(['natlang.tune-data/v3-action-outcome-2', collectable.map(example => [example.id, example.partition, records.has(example.id)
     ? sha(records.get(example.id)) : null])]).slice(0, 24);
   // Binding IDs depend on program, component and context only, so rows stay valid for any tree-root variant.
-  const trainRows = turns.filter(turn => turn.partition === 'train' && turn.binding && turn.evidence.enclosingSuccess && !turn.reply.truncated);
+  const trainRows = turns.filter(turn => turn.partition === 'train' && turn.binding && turn.evidence.enclosingSuccess &&
+    turn.evidence.actionPolicy === 'natlang.tune-action-outcome/2' && Array.isArray(turn.evidence.actionEvents) &&
+    turn.evidence.actionDisposition === 'admissible' && !turn.reply.truncated);
   return { scaffold, sites, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
 }
 

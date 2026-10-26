@@ -25,7 +25,9 @@ def turn(binding='bx', root='r1', **changes):
            'messages': [{'role': 'system', 'content': 't10 t11'}, {'role': 'user', 'content': 't12 ' + INSTRUCTIONS + ' t13'},
                         {'role': 'tool', 'content': 't30 t31'}],
            'texts': {'instructions': INSTRUCTIONS, 'skills': {'skills.s': 't30 t31', 'skills.unread': 't40'}},
-           'reply': {'text': 't14'}, 'evidence': {'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done'}}
+           'reply': {'text': 't14'}, 'evidence': {'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done',
+           'actionPolicy': 'natlang.tune-action-outcome/2', 'actionDisposition': 'admissible', 'failedHistory': False,
+           'actionEvents': []}}
     row.update(changes)
     return row
 

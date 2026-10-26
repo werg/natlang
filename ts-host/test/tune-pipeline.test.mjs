@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import * as host from '../dist/index.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
 import { tuneProgram } from '../dist/tune/pipeline.js';
-import { splitExamples } from '../dist/tune/collect.js';
+import { collect, splitExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
 
@@ -79,6 +79,8 @@ test('natlang tune collects per-binding trajectories, trains, validates through 
     const turns = readdirSync(rootsDir).flatMap(file => JSON.parse(readFileSync(join(rootsDir, file), 'utf8')).turns);
     assert.equal(new Set(turns.map(turn => turn.binding)).size, 2, 'outer and inner turns carry their own bindings');
     assert.ok(turns.every(turn => turn.evidence.enclosingSuccess && turn.evidence.rootOracle === true));
+    assert.ok(turns.every(turn => turn.evidence.actionPolicy === 'natlang.tune-action-outcome/2' &&
+      turn.evidence.actionDisposition === 'admissible'), `completed tool actions are independently outcome-checked: ${JSON.stringify(turns.map(turn => turn.evidence))}`);
     assert.ok(seen.some(adapters => adapters.length === 1), 'validation calls ran with their own lambda stack');
     assert.equal(report.validation.tuned.oracle, report.validation.tuned.roots);
     const active = host.readActive(root);
@@ -91,6 +93,34 @@ test('natlang tune collects per-binding trajectories, trains, validates through 
     const again = await tuneProgram({ ...options, teacher: () => { throw new Error('teacher must not be asked again'); } });
     assert.equal(again.activated, true, again.reason);
     assert.deepEqual(again.timings.filter(item => item.reused).map(item => item.stage), ['data', 'train']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('live collection excludes a rejected action in an eventually oracle-correct root and masks it in later prompt history', async () => {
+  const root = project();
+  try {
+    const built = program(root), examples = splitExamples(readRootExamples(root));
+    const example = examples.find(item => item.input.value === 'alpha');
+    let turn = 0;
+    const teacher = async () => {
+      turn++;
+      if (turn === 1) {
+        const args = { code: 'throw new Error("rejected action")' };
+        return { calls: [['eval', args]], raw_calls: [{ id: 'teacher-bad-call', type: 'function',
+          function: { name: 'eval', arguments: JSON.stringify(args) } }] };
+      }
+      const args = { status: 'success', value: 'ALPHA' };
+      return { calls: [['return_result', args]], raw_calls: [{ id: 'teacher-good-result', type: 'function',
+        function: { name: 'return_result', arguments: JSON.stringify(args) } }] };
+    };
+    const collected = await collect({ root, program: built, scaffold: scaffoldManifest(built, base), examples: [example],
+      teacher, teacherId: 'teacher:action-mask' });
+    assert.equal(collected.roots[0].oracle, true, 'the root eventually meets its exact oracle');
+    assert.deepEqual(collected.turns.map(item => item.evidence.actionDisposition), ['rejected', 'admissible']);
+    assert.equal(collected.turns[0].evidence.enclosingSuccess, true, 'eventual root success does not erase action failure');
+    assert.equal(collected.turns[1].evidence.failedHistory, true);
+    assert.ok(collected.turns[1].messages.some(message => message.tool_call_id === 'teacher-bad-call'),
+      'the failed action remains in the exact conversation context');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

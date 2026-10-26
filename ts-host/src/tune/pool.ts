@@ -127,10 +127,10 @@ type Row = { task?: { program_ir?: { semantics?: { root?: string }; tune?: TuneC
     checks?: Record<string, unknown>;
     invocation_ledger?: { invocation_id: string; parent_invocation_id?: string | null; completion_status?: string | null;
       completion_source?: string }[];
-    action_ledger?: { call_id?: string; name?: string; outcome?: string; arguments?: unknown; seq?: number }[];
+    action_ledger?: { call_id?: string; tool_call_id?: string; name?: string; outcome?: string; arguments?: unknown; seq?: number }[];
     execution_graph?: { kind?: string; phase?: string; call_id?: string; definition?: { id?: string }; context?: string; inputs?: { port?: string }[] }[] };
   trajectory?: { phase?: string; invocation_id?: string; context?: { role: string; content?: unknown }[]; tools_offered?: unknown[];
-    model_response?: { calls?: unknown; text?: string; protocol_failure?: unknown };
+    model_response?: { calls?: unknown; raw_calls?: unknown; text?: string; protocol_failure?: unknown };
     assistant?: { reasoning?: unknown; calls?: { source_tool?: string; tool?: string; arguments?: Record<string, unknown> }[] } }[] };
 
 const blockedChecks = ['seeded_failure_requirement', 'expected_status', 'honest_stop', 'effects', 'files', 'world',
@@ -164,6 +164,88 @@ export function honestTuneBlockedRoot(row: Row, expected: unknown): boolean {
   for (const step of row.trajectory ?? []) if (step.invocation_id && childIds.has(step.invocation_id))
     for (const call of step.assistant?.calls ?? []) if ((call.source_tool ?? call.tool) === 'return_result' && call.arguments?.status !== 'success') return false;
   return true;
+}
+
+export function actionDisposition(row: Row, step: NonNullable<Row['trajectory']>[number], honestBlockedRoot: boolean):
+  'admissible' | 'rejected' | 'unverified' {
+  return recordedActionEvents(row, step, honestBlockedRoot).disposition;
+}
+
+function recordedActionEvents(row: Row, step: NonNullable<Row['trajectory']>[number], honestBlockedRoot: boolean):
+  { disposition: 'admissible' | 'rejected' | 'unverified'; events: { toolCallId: string; name: string; outcome: string;
+    argumentsSha256: string }[] } {
+  const response = step.model_response ?? {}, calls = Array.isArray(response.calls) ? response.calls : [];
+  if (!calls.length) return { disposition: 'admissible', events: [] };
+  const raw = Array.isArray(response.raw_calls) ? response.raw_calls : [];
+  const invocation = step.invocation_id;
+  const ledger = row.outcome?.action_ledger ?? [];
+  let disposition: 'admissible' | 'rejected' | 'unverified' = 'admissible';
+  if (!invocation || raw.length !== calls.length) return { disposition: 'unverified', events: [] };
+  const rootInvocation = (row.outcome?.invocation_ledger ?? []).find(item => item.parent_invocation_id === null)?.invocation_id;
+  const events: { toolCallId: string; name: string; outcome: string; argumentsSha256: string }[] = [];
+  let ledgerCursor = 0;
+  for (const [index, value] of calls.entries()) {
+    if (!Array.isArray(value) || typeof value[0] !== 'string' || !value[1] || typeof value[1] !== 'object')
+      return { disposition: 'unverified', events: [] };
+    const rawCall = raw[index] as { id?: unknown; function?: { name?: unknown; arguments?: unknown } } | undefined;
+    const id = rawCall?.id, fn = rawCall?.function;
+    if (typeof id !== 'string' || !id || fn?.name !== value[0] || typeof fn.arguments !== 'string')
+      return { disposition: 'unverified', events: [] };
+    let rawArgs: unknown;
+    try { rawArgs = JSON.parse(fn.arguments); } catch { return { disposition: 'unverified', events: [] };
+    }
+    if (canonicalJson(rawArgs) !== canonicalJson(value[1])) return { disposition: 'unverified', events: [] };
+    const exactIndexes = ledger.flatMap((event, at) => at >= ledgerCursor && event.call_id === invocation &&
+      event.tool_call_id === id ? [at] : []);
+    let eventIndex = exactIndexes.length === 1 ? exactIndexes[0] : undefined;
+    if (eventIndex === undefined && exactIndexes.length === 0) {
+      // Some native action sources omit tool_call_id from the ledger even though
+      // the response carries it. Accept only a unique exact name/arguments
+      // occurrence after the previous response call; never infer by name alone.
+      const actionIndexes = ledger.flatMap((event, at) => at >= ledgerCursor && event.call_id === invocation &&
+        event.name === value[0] && canonicalJson(event.arguments) === canonicalJson(value[1]) ? [at] : []);
+      const idless = actionIndexes.filter(at => ledger[at]!.tool_call_id === undefined);
+      if (idless.length === 1 && actionIndexes[0] === idless[0]) eventIndex = idless[0];
+    }
+    if (eventIndex === undefined) return { disposition: 'unverified', events: [] };
+    const event = ledger[eventIndex]!;
+    if (event.name !== value[0] || canonicalJson(event.arguments) !== canonicalJson(value[1]))
+      return { disposition: 'unverified', events: [] };
+    ledgerCursor = eventIndex + 1;
+    events.push({ toolCallId: id, name: event.name, outcome: String(event.outcome), argumentsSha256: sha(canonicalJson(value[1])) });
+    if (['rejected', 'refused', 'error', 'failed'].includes(String(event.outcome))) disposition = 'rejected';
+    else if (event.outcome === 'blocked' && honestBlockedRoot && invocation === rootInvocation && event.name === 'return_result') { /* exact root stop */ }
+    else if (!['ok', 'completed', 'done'].includes(String(event.outcome))) disposition = 'unverified';
+  }
+  return { disposition, events };
+}
+
+export function actionEvidenceForTrajectory(row: Row, steps: NonNullable<Row['trajectory']>, honestBlockedRoot: boolean):
+  { actionPolicy: 'natlang.tune-action-outcome/2'; actionDisposition: 'admissible' | 'rejected' | 'unverified'; failedHistory: boolean;
+    actionEvents: { toolCallId: string; name: string; outcome: string; argumentsSha256: string }[] }[] {
+  const failed = new Set<string>();
+  const failedInvocations = new Set<string>();
+  return steps.map(step => {
+    const context = step.context ?? [];
+    const failedHistory = (typeof step.invocation_id === 'string' && failedInvocations.has(step.invocation_id)) || context.some(message => {
+      const calls = (message as { tool_calls?: unknown }).tool_calls;
+      const responseId = (message as { tool_call_id?: unknown }).tool_call_id;
+      return (typeof responseId === 'string' && failed.has(responseId)) ||
+        (Array.isArray(calls) && calls.some(call => !!call && typeof call === 'object' &&
+          typeof (call as { id?: unknown }).id === 'string' && failed.has((call as { id: string }).id)));
+    });
+    const checked = recordedActionEvents(row, step, honestBlockedRoot), disposition = checked.disposition;
+    if (disposition !== 'admissible') {
+      if (typeof step.invocation_id === 'string') failedInvocations.add(step.invocation_id);
+      const raw = step.model_response?.raw_calls;
+      if (Array.isArray(raw)) for (const call of raw) {
+        const id = (call as { id?: unknown } | null)?.id;
+        if (typeof id === 'string' && id) failed.add(id);
+      }
+    }
+    return { actionPolicy: 'natlang.tune-action-outcome/2', actionDisposition: disposition, failedHistory,
+      actionEvents: checked.events };
+  });
 }
 
 export type ImportSummary = { rows: number; imported: number; failures: number; rejected: { row: string; reason: string }[];
@@ -307,8 +389,9 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
     const blockedRoot = honestTuneBlockedRoot(row, example.expected);
     const rootAccepted = ok && outcome.accepted === true && oracle !== false || blockedRoot;
     const turns: CollectedTurn[] = [], counters = new Map<string, number>();
+    const actionEvidence = actionEvidenceForTrajectory(row, row.trajectory ?? [], blockedRoot);
     let bad: string | undefined;
-    for (const step of row.trajectory ?? []) {
+    for (const [trajectoryIndex, step] of (row.trajectory ?? []).entries()) {
       if (step.phase !== 'action') continue;
       const messages = structuredClone(step.context ?? []);
       const system = messages[0];
@@ -325,6 +408,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
       const instructions = component?.baseline.kind === 'lambda.instructions' && component.origin === 'named'
         ? component.baseline.template.segments.join('') : undefined;
       const response = step.model_response ?? {};
+      const action = actionEvidence[trajectoryIndex]!;
       turns.push({ schema: 'natlang.tune-turn/v1', root: example.id, component: example.component, partition: example.partition,
         binding: entry?.id ?? null, definition: site?.definition ?? null, call, turn, messages, tools: structuredClone(step.tools_offered ?? []),
         reply: { ...(Array.isArray(response.calls) && response.calls.length ? { calls: response.calls as never } : {}),
@@ -333,7 +417,9 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
           // A turn the collector flagged as a protocol failure is never a training target.
           ...(response.protocol_failure ? { truncated: true } : {}) },
         teacher, source: example.source ?? 'real', texts: instructions !== undefined ? { instructions } : {},
-        evidence: { rootOracle: oracle, enclosingSuccess: rootAccepted, callOutcome: call ? callOutcomes.get(call) ?? null : null } });
+        evidence: { rootOracle: oracle, enclosingSuccess: rootAccepted, callOutcome: call ? callOutcomes.get(call) ?? null : null,
+          actionPolicy: action.actionPolicy, actionDisposition: action.actionDisposition, failedHistory: action.failedHistory,
+          actionEvents: action.actionEvents } });
     }
     if (bad) { reject(bad); continue; }
     const bindings = Object.fromEntries([...new Set(turns.map(turn => turn.binding).filter((id): id is string => !!id))].map(id => [id, semantic.get(id) ?? '']));
@@ -346,6 +432,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
         result_file: rowCustody.result_file, result_manifest: rowCustody.result_manifest, queue: rowCustody.queue,
         source_row_sha256: rowCustody.source_row_sha256, provenance_sha256: rowCustody.provenance_sha256,
         execution_identity: rowCustody.execution_identity, actor: rowCustody.actor,
+        action_policy: 'natlang.tune-action-outcome/2',
         program_ir_sha256: provenance.program_ir_sha256 ?? null,
         model: provenance.model ?? null, provider: provenance.provider ?? null, system_prompt_sha256: provenance.system_prompt_sha256 ?? null,
         rerendered: 'collector system prompt with its collection-guidance block removed' } };
@@ -365,6 +452,15 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
         JSON.stringify(oldActor) === JSON.stringify(newActor);
       if (!sameClosedResult) {
         reject('this campaign actor/root already has different imported bytes'); continue;
+      }
+      const loweringCurrent = oldImport?.action_policy === 'natlang.tune-action-outcome/2' &&
+        existing.turns.every(turn => turn.evidence.actionPolicy === 'natlang.tune-action-outcome/2' &&
+          Array.isArray(turn.evidence.actionEvents) && typeof turn.evidence.failedHistory === 'boolean' &&
+          ['admissible', 'rejected', 'unverified'].includes(turn.evidence.actionDisposition));
+      if (!loweringCurrent) {
+        const migrated: RootRecord = { ...record, imported: { ...record.imported, ...oldImport,
+          action_policy: 'natlang.tune-action-outcome/2' } };
+        writeFileSync(target, JSON.stringify(migrated));
       }
       // Campaign supervision files advance as other cases close. Keep the first
       // immutable terminal-evidence snapshot for this exact row and make retries idempotent.

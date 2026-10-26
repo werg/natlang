@@ -26,6 +26,7 @@ def real_engine(tmp_path):
     return load_native_engine(str(checkpoint), device='cpu', dtype=torch.float32), checkpoint
 
 from natlang_neuralese.data.native_graph_schema import parse_graph
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.tune import TuneMathError
 from natlang_neuralese.tune.rows import lower_rows, turn_graph
 
@@ -37,7 +38,10 @@ def turn(**changes):
            'tools': [{'type': 'function', 'function': {'name': 'eval', 'description': 'Run code.',
                                                        'parameters': {'type': 'object', 'properties': {'code': {'type': 'string'}}}}}],
            'reply': {'calls': [['eval', {'code': 'return "HI"'}]]}, 'teacher': 'teacher:test', 'source': 'real',
-           'evidence': {'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done'}}
+           'evidence': {'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done',
+                        'actionPolicy': 'natlang.tune-action-outcome/2', 'actionDisposition': 'admissible', 'failedHistory': False,
+                        'actionEvents': [{'toolCallId': 'call_0', 'name': 'eval', 'outcome': 'ok',
+                                          'argumentsSha256': canonical_json_sha256_hex({'code': 'return "HI"'})}]}}
     row.update(changes)
     return row
 
@@ -55,6 +59,12 @@ def test_turn_renders_with_the_student_template_and_targets_only_the_reply(tmp_p
     assert 'eval' in engine.tokenizer.decode(target)
     assert lowered['binding'] == 'b1' and lowered['evidence_weight'] == 1. and lowered['occurrence'] == 'r1:task-1/c2:1'
     assert lower_rows(engine, [graph_row := lowered])[0] is graph_row  # already-lowered rows pass through
+    masked_history = turn(evidence={**turn()['evidence'], 'failedHistory': True}, messages=turn()['messages'] + [
+        {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'failed_call', 'type': 'function',
+            'function': {'name': 'eval', 'arguments': '{"code":"return 0"}'}}]},
+        {'role': 'tool', 'tool_call_id': 'failed_call', 'content': 'Rejected: wrong argument count.'}])
+    masked = turn_graph(engine, masked_history, prompt_weight=.1)['graph']['nodes'][0]['target_weights']
+    assert set(masked) == {0., 1.}, 'actual student-template prompt keeps failed history as context with zero loss weight'
 
 
 def test_non_training_and_failed_roots_never_become_positive_rows(tmp_path):
@@ -62,9 +72,35 @@ def test_non_training_and_failed_roots_never_become_positive_rows(tmp_path):
     with pytest.raises(TuneMathError, match='training-partition'):
         turn_graph(engine, turn(partition='development'), prompt_weight=.1)
     with pytest.raises(TuneMathError, match='not a positive target'):
-        turn_graph(engine, turn(evidence={'rootOracle': False, 'enclosingSuccess': False, 'callOutcome': 'failed'}), prompt_weight=.1)
+        turn_graph(engine, turn(evidence={'rootOracle': False, 'enclosingSuccess': False, 'callOutcome': 'failed',
+            'actionPolicy': 'natlang.tune-action-outcome/2', 'actionDisposition': 'admissible', 'failedHistory': False,
+            'actionEvents': [{'toolCallId': 'call_0', 'name': 'eval', 'outcome': 'ok',
+                              'argumentsSha256': canonical_json_sha256_hex({'code': 'return "HI"'})}]}), prompt_weight=.1)
     from natlang_neuralese.tune.rows import evidence_weight
-    assert evidence_weight(turn(evidence={'rootOracle': None, 'enclosingSuccess': True, 'callOutcome': 'done'})) == .5
+    assert evidence_weight(turn(evidence={'rootOracle': None, 'enclosingSuccess': True, 'callOutcome': 'done',
+        'actionPolicy': 'natlang.tune-action-outcome/2', 'actionDisposition': 'admissible', 'failedHistory': False,
+        'actionEvents': turn()['evidence']['actionEvents']})) == .5
+
+
+def test_rejected_actions_never_become_targets(tmp_path):
+    engine = engine_fixture(tmp_path, 'lfm')
+    from natlang_neuralese.tune.rows import evidence_weight
+    rejected = turn(evidence={'rootOracle': True, 'enclosingSuccess': True, 'callOutcome': 'done',
+        'actionPolicy': 'natlang.tune-action-outcome/2', 'actionDisposition': 'rejected', 'failedHistory': False,
+        'actionEvents': [{'toolCallId': 'call_0', 'name': 'eval', 'outcome': 'rejected',
+                          'argumentsSha256': canonical_json_sha256_hex({'code': 'return "HI"'})}]})
+    with pytest.raises(TuneMathError, match='rejected or unverified'):
+        evidence_weight(rejected)
+    with pytest.raises(TuneMathError, match='rejected or unverified'):
+        turn_graph(engine, rejected, prompt_weight=.1)
+    from natlang_neuralese.tune.rows import verify_action_evidence
+    assert verify_action_evidence(turn(evidence={**turn()['evidence'], 'failedHistory': True})) == 'admissible'
+    missing_history = turn(evidence={key: value for key, value in turn()['evidence'].items() if key != 'failedHistory'})
+    with pytest.raises(TuneMathError, match='boolean failed-history'):
+        verify_action_evidence(missing_history)
+    done_action = turn(evidence={**turn()['evidence'], 'actionEvents': [
+        {**turn()['evidence']['actionEvents'][0], 'outcome': 'done'}]})
+    assert verify_action_evidence(done_action) == 'admissible', 'a completed native eval action uses the runtime status "done"'
 
 
 @real_lfm
