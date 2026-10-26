@@ -8,6 +8,7 @@ build step and no dependencies beyond three Google Fonts.
 | `index.html` | The page: an introduction with a complete example, then nine chapters. Each chapter opens with a poster plate, explains one part of the language and ends in a working exhibit |
 | `style.css` | Flat poster palette with fixed meanings (mustard is prose, sky is types, plum is soft values, vermilion is the λ, actions and errors), light and dark themes, layout |
 | `app.js` | The exhibits. Each one is a small re-implementation of one rule from the specification |
+| `og.png` | The preview image that links to the site show, rendered from the page by `scripts/website-dev/social-card.mjs` |
 
 The exhibits model rules from [`spec/SPEC.md`](../spec/SPEC.md), its [extensions](../spec/ext/), the
 [inline lambda design](../docs/inline-natlang-lambdas.md), [`iterateOn`](../docs/ITERATE_ON_PLAN.md) and
@@ -47,9 +48,14 @@ The dev server's tests run with `npm run test:website`.
 
 ## Publish
 
-The workflow in [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) runs the tests on pull requests that
-touch the site, and publishes `website/` to GitHub Pages whenever it changes on `main`. It can also be started by hand
-from the Actions tab. Before the first run, set **Settings → Pages → Build and deployment → Source** to
-**GitHub Actions**.
+The site is published at <https://werg.github.io/natlang/>. The workflow in
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) runs the tests on pull requests that touch the site,
+and publishes `website/` to GitHub Pages whenever it changes on `main`. It can also be started by hand from the Actions
+tab. Before the first run, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**.
 
-A typical round: run the dev server, edit and save, review `git diff website/`, commit, and merge to `main`.
+A typical round: run the dev server, edit and save, review `git diff website/`, commit, and merge to `main`. After
+changing the headline or the example at the top of the page, render the preview image again with
+`node scripts/website-dev/social-card.mjs`.
+
+The page names its address in `og:url`, `og:image` and `rel="canonical"`. If the site moves, for example to a custom
+domain, change those three to the new address.
