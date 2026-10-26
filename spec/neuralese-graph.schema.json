@@ -24,7 +24,9 @@
         "properties": {
           "node": { "type": "string" },
           "port": { "type": "string" },
-          "block": { "$ref": "#/$defs/blockId" }
+          "block": { "$ref": "#/$defs/blockId" },
+          "source": { "type": "string" },
+          "stop": { "type": "boolean" }
         }
       }
     }

@@ -19,6 +19,6 @@
     "pack:cli": "npm pack --workspace @natlang/cli"
   },
   "devDependencies": {
-    "tracing-js-self": "https://codeload.github.com/werg/tracing-js-self/tar.gz/1952ee3ae3bb24b8d2c9d975ca3ed7e86e18ab38"
+    "tracing-js-self": "https://codeload.github.com/werg/tracing-js-self/tar.gz/b4fce2bd17490933efccd835d6573a57f2e91a92"
   }
 }

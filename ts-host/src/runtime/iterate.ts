@@ -16,7 +16,7 @@ import { invokeDefinition } from './kernel.js';
 import { builtinBody } from '../builtin/index.js';
 import { builtinDefinition } from './builtin.js';
 import { resolveFrame } from './runtime.js';
-import { graphNode, invocationNodeId, traceFor, valueInputs } from '../native/graph.js';
+import { graphNode, invocationNodeId, traceFor, producerScopeForTrace, valueInputs } from '../native/graph.js';
 
 export type IterationEvent<T> = Readonly<{
   kind: 'initial' | 'step' | 'review' | 'done' | 'error';
@@ -282,7 +282,7 @@ export class Iteration<T> {
         phase: full.kind, step: full.iteration, state_hash: full.state === undefined ? null : stableHash(full.state),
         predicate: full.kind === 'done' ? true : null, review: full.review ?? null },
         [...(frame.parentCallId ? [{ node: invocationNodeId(frame.parentCallId), port: 'caller' }] : []),
-          ...(full.state === undefined ? [] : valueInputs(full.state, 'state'))]);
+          ...(full.state === undefined ? [] : valueInputs(full.state, 'state', producerScopeForTrace(traceFor(frame.parentCallId))))]);
     };
     const traceEvents: Record<string, unknown>[] = [];
     let state = this.initial;

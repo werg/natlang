@@ -20,6 +20,12 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Training continuation and provenance checks intentionally resolve exact
+          # historical Git objects recorded by recipes and receipts. The default
+          # shallow checkout omits those objects and makes valid recovery checks
+          # fail in CI; fetch the repository history so those checks remain strict.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -47,7 +53,7 @@ jobs:
           # which is declared in the train extra but is imported by CPU-safe
           # Neuralese tests as well. Do not install the train extra here: it
           # pins a CUDA-agnostic torch wheel and would replace the CPU build.
-          python -m pip install -e '.[dev,data]' transformers 'triton==3.6.0; sys_platform == "linux"'
+          python -m pip install -e '.[dev,data]' transformers 'accelerate==1.15.0' 'triton==3.6.0; sys_platform == "linux"'
           python -m pytest -q
       - name: Install Chromium for browser smoke tests
         if: ${{ always() && steps.runtime_tests.outcome == 'success' }}

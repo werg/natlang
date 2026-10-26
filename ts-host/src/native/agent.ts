@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, hasBlockWriterOccurrence, invocationNodeId } from './graph.js';
+import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -675,14 +675,10 @@ export class NativeToolAgent {
         return 'external';
       }
       if (declared !== undefined) {
-        // The typed value may cross an invocation-local trace boundary while
-        // a nested decision recorder is active. Accept only a writer node
-        // already authenticated in the episode recorder or the exact recent
-        // writer for this content-addressed block. The resulting source node
-        // remains explicit in the graph; replay still requires its full writer
-        // node before any gradient can be accepted.
-        const inferenceOccurrence=activeRecorder()?false:hasBlockWriterOccurrence(block,declared);
-        if (!writers.includes(declared) && !inferenceOccurrence)
+        // Keep the actual episode recorder's cross-invocation writers and the
+        // task-scoped inference index. Neither can borrow another task's state.
+        if (!writers.includes(declared) &&
+            !hasProducerOccurrence(block, declared, session.runtime.episodeBudget))
           throw new Error(`neuralese-native-grad-invalid: native read ${block} names no matching in-episode writer ${declared}`);
         return declared;
       }
@@ -740,7 +736,7 @@ export class NativeToolAgent {
               architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
               embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source)]);
+            positions: [index + preparedMessageOffset, part] }, [blockInput(block, 'block', source, producerScopeForTrace(trace))]);
           if (node) reads.push({ node, port: 'read', block, source, stop: !!use.stop });
         }
       }
@@ -767,7 +763,7 @@ export class NativeToolAgent {
           architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
           embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 }, positions: [messageIndex, partIndex] },
-        [blockInput(item.id, 'block', source)]);
+        [blockInput(item.id, 'block', source, producerScopeForTrace(trace))]);
       if (node) reads.push({ node, port: 'read', block: item.id, source, stop: item.stop_gradient === true });
     }
     // The model server's captured prompt is the authoritative record of what
@@ -807,7 +803,7 @@ export class NativeToolAgent {
             architecture: artifact.metadata.architecture, checkpoint_sha256: artifact.metadata.checkpoint_sha256,
             tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
             embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-          positions: [0, promptIndex], position_source: 'captured_prompt_segment' }, [blockInput(sourceBlock, 'block', source)]);
+          positions: [0, promptIndex], position_source: 'captured_prompt_segment' }, [blockInput(sourceBlock, 'block', source, producerScopeForTrace(trace))]);
         if (node) reads.push({ node, port: 'read', block: sourceBlock, source, stop: segment.stop_gradient === true });
       }
       if (remaining.length)

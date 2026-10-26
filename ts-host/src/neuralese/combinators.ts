@@ -20,7 +20,7 @@ import { dialectBinding } from '../native/neuralese.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
-import { graphNode, traceFor, valueInputs } from '../native/graph.js';
+import { graphNode, traceFor, producerScopeForTrace, valueInputs } from '../native/graph.js';
 import { isNeuraleseRef, NeuraleseDialectError, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
 import { nativeStateBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
@@ -182,7 +182,7 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
 
 const record = (kind: 'combinator' | 'readout', data: Json, inputs: unknown) => {
   const trace = traceFor(currentFrame()?.parentCallId);
-  return graphNode(trace, kind, data, valueInputs(inputs, 'args'));
+  return graphNode(trace, kind, data, valueInputs(inputs, 'args', producerScopeForTrace(trace)));
 };
 
 /** The combinators over a standard library. */

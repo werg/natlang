@@ -14,8 +14,11 @@ import pytest
 from test_native_source_index_continuation import subject
 
 ROOT = Path(__file__).resolve().parents[1]
-PARENTS = ('14ca1758cacf99a4dc8f237fea7b8005d2123c40',
-           'b50e8823aaa1f92d2d3be853afc1955948a8fd1f')
+# These two immutable revisions are the exact reviewed compiler policies
+# (LFM prefix-extension and Mellum pre-extension) accepted by the production
+# continuation verifier. The former refs were unpublished in this repository.
+PARENTS = ('5706256bc7f733e9cd13199d4fcb58e05c50ce3a',
+           'd8bb4642f9dad3c1eff9cd86c1130e4c96cba0af')
 GUARD_EXTENSION = 'f8fe2e0ac37c'
 
 
