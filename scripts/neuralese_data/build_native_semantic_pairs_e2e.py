@@ -52,7 +52,7 @@ def rebind_pair_source_corpus(row, corpus_id):
         view['witness']['communication_sha256'] = new_hash
         view['graph']['source_pairing']['communication_sha256'] = new_hash
     return result
-BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-native-graphs-v2'
+BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-full-producer-targets-v3'
 CHECKPOINT_TRAJECTORIES = 16
 RESUME_SCHEMA = 'natlang.native-semantic-e2e-resume/2'
 
