@@ -22,6 +22,8 @@ export type RoundsSettings = {
   readonly samples?: number; readonly temperature?: number;
   /** Recipe fields for RL rounds; default alternates SFT and RL steps so the teacher rows keep anchoring the fit. */
   readonly rlRecipe?: Readonly<Record<string, unknown>>;
+  /** Continue an interrupted initial fit without inventing an evaluated parent release. Later rounds use their actual parent. */
+  readonly initialFitParent?: string;
   /** Repair rounds: verified corrections kept per wrong training root (default 1, from the latest boundary back) and
    * boundaries tried per root (default all). */
   readonly repairsPerRoot?: number; readonly repairBoundaries?: number;
@@ -41,7 +43,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
           // Corrections join the earlier usable rows; their prompts (the student's prefix) carry no target weight.
           ...(repairs ? { rows: [...data.trainRows, ...readRepairRows(repairs)] } : {}),
           ...(kind === 'rl' ? { recipe: { objectives: ['sft', 'rl'], ...settings.rlRecipe } } : {}),
-          ...(parent ? { parent: parent.build } : {}), ...(rollouts ? { rollouts } : {}) }, [], log);
+          ...(parent ? { parent: parent.build } : index === 0 && settings.initialFitParent ? { parent: settings.initialFitParent } : {}), ...(rollouts ? { rollouts } : {}) }, [], log);
         return { release: manifest.digest, build };
       },
       rollouts: async ({ index, parent }) => {

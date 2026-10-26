@@ -28,7 +28,7 @@ not train the production lineages and earns them no exposure credit.
 | Distillation export for base SFT | `--distill`, `tune/distill.py` | real LFM lowering test; stand-in stack |
 | Paired evaluation, placement, sweeps, report | `ts-host/src/tune/{evaluate,stats,placement,sweep,report}.ts` | unit tests |
 | Managed llama.cpp serving (per-node GGUF, per-request scales) | upstream runtime pin v0.5.0 (b11146) | real `natlang call` on LFM2.5-350M |
-| llama.cpp fork per-sequence LoRA (`--lora-per-sequence`) | `~/llama.cpp-neuralese` branch `neuralese` (unpushed) | LFM dense: bitwise CPU+CUDA. MoE expert path (tiny random Qwen3-MoE, same `build_lora_mm_id` code Mellum uses): CPU tokens identical, \|Δlogprob\| ≤ 7e-6; CUDA MoE batches differ the same way without adapters |
+| llama.cpp fork per-sequence LoRA (`--lora-per-sequence`) | `~/llama.cpp-neuralese` branch `neuralese` (pushed to our fork) | LFM dense: bitwise CPU+CUDA. MoE expert path (tiny random Qwen3-MoE, same `build_lora_mm_id` code Mellum uses): CPU tokens identical, \|Δlogprob\| ≤ 7e-6; CUDA MoE batches differ the same way without adapters |
 | llama.cpp fork soft states (`--native-state`, `llama_state_span_register`) | same fork, commit `6eff8834f`; `tune/soft_export.py`; `tune.softStates: true` | real LFM2.5-350M on CPU: max \|Δlogit\| 0.043 vs the Python splice (plain-text baseline 0.075), top-1 1.0, perturbation control 2.68, plain-text logits bitwise unchanged; GPU smoke only |
 | Native reference server (exact coefficients + soft states) | profile `neuraleseServer: true` | unit tests |
 | vLLM whole-stack PEFT LoRAs | profile `vllm: true`, `tune/stack_export.py` | mock-vLLM test; no real vLLM run |
