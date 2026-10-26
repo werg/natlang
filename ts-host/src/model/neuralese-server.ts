@@ -703,7 +703,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       }catch(error){results[index]={status:'rejected',reason:error};}
     }));
     const order=prepared.filter(entry=>entry!==undefined).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:a.index-b.index);
-    const scored=await (serves((await serverInfo())??{},'score')?batched:perItem)(order.map(entry=>entry.item),signal);
+    // A server that lists its capabilities is asked by them; one that lists none is asked the batch endpoint once,
+    // whose 404 falls back to per-item decisions for the rest of the session.
+    const info=await serverInfo();
+    const batch=Array.isArray(info?.capabilities)?serves(info!,'score'):true;
+    const scored=await (batch?batched:perItem)(order.map(entry=>entry.item),signal);
     await Promise.all(order.map(async(entry,position)=>{
       const result=scored[position]!;
       if(result.status==='rejected'){results[entry.index]=result;return;}
