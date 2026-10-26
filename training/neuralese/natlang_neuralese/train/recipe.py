@@ -37,7 +37,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'ce_supervision_policy'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request', 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction', 'ce_supervision_policy'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
@@ -327,6 +327,10 @@ def _bind_native_source_dependencies(inputs, *, source_route=None):
         from .native_classification_continuation import classification_proof_dependencies
         inputs['source_classification_migration']['dependencies'] = classification_proof_dependencies(
             inputs['source_classification_migration'])
+    if 'source_correction' in inputs:
+        from .native_source_correction import source_correction_dependencies
+        inputs['source_correction']['dependencies'] = source_correction_dependencies(
+            inputs['source_correction'])
     if 'pending_native_sources' in inputs:
         from .native_pending_sources import pending_source_dependencies
         inputs['pending_native_sources']['dependencies'] = pending_source_dependencies(inputs['pending_native_sources']['path'])
@@ -383,7 +387,7 @@ def stage_input_args(resolved, kind):
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'native_graphs', 'held_native_graphs', 'continued_native_graphs',
                  'continued_held_native_graphs', 'foundation_native_graphs', 'foundation_declaration_recovery', 'foundation_qualification_request',
-                 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration',
+                 'withdrawn_native_graphs', 'pending_native_sources', 'unavailable_native_sources', 'source_classification_migration', 'source_correction',
                  'ce_supervision_policy', 'objective_spec', 'rl_block_bundle', 'continue_from'):
         if role in resolved and role in supported:
             args += ['--' + role.replace('_', '-'), resolved[role]['path']]
@@ -841,6 +845,36 @@ def _data_continuation(old, new):
     return False
 
 
+def _source_correction_continuation(old, new):
+    """Allow only a proof-bound, exact source repair on an active native SFT stage."""
+    role = 'source_correction'
+    if (role not in new or new.get(role) == old.get(role)
+            or not isinstance(old.get('native_graphs'), dict)
+            or not isinstance(new.get('native_graphs'), dict)
+            or new.get('continued_native_graphs', {}).get('sha256') != old['native_graphs'].get('sha256')
+            or old.get('held_native_graphs') != new.get('held_native_graphs')):
+        return False
+    reference = new[role]
+    if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
+        raise ValueError('native source correction requires an exact recipe-bound proof')
+    from .native_source_correction import source_correction_dependencies
+    path = Path(reference['path']).resolve(strict=True)
+    dependencies = source_correction_dependencies({'path': str(path), 'sha256': reference['sha256']})
+    proof = json.loads(path.read_text())
+    def ref_matches(value, declared):
+        return isinstance(value, dict) and value.get('path') == declared.get('path') and value.get('sha256') == declared.get('sha256')
+    if not ref_matches(proof.get('prior_source'), old['native_graphs']):
+        return False
+    if not ref_matches(proof.get('current_source'), new['native_graphs']):
+        return False
+    if (proof.get('row_bindings_path') != dependencies[1]['path']
+            or proof.get('row_bindings_sha256') != dependencies[1]['sha256']):
+        return False
+    excluded = {'native_graphs', 'continued_native_graphs', role}
+    return {key:value for key,value in old.items() if key not in excluded} == {
+        key:value for key,value in new.items() if key not in excluded}
+
+
 def _priority_only_native_source_continuation(old, new):
     """Permit a drained scheduling-only revision of an existing train manifest.
 
@@ -1243,13 +1277,15 @@ def unstarted_stage_input_changes(existing, plan, out, *, started_stage_ids=()):
                     _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
                     or _pending_source_continuation(old, new)
                     or _combined_native_source_continuation(old, new)
+                    or _source_correction_continuation(old, new)
                     or (next(s for s in plan['recipe']['stages'] if s['id'] == stage_id)['kind'] == 'native_state_sft'
                         and (_classification_input_continuation(old, new)
                              or _ce_supervision_input_continuation(old, new)))):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by an explicit metadata classification or declared '
                                  'data continuation that retains the exact authenticated native predecessor')
-            changes[stage_id] = {'kind': ('ce_supervision_continuation'
+            changes[stage_id] = {'kind': ('source_correction_continuation'
+                if _source_correction_continuation(old, new) else 'ce_supervision_continuation'
                 if _ce_supervision_input_continuation(old, new) else 'metadata_classification_continuation'
                 if _classification_input_continuation(old, new) else 'scheduling_priority_continuation'
                 if _priority_only_native_source_continuation(old, new) else 'data_continuation'),

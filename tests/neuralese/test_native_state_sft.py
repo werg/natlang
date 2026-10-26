@@ -461,6 +461,159 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     assert optimizer_step_values and min(optimizer_step_values) > min(previous_optimizer_steps)
 
 
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure(tmp_path, family, monkeypatch):
+    """Run the correction through source parsing, checkpoint restore, SGD and save."""
+    import copy
+    import hashlib
+    import json
+    import torch
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import WhitespaceSplit
+    from transformers import Lfm2Config, Lfm2ForCausalLM, PreTrainedTokenizerFast
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    from natlang_neuralese.model.shared_state import ROLE_MARKERS
+    from natlang_neuralese.train.native_state_sft import NativeGraphSource, main
+    from natlang_neuralese.train.native_source_correction import SCHEMA
+    from natlang_neuralese.common.hashing import sha256_file_hex, sha256_hex
+
+    if family == 'mellum':
+        # This CPU fixture exercises the actual Mellum model/source path. Its
+        # hardware-specific FP8 capacity/adjoint qualification is intentionally
+        # outside this source-continuation test and is represented by this
+        # explicit backend boundary stub; no production readiness is inferred.
+        from contextlib import nullcontext
+        from torch.utils.checkpoint import checkpoint as torch_checkpoint
+        from natlang_neuralese.train import fp8_backend
+        class BackendBoundary:
+            def __init__(self): self.checkpoint = torch_checkpoint
+            def reset_row_counts(self): pass
+            def restore_extra_state(self, state): pass
+            def extra_state(self): return {'test_boundary': 'FP8 hardware qualification not exercised'}
+            def inventory(self): return {'test_boundary': 'FP8 hardware qualification not exercised'}
+            def autocast(self): return nullcontext()
+            def native_modules(self): return nullcontext()
+        monkeypatch.setattr(fp8_backend, 'make_backend', lambda *args, **kwargs: BackendBoundary())
+
+    base = tmp_path / 'base'
+    base.mkdir()
+    if family == 'lfm':
+        model_config = Lfm2Config(vocab_size=128, hidden_size=16, intermediate_size=32,
+            num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=2,
+            layer_types=['full_attention'], max_position_embeddings=64)
+        torch.manual_seed(701)
+        Lfm2ForCausalLM(model_config).save_pretrained(base)
+    else:
+        from test_mellum_port import tiny_mellum
+        torch.manual_seed(702)
+        tiny_mellum(base)
+    tokenizer_object = Tokenizer(WordLevel({f't{i}': i for i in range(128)}, unk_token='t0'))
+    tokenizer_object.pre_tokenizer = WhitespaceSplit()
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer_object,
+        unk_token='t0', bos_token='t1', eos_token='t2')
+    tokenizer.add_special_tokens({'additional_special_tokens': list(ROLE_MARKERS)})
+    if family == 'lfm':
+        tokenizer.chat_template = ("{% for message in messages %}"
+            "{{ message.get('reasoning_content', '') if (preserve_thinking or loop.last) else '' }}"
+            "{{ message['content'] }}{% endfor %}assistant:")
+    else:
+        tokenizer.chat_template = ("{% for message in messages %}"
+            "{{ message.get('reasoning_content', '') }}{{ message['content'] }}"
+            "{% endfor %}assistant:")
+    tokenizer.save_pretrained(base)
+    fingerprint = tokenizer_fingerprint(tokenizer)
+    roles = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
+
+    pair = authenticated_pair('corrected-edge', roles=roles, fingerprint=fingerprint)
+    pair['models'][family]['graph']['tokenizer_fingerprint'] = fingerprint
+    corrected = copy.deepcopy(pair)
+    payload_sha = sha256_hex(b'efgh')
+    corrected['payload_sha256'] = payload_sha
+    for model_name, view in corrected['models'].items():
+        view['export']['text'] = 'efgh'
+        view['witness']['payload_sha256'] = payload_sha
+        if model_name == family == 'lfm':
+            view['graph']['nodes'][0]['token_ids'] = [1, roles[0], 8, 9, roles[1]]
+        elif model_name == family == 'mellum':
+            view['graph']['nodes'][0]['token_ids'] = [1, roles[0], 10, 11, 12, roles[1]]
+        view['graph']['source_pairing']['consumed_occurrences'][0]['payload_sha256'] = payload_sha
+
+    ordinary = {**graph('ordinary-row'), 'tokenizer_fingerprint': fingerprint}
+    old_dir, new_dir = tmp_path / 'old-source', tmp_path / 'new-source'
+    old_dir.mkdir(); new_dir.mkdir()
+    old_manifest = source_manifest(old_dir, [ordinary], [pair], model=family)
+    new_manifest = source_manifest(new_dir, [ordinary], [corrected], model=family)
+    held = {**graph('held-row'), 'split': 'test', 'source_groups': ['protected-held'],
+            'tokenizer_fingerprint': fingerprint}
+    held_path = tmp_path / 'held.jsonl'
+    held_path.write_text(json.dumps(held) + '\n')
+    old_source = NativeGraphSource(old_manifest, fingerprint, required_split='train', role_ids=roles)
+    new_source = NativeGraphSource(new_manifest, fingerprint, required_split='train', role_ids=roles)
+    corrected_id = family + ':corrected-edge'
+    assert old_source.bindings[corrected_id] != new_source.bindings[corrected_id]
+
+    out = tmp_path / 'run'
+    dtype = 'float32' if family == 'lfm' else 'bfloat16'
+    base_argv = ['--base', str(base), '--device', 'cpu', '--dtype', dtype, '--rank', '2',
+        '--held-native-graphs', str(held_path), '--epochs', '1', '--eval-every', '100',
+        '--batch-graphs', '1', '--learning-rate', '1e-3', '--seed', '29',
+        '--stage-id', 'native_full_sft']
+    if family == 'mellum':
+        base_argv += ['--fp8-training', 'triton-experts']
+    assert main([*base_argv, '--native-graphs', str(old_manifest), '--out', str(out)]) == 0
+    checkpoint = out / 'checkpoint.pt'
+    parent = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    parent_training = parent['training']
+    old_receipt = parent_training['source_receipts'][0]
+
+    row_ledger = tmp_path / 'correction-rows.jsonl'
+    old_leaf = old_source.receipt()['sources'][1]
+    new_leaf = new_source.receipt()['sources'][1]
+    row_ledger.write_text(json.dumps({
+        'id': corrected_id, 'old_binding': old_source.bindings[corrected_id],
+        'new_binding': new_source.bindings[corrected_id],
+        'old_source_sha256': old_leaf['sha256'], 'new_source_sha256': new_leaf['sha256'],
+        'disposition': 'corrected'}, sort_keys=True) + '\n')
+    proof = tmp_path / 'correction.json'
+    proof.write_text(json.dumps({'schema': SCHEMA,
+        'model_id': parent_training['identity']['config']['architecture'] + ':' +
+            parent_training['identity']['config']['base_inventory_sha256'],
+        'stage_id': 'native_full_sft',
+        'prior_source': {'path': old_receipt['path'], 'sha256': old_receipt['sha256']},
+        'current_source': {'path': str(new_manifest.resolve()), 'sha256': new_source.file_sha256},
+        'row_bindings_path': str(row_ledger.resolve()),
+        'row_bindings_sha256': sha256_file_hex(row_ledger)}, sort_keys=True))
+
+    assert main([*base_argv, '--native-graphs', str(new_manifest), '--out', str(out),
+        '--continue-from', str(checkpoint), '--continued-native-graphs', str(old_manifest),
+        '--source-correction', str(proof)]) == 0
+    child = torch.load(checkpoint, map_location='cpu', weights_only=False)
+    child_training = child['training']
+    assert child_training['global_step'] == parent_training['global_step'] + 1
+    assert child_training['source_row_bindings'] == new_source.bindings
+    assert child_training['source_row_order'] == new_source.ordered_ids()
+    assert child_training['exposure_counts']['ordinary-row'] == parent_training['exposure_counts']['ordinary-row']
+    assert child_training['exposure_counts'][corrected_id] == 1
+    frame = child_training['sft_progress']['native_full_sft']
+    assert frame['required_visits'][corrected_id] == 1
+    history = child_training['options']['source_correction_history']
+    assert history[-1]['corrected_rows'][0]['prior_exposure'] == 1
+    assert history[-1]['new_corrected_row_exposure_added'] == 0
+    assert history[-1]['optimizer_rng_weights'] == 'preserved'
+    assert child_training['optimizer'] and child_training['rng']
+    def equal(left, right):
+        if torch.is_tensor(left):
+            return torch.equal(left, right)
+        if isinstance(left, dict):
+            return left.keys() == right.keys() and all(equal(left[key], right[key]) for key in left)
+        if isinstance(left, (tuple, list)):
+            return len(left) == len(right) and all(equal(a, b) for a, b in zip(left, right))
+        return left == right
+    assert not equal(child_training['optimizer'], parent_training['optimizer'])
+    assert not equal(child['interface_state'], parent['interface_state'])
+
+
 def test_token_volume_batches_preserve_every_graph_and_long_graph():
     from natlang_neuralese.train.native_state_sft import batch_boundaries
     entries = [{'forward_tokens': count} for count in (3, 4, 20, 2, 5)]

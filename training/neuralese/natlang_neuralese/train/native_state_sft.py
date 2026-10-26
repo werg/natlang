@@ -932,6 +932,8 @@ def build_parser():
         help='balance positive-priority source cohorts using actual completed indexed graph token exposure')
     parser.add_argument('--source-classification-migration', type=Path,
         help='explicit source-bound index/progress classification continuation')
+    parser.add_argument('--source-correction', type=Path,
+        help='exact old-to-corrected native row transition; preserves optimizer/RNG and resets corrected-row exposure')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--refresh-foundation-readiness', action=argparse.BooleanOptionalAction, default=False,
@@ -1305,6 +1307,8 @@ def _main(argv=None, *, requested_refresh):
                 raise ValueError('native continuation changed its preserved recipe lineage')
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     checkpoint_options['source_availability_history']=list((saved_training.get('options') or {}).get('source_availability_history') or [])
+    checkpoint_options['source_correction_history']=list((saved_training.get('options') or {}).get('source_correction_history') or [])
+    checkpoint_options['source_correction_binding']=(saved_training.get('options') or {}).get('source_correction_binding')
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
     if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
@@ -1391,6 +1395,7 @@ def _main(argv=None, *, requested_refresh):
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     source_order = train.ordered_ids()
+    source_correction_result = {'changed': False}
     from .native_pending_sources import load_pending_sources
     checkpoint_options['_pending_native_source_declarations'] = [
         load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
@@ -1512,6 +1517,10 @@ def _main(argv=None, *, requested_refresh):
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
+    if args.source_correction is not None and resume is None:
+        raise ValueError('native source correction requires the exact saved SFT predecessor frame')
+    if args.source_correction is not None and args.continued_native_graphs is None:
+        raise ValueError('native source correction requires its declared predecessor graph source')
     ce_prior_options = (resume or {}).get('options') or saved_options
     previous_ce = ce_prior_options.get('ce_supervision_policy_binding')
     inherited_ce = saved_options.get('ce_supervision_policy_binding') or previous_ce
@@ -1596,6 +1605,20 @@ def _main(argv=None, *, requested_refresh):
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
+        if args.source_correction is not None:
+            from .native_source_correction import apply_source_correction
+            resume, source_correction_result = apply_source_correction(
+                resume, args.source_correction, model_id=config['architecture'] + ':' + config['base_inventory_sha256'],
+                stage_id=args.stage_id or 'native-graph-ce', current_source_receipt=source_receipts[0],
+                current_bindings=source_row_bindings, current_order=source_order,
+                current_communication_ids=[entry['id'] for entry in train.entries if entry.get('communication')])
+            saved_training = resume
+            saved_options = saved_training.get('options') or {}
+            carried_progress = collect_sft_progress(saved_training)
+            checkpoint_options['source_correction_binding'] = saved_options.get('source_correction_binding')
+            checkpoint_options['source_correction_history'] = list(saved_options.get('source_correction_history') or [])
+            checkpoint_options['foundation_qualification_history'] = list(
+                saved_options.get('foundation_qualification_history') or [])
         previous = _resume_identity_for_comparison(resume.get('identity'))
         verify_failure_repair_objective_continuation(previous,resume.get('options') or {},
             objective,args.stage_id or args.out.name)
@@ -1654,7 +1677,15 @@ def _main(argv=None, *, requested_refresh):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
         # MuonSR retains its constructor's NS variant on state restoration;
         # switching the update approximation preserves compatible moment state.
-        if restored_progress or not (parent_continuation and args.objective_continuation):
+        if (source_correction_result.get('changed', False)):
+            # The correction proof already checked every retained, corrected,
+            # deferred, and appended row against the exact predecessor source.
+            # Ordinary append-only validation cannot express a same-ID row
+            # whose supervised graph was explicitly replaced. Keep the held
+            # source immutable even across this one authorized transition.
+            append_only_rows(resume.get('held_row_bindings') or {}, held_row_bindings,
+                             label='held-source')
+        elif restored_progress or not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
             prior_order = resume.get('source_row_order') or []
@@ -1916,6 +1947,7 @@ def _main(argv=None, *, requested_refresh):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or source_correction_result.get('changed', False)
         or foundation_declaration_changed
         or foundation_dependencies_changed
         or args.native_shared_execution is not None and args.native_shared_execution!=previous_shared_declaration
