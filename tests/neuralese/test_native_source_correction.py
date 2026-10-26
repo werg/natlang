@@ -460,6 +460,17 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
         'exposure_counts':{'edge':2},'required_visits':{'edge':3},
         'options':{'objective':'separate-but-same-source'},
         'metrics':{'held':{'loss':1.0},'held_coverage':carried_coverage}}
+    dpo_train = _receipt('/dpo/objective.json', 'dpo-objective', ['pair:1'], ['dpo-leaf'])
+    dpo_frame = {'source_receipts':[dpo_train,old_held],
+        'source_row_bindings':{'pair:1':{'objective':'exact-dpo'}},'source_row_order':['pair:1'],
+        'held_row_bindings':{'held:a':{'sha':'old-held'},'held:b':{'sha':'old-held-b'}},
+        'exposure_counts':{'pair:1':4},'required_visits':{'pair:1':9},
+        'options':{'objective_kind':'native-offline-pairwise','objective':{'path':'dpo-objective'}},
+        'metrics':{'held':{'loss':2.0},'held_coverage':copy.deepcopy(carried_coverage)}}
+    unrelated_dpo = copy.deepcopy(dpo_frame)
+    unrelated_dpo['source_receipts'] = [dpo_train, _receipt('/other/held.json', 'other-held',
+        ['held:a','held:b'], ['other-a','other-b'])]
+    unrelated_dpo['held_row_bindings'] = {'held:a':{'other':'a'},'held:b':{'other':'b'}}
     training = {'source_receipts': [prior_train, old_held],
         'source_row_bindings': {'edge': {'sha': 'old-train'}}, 'source_row_order': ['edge'],
         'held_row_bindings': {'held:a': {'sha': 'old-held'}, 'held:b': {'sha': 'old-held-b'}},
@@ -469,7 +480,9 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
             'source_row_bindings': {'edge': {'sha': 'old-train'}}, 'source_row_order': ['edge'],
             'held_row_bindings': {'held:a': {'sha': 'old-held'}, 'held:b': {'sha': 'old-held-b'}},
             'exposure_counts': {'edge': 1}, 'required_visits': {'edge': 1}, 'options': {}},
-            'carried-same-source': carried_frame}}
+            'carried-same-source': carried_frame,
+            'carried-dpo-shared-held': dpo_frame,
+            'unrelated-dpo-different-held': unrelated_dpo}}
     held_context = {'prior_receipt': old_held, 'current_receipt': new_held,
         'prior_bindings': training['held_row_bindings'], 'current_bindings': held_bindings,
         'prior_order': ['held:a', 'held:b'], 'current_order': ['held:a', 'held:b'],
@@ -495,6 +508,17 @@ def test_protected_held_correction_keeps_membership_groups_and_exposure_unchange
             __import__('natlang_neuralese.common.hashing',fromlist=['canonical_json_sha256_hex']).canonical_json_sha256_hex({'sha':'old-held'}),
         'visits':1,'forward_tokens_per_visit':3,'retired_forward_token_visits':3,
         'reason':'held target binding changed'}]
+    carried_dpo = result['sft_progress']['carried-dpo-shared-held']
+    assert carried_dpo['source_receipts'][0] == dpo_train
+    assert carried_dpo['source_row_bindings'] == {'pair:1':{'objective':'exact-dpo'}}
+    assert carried_dpo['exposure_counts'] == {'pair:1':4}
+    assert carried_dpo['required_visits'] == {'pair:1':9}
+    assert carried_dpo['source_receipts'][1] == new_held
+    assert carried_dpo['held_row_bindings'] == held_bindings
+    assert carried_dpo['metrics']['held'] is None if 'held' in carried_dpo['metrics'] else True
+    assert carried_dpo['options']['held_correction_binding']['sha256'] == _sha(proof)
+    assert len(carried_dpo['options']['held_correction_history']) == 1
+    assert result['sft_progress']['unrelated-dpo-different-held'] == unrelated_dpo
     assert result['exposure_counts'] == {'edge': 0}
     assert result['required_visits']['edge'] == 2
     assert len(source_correction_dependencies({'path': str(proof), 'sha256': _sha(proof)})) == 4
@@ -505,8 +529,8 @@ def test_held_quality_hold_authenticates_exact_pending_rows_and_is_carried_in_ch
     current_train = _receipt('/new/train.json', 'new-train', ['edge'], ['b'*64])
     held = _receipt('/new/held.json', 'held-current', ['held:bad', 'held:good'], ['c'*64, 'd'*64])
     entries = [
-        {'id':'held:bad','binding':{'graph':'bad'},'groups':['world:a'],'communication':False},
-        {'id':'held:good','binding':{'graph':'good'},'groups':['world:b'],'communication':False},
+        {'id':'held:bad','binding':{'graph':'bad'},'groups':['world:a'],'communication':False,'forward_tokens':2},
+        {'id':'held:good','binding':{'graph':'good'},'groups':['world:b'],'communication':False,'forward_tokens':3},
     ]
     rows_path=tmp_path/'quality-rows.jsonl'
     rows_path.write_text(json.dumps({'id':'held:bad','binding':{'graph':'bad'},'source_sha256':'c'*64,
@@ -540,6 +564,8 @@ def test_held_quality_hold_authenticates_exact_pending_rows_and_is_carried_in_ch
         'pending_held_correction':{'remaining_original_sources':[{'source':{'sha256':'c'*64},
             'rows':1,'reason':'truncated producer target'}]}}
     proof_path.write_text(json.dumps(proof,sort_keys=True))
+    from natlang_neuralese.train.native_held import held_selection
+    prior_coverage = held_selection(entries, source_sha256=held['sha256'])[1]
     training={'source_receipts':[prior_train,held],
         'source_row_bindings':{'edge':{'graph':'old'}},'source_row_order':['edge'],
         'held_row_bindings':{'held:bad':{'graph':'bad'},'held:good':{'graph':'good'}},
@@ -548,7 +574,16 @@ def test_held_quality_hold_authenticates_exact_pending_rows_and_is_carried_in_ch
         'sft_progress':{'native_full_sft':{'source_receipts':[prior_train,held],
             'source_row_bindings':{'edge':{'graph':'old'}},'source_row_order':['edge'],
             'held_row_bindings':{'held:bad':{'graph':'bad'},'held:good':{'graph':'good'}},
-            'exposure_counts':{'edge':1},'required_visits':{'edge':1},'options':{}}}}
+            'exposure_counts':{'edge':1},'required_visits':{'edge':1},'options':{}},
+            # A DPO cursor on another training source still consumes this exact
+            # held set and must receive the quality exclusion binding.
+            'native_offline_preference':{'source_receipts':[
+                _receipt('/dpo/train.json','dpo-train',['pair'],['e'*64]),held],
+                'source_row_bindings':{'pair':{'graph':'dpo'}},'source_row_order':['pair'],
+                'held_row_bindings':{'held:bad':{'graph':'bad'},'held:good':{'graph':'good'}},
+                'exposure_counts':{'pair':2},'required_visits':{'pair':4},
+                'metrics':{'held':{'source_sha256':'held-old','loss':9.},
+                    'held_coverage':prior_coverage},'options':{}}}}
     held_context={'prior_receipt':held,'current_receipt':held,
         'prior_bindings':training['held_row_bindings'],'current_bindings':training['held_row_bindings'],
         'prior_order':['held:bad','held:good'],'current_order':['held:bad','held:good'],
@@ -563,6 +598,15 @@ def test_held_quality_hold_authenticates_exact_pending_rows_and_is_carried_in_ch
     binding=result['options']['held_quality_hold_binding']
     assert binding['excluded_rows']==1 and binding['source_sha256']=='held-current'
     assert result['sft_progress']['native_full_sft']['options']['held_quality_hold_binding']==binding
+    dpo=result['sft_progress']['native_offline_preference']
+    assert dpo['source_receipts'][0]['sha256']=='dpo-train'
+    assert dpo['source_row_bindings']=={'pair':{'graph':'dpo'}}
+    assert dpo['exposure_counts']=={'pair':2} and dpo['required_visits']=={'pair':4}
+    assert dpo['source_receipts'][1]['sha256']=='held-current'
+    assert dpo['options']['held_quality_hold_binding']==binding
+    assert 'held' not in dpo['metrics']
+    assert dpo['metrics']['held_coverage']['quality_hold_binding']==binding
+    assert dpo['metrics']['held_coverage']['quality_excluded_ids']==['held:bad']
 
 
 def test_protected_held_coverage_rebinds_only_after_exact_same_class_rows():
@@ -596,7 +640,7 @@ def test_protected_held_coverage_rebinds_only_after_exact_same_class_rows():
 
 
 def test_carried_held_correction_accepts_only_exact_authenticated_source_relocation(tmp_path):
-    from natlang_neuralese.train.native_source_correction import _propagate_source_correction_to_carried_frames
+    from natlang_neuralese.train.native_source_correction import _propagate_held_correction_to_frames
     from natlang_neuralese.train.native_held import held_selection
 
     staged=tmp_path/'staged-held.jsonl';staged.write_bytes(b'held\n')
@@ -607,12 +651,18 @@ def test_carried_held_correction_accepts_only_exact_authenticated_source_relocat
     held_sha=_sha(staged)
     map_sha=_sha(source_map)
     proof=tmp_path/'correction-with-relocation.json'
-    proof.write_text(json.dumps({'schema':SCHEMA,
+    held_rows=tmp_path/'held-rows.jsonl'
+    held_rows.write_text('{"id":"held:a","disposition":"corrected"}\n')
+    proof.write_text(json.dumps({'schema':SCHEMA,'stage_id':'native_full_sft',
         'source_map':{'path':str(source_map),'sha256':map_sha},
         'prior_held_relocation':{'schema':'natlang.staged-receipt-relocation/1',
             'logical_path':logical,'staged_path':str(staged.resolve()),
             'sha256':held_sha,'source_map_path':str(source_map.resolve()),
-            'source_map_sha256':map_sha}},sort_keys=True))
+            'source_map_sha256':map_sha},
+        'protected_held_correction':{'schema':'natlang.native-protected-held-correction/1',
+            'prior_source':{'path':logical,'sha256':held_sha},
+            'current_source':{'path':'/new/held.json','sha256':'held-new'},
+            'row_bindings_path':'held-rows.jsonl','row_bindings_sha256':_sha(held_rows)}},sort_keys=True))
     prior_train=_receipt('/old/train.json','train-old',['edge'],['sha-edge'])
     current_train=_receipt('/new/train.json','train-new',['edge'],['sha-edge-new'])
     prior_held={'path':str(staged.resolve()),'sha256':held_sha,'rows':1,
@@ -636,11 +686,8 @@ def test_carried_held_correction_accepts_only_exact_authenticated_source_relocat
         'prior_bindings':{'held:a':prior_entries[0]['binding']},
         'current_bindings':{'held:a':current_entries[0]['binding']},
         'prior_entries':prior_entries,'current_entries':current_entries}
-    transitions=_propagate_source_correction_to_carried_frames(progress,stage_id='native_full_sft',
-        prior_receipt=prior_train,current_receipt=current_train,
-        prior_bindings={'edge':{'graph':'old'}},current_bindings={'edge':{'graph':'new'}},
-        current_order=['edge'],current_communication_ids=['edge'],corrected={'edge'},deferred=set(),
-        added=set(),pending={},protected_held=protected,proof=json.loads(proof.read_text()),proof_path=proof)
+    transitions=_propagate_held_correction_to_frames(progress,held=protected,
+        proof=json.loads(proof.read_text()),proof_path=proof)
     assert transitions[0]['stage_id']=='carried'
     assert progress['carried']['source_receipts'][1]==current_held
     assert progress['carried']['held_row_bindings']=={'held:a':{'target':'new'}}

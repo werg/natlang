@@ -1322,6 +1322,8 @@ def _main(argv=None, *, requested_refresh):
     checkpoint_options['source_availability_history']=list((saved_training.get('options') or {}).get('source_availability_history') or [])
     checkpoint_options['source_correction_history']=list((saved_training.get('options') or {}).get('source_correction_history') or [])
     checkpoint_options['source_correction_binding']=(saved_training.get('options') or {}).get('source_correction_binding')
+    checkpoint_options['held_correction_history']=list((saved_training.get('options') or {}).get('held_correction_history') or [])
+    checkpoint_options['held_correction_binding']=(saved_training.get('options') or {}).get('held_correction_binding')
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
     if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
@@ -1652,6 +1654,8 @@ def _main(argv=None, *, requested_refresh):
             carried_progress = collect_sft_progress(saved_training)
             checkpoint_options['source_correction_binding'] = saved_options.get('source_correction_binding')
             checkpoint_options['source_correction_history'] = list(saved_options.get('source_correction_history') or [])
+            checkpoint_options['held_correction_binding'] = saved_options.get('held_correction_binding')
+            checkpoint_options['held_correction_history'] = list(saved_options.get('held_correction_history') or [])
             checkpoint_options['foundation_qualification_history'] = list(
                 saved_options.get('foundation_qualification_history') or [])
         previous = _resume_identity_for_comparison(resume.get('identity'))
@@ -1708,8 +1712,11 @@ def _main(argv=None, *, requested_refresh):
             checkpoint_options['offline_objective_revisions'].append(transition)
         if (parent_continuation and args.objective_continuation) or offline_tweak:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
-        if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
-            raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
+        identity_mismatches = [key for key in stable
+            if previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key)]
+        if identity_mismatches:
+            raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity: '
+                             + ', '.join(identity_mismatches))
         # MuonSR retains its constructor's NS variant on state restoration;
         # switching the update approximation preserves compatible moment state.
         if (source_correction_result.get('changed', False)):
@@ -1841,17 +1848,6 @@ def _main(argv=None, *, requested_refresh):
             exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()
                                     if key in exposure_counts})
             metrics = dict(resume.get('metrics') or {})
-            if source_correction_result.get('protected_held_rows'):
-                coverage=metrics.get('held_coverage')
-                if coverage is not None:
-                    from .native_held import rebind_held_coverage_after_exact_correction
-                    metrics['held_coverage']=rebind_held_coverage_after_exact_correction(
-                        protected_held['prior_entries'], protected_held['current_entries'], coverage,
-                        source_sha256=source_receipts[1]['sha256'])
-                # Held loss/accuracy measured the old target bytes. Keep the
-                # exact per-row visit history above, but require a fresh eval
-                # before publishing any result for the corrected held source.
-                metrics.pop('held', None)
             if restored_progress and (shared_resume is not None
                     or (saved_training.get('options') or {}).get('stage_id')!=args.stage_id
                     or (saved_training.get('identity') or {}).get('objective')!=objective_binding):
@@ -1860,6 +1856,12 @@ def _main(argv=None, *, requested_refresh):
                     metrics.pop(key, None)
                 _retain_current_held_coverage(metrics,saved_training,held)
         held_quality_binding = ((resume or saved_training or {}).get('options') or {}).get('held_quality_hold_binding')
+        held_options = (resume or saved_training or {}).get('options') or {}
+        from .native_source_correction import validate_held_correction_history
+        held_correction_history, held_correction_binding = validate_held_correction_history(
+            held_options, held_receipt=source_receipts[1])
+        checkpoint_options['held_correction_history'] = held_correction_history
+        checkpoint_options['held_correction_binding'] = held_correction_binding
         held_quality_excluded_ids = set()
         if held_quality_binding is not None:
             from .native_source_correction import validate_held_quality_hold

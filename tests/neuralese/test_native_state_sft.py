@@ -632,7 +632,39 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     assert parent_training['global_step'] > first_training['global_step']
     assert parent_training['sft_progress']['native_full_sft']['source_receipts'][0]['sha256'] == \
         first_training['source_receipts'][0]['sha256']
-    old_receipt = parent_training['source_receipts'][0]
+    old_receipt = parent_training['sft_progress']['native_full_sft']['source_receipts'][0]
+    old_held_receipt = old_held_source.receipt()
+
+    # Put a real DPO stage with a different train source and the same held
+    # source into the checkpoint before correcting the held target. The
+    # correction must follow held identity independently of train identity.
+    from test_native_offline_preference import example_spec as preference_example_spec
+    from natlang_neuralese.data.native_graph import SCHEMA as GRAPH_SCHEMA
+    dpo_fixture = tmp_path / 'dpo-fixture'; dpo_fixture.mkdir()
+    dpo_example, dpo_objective = preference_example_spec(
+        dpo_fixture, fingerprint=fingerprint)
+    dpo_row = {'schema': GRAPH_SCHEMA, 'id': dpo_example.id, 'split': 'train',
+        'source_groups':list(dpo_example.source_groups), 'tokenizer_fingerprint':fingerprint,
+        'nodes':[{'name':node.name, 'token_ids':list(node.token_ids),
+                  'target_weights':[0.0] * len(node.token_ids)}
+                 for node in dpo_example.plan.invocations]}
+    dpo_train = tmp_path / 'dpo-train.jsonl'; dpo_train.write_text(json.dumps(dpo_row) + '\n')
+    dpo_out = tmp_path / 'dpo-before-correction'
+    dpo_args = ['--base',str(base),'--device','cpu','--dtype',dtype,'--rank','2',
+        '--native-graphs',str(dpo_train),'--held-native-graphs',str(old_held_path),
+        '--objective-spec',str(dpo_objective.path),'--out',str(dpo_out),
+        '--continue-from',str(checkpoint),'--stage-id','native_offline_preference',
+        '--epochs','1','--eval-every','100',
+        '--batch-graphs','1','--learning-rate','1e-3','--seed','29']
+    if family == 'mellum':
+        dpo_args += ['--fp8-training','triton-experts']
+    from natlang_neuralese.train.native_preference import main as preference_main
+    assert preference_main(dpo_args) == 0
+    dpo_checkpoint = dpo_out / 'checkpoint.pt'
+    dpo_parent_training = torch.load(dpo_checkpoint, map_location='cpu', weights_only=False)['training']
+    dpo_frame_before = dpo_parent_training['sft_progress']['native_offline_preference']
+    assert dpo_frame_before['source_receipts'][0]['sha256'] != old_receipt['sha256']
+    assert dpo_frame_before['source_receipts'][1]['sha256'] == old_held_receipt['sha256']
 
     row_ledger = tmp_path / 'deferred-correction-rows.jsonl'
     old_leaf = old_source.receipt()['sources'][1]
@@ -651,6 +683,16 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
         'old_source_sha256': old_held_receipt['sha256'], 'new_source_sha256': new_held_receipt['sha256'],
         'old_groups': ['protected-held'], 'new_groups': ['protected-held'],
         'disposition': 'corrected'}, sort_keys=True) + '\n')
+    quality_rows = tmp_path / 'corrected-held-quality-rows.jsonl'
+    quality_rows.write_text('')
+    quality_manifest = tmp_path / 'corrected-held-quality.json'
+    quality_manifest.write_text(json.dumps({
+        'schema':'natlang.native-held-quality-hold/1',
+        'held_source':new_held_receipt,
+        'row_bindings_path':quality_rows.name,
+        'row_bindings_sha256':sha256_file_hex(quality_rows),
+        'excluded_rows':0,'pending_sources':[]},sort_keys=True))
+    quality_ref = {'path':quality_manifest.name,'sha256':sha256_file_hex(quality_manifest)}
     proof = tmp_path / 'deferred-correction.json'
     proof.write_text(json.dumps({'schema': SCHEMA,
         'model_id': parent_training['identity']['config']['architecture'] + ':' +
@@ -663,8 +705,8 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     }, sort_keys=True))
 
     deferred_out = tmp_path / 'deferred-run'
-    assert main([*base_argv, '--native-graphs', str(reduced_manifest), '--held-native-graphs', str(old_held_path), '--out', str(deferred_out),
-        '--continue-from', str(checkpoint), '--continued-native-graphs', str(old_manifest),
+    assert main([*base_argv, '--objective-continuation', '--native-graphs', str(reduced_manifest), '--held-native-graphs', str(old_held_path), '--out', str(deferred_out),
+        '--continue-from', str(dpo_checkpoint), '--continued-native-graphs', str(old_manifest),
         '--continued-held-native-graphs', str(old_held_path),
         '--source-correction', str(proof)]) == 0
     deferred_checkpoint = deferred_out / 'checkpoint.pt'
@@ -684,7 +726,8 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     appended_out = tmp_path / 'appended-run'
     assert main([*base_argv, '--native-graphs', str(append_manifest),
         '--held-native-graphs', str(old_held_path), '--out', str(appended_out),
-        '--continue-from', str(deferred_checkpoint), '--continued-native-graphs', str(reduced_manifest),
+        '--objective-continuation', '--continue-from', str(deferred_checkpoint),
+        '--continued-native-graphs', str(reduced_manifest),
         '--continued-held-native-graphs', str(old_held_path)]) == 0
     appended_checkpoint = appended_out / 'checkpoint.pt'
     appended_training = torch.load(appended_checkpoint, map_location='cpu', weights_only=False)['training']
@@ -720,10 +763,12 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
             'current_source': {'path': new_held_receipt['path'], 'sha256': new_held_receipt['sha256']},
             'row_bindings_path': str(held_row_ledger.resolve()),
             'row_bindings_sha256': sha256_file_hex(held_row_ledger)},
+        'held_quality_hold':quality_ref,
+        'pending_held_correction':{'remaining_original_sources':[]},
     }, sort_keys=True))
 
     corrected_out = tmp_path / 'corrected-run'
-    assert main([*base_argv, '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(corrected_out),
+    assert main([*base_argv, '--objective-continuation', '--native-graphs', str(new_manifest), '--held-native-graphs', str(new_held_path), '--out', str(corrected_out),
         '--continue-from', str(appended_checkpoint), '--continued-native-graphs', str(append_manifest),
         '--continued-held-native-graphs', str(old_held_path),
         '--source-correction', str(repaired_proof)]) == 0
@@ -753,6 +798,29 @@ def test_source_correction_resumes_real_native_optimizer_and_fresh_pair_exposure
     assert history[-1]['corrected_rows'][0]['prior_exposure'] == 1
     assert history[-1]['new_corrected_row_exposure_added'] == 0
     assert not history[-1].get('carried_frame_transitions')
+    carried_dpo = child_training['sft_progress']['native_offline_preference']
+    assert carried_dpo['source_receipts'][0] == dpo_frame_before['source_receipts'][0]
+    assert carried_dpo['source_row_bindings'] == dpo_frame_before['source_row_bindings']
+    assert carried_dpo['source_row_order'] == dpo_frame_before['source_row_order']
+    assert carried_dpo['exposure_counts'] == dpo_frame_before['exposure_counts']
+    assert carried_dpo['required_visits'] == dpo_frame_before['required_visits']
+    assert carried_dpo['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert carried_dpo['held_row_bindings'] == new_held_source.bindings
+    assert 'held' not in carried_dpo.get('metrics', {})
+    assert carried_dpo['options']['held_correction_binding']['sha256'] == sha256_file_hex(repaired_proof)
+
+    # Resume the actual DPO stage from the corrected full-state parent with
+    # its independent train source and newly corrected protected set.
+    dpo_args[dpo_args.index('--out') + 1] = str(tmp_path / 'dpo-after-correction')
+    dpo_args[dpo_args.index('--continue-from') + 1] = str(corrected_out / 'checkpoint.pt')
+    dpo_args[dpo_args.index('--held-native-graphs') + 1] = str(new_held_path)
+    assert preference_main(dpo_args) == 0
+    resumed_dpo = torch.load(tmp_path / 'dpo-after-correction' / 'checkpoint.pt',
+        map_location='cpu', weights_only=False)['training']
+    resumed_dpo_frame = resumed_dpo['sft_progress']['native_offline_preference']
+    assert resumed_dpo_frame['source_receipts'][0] == dpo_frame_before['source_receipts'][0]
+    assert resumed_dpo_frame['source_receipts'][1]['sha256'] == new_held_receipt['sha256']
+    assert resumed_dpo_frame['options']['held_correction_binding']['sha256'] == sha256_file_hex(repaired_proof)
     assert history[-1]['optimizer_rng_weights'] == 'preserved'
     assert child_training['optimizer'] and child_training['rng']
     def equal(left, right):
