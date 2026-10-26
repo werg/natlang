@@ -10,6 +10,7 @@ the local/cloud source transport while training continues.
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -70,7 +71,12 @@ def prepare_current_from_owner(state_path, participant, out_root):
     state_path=Path(state_path).resolve(strict=True)
     before=(state_path.stat().st_dev,state_path.stat().st_ino,state_path.stat().st_size,
         state_path.stat().st_mtime_ns,state_path.stat().st_ctime_ns)
-    state=json.loads(state_path.read_text())
+    state_bytes=state_path.read_bytes()
+    state=json.loads(state_bytes)
+    read_stat=state_path.stat()
+    read_identity=(read_stat.st_dev,read_stat.st_ino,read_stat.st_size,read_stat.st_mtime_ns,read_stat.st_ctime_ns)
+    if before!=read_identity or len(state_bytes)!=before[2]:
+        raise ValueError('owner checkpoint pointer changed while reading its source state')
     checkpoint_value=state.get('checkpoint')
     checkpoint_path=(checkpoint_value.get('path')if isinstance(checkpoint_value,dict)else checkpoint_value)
     if not isinstance(checkpoint_path,str):
@@ -92,7 +98,7 @@ def prepare_current_from_owner(state_path, participant, out_root):
     after=(state_after.st_dev,state_after.st_ino,state_after.st_size,state_after.st_mtime_ns,state_after.st_ctime_ns)
     if before!=after:
         raise ValueError('owner checkpoint pointer changed while preparing shared recovery bundle')
-    prepared['owner_state']={'path':str(state_path),'sha256':sha256_file_hex_cached(state_path),
+    prepared['owner_state']={'path':str(state_path),'sha256':hashlib.sha256(state_bytes).hexdigest(),
         'checkpoint':prepared['source_checkpoint']}
     return prepared
 
