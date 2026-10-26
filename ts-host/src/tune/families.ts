@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { canonical } from '../adaptation/identity.js';
 import { sealManifest, type FamilyMembership, type FamilyVersion, type WeightManifest } from '../adaptation/weights/manifest.js';
-import { activateRelease, readActive, tuneDirectory } from '../adaptation/weights/release.js';
+import { activateRelease, readActive, storeRelease, tuneDirectory } from '../adaptation/weights/release.js';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { rootSuccess, type ArmResult } from './evaluate.js';
@@ -36,12 +36,19 @@ export type Discovery = { readonly schema: 'natlang.tune-family-discovery/v1'; r
   readonly similarities: readonly { a: FamilyMember; b: FamilyMember; cosine: number }[];
   readonly clusters: readonly (readonly FamilyMember[])[]; readonly tags: Readonly<Record<string, readonly FamilyMember[]>> };
 export type PublishedFamily = FamilyVersion & { readonly members: readonly string[]; readonly base: string };
-export type FamiliesSettings = { readonly threshold?: number; readonly minPrograms?: number; readonly mode?: PluggableSetting;
+export type FamiliesSettings = { readonly threshold?: number; readonly minPrograms?: number; readonly mode?: PluggableSetting; readonly every?: number;
   readonly recipe?: Readonly<Record<string, unknown>> };
 export type ProgramOutcome = { readonly program: string; readonly families: readonly string[]; readonly release?: string;
   readonly previous: string; readonly development?: { previous: number; refit: number; roots: number; delta: number; interval: readonly [number, number]; underpowered: boolean };
   readonly activated: boolean; readonly negativeTransfer: boolean; readonly reason?: string };
+/** Zero-shot transfer of one published family to a program that did not train it (§5.5 step 4): the family at gate 1 on
+ * every binding of the program's current release, without refitting, paired on development roots. Diagnostic only. */
+export type TransferOutcome = { readonly family: string; readonly version: string; readonly program: string;
+  readonly kind: 'non-member' | 'held'; readonly release?: string;
+  readonly development?: { current: number; withFamily: number; roots: number; delta: number; interval: readonly [number, number]; underpowered: boolean };
+  readonly reason?: string };
 export type FamiliesReport = { readonly schema: 'natlang.tune-families/v1'; readonly base: string; readonly discovery: Discovery;
+  readonly transfer: readonly TransferOutcome[];
   readonly proposals: readonly FamilyProposal[]; readonly published: readonly PublishedFamily[]; readonly absent: readonly string[];
   readonly programs: readonly ProgramOutcome[] };
 
@@ -115,11 +122,13 @@ function readStore(store: string): PublishedFamily[] {
 
 /** Run the families pass over programs that share one base. */
 export async function runFamilies(programs: readonly FamilyProgram[], settings: FamiliesSettings & { store?: string;
-  nl?: ProposeFunction; log?: (line: string) => void } = {}): Promise<FamiliesReport> {
+  nl?: ProposeFunction; log?: (line: string) => void;
+  /** Programs kept outside discovery and fitting (no rows, no similarity): only measured for transfer. */
+  held?: readonly FamilyProgram[] } = {}): Promise<FamiliesReport> {
   const log = settings.log ?? (() => {});
   if (programs.length < 1) throw new Error('natlang tune --families needs at least one tuned program');
   const base = programs[0]!.release.base;
-  for (const program of programs) if (canonical(program.release.base) !== canonical(base))
+  for (const program of [...programs, ...settings.held ?? []]) if (canonical(program.release.base) !== canonical(base))
     throw new Error(`${program.options.root} is tuned on another base; families never mix bases (retune it for ${base.architecture})`);
   const store = settings.store ?? familyStore(base);
   const byNamespace = new Map(programs.map(program => [programNamespace(program.options.program), program]));
@@ -189,9 +198,19 @@ export async function runFamilies(programs: readonly FamilyProgram[], settings: 
     if (!mine.length) continue;
     outcomes.push(await refitProgram(program, namespace, mine, store, log));
   }
-  const report: FamiliesReport = { schema: 'natlang.tune-families/v1', base: sha(base).slice(0, 24), discovery, proposals, published, absent, programs: outcomes };
+  // 6. Transfer: every published family on the programs that did not train it, and on held programs.
+  const transfer: TransferOutcome[] = [];
+  const targets = [...[...byNamespace].map(([namespace, program]) => ({ namespace, program, kind: 'non-member' as const })),
+    ...(settings.held ?? []).map(program => ({ namespace: programNamespace(program.options.program), program, kind: 'held' as const }))];
+  for (const family of published) for (const { namespace, program, kind } of targets) {
+    if (family.members.some(member => member.startsWith(namespace + '/'))) continue;
+    transfer.push(await measureTransfer(program, family, kind, store, log));
+  }
+  const report: FamiliesReport = { schema: 'natlang.tune-families/v1', base: sha(base).slice(0, 24), discovery, proposals, published, absent,
+    programs: outcomes, transfer };
   writeJson(join(work, 'report.json'), report);
-  for (const program of programs) writeJson(join(tuneDirectory(program.options.root), 'families', 'latest.json'), report);
+  for (const program of [...programs, ...settings.held ?? []]) writeJson(join(tuneDirectory(program.options.root), 'families', 'latest.json'), report);
+  markFamiliesRun(store, programs.map(program => program.options.root));
   return report;
 }
 
@@ -228,4 +247,64 @@ async function refitProgram(program: FamilyProgram, namespace: string, families:
   readiness: { definition: development[0]!.function, ok: true, effectiveIdentity: exercised.identity,
     ms: refitArm.roots.reduce((sum, root) => sum + root.ms, 0) / refitArm.roots.length } }, readActive(options.root)?.release ?? null);
   return { ...base, release: refit.digest, development: measured, activated: true, negativeTransfer: delta < 0 };
+}
+
+async function measureTransfer(program: FamilyProgram, family: PublishedFamily, kind: TransferOutcome['kind'], store: string,
+  log: (line: string) => void): Promise<TransferOutcome> {
+  const { options, data, release, releaseDir } = program;
+  const base = { family: family.family, version: family.version, program: options.program.id, kind };
+  const development = data.examples.filter(example => example.partition === 'development');
+  if (!development.length) return { ...base, reason: 'no development roots' };
+  const { members: _m, base: _b, ...version } = family;
+  const { digest: _digest, ...current } = release;
+  // The current release unchanged, plus the family at gate 1 on every binding: nothing is refit.
+  const composed = sealManifest({ ...current, families: [...current.families.filter(item => item.family !== family.family), version],
+    memberships: [...current.memberships.filter(item => item.family !== family.family),
+      ...release.bindings.map(binding => ({ binding: binding.id, family: family.family, version: family.version, gate: 1 }))],
+    receipts: { ...current.receipts, variant: `transfer:${family.family}@${family.version}` } } as Omit<WeightManifest, 'digest'>);
+  storeRelease(options.root, composed);
+  const directory = join(tuneDirectory(options.root), 'releases', composed.digest);
+  const copy = (from: string, file: string) => {
+    if (!existsSync(join(directory, file)) && existsSync(join(from, file))) {
+      mkdirSync(dirname(join(directory, file)), { recursive: true }); copyFileSync(join(from, file), join(directory, file));
+    }
+  };
+  for (const folder of ['artifacts', 'states']) if (existsSync(join(releaseDir, folder)))
+    for (const file of readdirSync(join(releaseDir, folder))) copy(releaseDir, join(folder, file));
+  if (existsSync(join(store, 'artifacts'))) for (const file of readdirSync(join(store, 'artifacts'))) copy(store, join('artifacts', file));
+  for (const artifact of release.artifacts) if (artifact.exports?.gguf) copy(releaseDir, artifact.exports.gguf.file);
+  if (version.exports?.gguf) copy(store, version.exports.gguf.file);
+  log(`natlang tune: transfer of family ${family.family}@${family.version} to ${kind} program ${options.program.id}`);
+  const currentArm = await evaluateRelease(options, data, release, development, 'hierarchy', 'development');
+  const familyArm = await evaluateRelease(options, data, composed, development, `transfer:${family.family}`, 'development');
+  saveArm(options.root, currentArm); saveArm(options.root, familyArm);
+  const rate = (arm: ArmResult) => arm.roots.reduce((sum, root) => sum + rootSuccess(root), 0) / Math.max(arm.roots.length, 1);
+  const comparison = pairedComparison(currentArm, familyArm);
+  return { ...base, release: composed.digest, development: { current: rate(currentArm), withFamily: rate(familyArm), roots: development.length,
+    delta: comparison.effect, interval: comparison.ci, underpowered: comparison.underpowered } };
+}
+
+/** Tuned programs of one base (plan §5.5 "run after newly tuned program batches"): every activated program release
+ * is recorded; a family run resets the count of releases since the last one. */
+export type FamilyRegistry = { readonly schema: 'natlang.tune-family-programs/v1';
+  readonly programs: Readonly<Record<string, { readonly release: string; readonly at: string }>>;
+  readonly sinceLastRun: readonly string[]; readonly lastRun: string | null };
+const registryPath = (store: string) => join(store, 'programs.json');
+export function familyRegistry(store: string): FamilyRegistry {
+  return existsSync(registryPath(store)) ? JSON.parse(readFileSync(registryPath(store), 'utf8'))
+    : { schema: 'natlang.tune-family-programs/v1', programs: {}, sinceLastRun: [], lastRun: null };
+}
+/** Record a newly activated program release; returns whether a family run is due (`every` new releases). */
+export function registerTunedProgram(store: string, root: string, release: string, every: number | undefined): boolean {
+  const registry = familyRegistry(store);
+  if (registry.programs[root]?.release === release) return !!every && registry.sinceLastRun.length >= every;
+  mkdirSync(store, { recursive: true });
+  const next: FamilyRegistry = { ...registry, programs: { ...registry.programs, [root]: { release, at: new Date().toISOString() } },
+    sinceLastRun: [...registry.sinceLastRun, root] };
+  writeJson(registryPath(store), next);
+  return !!every && next.sinceLastRun.length >= every;
+}
+function markFamiliesRun(store: string, roots: readonly string[]): void {
+  const registry = familyRegistry(store);
+  writeJson(registryPath(store), { ...registry, sinceLastRun: registry.sinceLastRun.filter(root => !roots.includes(root)), lastRun: new Date().toISOString() });
 }

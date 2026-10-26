@@ -13,8 +13,8 @@ import { dirname, join, resolve } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { sealManifest, type WeightArtifact, type WeightManifest, type FamilyVersion, type FamilyMembership, type SoftState } from '../adaptation/weights/manifest.js';
 import { stackServingName, WeightBinding } from '../adaptation/weights/binding.js';
-import { activateRelease, readActive, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
-import type { ModelDriver } from '../runtime/runtime.js';
+import { activateRelease, readActive, readRelease, releaseFile, storeRelease, tuneDirectory, tuneJobLock } from '../adaptation/weights/release.js';
+import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { sharedSourceHash, rootDataValid, trainingScaffoldKey } from './keys.js';
 import { programSites } from './sites.js';
 import { collect, readRootExamples, scaffoldManifest, splitExamples, type CollectedTurn, type SplitExample, type SplitReceipt } from './collect.js';
@@ -29,6 +29,8 @@ export type TuneReport = {
   data: { examples: number; protected: number; components: Record<string, number>; turns: number; trainTurns: number };
   validation: { tuned: { roots: number; ok: number; oracle: number }; base: { roots: number; ok: number; oracle: number } } | null;
   timings: StageTiming[]; totalMs: number; manualActions: 0;
+  /** What kind of build produced the release (§8): a full joint fit, an incremental candidate or a shared refit. */
+  build?: string;
 };
 
 export type TuneOptions = {
@@ -41,6 +43,9 @@ export type TuneOptions = {
     /** Whether the backend imports stored native state (soft instruction/skill states). */
     nativeState?: boolean; close(): Promise<void> }>;
   examplesPath?: string; log?: (line: string) => void;
+  /** Host services for one root invocation, fresh per root: a test or sandbox world (SDK hosts; the CLI passes none).
+   * Collection journals every call so repairs replay the same world (world.ts). */
+  services?: (example: SplitExample) => Services;
 };
 
 /** Persist an evaluated arm for reports: `.natlang/tune/evaluations/<partition>/<arm>.json`. */
@@ -144,7 +149,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   await timed(timings, 'data', log, async () => {
     if (!missing.length) return;
     mkdirSync(rootsDir, { recursive: true });
-    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId });
+    const collected = await collect({ root, program, scaffold, examples: missing, teacher: options.teacher, teacherId: options.teacherId, services: options.services });
     const failures = collected.roots.filter(item => !item.ok && item.error);
     if (failures.length === collected.roots.length)
       // Nothing usable: do not cache it as reusable data; the cause is usually the teacher setup.
@@ -171,6 +176,12 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
   return { scaffold, sites, examples, dataKey, turns, trainRows, protectedCount: all.filter(example => example.protected).length, total: all.length };
 }
 
+/** Whether this backend serves soft instruction/skill states, so the build trains and exports them (plan §3.3): the
+ * native reference server always; managed llama.cpp when `tune.softStates` declares the fork's `--native-state`. */
+export function softStatesServed(settings: TuneOptions['settings']): boolean {
+  return settings.backend === 'native' || (settings.backend === 'managed-local' && settings.softStates === true);
+}
+
 /** One training variant: a scaffold (scales, tree roots), a recipe and optionally a row subset. */
 export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?: Readonly<Record<string, unknown>>;
   readonly rows?: readonly CollectedTurn[]; readonly label?: string;
@@ -179,7 +190,14 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   /** Scored student rollouts (natlang.tune-rollout/v1 JSONL): the RL rows of this fit (§5.1a). */
   readonly rollouts?: string;
   /** Directories of published artifacts the fit imports first (frozen family versions, §5.4). */
-  readonly artifactDirs?: readonly string[] };
+  readonly artifactDirs?: readonly string[];
+  /** Incremental builds (§8): nodes frozen at earlier artifacts, and trainable nodes seeded from earlier ones. */
+  readonly pinned?: Readonly<Record<string, string>>;
+  readonly warm?: Readonly<Record<string, { readonly artifact: string; readonly optimizer?: string }>>;
+  /** Soft states of bindings this fit does not train, carried from an earlier release directory unchanged. */
+  readonly carrySoftStates?: { readonly states: readonly SoftState[]; readonly directory: string };
+  /** Extra release receipts (build kind, pinned parents and the semantics they saw). */
+  readonly receipts?: Readonly<Record<string, unknown>> };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
@@ -190,7 +208,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
   const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
     variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null, variant.parent ?? null,
-    variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null]).slice(0, 24);
+    variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null,
+    ...(variant.pinned || variant.warm ? [variant.pinned ?? {}, variant.warm ?? {}] : [])]).slice(0, 24);
   const jobDir = join(tuneDirectory(root), 'jobs', trainKey), out = join(jobDir, 'out');
   const reused = existsSync(join(out, 'result.json'));
   const result = await timed(timings, 'train', log, async () => {
@@ -204,21 +223,29 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
           ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
         exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
-        softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}),
+        softStates: softStatesServed(options.settings), recipe, ...(variant.label ? { label: variant.label } : {}),
         ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
-        ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}) }, null, 2));
+        ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
+        ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}) }, null, 2));
       await runTrainer(student, plan, out, log);
     }
     return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
   }, reused);
   const manifest = await timed(timings, 'export', log, () => {
     const { digest: _digest, ...base } = variant.manifest;
-    const sealed = sealManifest({ ...base, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [], softStates: result.softStates ?? [],
+    const sealed = sealManifest({ ...base, artifacts: result.artifacts, families: result.families ?? [], memberships: result.memberships ?? [],
+      softStates: [...(result.softStates ?? []), ...(variant.carrySoftStates?.states ?? [])],
       validatedReductions: result.validatedReductions ?? [], receipts: { data: data.dataKey, training: result.receipt, recipe,
-        ...(variant.label ? { variant: variant.label } : {}) } } as Omit<WeightManifest, 'digest'>);
+        ...(variant.label ? { variant: variant.label } : {}), ...variant.receipts } } as Omit<WeightManifest, 'digest'>);
     storeRelease(root, sealed);
     const directory = dirname(releaseFile(root, sealed.digest));
     // Native artifacts (coefficients, bases) and soft states, for backends that serve them exactly.
+    // Carried soft states keep their exact files (and derivation parents) from the earlier release.
+    const carried = variant.carrySoftStates && join(variant.carrySoftStates.directory, 'states');
+    if (carried && existsSync(carried)) {
+      mkdirSync(join(directory, 'states'), { recursive: true });
+      for (const file of readdirSync(carried)) if (!existsSync(join(directory, 'states', file))) copyFileSync(join(carried, file), join(directory, 'states', file));
+    }
     for (const folder of ['artifacts', 'states']) if (existsSync(join(out, folder))) {
       mkdirSync(join(directory, folder), { recursive: true });
       for (const file of readdirSync(join(out, folder))) if (!existsSync(join(directory, folder, file)))
@@ -228,6 +255,14 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
       const target = join(directory, artifact.exports.gguf.file);
       mkdirSync(dirname(target), { recursive: true });
       if (!existsSync(target)) copyFileSync(join(out, artifact.exports.gguf.file), target);
+    }
+    // Soft states exported as llama.cpp native state spans: from this build, or a carried state's earlier release.
+    for (const state of sealed.softStates) if (state.exports?.gguf) {
+      const target = join(directory, state.exports.gguf.file);
+      mkdirSync(dirname(target), { recursive: true });
+      const source = existsSync(join(out, state.exports.gguf.file)) ? join(out, state.exports.gguf.file)
+        : variant.carrySoftStates ? join(variant.carrySoftStates.directory, state.exports.gguf.file) : join(out, state.exports.gguf.file);
+      if (!existsSync(target)) copyFileSync(source, target);
     }
     return sealed;
   });
@@ -277,7 +312,7 @@ export async function evaluateRelease(options: TuneOptions, data: TuneData, mani
   try {
     const weights = manifest ? [new WeightBinding(manifest, { program: options.program, available: served.loaded,
       nativeState: !!served.nativeState, strict: true })] : [];
-    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm,
+    return await evaluateRoots({ root: options.root, program: options.program, driver: served.driver, weights, examples, arm, services: options.services,
       release: manifest?.digest ?? null, partition });
   } finally { await served.close(); }
 }
@@ -303,7 +338,15 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
     report.data.turns = data.turns.length; report.data.trainTurns = data.trainRows.length;
     const examples = data.examples;
     // 3-4. One joint run over all bindings against one input snapshot, then the content-addressed release.
-    const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, { manifest: data.scaffold }, timings, log)).manifest;
+    // A full refit keeps the active release's published families and learned gates (refit with the family frozen).
+    const active = expectedActive ? { manifest: readRelease(root, expectedActive), directory: dirname(releaseFile(root, expectedActive)) } : null;
+    const bindings = new Set(data.scaffold.bindings.map(entry => entry.id));
+    const memberships = active?.manifest.memberships.filter(item => bindings.has(item.binding)) ?? [];
+    const variant: TrainVariant = active && memberships.length
+      ? { manifest: { ...data.scaffold, families: active.manifest.families, memberships }, artifactDirs: [join(active.directory, 'artifacts')] }
+      : { manifest: data.scaffold };
+    const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, variant, timings, log)).manifest;
+    report.build = typeof manifest.receipts.build === 'string' ? manifest.receipts.build : 'full';
     report.release = manifest.digest;
     // 5. Load on the backend and validate through the normal engine, strict: nothing may silently fall back.
     const directory = dirname(releaseFile(root, manifest.digest));
@@ -313,9 +356,9 @@ export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector
       const probe = development.length ? development : examples.filter(example => example.partition === 'train').slice(0, 1);
       const tunedBinding = new WeightBinding(manifest, { program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
       const validation = await timed(timings, 'validate', log, async () => {
-        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe,
+        const tuned = await evaluateRoots({ root, program, driver: served.driver, weights: [tunedBinding], examples: probe, services: options.services,
           arm: 'hierarchy', release: manifest.digest, partition: 'development' });
-        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe,
+        const base = await evaluateRoots({ root, program, driver: served.driver, weights: [], examples: probe, services: options.services,
           arm: 'untuned', release: null, partition: 'development' });
         return { tuned, base };
       });

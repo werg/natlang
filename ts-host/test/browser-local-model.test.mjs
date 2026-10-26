@@ -235,3 +235,57 @@ test('a tuned release loads into the in-page model and each request applies only
   assert.equal(other.adapters.length, 0);
   assert.equal(other.weights[0].status, 'degraded');
 });
+
+test('tuned release adapters are cached in OPFS by content hash and re-fetched when a cached file is corrupt', async () => {
+  const api = await browserApi();
+  const host = await import('../dist/index.js');
+  const { hexDigest } = await import('../dist/native/hash.js');
+  const { removeCachedModelFiles } = await import('../dist/browser/model-files.js');
+  const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
+  const project = api.compileVirtualProject({ files: { 'echo.nl': named('Return value.'), 'main.ts': "import echo from './echo.nl'; export default echo;" } }, api);
+  const program = project.manifest.adaptation;
+  const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+  const { tree, bindings } = host.compileScopeTree(program);
+  const files = new Map(tree.map((node, index) => [`adapters/${index}.gguf`, new TextEncoder().encode(`gguf ${node.id}`)]));
+  const familyBytes = new TextEncoder().encode('gguf family');
+  files.set('exports/family.gguf', familyBytes);
+  const gguf = file => ({ file, sha256: hexDigest(files.get(file)), baseGgufSha256: 'b'.repeat(64) });
+  const manifest = host.sealManifest({ schema: 'natlang.adapters/v1', program: { id: program.id, buildHash: program.buildHash }, base, tree, bindings,
+    artifacts: tree.map((node, index) => ({ node: node.id, artifact: 'nnt1:' + node.id, rank: 2, parameterization: 'native-subspace', requires: [],
+      exports: { gguf: gguf(`adapters/${index}.gguf`) } })),
+    families: [{ family: 'shout', version: 'v1', artifact: 'nnt1:family', amplitudeHex: '0x1.0000000000000p+0', exports: { gguf: gguf('exports/family.gguf') } }],
+    memberships: [], softStates: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
+  files.set('natlang.adapters.json', new TextEncoder().encode(JSON.stringify(manifest)));
+  const fetched = [];
+  const fetch = async url => { const path = new URL(url).pathname.replace('/release/', ''); fetched.push(path);
+    const bytes = files.get(path); return bytes ? new Response(bytes) : new Response('missing', { status: 404 }); };
+  const stored = new Map();
+  const directory = {
+    async getDirectoryHandle() { return directory; },
+    async getFileHandle(name, options = {}) {
+      if (!stored.has(name) && !options.create) throw new DOMException('not found', 'NotFoundError');
+      return { async getFile() { return new File([stored.get(name) ?? new Uint8Array()], name); },
+        async createWritable() { const chunks = [];
+          const stream = new WritableStream({ write(chunk) { chunks.push(chunk); }, close() { stored.set(name, Buffer.concat(chunks)); } });
+          stream.abort = async () => undefined; return stream; } };
+    },
+    async removeEntry(name) { stored.delete(name); },
+  };
+  const storage = { async getDirectory() { return directory; } };
+  const first = await api.loadBrowserRelease('https://example.test/release', { fetch, storage, executor: base });
+  assert.equal(first.adapters.length, tree.length + 1, 'family exports load with the program residuals');
+  assert.equal(stored.size, tree.length + 1);
+  fetched.length = 0;
+  const second = await api.loadBrowserRelease('https://example.test/release', { fetch, storage, executor: base });
+  assert.deepEqual(fetched, ['natlang.adapters.json'], 'a reload reads every adapter from the cache');
+  assert.deepEqual(new Uint8Array(await second.adapters.at(-1).blob.arrayBuffer()), familyBytes);
+  // A cached file that no longer matches its hash is fetched again and replaced.
+  const key = `sha256-${hexDigest(familyBytes)}`;
+  stored.set(key, new TextEncoder().encode('corrupt'));
+  fetched.length = 0;
+  await api.loadBrowserRelease('https://example.test/release', { fetch, storage, executor: base });
+  assert.deepEqual(fetched, ['natlang.adapters.json', 'exports/family.gguf']);
+  assert.deepEqual(new Uint8Array(stored.get(key)), familyBytes);
+  await removeCachedModelFiles([{ url: 'x', sha256: hexDigest(familyBytes) }], { storage });
+  assert.equal(stored.has(key), false);
+});

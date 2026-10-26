@@ -1,4 +1,4 @@
-From 07758bad5666db0a938145d89d69e20612b1dbba Mon Sep 17 00:00:00 2001
+From ee85d96f7f6e8cd52ea8ef970ab51ea75725f045 Mon Sep 17 00:00:00 2001
 From: Gabriel Pickard <wergomat@gmail.com>
 Date: Mon, 26 Oct 2026 18:01:33 +0100
 Subject: [PATCH] server: never reuse a prompt state computed with other LoRA
@@ -13,10 +13,10 @@ cache. The host prompt cache does not record adapters, so it is not consulted
  1 file changed, 14 insertions(+), 5 deletions(-)
 
 diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
-index f5477356d..c9fc3ace0 100644
+index a18b7542c..a25eb7815 100644
 --- a/tools/server/server-context.cpp
 +++ b/tools/server/server-context.cpp
-@@ -1417,6 +1417,12 @@ private:
+@@ -1566,6 +1566,12 @@ private:
  
          metrics.init();
  
@@ -29,9 +29,9 @@ index f5477356d..c9fc3ace0 100644
          if (params_base.cache_idle_slots) {
              if (params_base.cache_ram_mib == 0) {
                  SRV_WRN("%s", "--cache-idle-slots requires --cache-ram, disabling\n");
-@@ -1628,6 +1634,10 @@ private:
-             // cache prompts only for completion tasks
-             update_cache = update_cache && task.type == SERVER_TASK_TYPE_COMPLETION;
+@@ -1782,6 +1788,10 @@ private:
+             // cache prompts only for the tasks that reuse them
+             update_cache = update_cache && !task.is_stateless();
  
 +            // cached prompt states do not record the adapters they were computed with, so with LoRA adapters a
 +            // restored state could serve a request with other adapters; each slot's own cache is checked instead
@@ -40,7 +40,7 @@ index f5477356d..c9fc3ace0 100644
              if (update_cache) {
                  SRV_TRC("%s", "updating prompt cache\n");
  
-@@ -1694,9 +1704,10 @@ private:
+@@ -1848,9 +1858,10 @@ private:
      }
  
      bool launch_slot_with_task(server_slot & slot, server_task && task) {
@@ -54,7 +54,7 @@ index f5477356d..c9fc3ace0 100644
              if (!are_lora_equal(task_loras, slot.lora)) {
                  // if lora has changed, check to see if the cache should be cleared
                  if (lora_should_clear_cache(slot.lora, task_loras)) {
-@@ -1707,8 +1718,6 @@ private:
+@@ -1861,8 +1872,6 @@ private:
                  }
                  slot.lora = task_loras;
              }

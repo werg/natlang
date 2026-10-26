@@ -54,7 +54,7 @@ Decisions: **fn** (its own natural-language function), **inline** (one instructi
 | Route a program's collection to an authorized teacher | pluggable | `routeTeacher` in `ts-host/src/tune/teachers.ts` (crisp default: measured quality/cost frontier with minimum quality; NL `routeTeacher.nl`, unmeasured, see `plans/MODEL_FACING_CHANGES.md`); measurement by `calibrateTeachers` | Hot policy; the crisp default is the measured frontier rule, the NL implementation can weigh call descriptions. Only owner-authorized actors are eligible (crisp filter). |
 | Interpret disagreement among samples | fn | `diagnoseDisagreement.nl` | Reading why answers differ is a judgment; the evidence fields stay separate and crisp. |
 | Evidence fields (oracle/enclosing/type/agreement/judge) | crisp | `evidence` record in data schema | Separate exact facts; no collapsed "verified" flag. |
-| On-policy repair of a student prefix | service + crisp | teacher continuation + reverification | The teacher writes; crisp reverifies the continuation and downstream result. |
+| On-policy repair of a student prefix | service + crisp | `runRepairs` in `ts-host/src/tune/repairs.ts`: the handoff replay of `teacher/replay.ts` (`scriptedDriver`, `callMatcher`, `observed`) over `collect()`; a `repair` round kind in `rounds.ts` | The teacher writes; crisp reverifies the replayed prefix (identical observations) and the downstream root oracle. Boundary order (latest first) is a fixed rule for now. |
 
 ### Training (`natlang_neuralese/tune/`)
 

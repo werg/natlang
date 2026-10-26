@@ -153,8 +153,10 @@ def main(argv=None):
     rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1),
                       soft={key: record['state'] for key, record in soft.items()}) if rows else []
     parent = json.loads((parent_dir / 'state.json').read_text()) if parent_dir is not None and state is None else None
+    # Plan §8 incremental builds: `pinned` nodes stay frozen at earlier artifacts, `warm` nodes start from them (both
+    # imported from the plan's `artifacts` directories, e.g. the active release's).
     trainer = JointTrainer(engine, manifest, rows + rollouts, Recipe.from_json(plan.get('recipe', {})), state=state,
-                           workdir=out / 'rl', parent=parent)
+                           workdir=out / 'rl', parent=parent, pinned=plan.get('pinned'), warm=plan.get('warm'))
     save()
     while trainer.state['step'] < trainer.total_steps:
         record = trainer.step()
@@ -167,6 +169,10 @@ def main(argv=None):
         export_nodes(trainer, engine, plan, out, fragment['artifacts'])
         export_families(trainer, engine, plan, out, families)
     soft_states = trainer.soft_fragment(soft) if soft else []
+    if soft_states and 'gguf' in plan.get('exports', []):
+        # The managed llama.cpp fork consumes soft states as exact native state spans (`--native-state`).
+        from .soft_export import export_soft_states
+        export_soft_states(engine, soft_states, out, base_gguf_sha256=plan['student'].get('baseGgufSha256') or '')
     _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', **fragment, 'families': families, 'softStates': soft_states,
                                  'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
                                  'receipt': trainer.receipt()})

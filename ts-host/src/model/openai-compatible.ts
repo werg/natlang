@@ -4,6 +4,7 @@ import { chatCompletionModelTurn, fetchModel, httpChatTransport, limitedTranspor
 import type { ModelTurnRequest } from '../contracts.js';
 import type { Scheduler } from './scheduler.js';
 import { coalescingScorer, concurrentScoreMany, explicitBatchScoreMany } from './scoring.js';
+import { nativeStateSentinelIds, runtimeTextToParts } from '../native/neuralese.js';
 export { fetchModel } from './chat-completion.js';
 
 export type OpenAICompatibleExchange = ChatExchange;
@@ -25,7 +26,26 @@ export type OpenAICompatibleOptions = HttpChatOptions & {
    * the calling invocation's context, before any queueing or coalescing, so each request carries its own stack.
    */
   tunedRequest?: () => Record<string, unknown> | undefined;
+  /**
+   * Native state spans the server has loaded by ID (the llama.cpp fork's `--native-state`, e.g. tuned soft
+   * instructions). Message text holding a state's sentinel is sent as content parts with `{type: "native_state", id}`;
+   * a sentinel naming a state the server has not loaded is `weights-unavailable`.
+   */
+  nativeStates?: () => ReadonlySet<string>;
 };
+
+/** Messages whose text carries native state sentinels, as content-part arrays the llama.cpp fork consumes exactly. */
+export function nativeStateMessages(messages: readonly unknown[], loaded: ReadonlySet<string>): unknown[] {
+  return messages.map(message => {
+    const content = (message as { content?: unknown })?.content;
+    if (typeof content !== 'string' || !nativeStateSentinelIds(content).length) return message;
+    return { ...(message as object), content: runtimeTextToParts(content).map(part => {
+      if (part.type === 'text') return { type: 'text', text: part.text };
+      if (!loaded.has(part.id)) throw new Error(`weights-unavailable: native state ${part.id} is not loaded by the model server; rerun natlang tune or restart`);
+      return { type: 'native_state', id: part.id };
+    }) };
+  });
+}
 const TUNED: unique symbol = Symbol('natlang.tuned-request');
 const isScheduler = (value: unknown): value is Scheduler => typeof (value as Scheduler | undefined)?.transport === 'function';
 
@@ -35,7 +55,7 @@ const isScheduler = (value: unknown): value is Scheduler => typeof (value as Sch
  * the server how many tokens the model's context holds (undefined when the server does not say).
  */
 export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
-  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, tunedRequest, ...http } = options;
+  const { toolAliases, request, onExchange, onRequestStart, concurrency, scoreEndpoint, scoreCoalesceMs, tunedRequest, nativeStates, ...http } = options;
   // A bare number keeps its plain FIFO limit; a scheduler adds priority, adjacency and batch records.
   const scheduler = isScheduler(concurrency) ? concurrency : undefined;
   const limit: RequestLimit | undefined = typeof concurrency === 'number' ? requestLimit(concurrency) : scheduler ? undefined : concurrency as RequestLimit | undefined;
@@ -57,14 +77,20 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
   const many: typeof explicit = items => items.some(item => (item as Tuned)[TUNED]) ? concurrent(items) : explicit(items);
   const coalesced = coalescingScorer(Object.assign((...args: Parameters<typeof single>) => single(...args), { scoreMany: many }),
     { windowMs: scoreCoalesceMs ?? 0 });
-  const decide: typeof coalesced = tunedRequest ? (item, signal) => {
-    const tuned = tunedRequest();
-    return coalesced(tuned ? Object.assign({ ...item }, { [TUNED]: tuned }) : item, signal);
+  const withStates = <T extends { messages?: unknown }>(item: T): T => {
+    const loaded = nativeStates?.();
+    return loaded?.size && Array.isArray(item.messages) ? { ...item, messages: nativeStateMessages(item.messages, loaded) } : item;
+  };
+  const decide: typeof coalesced = tunedRequest || nativeStates ? (item, signal) => {
+    const tuned = tunedRequest?.();
+    const states = withStates(item);
+    return coalesced(tuned ? Object.assign({ ...states }, { [TUNED]: tuned }) : states, signal);
   } : coalesced;
   const turns = transport(http);
-  const tunedTurns: typeof turns = tunedRequest ? (body, signal, meta) => {
-    const tuned = tunedRequest();
-    return turns(tuned ? { ...body, ...tuned } : body, signal, meta);
+  const tunedTurns: typeof turns = tunedRequest || nativeStates ? (body, signal, meta) => {
+    const tuned = tunedRequest?.();
+    const states = withStates(body as { messages?: unknown }) as typeof body;
+    return turns(tuned ? { ...states, ...tuned } : states, signal, meta);
   } : turns;
   return Object.assign(chatCompletionModelTurn(tunedTurns, { toolAliases, request, onExchange, onRequestStart }),
     { model: http.model, decide, contextWindow: () => window ??= serverContextWindow(http) });

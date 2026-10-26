@@ -39,7 +39,7 @@ export async function exportDistillation(options: TuneOptions, data: TuneData, r
   try {
     const weights = new WeightBinding(release, { program: options.program, available: served.loaded, nativeState: !!served.nativeState, strict: true });
     log(`natlang tune: distillation re-runs ${roots.length} training roots with release ${release.digest.slice(0, 12)}`);
-    const collected = await collect({ root: options.root, program: options.program, scaffold: release, examples: roots, partitions: ['train'],
+    const collected = await collect({ root: options.root, program: options.program, scaffold: release, examples: roots, partitions: ['train'], services: options.services,
       teacher: served.driver, teacherId: `student-stack:${release.base.checkpoint_sha256}:${release.digest}`, weights });
     correct = collected.roots.filter(root => root.oracle === true).length;
     // Reverified: the tuned stack's turns count only when its whole root run met the oracle.

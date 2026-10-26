@@ -213,3 +213,29 @@ test('distillation exports deduplicated, oracle-verified training rows of the tu
     assert.ok(seen.some(adapters => adapters.length > 0), 'the re-run served the tuned stack');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('managed llama.cpp releases train soft states only when declared and carry their native state span exports', async () => {
+  const { prepareData, trainRelease, softStatesServed } = await import('../dist/tune/pipeline.js');
+  assert.equal(softStatesServed({ backend: 'managed-local' }), false, 'the upstream server has no native-state import');
+  assert.equal(softStatesServed({ backend: 'managed-local', softStates: true }), true);
+  assert.equal(softStatesServed({ backend: 'native' }), true);
+  assert.equal(softStatesServed({ backend: 'vllm', softStates: true }), false);
+  const root = project();
+  try {
+    const state = 'nzs1_' + 'c'.repeat(52);
+    // A stand-in trainer that reports one soft state with its llama.cpp export, as tune/build.py does.
+    writeFileSync(join(root, 'soft-trainer.mjs'), `import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
+if (!plan.softStates) throw new Error('soft states were not requested');
+const lambda = plan.manifest.bindings[0];
+mkdirSync(out + '/exports', { recursive: true }); writeFileSync(out + '/exports/${state}.state.gguf', 'span');
+writeFileSync(out + '/result.json', JSON.stringify({ artifacts: [], receipt: {}, softStates: [{ binding: lambda.id, kind: 'instructions', target: null,
+  state: '${state}', textSha256: '0'.repeat(64), tokens: 3, exports: { gguf: { file: 'exports/${state}.state.gguf', sha256: 's', baseGgufSha256: 'f'.repeat(64) } } }] }));`);
+    const options = { root, program: program(root), settings: { ...settings, softStates: true }, student: { ...student(root), trainer: [process.execPath, join(root, 'soft-trainer.mjs')] },
+      teacher: scriptedModel(respond).driver, teacherId: 'teacher:test', serve: serve([]) };
+    const data = await prepareData(options);
+    const { manifest } = await trainRelease(options, data, { manifest: data.scaffold });
+    assert.equal(manifest.softStates[0].exports.gguf.file, `exports/${state}.state.gguf`);
+    assert.equal(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, manifest.softStates[0].exports.gguf.file), 'utf8'), 'span');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

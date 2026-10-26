@@ -282,9 +282,10 @@ function modelSelection(parsed: Parsed): LoadedModelConfiguration {
   return loadModelConfiguration(option(parsed, '--profile'), overrides);
 }
 
-function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapters?: () => readonly { id: string; path: string }[]) {
+function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapters?: () => readonly { id: string; path: string }[],
+  nativeStates?: () => readonly { id: string; path: string }[]) {
   return createResolvedModelSession(choice, process.env, process.stderr,
-  { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes), ...(loraAdapters ? { loraAdapters } : {}) });
+  { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes), ...(loraAdapters ? { loraAdapters } : {}), ...(nativeStates ? { nativeStates } : {}) });
 }
 
 /** A tuned program root's release, unless --no-weights. Prints why tuned weights are not served, when they are not. */
@@ -454,7 +455,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const program = inventory.manifest.adaptation!;
   const tuned = await discoverWeights(parsed, spec.root, program, choice);
-  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters, tuned.nativeStates);
   if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
@@ -558,7 +559,7 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
   const program = inventory?.manifest.adaptation;
   const tuned = tunedRoot ? await discoverWeights(parsed, tunedRoot, program, choice) : {};
-  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters);
+  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters, tuned.nativeStates);
   if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
   const executorIdentity = executorIdentityForChoice(choice);
   const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;

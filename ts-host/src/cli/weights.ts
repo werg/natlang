@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import { WeightBinding } from '../adaptation/weights/binding.js';
 import { currentRelease } from '../adaptation/weights/release.js';
-import { managedModelSha256 } from '../model/local-server.js';
+import { managedModelSha256, supportsNativeStates } from '../model/local-server.js';
+import { discoverLlamaRuntime } from '../model/llama-runtime.js';
 import type { ResolvedModelChoice } from '../model/config.js';
 
 export type TunedServing = {
@@ -19,6 +20,8 @@ export type TunedServing = {
   weights?: readonly WeightBinding[];
   /** For the managed llama.cpp session: the GGUF adapters to load. */
   loraAdapters?: () => readonly { id: string; path: string }[];
+  /** For the managed llama.cpp fork: soft states as native state spans to load (`--native-state`). */
+  nativeStates?: () => readonly { id: string; path: string }[];
   /** Whole-stack LoRA names a vLLM server loaded, for its session's request routing. */
   vllmStacks?: readonly string[];
   /** One author-facing line when the program is tuned but not served as tuned, else undefined. */
@@ -53,9 +56,10 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
     return { weights: [binding], vllmStacks: loaded.names,
       ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
   }
+  let base: string | undefined;
   if (choice.kind !== 'managed-local') incompatible = `the ${choice.kind} backend does not serve tuned weights; use the managed local model or the native server`;
   else {
-    const base = await managedModelSha256(environment);
+    base = await managedModelSha256(environment);
     const exported = manifest.artifacts.filter(item => item.exports?.gguf);
     const families = manifest.families.map(family => manifest.artifacts.find(item => item.artifact === family.artifact)).filter(Boolean);
     if (!exported.length && !families.length) incompatible = 'this release has no llama.cpp export; rerun natlang tune for the managed backend';
@@ -68,10 +72,21 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
       loaded.push({ id: item.artifact, path });
     }
   }
-  // The managed upstream llama-server has no native-state import: soft-state bindings run degraded there.
-  const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: new Set(loaded.map(item => item.id)), nativeState: false,
-    ...(incompatible ? { incompatible } : {}) });
-  return { weights: [binding], ...(loaded.length ? { loraAdapters: () => loaded } : {}),
+  // Soft states: exact native state spans on the llama.cpp fork (`--native-state`); the upstream llama-server has no
+  // native-state import, so there soft-state bindings run degraded.
+  const states: { id: string; path: string }[] = [];
+  const executable = choice.kind === 'managed-local' ? discoverLlamaRuntime(environment).selected?.path : undefined;
+  const nativeState = !incompatible && manifest.softStates.length > 0 && !!executable && supportsNativeStates(executable)
+    && manifest.softStates.every(item => item.exports?.gguf?.baseGgufSha256 === base);
+  if (nativeState) for (const item of manifest.softStates) {
+    const path = join(directory, item.exports!.gguf!.file);
+    if (await fileSha256(path).catch(() => '') !== item.exports!.gguf!.sha256)
+      throw new Error(`tuned soft state ${item.exports!.gguf!.file} is missing or differs from its release receipt; rerun natlang tune`);
+    states.push({ id: item.state, path });
+  }
+  const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: new Set([...loaded, ...states].map(item => item.id)),
+    nativeState, ...(incompatible ? { incompatible } : {}) });
+  return { weights: [binding], ...(loaded.length ? { loraAdapters: () => loaded } : {}), ...(states.length ? { nativeStates: () => states } : {}),
     ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
 }
 

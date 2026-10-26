@@ -40,8 +40,25 @@ No adapter manifest, adapter IDs, export, conversion or server-loading step is p
 Rerunning the same command reuses collected data and training receipts. Splits are persisted
 (`.natlang/tune/splits.json`), so later edits never move an example between partitions. Collected data is kept per
 root and recollected only when a definition that root reached changed, or when non-instruction sources (helpers,
-services, types) changed; `--incremental` prints which bindings changed and which shared nodes and dependents must
-be refit. The report prints the time from invoking
+services, types) changed.
+
+`natlang tune ./my-program --incremental` refits only what an edit dirtied, against the active release:
+
+- A **candidate** trains the edited lambda leaves (and new bindings) against every other node pinned at its exact
+  released residual, warm-started from the released leaf. Only rows whose stack contains a trained node are fitted.
+  A dirty shared ancestor (a folder or the program root trained on the old semantics) stays pinned at its older
+  version, and the release receipts record which older binding semantics it was trained on (`stalePins`).
+- A **shared refit** then trains the dirty shared ancestors and every residual fit against them, the rest pinned;
+  it is planned against the release the candidate pinned and seeded with the candidate's leaves. If it does not
+  complete, the next `--incremental` run finishes it rather than reporting the program fresh.
+  `tune.incremental.sharedEdits: "refit"` skips the candidate.
+- A **full** joint refit runs after `tune.incremental.fullRefitEvery` incremental builds (default 5), on `--full`,
+  or when the recipe changed (pinned residuals of another rank cannot compose).
+
+Warm-started nodes continue their optimizer moments only when the released optimizer state binds the exact artifact
+and algorithm; otherwise their history starts new and the receipt says so. Families with their learned gates and the
+soft states of untouched bindings carry over unchanged. `--watch` makes the same incremental builds. `--report`
+shows the active release's build kind and any stale pinned parents. The report prints the time from invoking
 `tune` to the first tuned call, split by stage.
 
 ## Edits and renames
@@ -92,6 +109,14 @@ have an active release on the same exact base model.
    with an L1 penalty, 0 removes it), measured against its previous release on development roots, and activated only
    within `tune.placement.maxSuccessLoss`. The report flags negative transfer; `--rollback` restores the previous
    release. Programs you do not name never contribute data.
+5. Transfer: every published family is also applied zero-shot (gate 1 on every definition, nothing refit) to the
+   named programs that are not its members and to held programs (`--held ./prog-c,./prog-d`), and measured paired
+   on their development roots. Held programs never enter discovery or fitting, and transfer releases are stored but
+   never activated.
+
+Every activated program release is recorded per base (`<store>/programs.json`). With `tune.families.every: N`, a
+successful `natlang tune` runs families over all recorded programs of the base after N new releases since the last
+family run; `natlang tune --families` without program arguments uses the recorded programs.
 
 ## How calls use a release
 
@@ -142,8 +167,29 @@ with exact sampling receipts and fits on those rollouts together with the teache
 development roots only, and the best release is validated and activated as usual. RL rounds need the native
 reference server (`tune.backend: "native"`); an SFT-only schedule works on every backend.
 
+A `repair` round (on-policy correction, plan §4.4; for example `"schedule": ["sft", "repair", "rl"]`) runs the best
+release so far on the training roots that have an `expected` result. For each root it gets wrong, the teacher takes
+over the student's own run at a turn boundary: the student's earlier turns are replayed call by call, so the program
+re-executes in the same world, and the teacher answers from that turn on. Boundaries are tried from the latest
+backwards (`repairsPerRoot`, default 1; `repairBoundaries`, default all). A repair is admitted only when every replayed
+turn and the boundary observed exactly what the student observed and the repaired run meets the root oracle. Only the
+teacher's turns train, together with the earlier teacher rows; the student's mistaken prefix is context at zero weight.
+Each correction row records the student checkpoint and release, the boundary call's requested/effective stack, the
+boundary, the round, the teacher and the verification evidence; the whole repaired trajectory is kept in
+`.natlang/tune/rounds/<data>/round-<n>.repairs.jsonl`. Repair rounds work on every backend.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
+
+## Programs that use host services
+
+`natlang tune` from the CLI runs programs without host services. An SDK host that tunes a service-using program
+passes `services: example => ({ ... })` in the tune options: fresh services per root invocation, a test or sandbox
+world rather than production systems, because collection, evaluation and rollouts call them. Every call made during
+collection and on-policy repair runs is journaled exactly (service, method, arguments, result or error). A repair
+replays the student's journal: it is admitted only when every service call of the repaired run was answered from
+that journal, so a repair never acts on the world a second time; a continuation that needs a call the student's
+run never made is rejected as leaving the captured world.
 
 ## SDK hosts
 
@@ -162,13 +208,24 @@ reference server applies the stack through its exact native adapter path.
 | Backend | Weight residuals | Soft instruction/skill states | Mixed stacks in one batch |
 | --- | --- | --- | --- |
 | Managed llama.cpp (upstream runtime) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
-| llama.cpp fork (`--lora-per-sequence`) | Same | Through its Neuralese server (not yet wired here) | Yes, per-sequence scales, verified bitwise isolation |
+| llama.cpp fork (`--lora-per-sequence`, `--native-state`) | Same | Yes with `tune.softStates: true` (LFM2): exact native state spans | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
 | wllama in the page (vendored build, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
 
+**Soft states on the managed llama.cpp fork.** A soft state is native KV/hybrid state, not text: per position, the
+attention keys (after the key norm, before RoPE) and values, and LFM2's short-convolution gated inputs. With
+`tune.softStates: true` on the `managed-local` backend, the build trains soft states and exports each as a llama.cpp
+native state span (`exports/<state>.state.gguf`, bound to the base GGUF). The managed session passes them with
+`--native-state`, and requests carry `{"type": "native_state", "id"}` content parts where the instruction or skill
+text was. The fork imports the stored state exactly for virtual tokens between the consume markers. On the real
+LFM2.5-350M it matches the reference engine as closely as plain text does (max |Δlogit| 0.043 vs 0.075, top-1 1.0;
+`scripts/llama_state_span_parity.py`). A server without `--native-state` (the upstream runtime) refuses to start with
+soft states (`weights-unavailable`); in `run`/`call` such releases run their soft-state bindings degraded. Mellum
+soft states are not exportable yet.
+
 In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
-checks each file's sha256, and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
+checks each file's sha256 (program residuals and family versions; files are cached in the origin-private file system by content hash and re-verified on every load, `removeCachedModelFiles` drops replaced ones), and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
 binding for `createNatlangRuntime({ weights })`. Adapters load at scale 0; each request lists every adapter with its
 own call's scales. A release exported for another base GGUF runs untuned. This needs the patched wllama vendored in
 `ts-host/vendor/wllama` (LoRA blobs, and a server that never reuses a prompt computed with other adapters; see its
@@ -193,5 +250,5 @@ bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for v
 oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
 resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
 them yet. Not yet
-implemented: full per-lambda fine-tuning arm, base distillation, a CLI
-command for the RL rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.
+implemented: full per-lambda fine-tuning arm. Incremental builds (candidate, shared refit, periodic full refit) are
+implemented; the native-backend soft-state carry-over of untouched bindings has no test yet.

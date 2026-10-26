@@ -2,7 +2,9 @@
  * `natlang tune` (plans/HIERARCHICAL_LORA_TUNING.md §8):
  *
  *   natlang tune <program>                 discover, collect/reuse data, train, export, load, validate, activate
- *   natlang tune <program> --incremental   rebuild what changed (reuses valid data and training receipts)
+ *   natlang tune <program> --incremental   rebuild what changed: a leaf candidate against pinned parents, the shared
+ *                                          refit of dirty ancestors, or a periodic full refit (incremental.ts)
+ *   natlang tune <program> --full          a full joint refit of every node (resets the incremental counter)
  *   natlang tune <program> --watch         rebuild in the background on edits; the run/call path keeps serving
  *   natlang tune <program> --report        the latest report, status and the active release
  *   natlang tune <program> --rollback      reactivate the previous coherent release
@@ -34,6 +36,7 @@ import { loadVllmStacks, uploadRelease } from './weights.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
 import { programSites } from '../tune/sites.js';
+import { incrementalSelector, runIncrementalBuilds } from '../tune/incremental.js';
 import { exportCases, importCases } from '../tune/pool.js';
 import { evaluateRelease, prepareData, runStudentModule, saveArm, tuneProgram, type TuneOptions, type TuneReport } from '../tune/pipeline.js';
 import { evaluateRoots } from '../tune/evaluate.js';
@@ -43,7 +46,7 @@ import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
 import { roundsSelector } from '../tune/schedule.js';
 import { exportDistillation } from '../tune/distill.js';
-import { runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
+import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
@@ -64,7 +67,7 @@ const driverOf = (session: Session): ModelDriver => Object.assign(
 
 function formatReport(report: TuneReport): string {
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
-  const lines = [report.activated ? `ready: ${report.program} is tuned for ${report.student} on ${report.backend} (release ${report.release?.slice(0, 12)})`
+  const lines = [report.activated ? `ready: ${report.program} is tuned for ${report.student} on ${report.backend} (release ${report.release?.slice(0, 12)}, ${report.build ?? 'full'} build)`
     : `not activated: ${report.reason ?? 'unknown failure'}${report.release ? ` (release ${report.release.slice(0, 12)} was built)` : ''}`];
   lines.push(`data: ${report.data.examples} root examples (${report.data.protected} protected, excluded), ${report.data.turns} teacher turns, ${report.data.trainTurns} training turns`);
   if (report.validation) lines.push(`validation (development roots): tuned ${report.validation.tuned.oracle}/${report.validation.tuned.roots} correct, ` +
@@ -75,12 +78,12 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases', '--held'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation', '--rounds', '--distill']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation', '--rounds', '--distill', '--full']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
   const root = resolve(words[0] ?? '.');
   if (!existsSync(root)) throw new Error(`natlang tune: ${root} does not exist`);
@@ -89,9 +92,15 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const reports = join(tuneDirectory(root), 'reports');
     const latest = existsSync(reports) ? readdirSync(reports).sort().at(-1) : undefined;
     const status = tuneStatus(root), overview = loadOverview(root, value('--partition') ?? 'development');
-    if (flags.has('--json')) io.out(JSON.stringify({ status, active: readActive(root) ?? null,
+    // What built the active release (§8): full, candidate (with any stale pinned parents) or shared refit.
+    const activeReceipts = currentRelease(root)?.manifest.receipts as { build?: string; pinnedFrom?: string; stalePins?: Record<string, unknown> } | undefined;
+    const build = activeReceipts ? { kind: activeReceipts.build ?? 'full', ...(activeReceipts.pinnedFrom ? { pinnedFrom: activeReceipts.pinnedFrom } : {}),
+      stalePins: Object.keys(activeReceipts.stalePins ?? {}) } : null;
+    if (flags.has('--json')) io.out(JSON.stringify({ status, active: readActive(root) ?? null, build,
       report: latest ? JSON.parse(readFileSync(join(reports, latest), 'utf8')) : null, overview }, null, 2));
     else io.out([`status: ${status.status}${status.reason ? ` (${status.reason})` : ''}`,
+      ...(build ? [`active build: ${build.kind}${build.stalePins.length ? `; pinned stale shared parents ${build.stalePins.join(', ')} ` +
+        '(run natlang tune --incremental to complete the shared refit)' : ''}`] : []),
       latest ? formatReport(JSON.parse(readFileSync(join(reports, latest), 'utf8')) as TuneReport) : 'no tune report yet',
       formatOverview(overview)].join('\n'));
     return 0;
@@ -132,9 +141,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
           const serving = loadModelConfiguration(undefined);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');
-          const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { loraAdapters: () => adapters });
+          // Soft states as exact native state spans on the llama.cpp fork (`--native-state`); refused by other servers.
+          const states = manifest.softStates.filter(item => item.exports?.gguf).map(item => ({ id: item.state, path: join(directory, item.exports!.gguf!.file) }));
+          const session = createResolvedModelSession(serving.choice, process.env, process.stderr,
+            { loraAdapters: () => adapters, nativeStates: () => states });
           await session.prepare();
-          return { driver: driverOf(session), loaded: new Set(adapters.map(item => item.id)), close: () => session.close() };
+          return { driver: driverOf(session), loaded: new Set([...adapters, ...states].map(item => item.id)), nativeState: states.length > 0, close: () => session.close() };
         } });
     } finally { await teacherSession.close(); }
   };
@@ -151,38 +163,53 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       const arms = [await evaluateRelease(options, data, null, examples, 'untuned', partition)];
       if (current) arms.push(await evaluateRelease(options, data, current, examples, String(current.receipts.variant ?? '').startsWith('placement') ? 'placed' : 'hierarchy', partition));
       // The teacher reference runs as an isolated evaluator: its answers are never training data.
-      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples,
+      if (flags.has('--with-teacher')) arms.push(await evaluateRoots({ root, program: options.program, driver: options.teacher, weights: [], examples, services: options.services,
         arm: 'teacher', release: null, partition }));
       for (const arm of arms) saveArm(root, arm);
     });
     io.out(formatOverview(loadOverview(root, partition)));
     return 0;
   }
-  if (flags.has('--families')) {
-    // Every named program stays open (sessions, data) while families are discovered, fit and members refit.
-    const programs = words.map(word => resolve(word));
-    const open = async (rest: string[], opened: FamilyProgram[]): Promise<FamiliesReport> => {
-      if (rest.length) return withOptions(async options => {
+  // Every named program stays open (sessions, data) while families are discovered, fit and members refit; held
+  // programs are opened too but only measured for transfer.
+  const familiesFor = async (programs: readonly string[], heldPrograms: readonly string[]): Promise<FamiliesReport> => {
+    if (!programs.length) throw new Error('natlang tune --families: name the tuned programs, or tune programs first (none are registered for this base)');
+    // Open members, then held programs, keeping every session open until the run ends.
+    let report: FamiliesReport | undefined;
+    const openAll = async (rest: readonly string[], opened: FamilyProgram[], heldRest: readonly string[], heldOpened: FamilyProgram[]): Promise<void> => {
+      if (rest.length || heldRest.length) return withOptions(async options => {
         const active = currentRelease(options.root);
         if (!active?.active) throw new Error(`natlang tune --families: ${options.root} has no active release; run natlang tune there first`);
-        const data = await prepareData(options, [], io.err);
-        return open(rest.slice(1), [...opened, { options, data, release: active.manifest, releaseDir: active.directory }]);
-      }, rest[0]);
+        const program = { options, data: await prepareData(options, [], io.err), release: active.manifest, releaseDir: active.directory };
+        return rest.length ? openAll(rest.slice(1), [...opened, program], heldRest, heldOpened)
+          : openAll(rest, opened, heldRest.slice(1), [...heldOpened, program]);
+      }, rest[0] ?? heldRest[0]);
       const settings = opened[0]!.options.settings;
       const nl = async (discovery: string) => {
         const runtime = createNatlangRuntime({ model: opened[0]!.options.teacher });
         try { return await runtime.run(() => (loadNatlang(PROPOSE_FAMILIES) as (...args: unknown[]) => Promise<unknown>)(discovery)); }
         finally { runtime.close(); }
       };
-      return runFamilies(opened, { ...settings.families, nl, log: io.err });
+      report = await runFamilies(opened, { ...settings.families, nl, log: io.err, held: heldOpened });
     };
-    const report = await open(programs, []);
+    await openAll(programs, [], heldPrograms, []);
+    return report!;
+  };
+  const familyStoreOf = () => familyStore(loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') }).student.base);
+  if (flags.has('--families')) {
+    // Without program arguments: every program tuned on this base (the family registry).
+    const programs = words.length ? words.map(word => resolve(word)) : Object.keys(familyRegistry(familyStoreOf()).programs);
+    const heldPrograms = (value('--held') ?? '').split(',').filter(Boolean).map(item => resolve(item));
+    const report = await familiesFor(programs.filter(item => !heldPrograms.includes(item)), heldPrograms);
     io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : [
       `families: ${report.published.map(item => `${item.family}@${item.version} (${item.members.length} members)`).join(', ') || 'none published'}` +
         (report.absent.length ? `; absent: ${report.absent.join(', ')}` : ''),
       ...report.programs.map(item => `${item.program}: ${item.activated ? 'activated' : 'kept previous'} ${item.release?.slice(0, 12) ?? ''}` +
         (item.development ? ` (development ${item.development.previous.toFixed(2)} -> ${item.development.refit.toFixed(2)}` +
-          `${item.negativeTransfer ? ', negative transfer' : ''})` : '') + (item.reason ? `: ${item.reason}` : ''))].join('\n'));
+          `${item.negativeTransfer ? ', negative transfer' : ''})` : '') + (item.reason ? `: ${item.reason}` : '')),
+      ...report.transfer.map(item => `transfer ${item.family}@${item.version} -> ${item.kind} ${item.program}: ` + (item.development
+        ? `development ${item.development.current.toFixed(2)} -> ${item.development.withFamily.toFixed(2)} (delta ${item.development.delta.toFixed(3)}` +
+          ` [${item.development.interval.map(value => value.toFixed(3)).join(', ')}]${item.development.underpowered ? ', underpowered' : ''})` : item.reason ?? ''))].join('\n'));
     return 0;
   }
   if (flags.has('--placement')) {
@@ -273,22 +300,42 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       `\njournal: ${result.journal}`);
     return 0;
   }
-  if (flags.has('--incremental') && !flags.has('--watch')) {
-    // The dependency closure of the edit, against the active release (plan §8 invalidation matrix).
-    const active = currentManifest(root);
-    if (active) {
-      const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
-      if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-      const program = inventory.manifest.adaptation!;
-      const change = invalidation(active, scaffoldManifest(program, active.base, { sites: programSites(root, program).sites }));
-      if (change.fresh && active.program.buildHash === inventory.manifest.adaptation!.buildHash) { io.out('fresh: the active release matches the program; nothing to rebuild'); return 0; }
-      io.err(`natlang tune: changed ${change.changed.length}, added ${change.added.length}, removed ${change.removed.length}, moved ${change.moved.length}, renamed ${change.rekeyed.length} binding(s); ` +
-        `dirty nodes ${change.dirty.length}, dependent residuals ${change.dependents.length}; unchanged roots reuse their data`);
+  // Incremental builds against the active release (plan §8): a leaf candidate, a shared refit, or a periodic full
+  // refit. Undefined when there is no active release (the ordinary full tune runs); null when nothing changed.
+  const incrementalBuild = async (): Promise<TuneReport[] | null | undefined> => {
+    const active = currentRelease(root);
+    if (!active?.active) return undefined;
+    const { settings } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
+    const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
+    if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+    const program = inventory.manifest.adaptation!;
+    const current = scaffoldManifest(program, active.manifest.base, { sites: programSites(root, program).sites });
+    const change = invalidation(active.manifest, current);
+    io.err(`natlang tune: changed ${change.changed.length}, added ${change.added.length}, removed ${change.removed.length}, moved ${change.moved.length}, renamed ${change.rekeyed.length} binding(s); ` +
+      `dirty nodes ${change.dirty.length}, dependent residuals ${change.dependents.length}; unchanged roots reuse their data`);
+    return runIncrementalBuilds(root, current, program.buildHash, { full: flags.has('--full'), settings: settings.incremental,
+      recipe: { seed: 0, ...settings.recipe }, log: io.err }, step => withOptions(options => tuneProgram(options, incrementalSelector(options, step))));
+  };
+  if ((flags.has('--incremental') || flags.has('--full')) && !flags.has('--watch')) {
+    const reports = await incrementalBuild();
+    if (reports === null) { io.out('fresh: the active release matches the program; nothing to rebuild'); return 0; }
+    if (reports) {
+      io.out(flags.has('--json') ? JSON.stringify(reports, null, 2) : reports.map(formatReport).join('\n'));
+      return reports.every(report => report.activated) ? 0 : 1;
     }
   }
   if (!flags.has('--watch')) {
     const report = await once();
     io.out(flags.has('--json') ? JSON.stringify(report, null, 2) : formatReport(report));
+    if (report.activated && report.release) {
+      // Families run after a batch of newly tuned programs (tune.families.every), over every program of this base.
+      const store = familyStoreOf(), every = loadTuneSettings(process.env, { student: value('--student') }).settings.families?.every;
+      if (registerTunedProgram(store, root, report.release, every)) {
+        const programs = Object.keys(familyRegistry(store).programs);
+        io.err(`natlang tune: ${every} newly tuned program release(s) since the last family run; running families over ${programs.length} programs`);
+        if (programs.length >= 2) await familiesFor(programs, []);
+      }
+    }
     return report.activated ? 0 : 1;
   }
   // Watch: coalesce edits, one build at a time; activation compares the pointer, so a stale build cannot win.
@@ -296,7 +343,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   const build = async () => {
     if (running) { again = true; return; }
     running = true;
-    try { io.out(formatReport(await once())); } catch (error) { io.err(`natlang tune: ${(error as Error).message}`); }
+    try {
+      // Edits rebuild incrementally against the active release; the first build (no release yet) is a full tune.
+      const reports = await incrementalBuild();
+      if (reports === null) return;
+      for (const report of reports ?? [await once()]) io.out(formatReport(report));
+    } catch (error) { io.err(`natlang tune: ${(error as Error).message}`); }
     finally { running = false; if (again) { again = false; void build(); } }
   };
   watch(root, { recursive: true }, (_event, file) => {

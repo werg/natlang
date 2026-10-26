@@ -137,14 +137,22 @@ def _tensor_hex(tensor):
 class JointTrainer:
     """Resumable joint trainer over one program manifest and its admitted training rows."""
 
-    def __init__(self, engine, manifest, rows, recipe, *, state=None, owner=None, workdir=None, parent=None):
+    def __init__(self, engine, manifest, rows, recipe, *, state=None, owner=None, workdir=None, parent=None,
+                 pinned=None, warm=None):
         """`rows` are SFT rows (`{binding, graph, ...}`) and RL rollouts (`natlang.tune-rollout/v1`); RL admission
         archives its behavior bundle and registered objective under `workdir`.
 
         `parent` is the final state of the previous fit of the same manifest (an earlier SFT or RL round). A new fit
         continues its node, soft-state and gate versions with their optimizer moments and lineage histories, so
         rollouts sampled from the parent's release are admitted as recorded-lineage behavior. Its own row set,
-        schedule and step counter start fresh; cumulative exposure carries over."""
+        schedule and step counter start fresh; cumulative exposure carries over.
+
+        `pinned` maps scope nodes to existing coefficient artifacts that stay frozen (plan §8 incremental candidates and
+        shared refits): they run in every stack that includes them, receive no gradient and are never updated, so the
+        release carries the exact same artifacts. `warm` maps trainable nodes to `{artifact, optimizer?}` of an earlier
+        compatible fit (same rank, parameterization, target names and canonical basis): the node starts from that
+        artifact, and its optimizer moments continue only when the given state binds that exact artifact and the
+        recipe's algorithm; otherwise its optimizer history starts new and the receipt says so."""
         self.engine, self.manifest, self.recipe, self.owner = engine, manifest, recipe, owner
         if manifest.get('schema') != 'natlang.adapters/v1':
             raise TuneMathError('trainer consumes a natlang.adapters/v1 manifest')
@@ -154,6 +162,12 @@ class JointTrainer:
         self.bindings = {binding['id']: binding for binding in manifest['bindings']}
         self.families = {(item['family'], item['version']): item for item in manifest['families']}
         self.memberships = [item for item in manifest['memberships'] if item['binding'] in self.bindings]
+        self.pinned, self.warm = dict(sorted((pinned or {}).items())), dict(sorted((warm or {}).items()))
+        stack_nodes = set(self._stack_nodes())
+        if set(self.pinned) - stack_nodes or set(self.warm) - stack_nodes:
+            raise TuneMathError('pinned and warm-started nodes must be trained scope nodes of this manifest')
+        if set(self.pinned) & set(self.warm):
+            raise TuneMathError('a node is either pinned or warm-started, not both')
         self._soft_initial = {}
         from .rl import ROLLOUT_SCHEMA
         rollouts = [row for row in rows if isinstance(row, dict) and row.get('schema') == ROLLOUT_SCHEMA]
@@ -241,6 +255,7 @@ class JointTrainer:
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,
             'rows': [[row['binding'], row['occurrence'], row['evidence_weight'], canonical_json_sha256_hex(row['graph'])]
                      for row in self.rows], 'targets': self.target_names,
+            **({'pinned': self.pinned} if self.pinned else {}), **({'warm': self.warm} if self.warm else {}),
             **({'rl': self.rl.digest()} if self.rl is not None else {})})
 
     @property
@@ -251,17 +266,39 @@ class JointTrainer:
         rows = len(self.rows) + (len(self.rl.graphs) if self.rl is not None else 0)
         return math.ceil(self.recipe.epochs * rows / min(self.recipe.batch_rows, max(rows, 1)))
 
-    def _trained_nodes(self):
+    def _stack_nodes(self):
+        """Every scope node with a residual in this release: trained here or pinned."""
         used = {node for binding in self.bindings.values() for node in binding['ancestry']}
         return sorted(node for node in used if self.recipe.ranks.get(self.nodes[node]['level'], 0) > 0)
+
+    def _trained_nodes(self):
+        return [node for node in self._stack_nodes() if node not in self.pinned]
+
+    def _compatible(self, artifact_id, rank, basis_id):
+        """Why an earlier artifact cannot seed this node, or None when it can."""
+        record = self.engine.store.get_native_tensor_artifact(artifact_id).artifact
+        spec = (record.provenance or {}).get('adapter_spec') or {}
+        kind = 'free-lora' if self.recipe.parameterization == 'free-lora' else 'xs'
+        if record.kind != 'adapter-coefficients' or spec.get('kind') != kind:
+            return 'another parameterization'
+        if spec.get('rank') != rank:
+            return f"rank {spec.get('rank')} differs from {rank}"
+        if list(spec.get('parameter_names', [])) != self.target_names:
+            return 'other target matrices'
+        if basis_id is not None and record.source_artifact_id != basis_id:
+            return 'another canonical basis'
+        return None
 
     def _initial_state(self):
         recipe, engine = self.recipe, self.engine
         nodes = self._trained_nodes()
-        artifacts = {}
+        artifacts, basis_id = {}, None
         if recipe.parameterization == 'native-subspace':
-            max_rank = max(recipe.ranks[self.nodes[node]['level']] for node in nodes)
+            # The basis is a pure function of the base, maximum rank and targets: over every stack node, pinned ones
+            # included, it is the same basis the earlier fit sliced, so pinned and warm artifacts compose exactly.
+            max_rank = max(recipe.ranks[self.nodes[node]['level']] for node in self._stack_nodes())
             basis = create_canonical_basis(engine, {'max_rank': max_rank, 'parameter_names': self.target_names}, self.owner)
+            basis_id = basis.id
             for index, node in enumerate(nodes):
                 # Zero cores of equal rank would otherwise be one content-addressed artifact shared by sibling nodes,
                 # and one graph whose calls run both siblings could not tell their coefficients apart.
@@ -272,6 +309,27 @@ class JointTrainer:
                 rank = recipe.ranks[self.nodes[node]['level']]
                 artifacts[node] = create_adapter(engine, {'kind': 'free-lora', 'rank': rank, 'seed': recipe.seed + index,
                     'alpha': float(recipe.free_lora_alpha or rank), 'parameter_names': self.target_names}, self.owner).id
+        for node, artifact in self.pinned.items():
+            reason = self._compatible(artifact, recipe.ranks[self.nodes[node]['level']], basis_id)
+            if reason is not None:
+                raise TuneMathError(f'pinned node {node} cannot be composed with this fit: {reason}')
+        optimizers, incremental = {node: None for node in nodes}, {'pinned': dict(self.pinned), 'warm': {}, 'cold': {}}
+        for node in nodes:
+            if node not in self.warm:
+                continue
+            seed = self.warm[node]
+            reason = self._compatible(seed['artifact'], recipe.ranks[self.nodes[node]['level']], basis_id)
+            if reason is not None:
+                incremental['cold'][node] = reason
+                continue
+            artifacts[node] = seed['artifact']
+            optimizer, history = seed.get('optimizer'), 'new'
+            if optimizer is not None:
+                old = engine.store.get_native_tensor_artifact(optimizer).artifact
+                if old.source_artifact_id == seed['artifact'] and (old.provenance or {}).get('optimizer') == recipe.optimizer.get('name'):
+                    optimizers[node], history = optimizer, 'continued'
+            incremental['warm'][node] = {'artifact': seed['artifact'], 'optimizer': history}
+        artifacts.update(self.pinned)
         gates = {}
         for item in self.memberships:
             if (item['family'], item['version']) not in self.families:
@@ -279,27 +337,32 @@ class JointTrainer:
             gates[json.dumps([item['binding'], item['family'], item['version']])] = float(min(max(item['gate'], 0.), self.recipe.a_max)).hex()
         if len(set(artifacts.values())) != len(artifacts):
             raise TuneMathError('every trained node needs its own coefficient artifact')
-        state = {'schema': STATE_SCHEMA, 'step': 0, 'epoch': 0, 'position': 0, 'node_artifacts': artifacts,
-                 'optimizer_states': {node: None for node in nodes}, 'gates': gates, 'gate_optimizer': None,
+        state = {'schema': STATE_SCHEMA, 'step': 0, 'epoch': 0, 'position': 0, 'node_artifacts': dict(sorted(artifacts.items())),
+                 'optimizer_states': optimizers, 'gates': gates, 'gate_optimizer': None,
                  'soft_states': dict(sorted(self._soft_initial.items())),
                  'soft_optimizer_states': {key: None for key in sorted(self._soft_initial)},
                  'node_history': {node: [artifact] for node, artifact in artifacts.items()},
                  'soft_history': {key: [ident] for key, ident in sorted(self._soft_initial.items())},
                  'rl_epoch': 0, 'rl_position': 0, 'exposure': {}, 'losses': []}
+        if self.pinned or self.warm:
+            state['incremental'] = incremental
         state['input_sha256'] = self.input_sha256
         return state
 
     def _continued_state(self, parent):
         if parent.get('schema') != STATE_SCHEMA:
             raise TuneMathError('a parent fit must be a tune trainer state')
-        nodes = self._trained_nodes()
+        nodes = self._stack_nodes()
+        if any(parent['node_artifacts'].get(node) != artifact for node, artifact in self.pinned.items()):
+            raise TuneMathError('a continued fit pins a node at another artifact than its parent holds')
         if sorted(parent['node_artifacts']) != nodes or set(parent['gates']) != {
                 json.dumps([item['binding'], item['family'], item['version']]) for item in self.memberships}:
             raise TuneMathError('the parent fit trained another node or gate set; continue only the same manifest and ranks')
         # Soft states first admitted in this fit start from their recorded initial version.
         soft = {**self._soft_initial, **parent.get('soft_states', {})}
         state = {'schema': STATE_SCHEMA, 'step': 0, 'epoch': 0, 'position': 0,
-                 'node_artifacts': dict(parent['node_artifacts']), 'optimizer_states': dict(parent['optimizer_states']),
+                 'node_artifacts': dict(parent['node_artifacts']),
+                 'optimizer_states': {node: value for node, value in parent['optimizer_states'].items() if node not in self.pinned},
                  'gates': dict(parent['gates']), 'gate_optimizer': parent.get('gate_optimizer'),
                  'soft_states': dict(sorted(soft.items())),
                  'soft_optimizer_states': {key: parent.get('soft_optimizer_states', {}).get(key) for key in sorted(soft)},
@@ -485,7 +548,7 @@ class JointTrainer:
         objective = recipe.objectives[self.state['step'] % len(recipe.objectives)]
         factor = lr_factor(recipe.schedule, self.state['step'], max(self.total_steps, 1))
         # One immutable snapshot of every node for the whole batch.
-        leaves = {node: {key: value.detach().clone().requires_grad_(True)
+        leaves = {node: {key: value.detach().clone().requires_grad_(node not in self.pinned)
                          for key, value in engine.store.get_native_tensor_artifact(artifact).artifact.tensors.items()}
                   for node, artifact in self.state['node_artifacts'].items()}
         from ..serve.native_grad import _leaf_block
@@ -538,10 +601,13 @@ class JointTrainer:
                                                                    target_position_start=0)['source_native_identity']
                 loss, _ = graph_loss(engine.shared_model, example, external_blocks=blocks or None,
                                      external_identity=identities or None)
-                (loss * coefficient).backward()
+                if loss.requires_grad:  # a row whose whole stack is pinned trains nothing (incremental fits)
+                    (loss * coefficient).backward()
                 return loss.detach()
             row_losses.append(float(run_native(engine, execute, entries, leaves=row_leaves, gradient_precision='fp32')))
-        active_nodes = sorted({node for binding in per_binding for kind, node in self._stack(binding) if kind == 'node'})
+        # Pinned nodes run in the stacks but are neither penalized nor updated.
+        active_nodes = sorted({node for binding in per_binding for kind, node in self._stack(binding)
+                               if kind == 'node' and node not in self.pinned})
         penalty = torch.zeros(())
         for node in active_nodes:
             level = self.nodes[node]['level']
@@ -723,4 +789,5 @@ class JointTrainer:
                    if self.rl is not None else {}),
                 'losses': self.state['losses'], **self.manifest_fragment(),
                 'soft_states': dict(self.state.get('soft_states', {})),
-                'optimizer_states': self.state['optimizer_states']}
+                'optimizer_states': self.state['optimizer_states'],
+                **({'incremental': self.state['incremental']} if self.state.get('incremental') else {})}

@@ -42,6 +42,14 @@ def turn_graph(engine, turn, *, prompt_weight, soft=None):
         raise TuneMathError('only training-partition turns become training rows')
     if not 0 <= prompt_weight <= 1:
         raise TuneMathError('prompt weight must lie in [0, 1]')
+    correction = turn.get('correction')
+    if correction is not None:
+        # An on-policy correction (§4.4): its prompt holds the student's mistaken prefix, which is context and never a
+        # target, so only the teacher's continuation is weighted; admission required the repaired root's oracle.
+        verification = correction.get('verification') or {}
+        if verification.get('rootOracle') is not True or verification.get('prefix') != 'observed-identical':
+            raise TuneMathError('a correction row needs a verified continuation and an identically observed prefix')
+        prompt_weight = 0.
     weight = evidence_weight(turn)
     from ..serve.targets import target_items
     from .soft import import_name, place_states, soft_items_to_node

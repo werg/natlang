@@ -844,7 +844,7 @@ independent work; a checked item needs its artifact and actual evidence.
 - [ ] Integrate the current six-worker Luna generation instruction with its
   supervisor, separately from engineering helpers and without duplicate pools
 - [ ] Direct/weak evidence schema, confidence calibration and disagreement handling
-- [ ] Student-prefix corrections with verified continuations and graph provenance
+- [x] Student-prefix corrections with verified continuations and provenance (`ts-host/src/tune/repairs.ts`; scripted tests only; native graph provenance of the student prefix is not captured)
 - [x] Stable binding/inline-site IDs and explicit edit/rename migration (`ts-host/src/tune/sites.ts`)
 
 **Training**

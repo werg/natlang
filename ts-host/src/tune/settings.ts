@@ -20,6 +20,7 @@ import { defaultNatlangConfigDirectory } from '../package/store.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
 import type { PluggableSetting } from '../runtime/pluggable.js';
 import type { RoundsSettings } from './schedule.js';
+import type { IncrementalSettings } from './incremental.js';
 
 export type StudentSettings = {
   /** The exact base the adapters are trained on. */
@@ -47,13 +48,20 @@ export type TuneSettings = {
   readonly teachers?: readonly string[];
   readonly teacherRouting: TeacherRouting;
   readonly backend: 'managed-local' | 'native' | 'vllm';
+  /** Train and serve soft instruction/skill states on the managed llama.cpp backend; its server must be the llama.cpp
+   * fork with `--native-state` (the native backend always serves them; vLLM cannot). */
+  readonly softStates?: boolean;
   /** Default trainer recipe fields (natlang_neuralese.tune.trainer.Recipe), shared across programs. */
   readonly recipe?: Readonly<Record<string, unknown>>;
+  /** Incremental builds (plan §8): full refit cadence and how shared-ancestor edits build. */
+  readonly incremental?: IncrementalSettings;
   /** SFT/RL round schedule for `natlang tune --rounds` (plan §5.1a). */
   readonly rounds?: RoundsSettings;
   /** Cross-program families (plan §5.5): discovery threshold, minimum programs per cluster, proposal policy mode and
    * the family fit recipe (`rank`, `steps`, ...). */
   readonly families?: { readonly threshold?: number; readonly minPrograms?: number; readonly mode?: PluggableSetting;
+    /** Run families automatically after this many newly activated program releases of this base (§5.5). */
+    readonly every?: number;
     readonly recipe?: Readonly<Record<string, unknown>> };
   /** Placement envelope (plan §5.2). */
   readonly placement?: PlacementSettings;
@@ -94,7 +102,7 @@ export function loadTuneSettings(environment: NodeJS.ProcessEnv = process.env, o
   const backend = tune.backend ?? 'managed-local';
   if (backend === 'managed-local' && !student.baseGgufSha256) throw new TuneSetupError(`tune.students.${name}.baseGgufSha256 is required for the managed-local backend`);
   return { settings: { student: name, students: tune.students!, teacher, backend, ...(tune.teachers?.length ? { teachers: tune.teachers } : {}),
-    teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.families ? { families: tune.families } : {}), ...(tune.recipe ? { recipe: tune.recipe } : {}), ...(tune.rounds ? { rounds: tune.rounds } : {}),
+    teacherRouting: { ...DEFAULT_TEACHER_ROUTING, ...tune.teacherRouting }, ...(tune.families ? { families: tune.families } : {}), ...(tune.recipe ? { recipe: tune.recipe } : {}), ...(tune.rounds ? { rounds: tune.rounds } : {}), ...(tune.softStates !== undefined ? { softStates: tune.softStates } : {}), ...(tune.incremental ? { incremental: tune.incremental } : {}),
     placement: { ...DEFAULT_PLACEMENT, ...tune.placement, costWeights: { ...DEFAULT_PLACEMENT.costWeights, ...tune.placement?.costWeights } } },
     student: { ...student, name } };
 }
