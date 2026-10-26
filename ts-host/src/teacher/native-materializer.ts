@@ -60,6 +60,7 @@ function canonical(value: unknown): string {
 }
 
 export function honestBlockedRootInvocation(row: NativeRow, program: Dict): string | undefined {
+  if ((program.semantics as Dict | undefined)?.operation !== 'blocked') return;
   const outcome = row.outcome as Dict;
   const checks = outcome.checks as Dict | undefined;
   const required = ['seeded_failure_requirement', 'expected_status', 'honest_stop', 'effects',

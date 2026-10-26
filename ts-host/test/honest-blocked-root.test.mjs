@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { honestBlockedRootInvocation } from '../dist/teacher/native-materializer.js';
 
 function blockedFixture() {
-  const program = { curriculum: { reference: { root: [
+  const program = { semantics: { operation: 'blocked' }, curriculum: { reference: { root: [
     ['eval', { code: 'assess(records)' }],
     ['return_result', { status: 'blocked', reason: 'the records are insufficient' }],
   ] } } };
@@ -54,4 +54,10 @@ test('honest blocked root requires the expected terminal and complete child cust
   const unboundTerminal = structuredClone(row);
   unboundTerminal.outcome.action_ledger = [];
   assert.equal(honestBlockedRootInvocation(unboundTerminal, program), undefined);
+});
+
+test('a blocked reference cannot override a task requiring an answer', () => {
+  const { program, row } = blockedFixture();
+  program.semantics.operation = 'exact';
+  assert.equal(honestBlockedRootInvocation(row, program), undefined);
 });

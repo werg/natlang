@@ -299,6 +299,17 @@ to truncated targets does not qualify repaired communication foundations or VAE
 inputs. Earn and record fresh exposure to the corrected row bindings while
 preserving useful weights, optimizer/RNG and the original exposure history.
 
+Task contracts and reward validity (engineering finding, 2026-10-26): an exact
+historical next assistant message is an SFT label, not a valid execution reward
+when other continuations can be correct and the recorded answer is not visible.
+Use the authenticated task-source correction mechanism to quarantine these RL
+rows without altering retained rows or losing source/split evidence. Admit exact
+oracle-approved expected root stops with their actual invocation/action custody;
+do not discard a correct blocked root merely because it is not `done`, or excuse
+a failed child because its parent succeeded. Reference replay alone does not
+qualify an oracle: test meaningful wrong answers and unmet required effects or
+repairs too. Keyword/length constraints alone do not prove editing fidelity.
+
 Publication dependencies (engineering finding, 2026-10-20): newly admitted
 classification witnesses retain exact historical parser-policy dependencies.
 Include their explicitly verified package roots in both provider and checkpoint

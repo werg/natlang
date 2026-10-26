@@ -18,6 +18,8 @@ def exact_honest_root_block(row, program):
     """
     if not isinstance(row, dict) or not isinstance(program, dict):
         return False
+    if (program.get('semantics') or {}).get('operation') != 'blocked':
+        return False
     outcome = row.get('outcome')
     if not isinstance(outcome, dict):
         return False
@@ -42,7 +44,7 @@ def exact_honest_root_block(row, program):
     if not isinstance(ledger, list):
         return False
     roots = [entry for entry in ledger if isinstance(entry, dict)
-             and entry.get('parent_invocation_id') is None]
+             and 'parent_invocation_id' in entry and entry['parent_invocation_id'] is None]
     if (len(roots) != 1 or roots[0].get('completion_status') != 'quiesced'
             or roots[0].get('completion_source') != 'execution_graph'
             or not isinstance(roots[0].get('invocation_id'), str)):

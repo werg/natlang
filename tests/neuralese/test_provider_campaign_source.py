@@ -21,6 +21,7 @@ def fixture(tmp_path, monkeypatch, mutation=None):
         p.write_text(json.dumps(value)+'\n');return p
     program={'id':'task','version':'natlang.program/2','split':'train','source_groups':['world-a','world-b']}
     if mutation=='honest-root-block':
+        program['semantics']={'operation':'blocked'}
         program['curriculum']={'reference':{'root':[['return_result',
             {'status':'blocked','reason':'the records do not settle this'}]]}}
     cases=put('cases.jsonl',program)
@@ -104,7 +105,7 @@ def test_provider_source_rejects_false_success_actor_or_custody(tmp_path,monkeyp
 
 def _blocked_root_fixture():
     program = {'id': 'blocked-task', 'version': 'natlang.program/2', 'split': 'train',
-        'source_groups': ['world-a'], 'curriculum': {'reference': {'root': [
+        'source_groups': ['world-a'], 'semantics': {'operation': 'blocked'}, 'curriculum': {'reference': {'root': [
             ['eval', {'code': 'assess(records)'}],
             ['return_result', {'status': 'blocked', 'reason': 'records are insufficient'}],
         ]}}}
@@ -160,3 +161,15 @@ def test_only_expected_honest_root_block_has_blocked_admission_exception():
     missing_custody = copy.deepcopy(row)
     missing_custody['outcome']['action_ledger'] = []
     assert not exact_honest_root_block(missing_custody, program)
+
+
+def test_blocked_reference_cannot_override_the_actual_task_operation():
+    row, program = _blocked_root_fixture()
+    program['semantics']['operation'] = 'exact'
+    assert not exact_honest_root_block(row, program)
+
+
+def test_expected_root_block_requires_explicit_parentless_capture():
+    row, program = _blocked_root_fixture()
+    del row['outcome']['invocation_ledger'][0]['parent_invocation_id']
+    assert not exact_honest_root_block(row, program)
