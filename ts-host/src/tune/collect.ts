@@ -37,6 +37,10 @@ export type CollectedTurn = {
   readonly texts: { readonly instructions?: string; readonly skills?: Readonly<Record<string, string>> };
   /** Separate evidence (§4.3); never collapsed into one flag. */
   readonly evidence: { readonly rootOracle: boolean | null; readonly enclosingSuccess: boolean; readonly callOutcome: string | null };
+  /** When a tuned release served the turn: its requested/effective stack (on-policy provenance, §4.4). */
+  readonly stack?: { readonly identity: string; readonly status: string; readonly requested: readonly string[]; readonly effective: readonly string[] };
+  /** An on-policy correction row (tune/repairs.ts): its prompt holds the student's prefix and is never a target. */
+  readonly correction?: import('./repairs.js').CorrectionProvenance;
 };
 
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -120,7 +124,9 @@ export async function collect(options: { root: string; program: ProgramDescripto
         messages: structuredClone(request.messages), tools: structuredClone(request.tools),
         reply: { ...(reply.calls ? { calls: reply.calls } : {}), ...(reply.text !== undefined ? { text: reply.text } : {}),
           ...(reply.reasoning ? { reasoning: reply.reasoning } : {}), ...(reply.truncated ? { truncated: true } : {}) },
-        teacher: options.teacherId, source: example.source ?? 'real', texts: structuredClone(frame?.invocationTexts ?? {}) });
+        teacher: options.teacherId, source: example.source ?? 'real', texts: structuredClone(frame?.invocationTexts ?? {}),
+        ...(options.weights && frame?.weights ? { stack: { identity: frame.weights.identity, status: frame.weights.status,
+          requested: frame.weights.requested.map(entry => entry.id), effective: frame.weights.effective.map(entry => entry.id) } } : {}) });
       return reply;
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const runtime = createNatlangRuntime({ program: options.program, model: driver, weights: [binding],

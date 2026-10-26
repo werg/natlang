@@ -150,6 +150,17 @@ with exact sampling receipts and fits on those rollouts together with the teache
 development roots only, and the best release is validated and activated as usual. RL rounds need the native
 reference server (`tune.backend: "native"`); an SFT-only schedule works on every backend.
 
+A `repair` round (on-policy correction, plan §4.4; for example `"schedule": ["sft", "repair", "rl"]`) runs the best
+release so far on the training roots that have an `expected` result. For each root it gets wrong, the teacher takes
+over the student's own run at a turn boundary: the student's earlier turns are replayed call by call, so the program
+re-executes in the same world, and the teacher answers from that turn on. Boundaries are tried from the latest
+backwards (`repairsPerRoot`, default 1; `repairBoundaries`, default all). A repair is admitted only when every replayed
+turn and the boundary observed exactly what the student observed and the repaired run meets the root oracle. Only the
+teacher's turns train, together with the earlier teacher rows; the student's mistaken prefix is context at zero weight.
+Each correction row records the student checkpoint and release, the boundary call's requested/effective stack, the
+boundary, the round, the teacher and the verification evidence; the whole repaired trajectory is kept in
+`.natlang/tune/rounds/<data>/round-<n>.repairs.jsonl`. Repair rounds work on every backend.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 

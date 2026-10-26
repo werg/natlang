@@ -74,6 +74,10 @@ pool). The base student as teacher produced prose without tool calls and 0 admit
    server and vLLM (`vllm-node:latest`, 0.29.1rc1 supports LFM2 LoRA); compare paired development success. Mellum's
    expert path in the fork is unrun.
 6. **Mellum.** Repeat 1–3 with the Mellum student.
+6a. **On-policy repair rounds.** Add `repair` rounds to `tune.rounds.schedule` (e.g. `["sft","repair","rl"]`) and run
+   `natlang tune ./prog --rounds`. Each wrong training root costs one teacher run per tried boundary (latest first;
+   `repairBoundaries` caps it). Report admitted/rejected repairs and rejection reasons from
+   `round-<n>.repairs.jsonl`, and the development delta of the repair round. Works on every backend.
 7. **Teacher calibration** (when more than one authorized teacher is configured in `tune.teachers`):
    `natlang tune ./prog --calibrate` before collection; record the calibration table with the run.
 8. **Families.** After at least two programs are tuned on the same exact base: `natlang tune --families ./a ./b ...`.
@@ -91,8 +95,7 @@ and timings. Tuning a program does not train the production lineages and gives t
 
 ## Not yet implemented (implementation work, not operations)
 
-Open: on-policy
-student-prefix corrections (§4.4), refitting only dirty nodes, a family schedule and member-vs-non-member transfer
+Open: refitting only dirty nodes, a family schedule and member-vs-non-member transfer
 reports, soft states on the llama.cpp fork's Neuralese server and in the browser, OPFS caching, upstreaming the
 llama.cpp and wllama patches. Earlier list for reference:
 

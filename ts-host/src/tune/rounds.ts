@@ -4,7 +4,9 @@
  * Round 0 fits the program on the teacher's training rows (SFT). Each later round continues the BEST release so far:
  * an RL round first samples rollouts of the training roots from that release (`runRollouts`), then fits a
  * continuation of its build on those rollouts (the trainer's `parent` plan field, so the sampled node and soft-state
- * versions are recorded lineage); an SFT round continues it on the training rows. Every round is measured on
+ * versions are recorded lineage); an SFT round continues it on the training rows; a repair round (§4.4) first runs
+ * that release on the training roots and admits verified teacher repairs of its mistakes (`runRepairs`), then
+ * continues the build on those corrections together with the training rows. Every round is measured on
  * DEVELOPMENT roots only, through the injected evaluator. The best release by development success is kept; after
  * `patience` consecutive rounds without an improvement above `minDelta`, the schedule stops early. Confirmation and
  * protected roots are never used here.
@@ -20,14 +22,17 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export type RoundKind = 'sft' | 'rl';
+export type RoundKind = 'sft' | 'rl' | 'repair';
 export type RoundParent = { readonly round: number; readonly release: string; readonly build: string };
 export type RoundRollouts = { readonly path: string; readonly written: number; readonly reused: number; readonly successes: number;
   readonly skipped: number };
+/** On-policy corrections of one repair round (repairs.ts): admitted rows train with the teacher rows. */
+export type RoundRepairs = { readonly records: string; readonly rows: string; readonly admitted: number; readonly rejected: number;
+  readonly studentCorrect: number; readonly roots: number };
 export type RoundRecord = {
   readonly index: number; readonly kind: RoundKind; readonly parent: RoundParent | null;
   readonly status: 'started' | 'trained' | 'evaluated' | 'skipped';
-  readonly rollouts?: RoundRollouts; readonly release?: string; readonly build?: string;
+  readonly rollouts?: RoundRollouts; readonly repairs?: RoundRepairs; readonly release?: string; readonly build?: string;
   readonly development?: { readonly success: number; readonly roots: number }; readonly improved?: boolean; readonly reason?: string;
 };
 export type RoundsJournal = { readonly schema: 'natlang.tune-rounds/v1'; readonly schedule: readonly RoundKind[];
@@ -43,10 +48,12 @@ export type RoundsOptions = {
   readonly patience?: number;
   readonly minDelta?: number;
   /** Fit one round: from scratch (parent null) or as a continuation of the parent's build; returns its stored release. */
-  readonly train: (round: { index: number; kind: RoundKind; parent: RoundParent | null; rollouts: string | null }) =>
+  readonly train: (round: { index: number; kind: RoundKind; parent: RoundParent | null; rollouts: string | null; repairs: string | null }) =>
     Promise<{ release: string; build: string }>;
   /** Sample training-root rollouts from the parent release (`runRollouts`). */
   readonly rollouts: (round: { index: number; parent: RoundParent }) => Promise<RoundRollouts>;
+  /** Run the parent release on training roots and admit verified teacher repairs of its mistakes (`runRepairs`). */
+  readonly repairs?: (round: { index: number; parent: RoundParent }) => Promise<RoundRepairs>;
   /** Development-root success of a release (never confirmation or protected roots). */
   readonly evaluate: (release: string) => Promise<{ success: number; roots: number }>;
   readonly log?: (line: string) => void;
@@ -67,7 +74,8 @@ function write(path: string, journal: RoundsJournal): void {
 export async function runRounds(options: RoundsOptions): Promise<RoundsJournal> {
   const schedule = options.schedule ?? DEFAULT_ROUNDS, patience = options.patience ?? 2, minDelta = options.minDelta ?? 0;
   if (!schedule.length || schedule[0] !== 'sft') throw new Error('a round schedule starts with an sft round');
-  if (schedule.some(kind => kind !== 'sft' && kind !== 'rl')) throw new Error('round kinds are sft or rl');
+  if (schedule.some(kind => kind !== 'sft' && kind !== 'rl' && kind !== 'repair')) throw new Error('round kinds are sft, rl or repair');
+  if (schedule.includes('repair') && !options.repairs) throw new Error('repair rounds need a repairs stage');
   if (!Number.isInteger(patience) || patience < 1) throw new Error('patience is a positive integer');
   const previous = readRounds(options.journal);
   if (previous && JSON.stringify(previous.schedule.slice(0, schedule.length)) !== JSON.stringify(schedule.slice(0, previous.schedule.length)))
@@ -104,8 +112,19 @@ export async function runRounds(options: RoundsOptions): Promise<RoundsJournal> 
       put({ ...record!, status: 'skipped', improved: false, reason: 'no scorable rollouts' });
       continue;
     }
+    let repairs: RoundRepairs | undefined = record!.repairs;
+    if (kind === 'repair' && !repairs) {
+      repairs = await options.repairs!({ index, parent: parent! });
+      put({ ...record!, repairs });
+      options.log?.(`round ${index}: ${repairs.admitted} verified repairs (${repairs.rejected} rejected; student correct on ` +
+        `${repairs.studentCorrect}/${repairs.roots} training roots)`);
+    }
+    if (kind === 'repair' && repairs!.admitted === 0) {
+      put({ ...record!, status: 'skipped', improved: false, reason: 'no verified repairs' });
+      continue;
+    }
     if (record!.status === 'started') {
-      const trained = await options.train({ index, kind, parent: record!.parent, rollouts: rollouts?.path ?? null });
+      const trained = await options.train({ index, kind, parent: record!.parent, rollouts: rollouts?.path ?? null, repairs: repairs?.rows ?? null });
       put({ ...record!, status: 'trained', release: trained.release, build: trained.build });
     }
     const development = await options.evaluate(record!.release!);

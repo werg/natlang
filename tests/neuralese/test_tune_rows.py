@@ -112,3 +112,26 @@ def test_distillation_export_lowers_training_turns_and_binds_hashes(tmp_path):
     (export / 'manifest.json').write_text(json.dumps({'turns': {'sha256': sha256_file_hex(export / 'turns.jsonl')}}))
     with pytest.raises(TuneMathError, match='training-split'):
         distill.main(['--export', str(export), '--checkpoint', str(checkpoint)])
+
+
+@real_lfm
+def test_correction_rows_weight_only_the_teacher_continuation(tmp_path):
+    engine, _ = real_engine(tmp_path)
+    prefix = [{'role': 'system', 'content': 'You run natlang functions.'}, {'role': 'user', 'content': 'Upper-case hi.'},
+              {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'call_0', 'type': 'function',
+               'function': {'name': 'eval', 'arguments': json.dumps({'code': 'return "hi"'})}}]},
+              {'role': 'tool', 'tool_call_id': 'call_0', 'content': 'checker: expected upper case'}]
+    verification = {'studentRootOracle': False, 'rootOracle': True, 'prefix': 'observed-identical', 'replayedTurns': 1}
+    correction = {'round': 1, 'kind': 'repair', 'boundary': {'index': 1, 'call': 'task-1/c1', 'turn': 2},
+                  'student': {'checkpointSha256': 'c' * 64, 'release': 'r' * 64, 'actor': 'student', 'stack': None},
+                  'teacher': 'teacher:test', 'call': 'task-1/c1', 'verification': verification}
+    row = turn(messages=prefix, call='repair:r1:b1:task-1/c1', turn=2, correction=correction)
+    graph = turn_graph(engine, row, prompt_weight=.1)['graph']
+    weights = graph['nodes'][0]['target_weights']
+    # The student's mistaken prefix (in the prompt) is context only: no prompt weight, the teacher's reply is the target.
+    assert set(weights) == {0., 1.} and weights[-1] == 1.
+    plain = turn_graph(engine, turn(messages=prefix), prompt_weight=.1)['graph']['nodes'][0]['target_weights']
+    assert .1 in plain, 'ordinary rows keep auxiliary prompt weight'
+    with pytest.raises(TuneMathError, match='verified continuation'):
+        turn_graph(engine, turn(messages=prefix, correction={**correction, 'verification': {**verification, 'rootOracle': False}}),
+                   prompt_weight=.1)
