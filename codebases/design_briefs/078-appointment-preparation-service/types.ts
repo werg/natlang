@@ -143,3 +143,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type PreparationCoordinator = { id: string };
+export type AppointmentChange = { instructionUpdates: EvidenceItem[]; appointmentUpdates: EvidenceItem[]; patientReports: EvidenceItem[]; translationReviews: EvidenceItem[]; representativeConsent: EvidenceItem[]; deliveries: EvidenceItem[] };
+export type PreparationDossier = { appointment: AppointmentPreparation; requirements: PreparationRequirement[]; contexts: PreparationContext[]; checklists: PreparationChecklist[]; questions: PreparationQuestion[]; statuses: PreparationStatus[]; evidence: EvidenceItem[]; checkpoint: PreparationCheckpoint };
+export type RelativeReminder = { requirementId: string; instructionVersion: string; appointmentVersion: string; eventTime: string; offsetMinutes: string; reminderTime: string; sourceIds: string[]; };
+export type InstructionConflict = { statements: string[]; sourceIds: string[]; staffQuestion: string; };
+export type DeliveryLedger = { channel: string; recipientId: string; consentVersion: string; state: 'pending'|'delivered'|'undelivered'|'acknowledged'|'unknown'; attemptRefs: string[]; fallbackChannel: string; blockers: string[]; };
+export type PreparationCheckpoint = { revision: string; appointment: AppointmentPreparation; instructionVersion: string; appointmentVersion: string; reminders: RelativeReminder[]; checklist: PreparationChecklist[]; conflicts: InstructionConflict[]; translationReviewRefs: string[]; delivery: DeliveryLedger[]; acknowledgments: string[]; };
+export type PreparationProposal = { application: 'Appointment Preparation Service'; status: 'ready-for-review'|'blocked'; requirements: PreparationRequirement[]; reminders: RelativeReminder[]; checklist: PreparationChecklist[]; questions: PreparationQuestion[]; conflicts: InstructionConflict[]; translations: string[]; deliveries: DeliveryLedger[]; blockers: string[]; actionBoundary: string; resumeState: PreparationCheckpoint; };
+
+export type ChecklistCompilation = { checklists: PreparationChecklist[]; reminders: RelativeReminder[]; blockers: string[]; };

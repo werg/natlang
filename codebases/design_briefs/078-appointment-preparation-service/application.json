@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.application/1",
+  "id": "078",
+  "title": "Appointment Preparation Service",
+  "entrypoint": "prepareAppointment.nl",
+  "interfaces": [
+    {
+      "name": "prepareAppointment",
+      "path": "prepareAppointment.nl",
+      "purpose": "Compile approved appointment requirements into versioned reminders, questions and consent-bounded delivery tracking."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverInstructions",
+        "paths": [
+          "prepareAppointment/recoverApprovedInstructions.nl",
+          "prepareAppointment/verifyPreparationRequirement.nl"
+        ]
+      },
+      {
+        "stage": "interpretCircumstances",
+        "paths": [
+          "prepareAppointment/interpretPatientConstraints.nl"
+        ]
+      },
+      {
+        "stage": "composeChecklist",
+        "paths": [
+          "prepareAppointment/compileRelativeChecklist.nl",
+          "prepareAppointment/compileRelativeChecklist/computeRelativeReminders.nl"
+        ]
+      },
+      {
+        "stage": "routeQuestions",
+        "paths": [
+          "prepareAppointment/routeInstructionQuestions.nl",
+          "prepareAppointment/identifyInstructionConflicts.nl"
+        ]
+      },
+      {
+        "stage": "trackAcknowledgment",
+        "paths": [
+          "prepareAppointment/trackPreparationDelivery.nl",
+          "prepareAppointment/trackPreparationDelivery/bindPreparationConsent.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "prepareAppointment/compileRelativeChecklist.nl",
+          "prepareAppointment/compileRelativeChecklist/computeRelativeReminders.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "prepareAppointment/verifyPreparationRequirement.nl",
+          "prepareAppointment/routeInstructionQuestions.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "prepareAppointment/routeInstructionQuestions.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "prepareAppointment/trackPreparationDelivery.nl",
+          "prepareAppointment/trackPreparationDelivery/bindPreparationConsent.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "prepareAppointment/trackPreparationDelivery.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "prepareAppointment.nl",
+    "prepareAppointment/compileRelativeChecklist.nl",
+    "prepareAppointment/compileRelativeChecklist/computeRelativeReminders.nl",
+    "prepareAppointment/identifyInstructionConflicts.nl",
+    "prepareAppointment/interpretPatientConstraints.nl",
+    "prepareAppointment/recoverApprovedInstructions.nl",
+    "prepareAppointment/routeInstructionQuestions.nl",
+    "prepareAppointment/trackPreparationDelivery.nl",
+    "prepareAppointment/trackPreparationDelivery/bindPreparationConsent.nl",
+    "prepareAppointment/verifyPreparationRequirement.nl",
+    "types.ts"
+  ]
+}

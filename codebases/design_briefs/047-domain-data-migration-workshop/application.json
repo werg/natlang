@@ -1,0 +1,101 @@
+{
+  "schema": "natlang.application/1",
+  "id": "047",
+  "title": "Domain data migration workshop",
+  "entrypoint": "rehearseDomainMigration.nl",
+  "interfaces": [
+    {
+      "name": "rehearseDomainMigration",
+      "path": "rehearseDomainMigration.nl",
+      "purpose": "Recover field meanings, declare mapping losses, rehearse record conservation, and hold cutover on exact deltas and mapping versions."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverSourceMeaning",
+        "paths": [
+          "rehearseDomainMigration/reconcileSourceFieldSemantics.nl"
+        ]
+      },
+      {
+        "stage": "designMappings",
+        "paths": [
+          "rehearseDomainMigration/designMeaningPreservingMappings.nl",
+          "rehearseDomainMigration/designMeaningPreservingMappings/preserveTypedMissingStates.nl"
+        ]
+      },
+      {
+        "stage": "resolveRecords",
+        "paths": [
+          "rehearseDomainMigration/classifySourceRecords.nl",
+          "rehearseDomainMigration/classifySourceRecords/qualifyHistoricalIdentityKeys.nl"
+        ]
+      },
+      {
+        "stage": "rehearseMigration",
+        "paths": [
+          "rehearseDomainMigration/checkMigrationConservation.nl"
+        ]
+      },
+      {
+        "stage": "coordinateCutover",
+        "paths": [
+          "rehearseDomainMigration/reconcileCutoverBoundary.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "rehearseDomainMigration/classifySourceRecords/qualifyHistoricalIdentityKeys.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "rehearseDomainMigration/designMeaningPreservingMappings/preserveTypedMissingStates.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "rehearseDomainMigration/checkMigrationConservation.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "rehearseDomainMigration/classifySourceRecords.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "rehearseDomainMigration/reconcileCutoverBoundary/reconcileTargetWritesBeforeRollback.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "migration": "mapping version, extraction snapshot, deltas, quarantined identities, conservation report, and target-write lineage"
+  },
+  "effects": {
+    "cutover": "proposal only; switch held until every source row and delta is accounted",
+    "rollback": "never overwrite target-side writes; explicit reconciliation is required"
+  },
+  "source_files": [
+    "qualification/recoverSourceMeaning.nl",
+    "rehearseDomainMigration.nl",
+    "rehearseDomainMigration/checkMigrationConservation.nl",
+    "rehearseDomainMigration/classifySourceRecords.nl",
+    "rehearseDomainMigration/classifySourceRecords/qualifyHistoricalIdentityKeys.nl",
+    "rehearseDomainMigration/designMeaningPreservingMappings.nl",
+    "rehearseDomainMigration/designMeaningPreservingMappings/preserveTypedMissingStates.nl",
+    "rehearseDomainMigration/reconcileCutoverBoundary.nl",
+    "rehearseDomainMigration/reconcileCutoverBoundary/reconcileTargetWritesBeforeRollback.nl",
+    "rehearseDomainMigration/reconcileSourceFieldSemantics.nl",
+    "types.ts"
+  ]
+}

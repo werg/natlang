@@ -1,0 +1,102 @@
+{
+  "schema": "natlang.application/1",
+  "id": "088",
+  "title": "Historical Record Linkage Atelier",
+  "entrypoint": "reconcileHistoricalLinkage.nl",
+  "interfaces": [
+    {
+      "name": "reconcileHistoricalLinkage",
+      "path": "reconcileHistoricalLinkage.nl",
+      "purpose": "Build a reversible historical identity network using uncertainty-aware chronology and time-specific geography."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeRecords",
+        "paths": [
+          "reconcileHistoricalLinkage/normalizeHistoricalObservations.nl",
+          "reconcileHistoricalLinkage/normalizeHistoricalObservations/boundHistoricalDates.nl",
+          "reconcileHistoricalLinkage/normalizeHistoricalObservations/mapHistoricalPlaces.nl",
+          "reconcileHistoricalLinkage/verifyHistoricalObservation.nl"
+        ]
+      },
+      {
+        "stage": "generateLinks",
+        "paths": [
+          "reconcileHistoricalLinkage/generateIdentityCandidates.nl"
+        ]
+      },
+      {
+        "stage": "judgeIdentity",
+        "paths": [
+          "reconcileHistoricalLinkage/judgeIdentityEdges.nl",
+          "reconcileHistoricalLinkage/judgeIdentityEdges/compareDateIntervals.nl"
+        ]
+      },
+      {
+        "stage": "reconcileNetworks",
+        "paths": [
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork.nl",
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork/traceLinkageImpact.nl"
+        ]
+      },
+      {
+        "stage": "prepareResearchView",
+        "paths": [
+          "reconcileHistoricalLinkage/prepareResearchEdition.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "reconcileHistoricalLinkage/normalizeHistoricalObservations/mapHistoricalPlaces.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "reconcileHistoricalLinkage/normalizeHistoricalObservations/boundHistoricalDates.nl",
+          "reconcileHistoricalLinkage/judgeIdentityEdges/compareDateIntervals.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "reconcileHistoricalLinkage/generateIdentityCandidates.nl",
+          "reconcileHistoricalLinkage/judgeIdentityEdges.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork.nl",
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork/traceLinkageImpact.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork.nl",
+          "reconcileHistoricalLinkage/reconcileLinkageNetwork/traceLinkageImpact.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "reconcileHistoricalLinkage.nl",
+    "reconcileHistoricalLinkage/generateIdentityCandidates.nl",
+    "reconcileHistoricalLinkage/judgeIdentityEdges.nl",
+    "reconcileHistoricalLinkage/judgeIdentityEdges/compareDateIntervals.nl",
+    "reconcileHistoricalLinkage/normalizeHistoricalObservations.nl",
+    "reconcileHistoricalLinkage/normalizeHistoricalObservations/boundHistoricalDates.nl",
+    "reconcileHistoricalLinkage/normalizeHistoricalObservations/mapHistoricalPlaces.nl",
+    "reconcileHistoricalLinkage/prepareResearchEdition.nl",
+    "reconcileHistoricalLinkage/reconcileLinkageNetwork.nl",
+    "reconcileHistoricalLinkage/reconcileLinkageNetwork/traceLinkageImpact.nl",
+    "reconcileHistoricalLinkage/verifyHistoricalObservation.nl",
+    "types.ts"
+  ]
+}

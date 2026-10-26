@@ -1,7 +1,7 @@
 [
   {
     "id": "061-change-order-impact-coordinator-gate-supported",
-    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "root": "qualification/reconstructInstruction.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
       "draft": {
@@ -70,7 +70,7 @@
   },
   {
     "id": "061-change-order-impact-coordinator-gate-contradictory",
-    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "root": "qualification/reconstructInstruction.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
       "draft": {
@@ -139,7 +139,7 @@
   },
   {
     "id": "061-change-order-impact-coordinator-gate-missing",
-    "root": "runCase/reconstructInstruction/audit/qualify.nl",
+    "root": "qualification/reconstructInstruction.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
       "draft": {
@@ -191,12 +191,28 @@
   },
   {
     "id": "061-change-order-impact-coordinator-operational-1",
-    "root": "runCase.nl",
+    "root": "assembleChangeOrder.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
-      "input": {
+      "dossier": {
         "caseId": "061-change-order-impact-coordinator-operational-1",
-        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-1; return a traceable proposal from the supplied records.",
+        "instruction": {
+          "id": "061-prior-siteinstruction-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "061-change-order-impact-coordinator-operational-1",
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority"
+        },
+        "writtenConfirmations": [],
+        "fieldReports": [],
+        "drawingRevisions": [],
+        "schedule": [],
+        "costItems": [],
+        "dependencies": [],
         "evidence": [
           {
             "id": "061-operational-detail-1-source-v2",
@@ -211,28 +227,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "061-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "061-prior-siteinstruction-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "061-change-order-impact-coordinator-operational-1",
-            "issuerId": "field-supervisor-SI61",
-            "requestedChange": "move opening in fire-rated partition",
-            "issuedAt": "2026-10-01T10:00:00Z",
-            "authorityScope": "site coordination only; no commercial change authority"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -257,12 +252,28 @@
   },
   {
     "id": "061-change-order-impact-coordinator-operational-2",
-    "root": "runCase.nl",
+    "root": "assembleChangeOrder.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
-      "input": {
+      "dossier": {
         "caseId": "061-change-order-impact-coordinator-operational-2",
-        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-2; return a traceable proposal from the supplied records.",
+        "instruction": {
+          "id": "061-prior-siteinstruction-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "061-change-order-impact-coordinator-operational-2",
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority"
+        },
+        "writtenConfirmations": [],
+        "fieldReports": [],
+        "drawingRevisions": [],
+        "schedule": [],
+        "costItems": [],
+        "dependencies": [],
         "evidence": [
           {
             "id": "061-operational-detail-2-source-v2",
@@ -277,28 +288,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "061-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "061-prior-siteinstruction-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "061-change-order-impact-coordinator-operational-2",
-            "issuerId": "field-supervisor-SI61",
-            "requestedChange": "move opening in fire-rated partition",
-            "issuedAt": "2026-10-01T10:00:00Z",
-            "authorityScope": "site coordination only; no commercial change authority"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -323,12 +313,28 @@
   },
   {
     "id": "061-change-order-impact-coordinator-operational-3",
-    "root": "runCase.nl",
+    "root": "assembleChangeOrder.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
-      "input": {
+      "dossier": {
         "caseId": "061-change-order-impact-coordinator-operational-3",
-        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-3; return a traceable proposal from the supplied records.",
+        "instruction": {
+          "id": "061-prior-siteinstruction-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "061-change-order-impact-coordinator-operational-3",
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority"
+        },
+        "writtenConfirmations": [],
+        "fieldReports": [],
+        "drawingRevisions": [],
+        "schedule": [],
+        "costItems": [],
+        "dependencies": [],
         "evidence": [
           {
             "id": "061-operational-detail-3-source-v2",
@@ -343,28 +349,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "061-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "061-prior-siteinstruction-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "061-change-order-impact-coordinator-operational-3",
-            "issuerId": "field-supervisor-SI61",
-            "requestedChange": "move opening in fire-rated partition",
-            "issuedAt": "2026-10-01T10:00:00Z",
-            "authorityScope": "site coordination only; no commercial change authority"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -389,12 +374,28 @@
   },
   {
     "id": "061-change-order-impact-coordinator-operational-4",
-    "root": "runCase.nl",
+    "root": "assembleChangeOrder.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
-      "input": {
+      "dossier": {
         "caseId": "061-change-order-impact-coordinator-operational-4",
-        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-4; return a traceable proposal from the supplied records.",
+        "instruction": {
+          "id": "061-prior-siteinstruction-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "061-change-order-impact-coordinator-operational-4",
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority"
+        },
+        "writtenConfirmations": [],
+        "fieldReports": [],
+        "drawingRevisions": [],
+        "schedule": [],
+        "costItems": [],
+        "dependencies": [],
         "evidence": [
           {
             "id": "061-operational-detail-4-source-v2",
@@ -409,28 +410,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "061-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "061-prior-siteinstruction-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "061-change-order-impact-coordinator-operational-4",
-            "issuerId": "field-supervisor-SI61",
-            "requestedChange": "move opening in fire-rated partition",
-            "issuedAt": "2026-10-01T10:00:00Z",
-            "authorityScope": "site coordination only; no commercial change authority"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -455,12 +435,28 @@
   },
   {
     "id": "061-change-order-impact-coordinator-operational-5",
-    "root": "runCase.nl",
+    "root": "assembleChangeOrder.nl",
     "split_group": "061-change-order-impact-coordinator",
     "inputs": {
-      "input": {
+      "dossier": {
         "caseId": "061-change-order-impact-coordinator-operational-5",
-        "goal": "Review the Change-order impact coordinator evidence for case 061-change-order-impact-coordinator-operational-5; return a traceable proposal from the supplied records.",
+        "instruction": {
+          "id": "061-prior-siteinstruction-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "061-change-order-impact-coordinator-operational-5",
+          "issuerId": "field-supervisor-SI61",
+          "requestedChange": "move opening in fire-rated partition",
+          "issuedAt": "2026-10-01T10:00:00Z",
+          "authorityScope": "site coordination only; no commercial change authority"
+        },
+        "writtenConfirmations": [],
+        "fieldReports": [],
+        "drawingRevisions": [],
+        "schedule": [],
+        "costItems": [],
+        "dependencies": [],
         "evidence": [
           {
             "id": "061-operational-detail-5-source-v2",
@@ -475,28 +471,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "061-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "061-prior-siteinstruction-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "061-change-order-impact-coordinator-operational-5",
-            "issuerId": "field-supervisor-SI61",
-            "requestedChange": "move opening in fire-rated partition",
-            "issuedAt": "2026-10-01T10:00:00Z",
-            "authorityScope": "site coordination only; no commercial change authority"
-          }
-        }
+        ]
       }
     },
     "expected": {

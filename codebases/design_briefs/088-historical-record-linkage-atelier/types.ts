@@ -143,3 +143,16 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type LinkageArchivist = { id: string };
+export type LinkageChange = { newRecords: EvidenceItem[]; transcriptionCorrections: EvidenceItem[]; geographyEvidence: EvidenceItem[]; relationshipEvidence: EvidenceItem[]; splitRequests: EvidenceItem[] };
+export type LinkageDossier = { linkage: HistoricalLinkage; observations: HistoricalObservation[]; candidates: HistoricalCandidate[]; findings: HistoricalIdentityFinding[]; networks: HistoricalNetwork[]; editions: HistoricalLinkageEdition[]; evidence: EvidenceItem[]; checkpoint: LinkageCheckpoint };
+export type DateInterval = { observationId: string; rawExpression: string; earliest: string; latest: string; precision: string; sourceIds: string[]; };
+export type HistoricalPlace = { observationId: string; rawExpression: string; candidateJurisdictions: string[]; effectivePeriod: string; boundaryEvidenceIds: string[]; unresolved: string[]; };
+export type LinkEdgeImpact = { candidateId: string; state: 'retained'|'reversed'|'review'; affectedFindings: string[]; affectedEditionStatements: string[]; sourceDeltaIds: string[]; };
+export type LinkageCheckpoint = { revision: string; observations: HistoricalObservation[]; dates: DateInterval[]; places: HistoricalPlace[]; candidates: HistoricalCandidate[]; findings: HistoricalIdentityFinding[]; networks: HistoricalNetwork[]; impacts: LinkEdgeImpact[]; openQuestions: string[]; };
+export type HistoricalLinkageProposal = { application: 'Historical Record Linkage Atelier'; status: 'ready-for-review'|'blocked'; observations: HistoricalObservation[]; dates: DateInterval[]; places: HistoricalPlace[]; candidates: HistoricalCandidate[]; findings: HistoricalIdentityFinding[]; network: HistoricalNetwork; impacts: LinkEdgeImpact[]; edition: HistoricalLinkageEdition; blockers: string[]; actionBoundary: string; resumeState: LinkageCheckpoint; };
+
+export type HistoricalNormalization={observations:HistoricalObservation[];dates:DateInterval[];places:HistoricalPlace[];};
+
+export type NetworkReconciliation={network:HistoricalNetwork;impacts:LinkEdgeImpact[];};

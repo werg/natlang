@@ -1,7 +1,7 @@
 [
   {
     "id": "056-quality-escape-investigator-gate-supported",
-    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "root": "qualification/normalizeDefects.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
       "draft": {
@@ -71,7 +71,7 @@
   },
   {
     "id": "056-quality-escape-investigator-gate-contradictory",
-    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "root": "qualification/normalizeDefects.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
       "draft": {
@@ -141,7 +141,7 @@
   },
   {
     "id": "056-quality-escape-investigator-gate-missing",
-    "root": "runCase/normalizeDefects/audit/qualify.nl",
+    "root": "qualification/normalizeDefects.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
       "draft": {
@@ -193,12 +193,30 @@
   },
   {
     "id": "056-quality-escape-investigator-operational-1",
-    "root": "runCase.nl",
+    "root": "investigateQualityEscape.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
-      "input": {
+      "caseFile": {
         "caseId": "056-quality-escape-investigator-operational-1",
-        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-1; return a traceable proposal from the supplied records.",
+        "observedDefects": [
+          {
+            "id": "056-prior-defectobservation-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-1",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        ],
+        "lotLineage": [],
+        "processHistories": [],
+        "inspectionMethods": [],
+        "holds": [],
+        "correctiveActions": [],
         "evidence": [
           {
             "id": "056-operational-detail-1-source-v2",
@@ -214,28 +232,8 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "056-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "056-prior-defectobservation-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "056-quality-escape-investigator-operational-1",
-            "productId": "valve-V56",
-            "lotId": "seal-batch-B17",
-            "symptom": "leak at valve seal",
-            "observedAt": "2026-10-01T09:30:00Z",
-            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
-          }
-        }
+        "eventNote": "R056 Quality steward records: Lot B17 of valve V56 was reworked under process PR56-R2 after the original cure process PR56-R1. Genealogy lists 8 units through R1 and 8 through R2; the exposure report currently groups them as one process history. This current event is source 056-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 056-quality-escape-investigator-operational-1. The supplied typed prior 056-prior-defectobservation-detail-1-v1 v1 is preserved for comparison.",
+        "priorClosure": null
       }
     },
     "expected": {
@@ -260,12 +258,30 @@
   },
   {
     "id": "056-quality-escape-investigator-operational-2",
-    "root": "runCase.nl",
+    "root": "investigateQualityEscape.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
-      "input": {
+      "caseFile": {
         "caseId": "056-quality-escape-investigator-operational-2",
-        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-2; return a traceable proposal from the supplied records.",
+        "observedDefects": [
+          {
+            "id": "056-prior-defectobservation-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-2",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        ],
+        "lotLineage": [],
+        "processHistories": [],
+        "inspectionMethods": [],
+        "holds": [],
+        "correctiveActions": [],
         "evidence": [
           {
             "id": "056-operational-detail-2-source-v2",
@@ -281,28 +297,8 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "056-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "056-prior-defectobservation-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "056-quality-escape-investigator-operational-2",
-            "productId": "valve-V56",
-            "lotId": "seal-batch-B17",
-            "symptom": "leak at valve seal",
-            "observedAt": "2026-10-01T09:30:00Z",
-            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
-          }
-        }
+        "eventNote": "R056 Quality steward records: Inspection method IM56 changed from visual sample to pressure-decay test on 2026-09-20. Detection rate increased from 2/100 to 9/100 inspected units; production volume and supplier lot mix also changed in that period. This current event is source 056-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 056-quality-escape-investigator-operational-2. The supplied typed prior 056-prior-defectobservation-detail-2-v1 v1 is preserved for comparison.",
+        "priorClosure": null
       }
     },
     "expected": {
@@ -327,12 +323,30 @@
   },
   {
     "id": "056-quality-escape-investigator-operational-3",
-    "root": "runCase.nl",
+    "root": "investigateQualityEscape.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
-      "input": {
+      "caseFile": {
         "caseId": "056-quality-escape-investigator-operational-3",
-        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-3; return a traceable proposal from the supplied records.",
+        "observedDefects": [
+          {
+            "id": "056-prior-defectobservation-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-3",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        ],
+        "lotLineage": [],
+        "processHistories": [],
+        "inspectionMethods": [],
+        "holds": [],
+        "correctiveActions": [],
         "evidence": [
           {
             "id": "056-operational-detail-3-source-v2",
@@ -348,28 +362,8 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "056-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "056-prior-defectobservation-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "056-quality-escape-investigator-operational-3",
-            "productId": "valve-V56",
-            "lotId": "seal-batch-B17",
-            "symptom": "leak at valve seal",
-            "observedAt": "2026-10-01T09:30:00Z",
-            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
-          }
-        }
+        "eventNote": "R056 Quality steward records: Operator O56 appears by name in a defect report for lot B17. The investigation log has no time-linked action evidence connecting O56 to the out-of-range cure temperature; team shift assignments overlap four operators. This current event is source 056-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 056-quality-escape-investigator-operational-3. The supplied typed prior 056-prior-defectobservation-detail-3-v1 v1 is preserved for comparison.",
+        "priorClosure": null
       }
     },
     "expected": {
@@ -394,12 +388,30 @@
   },
   {
     "id": "056-quality-escape-investigator-operational-4",
-    "root": "runCase.nl",
+    "root": "investigateQualityEscape.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
-      "input": {
+      "caseFile": {
         "caseId": "056-quality-escape-investigator-operational-4",
-        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-4; return a traceable proposal from the supplied records.",
+        "observedDefects": [
+          {
+            "id": "056-prior-defectobservation-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-4",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        ],
+        "lotLineage": [],
+        "processHistories": [],
+        "inspectionMethods": [],
+        "holds": [],
+        "correctiveActions": [],
         "evidence": [
           {
             "id": "056-operational-detail-4-source-v2",
@@ -415,28 +427,8 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "056-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "056-prior-defectobservation-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "056-quality-escape-investigator-operational-4",
-            "productId": "valve-V56",
-            "lotId": "seal-batch-B17",
-            "symptom": "leak at valve seal",
-            "observedAt": "2026-10-01T09:30:00Z",
-            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
-          }
-        }
+        "eventNote": "R056 Quality steward records: Hold H56 was lifted for units 1–12 of lot B17 after reinspection; units 13–20 remain on hold. The release manifest currently lists the entire lot as “released”. This current event is source 056-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 056-quality-escape-investigator-operational-4. The supplied typed prior 056-prior-defectobservation-detail-4-v1 v1 is preserved for comparison.",
+        "priorClosure": null
       }
     },
     "expected": {
@@ -461,12 +453,30 @@
   },
   {
     "id": "056-quality-escape-investigator-operational-5",
-    "root": "runCase.nl",
+    "root": "investigateQualityEscape.nl",
     "split_group": "056-quality-escape-investigator",
     "inputs": {
-      "input": {
+      "caseFile": {
         "caseId": "056-quality-escape-investigator-operational-5",
-        "goal": "Review the Quality escape investigator evidence for case 056-quality-escape-investigator-operational-5; return a traceable proposal from the supplied records.",
+        "observedDefects": [
+          {
+            "id": "056-prior-defectobservation-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "056-quality-escape-investigator-operational-5",
+            "productId": "valve-V56",
+            "lotId": "seal-batch-B17",
+            "symptom": "leak at valve seal",
+            "observedAt": "2026-10-01T09:30:00Z",
+            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
+          }
+        ],
+        "lotLineage": [],
+        "processHistories": [],
+        "inspectionMethods": [],
+        "holds": [],
+        "correctiveActions": [],
         "evidence": [
           {
             "id": "056-operational-detail-5-source-v2",
@@ -482,28 +492,8 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "056-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "056-prior-defectobservation-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "056-quality-escape-investigator-operational-5",
-            "productId": "valve-V56",
-            "lotId": "seal-batch-B17",
-            "symptom": "leak at valve seal",
-            "observedAt": "2026-10-01T09:30:00Z",
-            "inspectionContext": "lot genealogy ties 8 units to B17; cure temperature out of range"
-          }
-        }
+        "eventNote": "R056 Quality steward records: Valve V56 shows the same seal leak 12 days after corrective action CA56-4 was closed. The effectiveness check measured zero leaks for only one day; recurrence record R56-9 remains unlinked to the closed causal claim. This current event is source 056-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 056-quality-escape-investigator-operational-5. The supplied typed prior 056-prior-defectobservation-detail-5-v1 v1 is preserved for comparison.",
+        "priorClosure": null
       }
     },
     "expected": {

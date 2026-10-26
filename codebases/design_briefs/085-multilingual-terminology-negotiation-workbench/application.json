@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.application/1",
+  "id": "085",
+  "title": "Multilingual Terminology Negotiation Workbench",
+  "entrypoint": "negotiateTerminology.nl",
+  "interfaces": [
+    {
+      "name": "negotiateTerminology",
+      "path": "negotiateTerminology.nl",
+      "purpose": "Resolve concept-scoped terminology, preserve regional forms and stage coherent versioned migrations."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractSenses",
+        "paths": [
+          "negotiateTerminology/extractContextualOccurrences.nl",
+          "negotiateTerminology/verifyTermOccurrence.nl"
+        ]
+      },
+      {
+        "stage": "alignConcepts",
+        "paths": [
+          "negotiateTerminology/alignConceptBoundaries.nl",
+          "negotiateTerminology/alignConceptBoundaries/compareSenseContexts.nl"
+        ]
+      },
+      {
+        "stage": "constructTermOptions",
+        "paths": [
+          "negotiateTerminology/constructScopedTermOptions.nl",
+          "negotiateTerminology/constructScopedTermOptions/deriveContextualInflections.nl"
+        ]
+      },
+      {
+        "stage": "negotiateDecision",
+        "paths": [
+          "negotiateTerminology/recordTerminologyDecision.nl"
+        ]
+      },
+      {
+        "stage": "propagateTerminology",
+        "paths": [
+          "negotiateTerminology/stageTerminologyMigration.nl",
+          "negotiateTerminology/stageTerminologyMigration/traceReleasedTermUsage.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "negotiateTerminology/alignConceptBoundaries.nl",
+          "negotiateTerminology/alignConceptBoundaries/compareSenseContexts.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "negotiateTerminology/extractContextualOccurrences.nl",
+          "negotiateTerminology/constructScopedTermOptions.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "negotiateTerminology/constructScopedTermOptions.nl",
+          "negotiateTerminology/constructScopedTermOptions/deriveContextualInflections.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "negotiateTerminology/recordTerminologyDecision.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "negotiateTerminology/stageTerminologyMigration.nl",
+          "negotiateTerminology/stageTerminologyMigration/traceReleasedTermUsage.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "negotiateTerminology.nl",
+    "negotiateTerminology/alignConceptBoundaries.nl",
+    "negotiateTerminology/alignConceptBoundaries/compareSenseContexts.nl",
+    "negotiateTerminology/constructScopedTermOptions.nl",
+    "negotiateTerminology/constructScopedTermOptions/deriveContextualInflections.nl",
+    "negotiateTerminology/extractContextualOccurrences.nl",
+    "negotiateTerminology/recordTerminologyDecision.nl",
+    "negotiateTerminology/stageTerminologyMigration.nl",
+    "negotiateTerminology/stageTerminologyMigration/traceReleasedTermUsage.nl",
+    "negotiateTerminology/verifyTermOccurrence.nl",
+    "types.ts"
+  ]
+}

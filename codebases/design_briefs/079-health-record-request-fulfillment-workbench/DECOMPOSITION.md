@@ -1,17 +1,9 @@
 # 079 — Health Record Request Fulfillment Workbench
 
-## Source-derived procedure
+## Distinct algorithm: form a release projection from an authorization tuple and an episode-bounded record inventory
 
-Five domain stages: interpretAuthorization, locateRecords, reviewContent, assembleFulfillment, verifyDelivery. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+The workbench binds every requested release to requester, patient, authorized recipient, categories, date window and expiry. Authorization is checked again immediately before delivery, so a request that expires during review stops at the release boundary. Retrieval searches only the requested episode and records coverage gaps explicitly. A responsive document can still contain another person's information; targeted spans are routed for review rather than releasing the whole file or discarding it wholesale.
 
-## Domain algorithms and gates
+Fulfillment is built from a sanitized rendered derivative. A post-render scan checks document content and hidden metadata as separate channels, and a reviewer approval is bound to the exact derivative hash. Delivery is accepted only for the authorized recipient with an exact receipt. A corrected record arriving after disclosure creates a controlled amendment with a new review and notification obligation; it never silently mutates the prior packet.
 
-- **interpretAuthorization** — Read the request and authorization together to determine recipient, purpose, categories, dates, and any restrictions. Distinguish a requested scope from an authorized scope and route ambiguous authority to the records officer before retrieval. Gate: Current authorization covers the exact recipient and proposed disclosure purpose.
-- **locateRecords** — Search authorized inventories using verified patient and episode identifiers, preserving date and category boundaries. Distinguish unavailable records from records outside scope and prevent similar identities or merged historical accounts from contaminating the packet. Gate: Correct patient identity and explicit coverage manifest.
-- **reviewContent** — Assess responsiveness and identify third-party or otherwise restricted material under supplied disclosure rules. Preserve clinically relevant context where authorized, and route nuanced disclosure judgments to qualified records reviewers rather than making autonomous legal decisions. Gate: Every exclusion or redaction has a supplied policy basis and review status.
-- **assembleFulfillment** — Build a complete or explicitly partial packet with a manifest and explanation of outstanding items. Apply approved redactions through trusted rendering services, verify extracted content and metadata, and bind approval to exact artifact hashes. Gate: No recoverable restricted content, missing unexplained item, or mismatched patient document.
-- **verifyDelivery** — Recheck authorization immediately before recipient-bound delivery, record actual receipt where available, and track partial fulfillment or corrections. Preserve an audit trail without exposing sensitive record bodies in operational logs or notifications. Gate: Correct recipient, current authority, and exact released artifact identity are verified.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+The resume state preserves authorization versions, episode search coverage, source document references, third-party review decisions, rendered derivative identity, metadata scan, approval binding, exact delivery receipt, and outstanding amendment/notification obligations.

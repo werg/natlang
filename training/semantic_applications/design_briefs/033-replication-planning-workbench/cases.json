@@ -319,19 +319,27 @@
   },
   {
     "id": "033-workflow-01",
-    "root": "runCase.nl",
+    "root": "planReplication.nl",
     "split_group": "design-brief-app-033",
     "inputs": {
       "request": {
         "caseId": "SYN-033-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "studyId": "STUDY-33",
+        "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
+        "sourceIds": [
+          "P-33",
+          "DATASET-33"
+        ],
+        "investigatorId": "Dr Lee",
+        "computeBudget": {
+          "minorUnits": "500000",
+          "currency": "USD",
+          "scale": 2
+        },
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "projects": [
           {
             "studyId": "STUDY-33",
             "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
@@ -405,6 +413,111 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "dependencyReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency package DEP-33 v1 is unavailable; v2 changes randomization order and is documented as an adaptation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "seedPlanEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency package DEP-33 v1 is unavailable; v2 changes randomization order and is documented as an adaptation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "datasetVersionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency package DEP-33 v1 is unavailable; v2 changes randomization order and is documented as an adaptation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "jobReceipts": [],
+        "methodConflictEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dependency package DEP-33 v1 is unavailable; v2 changes randomization order and is documented as an adaptation."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -427,19 +540,27 @@
   },
   {
     "id": "033-workflow-02",
-    "root": "runCase.nl",
+    "root": "planReplication.nl",
     "split_group": "design-brief-app-033",
     "inputs": {
       "request": {
         "caseId": "SYN-033-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "studyId": "STUDY-33",
+        "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
+        "sourceIds": [
+          "P-33",
+          "DATASET-33"
+        ],
+        "investigatorId": "Dr Lee",
+        "computeBudget": {
+          "minorUnits": "500000",
+          "currency": "USD",
+          "scale": 2
+        },
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "projects": [
           {
             "studyId": "STUDY-33",
             "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
@@ -513,6 +634,111 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "dependencyReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol omitted seed; registered sensitivity set S-33 has seeds 11, 23, and 47 with no post-hoc selection."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "seedPlanEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol omitted seed; registered sensitivity set S-33 has seeds 11, 23, and 47 with no post-hoc selection."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "datasetVersionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol omitted seed; registered sensitivity set S-33 has seeds 11, 23, and 47 with no post-hoc selection."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "jobReceipts": [],
+        "methodConflictEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol omitted seed; registered sensitivity set S-33 has seeds 11, 23, and 47 with no post-hoc selection."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -535,19 +761,27 @@
   },
   {
     "id": "033-workflow-03",
-    "root": "runCase.nl",
+    "root": "planReplication.nl",
     "split_group": "design-brief-app-033",
     "inputs": {
       "request": {
         "caseId": "SYN-033-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "studyId": "STUDY-33",
+        "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
+        "sourceIds": [
+          "P-33",
+          "DATASET-33"
+        ],
+        "investigatorId": "Dr Lee",
+        "computeBudget": {
+          "minorUnits": "500000",
+          "currency": "USD",
+          "scale": 2
+        },
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "projects": [
           {
             "studyId": "STUDY-33",
             "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
@@ -621,6 +855,111 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "dependencyReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset hash changed from H-33A to H-33B and record count rose by 12; exact replication condition is not met."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "seedPlanEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset hash changed from H-33A to H-33B and record count rose by 12; exact replication condition is not met."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "datasetVersionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset hash changed from H-33A to H-33B and record count rose by 12; exact replication condition is not met."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "jobReceipts": [],
+        "methodConflictEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Dataset hash changed from H-33A to H-33B and record count rose by 12; exact replication condition is not met."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -643,19 +982,27 @@
   },
   {
     "id": "033-workflow-04",
-    "root": "runCase.nl",
+    "root": "planReplication.nl",
     "split_group": "design-brief-app-033",
     "inputs": {
       "request": {
         "caseId": "SYN-033-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "studyId": "STUDY-33",
+        "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
+        "sourceIds": [
+          "P-33",
+          "DATASET-33"
+        ],
+        "investigatorId": "Dr Lee",
+        "computeBudget": {
+          "minorUnits": "500000",
+          "currency": "USD",
+          "scale": 2
+        },
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "projects": [
           {
             "studyId": "STUDY-33",
             "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
@@ -729,6 +1076,111 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "dependencyReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Job J-33 crashed after writing 63 of 100 outputs; completion manifest lists only 63 checksums."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "seedPlanEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Job J-33 crashed after writing 63 of 100 outputs; completion manifest lists only 63 checksums."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "datasetVersionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Job J-33 crashed after writing 63 of 100 outputs; completion manifest lists only 63 checksums."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "jobReceipts": [],
+        "methodConflictEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Job J-33 crashed after writing 63 of 100 outputs; completion manifest lists only 63 checksums."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -751,19 +1203,27 @@
   },
   {
     "id": "033-workflow-05",
-    "root": "runCase.nl",
+    "root": "planReplication.nl",
     "split_group": "design-brief-app-033",
     "inputs": {
       "request": {
         "caseId": "SYN-033-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "studyId": "STUDY-33",
+        "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
+        "sourceIds": [
+          "P-33",
+          "DATASET-33"
+        ],
+        "investigatorId": "Dr Lee",
+        "computeBudget": {
+          "minorUnits": "500000",
+          "currency": "USD",
+          "scale": 2
+        },
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "projects": [
           {
             "studyId": "STUDY-33",
             "replicationGoal": "Repeat the preregistered centrifuge assay with documented parameters",
@@ -837,6 +1297,111 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "dependencyReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Paper states 20 samples per arm; released code sets 25, and both sources are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "seedPlanEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Paper states 20 samples per arm; released code sets 25, and both sources are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "datasetVersionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Paper states 20 samples per arm; released code sets 25, and both sources are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "jobReceipts": [],
+        "methodConflictEvidence": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "033-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Protocol P-33 specifies centrifuge at 4°C for 12 minutes at 3,000g; the lab notebook links output sample S-33 to parameter sheet v2."
+              },
+              {
+                "id": "E2",
+                "source": "033-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Paper states 20 samples per arm; released code sets 25, and both sources are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

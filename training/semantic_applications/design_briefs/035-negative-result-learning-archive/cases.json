@@ -1,7 +1,7 @@
 [
   {
     "id": "035-reconstructAttempt-supported",
-    "root": "runCase/reconstructAttempt/audit/qualify.nl",
+    "root": "negativeResultDossier/attempt/audit/qualify.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
       "draft": {
@@ -98,7 +98,7 @@
   },
   {
     "id": "035-reconstructAttempt-contradictory",
-    "root": "runCase/reconstructAttempt/audit/qualify.nl",
+    "root": "negativeResultDossier/attempt/audit/qualify.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
       "draft": {
@@ -195,7 +195,7 @@
   },
   {
     "id": "035-reconstructAttempt-missing",
-    "root": "runCase/reconstructAttempt/audit/qualify.nl",
+    "root": "negativeResultDossier/attempt/audit/qualify.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
       "draft": {
@@ -292,19 +292,19 @@
   },
   {
     "id": "035-workflow-01",
-    "root": "runCase.nl",
+    "root": "negativeResultDossier.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
-      "request": {
+      "archiveRequest": {
         "caseId": "SYN-035-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "researchQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "archivist": "case owner",
+        "versionAtReview": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "attemptStore": {
+        "archiveVersion": "v1",
+        "attempts": [
           {
             "projectId": "BIO-35",
             "originalQuestion": "Does treatment X reduce colony formation after 48 hours at 37°C?",
@@ -359,7 +359,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRules": [
           {
             "id": "POL-035",
             "authority": "named case owner",
@@ -396,19 +396,19 @@
   },
   {
     "id": "035-workflow-02",
-    "root": "runCase.nl",
+    "root": "negativeResultDossier.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
-      "request": {
+      "archiveRequest": {
         "caseId": "SYN-035-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "researchQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "archivist": "case owner",
+        "versionAtReview": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "attemptStore": {
+        "archiveVersion": "v1",
+        "attempts": [
           {
             "projectId": "BIO-35",
             "originalQuestion": "Does treatment X reduce colony formation after 48 hours at 37°C?",
@@ -463,7 +463,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRules": [
           {
             "id": "POL-035",
             "authority": "named case owner",
@@ -500,19 +500,19 @@
   },
   {
     "id": "035-workflow-03",
-    "root": "runCase.nl",
+    "root": "negativeResultDossier.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
-      "request": {
+      "archiveRequest": {
         "caseId": "SYN-035-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "researchQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "archivist": "case owner",
+        "versionAtReview": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "attemptStore": {
+        "archiveVersion": "v1",
+        "attempts": [
           {
             "projectId": "BIO-35",
             "originalQuestion": "Does treatment X reduce colony formation after 48 hours at 37°C?",
@@ -567,7 +567,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRules": [
           {
             "id": "POL-035",
             "authority": "named case owner",
@@ -604,19 +604,19 @@
   },
   {
     "id": "035-workflow-04",
-    "root": "runCase.nl",
+    "root": "negativeResultDossier.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
-      "request": {
+      "archiveRequest": {
         "caseId": "SYN-035-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "researchQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "archivist": "case owner",
+        "versionAtReview": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "attemptStore": {
+        "archiveVersion": "v1",
+        "attempts": [
           {
             "projectId": "BIO-35",
             "originalQuestion": "Does treatment X reduce colony formation after 48 hours at 37°C?",
@@ -671,7 +671,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRules": [
           {
             "id": "POL-035",
             "authority": "named case owner",
@@ -708,19 +708,19 @@
   },
   {
     "id": "035-workflow-05",
-    "root": "runCase.nl",
+    "root": "negativeResultDossier.nl",
     "split_group": "design-brief-app-035",
     "inputs": {
-      "request": {
+      "archiveRequest": {
         "caseId": "SYN-035-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
+        "researchQuestion": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
         "scope": "one named case",
-        "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "archivist": "case owner",
+        "versionAtReview": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "attemptStore": {
+        "archiveVersion": "v1",
+        "attempts": [
           {
             "projectId": "BIO-35",
             "originalQuestion": "Does treatment X reduce colony formation after 48 hours at 37°C?",
@@ -775,7 +775,7 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "authorityRules": [
           {
             "id": "POL-035",
             "authority": "named case owner",

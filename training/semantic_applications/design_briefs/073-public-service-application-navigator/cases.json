@@ -1,7 +1,7 @@
 [
   {
     "id": "073-first-gate-pass",
-    "root": "runCase/interpretSituation/audit/qualify.nl",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
     "split_group": "world-073-first-gate",
     "inputs": {
       "evidence": {
@@ -67,7 +67,7 @@
   },
   {
     "id": "073-first-gate-fail",
-    "root": "runCase/interpretSituation/audit/qualify.nl",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
     "split_group": "world-073-first-gate",
     "inputs": {
       "evidence": {
@@ -132,7 +132,7 @@
   },
   {
     "id": "073-first-gate-needs-review",
-    "root": "runCase/interpretSituation/audit/qualify.nl",
+    "root": "navigateServiceApplication/interpretSituationGate.nl",
     "split_group": "world-073-first-gate",
     "inputs": {
       "evidence": {
@@ -201,12 +201,11 @@
   },
   {
     "id": "073-workflow-1",
-    "root": "runCase.nl",
+    "root": "navigateServiceApplication.nl",
     "split_group": "world-073-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Public Service Application Navigator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "navigation": {
           "id": "073-workflow-1-record",
           "caseId": "073-workflow-1",
           "sourceRefs": [
@@ -228,36 +227,77 @@
           "serviceCatalogId": "CAT-5",
           "coordinatorId": "NAV-2",
           "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-1-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
         }
-      ],
-      "evidence": [
-        {
-          "id": "073-event-1",
-          "source": "current domain record 073-E1",
-          "version": "v1",
-          "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "073-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "073-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "073-event-1",
-          "source": "current domain record 073-E1",
-          "version": "v1",
-          "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-1",
+            "source": "current domain record 073-E1",
+            "version": "v1",
+            "text": "Applicant Nora V-73 lacks a current tax statement for food-card replacement A-73. Service rule E-13 v2 accepts a current residence permit plus benefit award notice as alternative evidence; Nora supplied award notice B-73 v1, which intake has not yet verified.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Service Application Navigator",
@@ -280,12 +320,11 @@
   },
   {
     "id": "073-workflow-2",
-    "root": "runCase.nl",
+    "root": "navigateServiceApplication.nl",
     "split_group": "world-073-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Public Service Application Navigator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "navigation": {
           "id": "073-workflow-2-record",
           "caseId": "073-workflow-2",
           "sourceRefs": [
@@ -307,36 +346,77 @@
           "serviceCatalogId": "CAT-5",
           "coordinatorId": "NAV-2",
           "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-2-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
         }
-      ],
-      "evidence": [
-        {
-          "id": "073-event-2",
-          "source": "current domain record 073-E2",
-          "version": "v1",
-          "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "073-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "073-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "073-event-2",
-          "source": "current domain record 073-E2",
-          "version": "v1",
-          "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-2",
+            "source": "current domain record 073-E2",
+            "version": "v1",
+            "text": "Nora application A-73 was submitted under service checklist v3 on 2026-10-20. Service bulletin SB-9 v4 effective 2026-10-22 removes the bank-statement requirement for this card pathway; A-73 remains pending and has not been reviewed under v4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Service Application Navigator",
@@ -359,12 +439,11 @@
   },
   {
     "id": "073-workflow-3",
-    "root": "runCase.nl",
+    "root": "navigateServiceApplication.nl",
     "split_group": "world-073-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Public Service Application Navigator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "navigation": {
           "id": "073-workflow-3-record",
           "caseId": "073-workflow-3",
           "sourceRefs": [
@@ -386,36 +465,77 @@
           "serviceCatalogId": "CAT-5",
           "coordinatorId": "NAV-2",
           "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-3-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
         }
-      ],
-      "evidence": [
-        {
-          "id": "073-event-3",
-          "source": "current domain record 073-E3",
-          "version": "v1",
-          "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "073-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "073-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "073-event-3",
-          "source": "current domain record 073-E3",
-          "version": "v1",
-          "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-3",
+            "source": "current domain record 073-E3",
+            "version": "v1",
+            "text": "Nora’s legal name is “Nora Amina El-Amin” on identity document ID-73, but online form field F-6 accepts only one family-name token. The truthful answer does not fit the field; service policy v5 provides a manual clarification route, and no alternate name is supported by the record.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Service Application Navigator",
@@ -438,12 +558,11 @@
   },
   {
     "id": "073-workflow-4",
-    "root": "runCase.nl",
+    "root": "navigateServiceApplication.nl",
     "split_group": "world-073-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Public Service Application Navigator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "navigation": {
           "id": "073-workflow-4-record",
           "caseId": "073-workflow-4",
           "sourceRefs": [
@@ -465,36 +584,77 @@
           "serviceCatalogId": "CAT-5",
           "coordinatorId": "NAV-2",
           "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-4-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
         }
-      ],
-      "evidence": [
-        {
-          "id": "073-event-4",
-          "source": "current domain record 073-E4",
-          "version": "v1",
-          "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "073-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "073-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "073-event-4",
-          "source": "current domain record 073-E4",
-          "version": "v1",
-          "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-4",
+            "source": "current domain record 073-E4",
+            "version": "v1",
+            "text": "Nora uploaded renewal document U-73 at 09:15 on 2026-10-26. The portal still shows “processing” at 09:45 and no receipt number has arrived; upload service log records one received payload and no rejection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Service Application Navigator",
@@ -517,12 +677,11 @@
   },
   {
     "id": "073-workflow-5",
-    "root": "runCase.nl",
+    "root": "navigateServiceApplication.nl",
     "split_group": "world-073-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Public Service Application Navigator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "navigation": {
           "id": "073-workflow-5-record",
           "caseId": "073-workflow-5",
           "sourceRefs": [
@@ -544,36 +703,77 @@
           "serviceCatalogId": "CAT-5",
           "coordinatorId": "NAV-2",
           "consentScope": "Application processing; no SMS consent."
+        },
+        "situation": [],
+        "pathways": [],
+        "questions": [],
+        "tasks": [],
+        "statuses": [],
+        "catalogRules": [],
+        "evidence": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "073-workflow-5-record",
+          "situation": [],
+          "pathways": {
+            "pathways": [],
+            "evidenceRoutes": [],
+            "excludedRoutes": [],
+            "changedRuleIds": [],
+            "blockers": []
+          },
+          "questions": [],
+          "tasks": [],
+          "applicationTruths": [],
+          "agencyReceipts": [],
+          "consentVersion": "Application processing; no SMS consent."
         }
-      ],
-      "evidence": [
-        {
-          "id": "073-event-5",
-          "source": "current domain record 073-E5",
-          "version": "v1",
-          "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "073-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "073-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "073-event-5",
-          "source": "current domain record 073-E5",
-          "version": "v1",
-          "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "ruleUpdates": [],
+        "helperConsent": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "agencyReceipts": [
+          {
+            "id": "073-event-5",
+            "source": "current domain record 073-E5",
+            "version": "v1",
+            "text": "Nora asks her niece Lila N-4 to update application A-73. Delegation form D-73 is unsigned; service policy v5 grants helpers read or edit access only within a signed scope, and the application contains no delegation receipt.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "formExceptions": []
+      },
+      "navigator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Service Application Navigator",

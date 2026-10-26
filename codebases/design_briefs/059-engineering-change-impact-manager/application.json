@@ -1,0 +1,97 @@
+{
+  "schema": "natlang.application/1",
+  "id": "059",
+  "title": "Engineering change impact manager",
+  "entrypoint": "planConfigurationChange.nl",
+  "interfaces": [
+    {
+      "name": "planConfigurationChange",
+      "path": "planConfigurationChange.nl",
+      "purpose": "Partition effect by approved configuration, disposition coexisting revisions, preserve grandfathered units, and fence partial retrofits until exact verification."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretChange",
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "stage": "resolveApplicability",
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "stage": "traceDependencies",
+        "paths": [
+          "planConfigurationChange/propagateAffectedInterfaces.nl"
+        ]
+      },
+      {
+        "stage": "planImplementation",
+        "paths": [
+          "planConfigurationChange/dispositionRevisionStock.nl"
+        ]
+      },
+      {
+        "stage": "verifyConfiguration",
+        "paths": [
+          "planConfigurationChange/reconcileUnitRetrofitStates.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planConfigurationChange/dispositionRevisionStock.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planConfigurationChange/partitionByApprovedConfiguration.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planConfigurationChange/propagateAffectedInterfaces.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planConfigurationChange/reconcileUnitRetrofitStates.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "configuration-specific inventory and unit retrofit state",
+    "writes": "engineering proposal only"
+  },
+  "effects": [
+    "supplier stock disposition request",
+    "configuration verification tasks"
+  ],
+  "source_files": [
+    "planConfigurationChange.nl",
+    "planConfigurationChange/dispositionRevisionStock.nl",
+    "planConfigurationChange/dispositionRevisionStock/assignRevisionUseByConfiguration.nl",
+    "planConfigurationChange/partitionByApprovedConfiguration.nl",
+    "planConfigurationChange/propagateAffectedInterfaces.nl",
+    "planConfigurationChange/reconcileUnitRetrofitStates.nl",
+    "qualification/interpretChange.nl",
+    "types.ts"
+  ]
+}

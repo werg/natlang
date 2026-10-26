@@ -1,7 +1,7 @@
 [
   {
     "id": "076-first-gate-pass",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "manageReferralPacket/verifyReferralRequirement.nl",
     "split_group": "world-076-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "076-first-gate-fail",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "manageReferralPacket/verifyReferralRequirement.nl",
     "split_group": "world-076-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "076-first-gate-needs-review",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "manageReferralPacket/verifyReferralRequirement.nl",
     "split_group": "world-076-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "076-workflow-1",
-    "root": "runCase.nl",
+    "root": "manageReferralPacket.nl",
     "split_group": "world-076-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "referral": {
           "id": "076-workflow-1-record",
           "caseId": "076-workflow-1",
           "sourceRefs": [
@@ -208,36 +207,131 @@
           "coordinatorId": "NURSE-4",
           "clinicianPriorityRef": "PRIORITY-9",
           "workflowStatus": "candidate"
+        },
+        "requirements": [],
+        "matches": [],
+        "gaps": [],
+        "requests": [],
+        "packets": [],
+        "evidence": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "076-workflow-1-record",
+          "referral": {
+            "id": "076-workflow-1-record",
+            "caseId": "076-workflow-1",
+            "sourceRefs": [
+              "076-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "ReferralCase",
+            "subject": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "evidenceIds": [
+              "076-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "076-wf-1-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P17",
+            "referringOrganizationId": "NORTH-WARD",
+            "receivingServiceId": "CARD-REPLACE",
+            "coordinatorId": "NURSE-4",
+            "clinicianPriorityRef": "PRIORITY-9",
+            "workflowStatus": "candidate"
+          },
+          "identity": {
+            "patientId": "P17",
+            "documentIds": [],
+            "verifiedRefs": [],
+            "mismatches": [],
+            "status": "uncertain"
+          },
+          "checklist": {
+            "version": "",
+            "addedRequirementIds": [],
+            "changedRequirementIds": [],
+            "unchangedRequirementIds": [],
+            "missingAuthority": []
+          },
+          "documents": [],
+          "priorityRef": "PRIORITY-9",
+          "episodeScope": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+          "requests": [],
+          "transfer": {
+            "packetId": "",
+            "state": "unknown",
+            "receiptRefs": [],
+            "recipientReadback": [],
+            "resendAllowed": false,
+            "blockers": []
+          },
+          "disclosureRefs": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "076-wf-1-source",
-          "source": "primary case artifact 076-E1",
-          "version": "v1",
-          "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "076-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "076-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "076-wf-1-source",
-          "source": "primary case artifact 076-E1",
-          "version": "v1",
-          "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "checklistUpdates": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "identityEvidence": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "documents": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicianUpdates": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "recipientReceipts": [
+          {
+            "id": "076-wf-1-source",
+            "source": "primary case artifact 076-E1",
+            "version": "v1",
+            "text": "Referral R-76 for patient P17 lists required signed identity attestation and clinician signature. Attached file D-8 is unsigned; name on D-8 also appears on patient P22’s chart.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Referral Packet Completeness Manager",
@@ -260,12 +354,11 @@
   },
   {
     "id": "076-workflow-2",
-    "root": "runCase.nl",
+    "root": "manageReferralPacket.nl",
     "split_group": "world-076-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "referral": {
           "id": "076-workflow-2-record",
           "caseId": "076-workflow-2",
           "sourceRefs": [
@@ -287,36 +380,131 @@
           "coordinatorId": "NURSE-4",
           "clinicianPriorityRef": "PRIORITY-9",
           "workflowStatus": "candidate"
+        },
+        "requirements": [],
+        "matches": [],
+        "gaps": [],
+        "requests": [],
+        "packets": [],
+        "evidence": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "076-workflow-2-record",
+          "referral": {
+            "id": "076-workflow-2-record",
+            "caseId": "076-workflow-2",
+            "sourceRefs": [
+              "076-wf-2-source"
+            ],
+            "state": "draft",
+            "kind": "ReferralCase",
+            "subject": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "evidenceIds": [
+              "076-wf-2-source"
+            ],
+            "fields": {
+              "sourceArtifact": "076-wf-2-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P17",
+            "referringOrganizationId": "NORTH-WARD",
+            "receivingServiceId": "CARD-REPLACE",
+            "coordinatorId": "NURSE-4",
+            "clinicianPriorityRef": "PRIORITY-9",
+            "workflowStatus": "candidate"
+          },
+          "identity": {
+            "patientId": "P17",
+            "documentIds": [],
+            "verifiedRefs": [],
+            "mismatches": [],
+            "status": "uncertain"
+          },
+          "checklist": {
+            "version": "",
+            "addedRequirementIds": [],
+            "changedRequirementIds": [],
+            "unchangedRequirementIds": [],
+            "missingAuthority": []
+          },
+          "documents": [],
+          "priorityRef": "PRIORITY-9",
+          "episodeScope": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+          "requests": [],
+          "transfer": {
+            "packetId": "",
+            "state": "unknown",
+            "receiptRefs": [],
+            "recipientReadback": [],
+            "resendAllowed": false,
+            "blockers": []
+          },
+          "disclosureRefs": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "076-wf-2-source",
-          "source": "primary case artifact 076-E2",
-          "version": "v1",
-          "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "076-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "076-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "076-wf-2-source",
-          "source": "primary case artifact 076-E2",
-          "version": "v1",
-          "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "checklistUpdates": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "identityEvidence": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "documents": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicianUpdates": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "recipientReceipts": [
+          {
+            "id": "076-wf-2-source",
+            "source": "primary case artifact 076-E2",
+            "version": "v1",
+            "text": "Receiving service checklist v3 adds a current medication list. Pending packet R-76 was created under v2 and contains no medication list.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Referral Packet Completeness Manager",
@@ -339,12 +527,11 @@
   },
   {
     "id": "076-workflow-3",
-    "root": "runCase.nl",
+    "root": "manageReferralPacket.nl",
     "split_group": "world-076-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "referral": {
           "id": "076-workflow-3-record",
           "caseId": "076-workflow-3",
           "sourceRefs": [
@@ -366,36 +553,131 @@
           "coordinatorId": "NURSE-4",
           "clinicianPriorityRef": "PRIORITY-9",
           "workflowStatus": "candidate"
+        },
+        "requirements": [],
+        "matches": [],
+        "gaps": [],
+        "requests": [],
+        "packets": [],
+        "evidence": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "076-workflow-3-record",
+          "referral": {
+            "id": "076-workflow-3-record",
+            "caseId": "076-workflow-3",
+            "sourceRefs": [
+              "076-wf-3-source"
+            ],
+            "state": "draft",
+            "kind": "ReferralCase",
+            "subject": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "evidenceIds": [
+              "076-wf-3-source"
+            ],
+            "fields": {
+              "sourceArtifact": "076-wf-3-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P17",
+            "referringOrganizationId": "NORTH-WARD",
+            "receivingServiceId": "CARD-REPLACE",
+            "coordinatorId": "NURSE-4",
+            "clinicianPriorityRef": "PRIORITY-9",
+            "workflowStatus": "candidate"
+          },
+          "identity": {
+            "patientId": "P17",
+            "documentIds": [],
+            "verifiedRefs": [],
+            "mismatches": [],
+            "status": "uncertain"
+          },
+          "checklist": {
+            "version": "",
+            "addedRequirementIds": [],
+            "changedRequirementIds": [],
+            "unchangedRequirementIds": [],
+            "missingAuthority": []
+          },
+          "documents": [],
+          "priorityRef": "PRIORITY-9",
+          "episodeScope": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+          "requests": [],
+          "transfer": {
+            "packetId": "",
+            "state": "unknown",
+            "receiptRefs": [],
+            "recipientReadback": [],
+            "resendAllowed": false,
+            "blockers": []
+          },
+          "disclosureRefs": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "076-wf-3-source",
-          "source": "primary case artifact 076-E3",
-          "version": "v1",
-          "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "076-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "076-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "076-wf-3-source",
-          "source": "primary case artifact 076-E3",
-          "version": "v1",
-          "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "checklistUpdates": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "identityEvidence": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "documents": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicianUpdates": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "recipientReceipts": [
+          {
+            "id": "076-wf-3-source",
+            "source": "primary case artifact 076-E3",
+            "version": "v1",
+            "text": "Attestation A-76 is present and signed by the patient, but the clinician signature box is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Referral Packet Completeness Manager",
@@ -418,12 +700,11 @@
   },
   {
     "id": "076-workflow-4",
-    "root": "runCase.nl",
+    "root": "manageReferralPacket.nl",
     "split_group": "world-076-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "referral": {
           "id": "076-workflow-4-record",
           "caseId": "076-workflow-4",
           "sourceRefs": [
@@ -445,36 +726,131 @@
           "coordinatorId": "NURSE-4",
           "clinicianPriorityRef": "PRIORITY-9",
           "workflowStatus": "candidate"
+        },
+        "requirements": [],
+        "matches": [],
+        "gaps": [],
+        "requests": [],
+        "packets": [],
+        "evidence": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "076-workflow-4-record",
+          "referral": {
+            "id": "076-workflow-4-record",
+            "caseId": "076-workflow-4",
+            "sourceRefs": [
+              "076-wf-4-source"
+            ],
+            "state": "draft",
+            "kind": "ReferralCase",
+            "subject": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "evidenceIds": [
+              "076-wf-4-source"
+            ],
+            "fields": {
+              "sourceArtifact": "076-wf-4-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P17",
+            "referringOrganizationId": "NORTH-WARD",
+            "receivingServiceId": "CARD-REPLACE",
+            "coordinatorId": "NURSE-4",
+            "clinicianPriorityRef": "PRIORITY-9",
+            "workflowStatus": "candidate"
+          },
+          "identity": {
+            "patientId": "P17",
+            "documentIds": [],
+            "verifiedRefs": [],
+            "mismatches": [],
+            "status": "uncertain"
+          },
+          "checklist": {
+            "version": "",
+            "addedRequirementIds": [],
+            "changedRequirementIds": [],
+            "unchangedRequirementIds": [],
+            "missingAuthority": []
+          },
+          "documents": [],
+          "priorityRef": "PRIORITY-9",
+          "episodeScope": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+          "requests": [],
+          "transfer": {
+            "packetId": "",
+            "state": "unknown",
+            "receiptRefs": [],
+            "recipientReadback": [],
+            "resendAllowed": false,
+            "blockers": []
+          },
+          "disclosureRefs": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "076-wf-4-source",
-          "source": "primary case artifact 076-E4",
-          "version": "v1",
-          "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "076-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "076-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "076-wf-4-source",
-          "source": "primary case artifact 076-E4",
-          "version": "v1",
-          "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "checklistUpdates": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "identityEvidence": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "documents": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicianUpdates": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "recipientReceipts": [
+          {
+            "id": "076-wf-4-source",
+            "source": "primary case artifact 076-E4",
+            "version": "v1",
+            "text": "Clinician priority update P-9 changes the referral from routine to urgent, signed by clinician C4 at 10:14.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Referral Packet Completeness Manager",
@@ -497,12 +873,11 @@
   },
   {
     "id": "076-workflow-5",
-    "root": "runCase.nl",
+    "root": "manageReferralPacket.nl",
     "split_group": "world-076-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Referral Packet Completeness Manager proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "referral": {
           "id": "076-workflow-5-record",
           "caseId": "076-workflow-5",
           "sourceRefs": [
@@ -524,36 +899,131 @@
           "coordinatorId": "NURSE-4",
           "clinicianPriorityRef": "PRIORITY-9",
           "workflowStatus": "candidate"
+        },
+        "requirements": [],
+        "matches": [],
+        "gaps": [],
+        "requests": [],
+        "packets": [],
+        "evidence": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "076-workflow-5-record",
+          "referral": {
+            "id": "076-workflow-5-record",
+            "caseId": "076-workflow-5",
+            "sourceRefs": [
+              "076-wf-5-source"
+            ],
+            "state": "draft",
+            "kind": "ReferralCase",
+            "subject": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "evidenceIds": [
+              "076-wf-5-source"
+            ],
+            "fields": {
+              "sourceArtifact": "076-wf-5-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P17",
+            "referringOrganizationId": "NORTH-WARD",
+            "receivingServiceId": "CARD-REPLACE",
+            "coordinatorId": "NURSE-4",
+            "clinicianPriorityRef": "PRIORITY-9",
+            "workflowStatus": "candidate"
+          },
+          "identity": {
+            "patientId": "P17",
+            "documentIds": [],
+            "verifiedRefs": [],
+            "mismatches": [],
+            "status": "uncertain"
+          },
+          "checklist": {
+            "version": "",
+            "addedRequirementIds": [],
+            "changedRequirementIds": [],
+            "unchangedRequirementIds": [],
+            "missingAuthority": []
+          },
+          "documents": [],
+          "priorityRef": "PRIORITY-9",
+          "episodeScope": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+          "requests": [],
+          "transfer": {
+            "packetId": "",
+            "state": "unknown",
+            "receiptRefs": [],
+            "recipientReadback": [],
+            "resendAllowed": false,
+            "blockers": []
+          },
+          "disclosureRefs": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "076-wf-5-source",
-          "source": "primary case artifact 076-E5",
-          "version": "v1",
-          "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "076-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "076-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "076-wf-5-source",
-          "source": "primary case artifact 076-E5",
-          "version": "v1",
-          "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "checklistUpdates": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "identityEvidence": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "documents": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicianUpdates": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "recipientReceipts": [
+          {
+            "id": "076-wf-5-source",
+            "source": "primary case artifact 076-E5",
+            "version": "v1",
+            "text": "Receiving clinic sent no receipt for packet X-17. Dispatch log shows one transmission; recipient status is unknown.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Referral Packet Completeness Manager",

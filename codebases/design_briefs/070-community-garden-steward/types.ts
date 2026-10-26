@@ -79,3 +79,13 @@ export type StageResultGardenTask = { accepted: GardenTask[]; unresolved: DraftG
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretPreferences: StageResultGardenPreference; modelPlots: StageResultPlotConstraint; generatePlans: StageResultGardenPlan; negotiateAllocation: StageResultGardenAgreement; coordinateSeason: StageResultGardenTask; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretPreferences: StageResultGardenPreference; modelPlots: StageResultPlotConstraint; generatePlans: StageResultGardenPlan; negotiateAllocation: StageResultGardenAgreement; coordinateSeason: StageResultGardenTask; };
+
+export type GardenSteward = { id: string };
+export type GardenChange = { unavailableMemberIds: string[]; brokenToolIds: string[]; newAssessments: Evidence[]; memberResponses: Evidence[]; departures: string[] };
+export type GardenDossier = { season: GardenSeason; preferences: GardenPreference[]; constraints: PlotConstraint[]; plans: GardenPlan[]; agreements: GardenAgreement[]; tasks: GardenTask[]; evidence: Evidence[]; checkpoint: GardenCheckpoint };
+export type GardenCheckpoint = { revision: string; preferences: GardenPreference[]; constraints: PlotConstraint[]; plans: GardenPlan[]; agreements: GardenAgreement[]; tasks: GardenTask[]; toolReservations: string[]; completedTaskRefs: string[]; transferredRights: string[]; };
+export type PlotConditionMap = { plotId: string; knownConditions: string[]; uncertainConditions: string[]; interventionsRequiringExpert: string[]; evidenceIds: string[] };
+export type PlotAlternative = { plan: GardenPlan; tradeoffs: string[]; hardConstraintFindings: string[]; unresolved: string[] };
+export type AllocationNegotiation = { proposals: GardenAgreement[]; unacceptedDuties: string[]; trials: string[]; fairnessReasons: string[]; blockers: string[] };
+export type SeasonBoard = { tasks: GardenTask[]; reservations: string[]; brokenToolHolds: string[]; careTransfers: string[]; completionRefs: string[]; conflicts: string[] };
+export type GardenProposal = { application: 'Community garden steward'; status: 'ready-for-review'|'blocked'; preferences: GardenPreference[]; plotMap: PlotConditionMap[]; alternatives: PlotAlternative[]; negotiation: AllocationNegotiation; seasonBoard: SeasonBoard; blockers: string[]; actionBoundary: string; resumeState: GardenCheckpoint; };

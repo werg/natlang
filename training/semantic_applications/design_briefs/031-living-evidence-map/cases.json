@@ -280,19 +280,23 @@
   },
   {
     "id": "031-workflow-01",
-    "root": "runCase.nl",
+    "root": "buildEvidenceMap.nl",
     "split_group": "design-brief-app-031",
     "inputs": {
       "request": {
         "caseId": "SYN-031-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
+        "inclusionPolicyId": "ELIGIBILITY-V3",
+        "corpusIds": [
+          "PREPRINT-P31",
+          "JOURNAL-J31"
+        ],
+        "reviewOwnerId": "Reviewer-31",
+        "cutoffDate": "2026-10-08",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "reviews": [
           {
             "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
             "inclusionPolicyId": "ELIGIBILITY-V3",
@@ -347,7 +351,27 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "studyRecords": [
+          {
+            "id": "E1",
+            "source": "031-source-1",
+            "version": "v1",
+            "observedAt": "2026-10-01",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+          },
+          {
+            "id": "E2",
+            "source": "031-source-2",
+            "version": "v2",
+            "observedAt": "2026-10-02",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+          }
+        ],
+        "eligibilityPolicies": [
           {
             "id": "POL-031",
             "authority": "named case owner",
@@ -362,6 +386,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "versionLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureConversions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "accessLimitations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "retractions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "eligibilityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Preprint P-31 and journal article J-31 share DOI and author list; J-31 is version of the same study, not a new cohort."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -384,19 +538,23 @@
   },
   {
     "id": "031-workflow-02",
-    "root": "runCase.nl",
+    "root": "buildEvidenceMap.nl",
     "split_group": "design-brief-app-031",
     "inputs": {
       "request": {
         "caseId": "SYN-031-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
+        "inclusionPolicyId": "ELIGIBILITY-V3",
+        "corpusIds": [
+          "PREPRINT-P31",
+          "JOURNAL-J31"
+        ],
+        "reviewOwnerId": "Reviewer-31",
+        "cutoffDate": "2026-10-08",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "reviews": [
           {
             "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
             "inclusionPolicyId": "ELIGIBILITY-V3",
@@ -451,7 +609,27 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "studyRecords": [
+          {
+            "id": "E1",
+            "source": "031-source-1",
+            "version": "v1",
+            "observedAt": "2026-10-01",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+          },
+          {
+            "id": "E2",
+            "source": "031-source-2",
+            "version": "v2",
+            "observedAt": "2026-10-02",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+          }
+        ],
+        "eligibilityPolicies": [
           {
             "id": "POL-031",
             "authority": "named case owner",
@@ -466,6 +644,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "versionLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureConversions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "accessLimitations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "retractions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "eligibilityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Study S-31 reports outcome in mg/L while target measure is µg/mL; raw values and calibration source are retained."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -488,19 +796,23 @@
   },
   {
     "id": "031-workflow-03",
-    "root": "runCase.nl",
+    "root": "buildEvidenceMap.nl",
     "split_group": "design-brief-app-031",
     "inputs": {
       "request": {
         "caseId": "SYN-031-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
+        "inclusionPolicyId": "ELIGIBILITY-V3",
+        "corpusIds": [
+          "PREPRINT-P31",
+          "JOURNAL-J31"
+        ],
+        "reviewOwnerId": "Reviewer-31",
+        "cutoffDate": "2026-10-08",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "reviews": [
           {
             "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
             "inclusionPolicyId": "ELIGIBILITY-V3",
@@ -555,7 +867,27 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "studyRecords": [
+          {
+            "id": "E1",
+            "source": "031-source-1",
+            "version": "v1",
+            "observedAt": "2026-10-01",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+          },
+          {
+            "id": "E2",
+            "source": "031-source-2",
+            "version": "v2",
+            "observedAt": "2026-10-02",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+          }
+        ],
+        "eligibilityPolicies": [
           {
             "id": "POL-031",
             "authority": "named case owner",
@@ -570,6 +902,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "versionLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureConversions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "accessLimitations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "retractions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "eligibilityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Full text F-31 is inaccessible; abstract reports objective but no result numbers."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -592,19 +1054,23 @@
   },
   {
     "id": "031-workflow-04",
-    "root": "runCase.nl",
+    "root": "buildEvidenceMap.nl",
     "split_group": "design-brief-app-031",
     "inputs": {
       "request": {
         "caseId": "SYN-031-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
+        "inclusionPolicyId": "ELIGIBILITY-V3",
+        "corpusIds": [
+          "PREPRINT-P31",
+          "JOURNAL-J31"
+        ],
+        "reviewOwnerId": "Reviewer-31",
+        "cutoffDate": "2026-10-08",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "reviews": [
           {
             "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
             "inclusionPolicyId": "ELIGIBILITY-V3",
@@ -659,7 +1125,27 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "studyRecords": [
+          {
+            "id": "E1",
+            "source": "031-source-1",
+            "version": "v1",
+            "observedAt": "2026-10-01",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+          },
+          {
+            "id": "E2",
+            "source": "031-source-2",
+            "version": "v2",
+            "observedAt": "2026-10-10",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+          }
+        ],
+        "eligibilityPolicies": [
           {
             "id": "POL-031",
             "authority": "named case owner",
@@ -674,6 +1160,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "versionLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureConversions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "accessLimitations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "retractions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "eligibilityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Registry notice R-31 marks paper P-31 retracted on Oct 9; claim C-31 cites its result."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -696,19 +1312,23 @@
   },
   {
     "id": "031-workflow-05",
-    "root": "runCase.nl",
+    "root": "buildEvidenceMap.nl",
     "split_group": "design-brief-app-031",
     "inputs": {
       "request": {
         "caseId": "SYN-031-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
+        "inclusionPolicyId": "ELIGIBILITY-V3",
+        "corpusIds": [
+          "PREPRINT-P31",
+          "JOURNAL-J31"
+        ],
+        "reviewOwnerId": "Reviewer-31",
+        "cutoffDate": "2026-10-08",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "corpus": {
+        "reviews": [
           {
             "question": "What is the effect at 90-day follow-up among adults diagnosed before enrollment?",
             "inclusionPolicyId": "ELIGIBILITY-V3",
@@ -763,7 +1383,27 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "studyRecords": [
+          {
+            "id": "E1",
+            "source": "031-source-1",
+            "version": "v1",
+            "observedAt": "2026-10-01",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+          },
+          {
+            "id": "E2",
+            "source": "031-source-2",
+            "version": "v2",
+            "observedAt": "2026-10-09",
+            "authority": "named case owner",
+            "scope": "one named case, current period",
+            "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+          }
+        ],
+        "eligibilityPolicies": [
           {
             "id": "POL-031",
             "authority": "named case owner",
@@ -778,6 +1418,136 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "versionLinks": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "measureConversions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "accessLimitations": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "retractions": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "eligibilityChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "031-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Eligibility v3 freezes adults with confirmed diagnosis before enrollment and follow-up at 90 days; the criterion set is versioned and applies to unseen records."
+              },
+              {
+                "id": "E2",
+                "source": "031-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Criterion set v2 changed on Oct 8; records screened before then require a targeted rescreen."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

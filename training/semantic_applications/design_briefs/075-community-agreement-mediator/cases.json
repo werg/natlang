@@ -1,7 +1,7 @@
 [
   {
     "id": "075-first-gate-pass",
-    "root": "runCase/recoverAgreements/audit/qualify.nl",
+    "root": "mediateAgreement/verifyExistingAgreement.nl",
     "split_group": "world-075-first-gate",
     "inputs": {
       "evidence": {
@@ -66,7 +66,7 @@
   },
   {
     "id": "075-first-gate-fail",
-    "root": "runCase/recoverAgreements/audit/qualify.nl",
+    "root": "mediateAgreement/verifyExistingAgreement.nl",
     "split_group": "world-075-first-gate",
     "inputs": {
       "evidence": {
@@ -130,7 +130,7 @@
   },
   {
     "id": "075-first-gate-needs-review",
-    "root": "runCase/recoverAgreements/audit/qualify.nl",
+    "root": "mediateAgreement/verifyExistingAgreement.nl",
     "split_group": "world-075-first-gate",
     "inputs": {
       "evidence": {
@@ -195,12 +195,11 @@
   },
   {
     "id": "075-workflow-1",
-    "root": "runCase.nl",
+    "root": "mediateAgreement.nl",
     "split_group": "world-075-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Community Agreement Mediator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "dispute": {
           "id": "075-workflow-1-record",
           "caseId": "075-workflow-1",
           "sourceRefs": [
@@ -231,36 +230,98 @@
             "MIN-14",
             "DRAFT-75"
           ]
+        },
+        "priorAgreements": [],
+        "positions": [],
+        "options": [],
+        "trials": [],
+        "reviews": [],
+        "evidence": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "075-workflow-1-record",
+          "priorAgreements": [],
+          "competingAccounts": [
+            {
+              "id": "075-wf-1-source",
+              "source": "primary case artifact 075-E1",
+              "version": "v1",
+              "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+              "status": "current",
+              "authority": "primary domain evidence"
+            }
+          ],
+          "participantTerms": [],
+          "options": [],
+          "trialTerms": [],
+          "findings": [],
+          "exitsCompleted": [],
+          "unresolved": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "075-wf-1-source",
-          "source": "primary case artifact 075-E1",
-          "version": "v1",
-          "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "075-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "075-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "075-wf-1-source",
-          "source": "primary case artifact 075-E1",
-          "version": "v1",
-          "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "participantResponses": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disputedAccounts": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "trialObservations": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "withdrawals": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "safetyOrRightsFlags": [
+          {
+            "id": "075-wf-1-source",
+            "source": "primary case artifact 075-E1",
+            "version": "v1",
+            "text": "Community agreement draft CA-75 lists residents R14 and R22 as participants. R14 signed the 20:00 garden closing time; R22 has not responded on Saturday watering.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "mediator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Community Agreement Mediator",
@@ -283,12 +344,11 @@
   },
   {
     "id": "075-workflow-2",
-    "root": "runCase.nl",
+    "root": "mediateAgreement.nl",
     "split_group": "world-075-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Community Agreement Mediator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "dispute": {
           "id": "075-workflow-2-record",
           "caseId": "075-workflow-2",
           "sourceRefs": [
@@ -319,36 +379,98 @@
             "MIN-14",
             "DRAFT-75"
           ]
+        },
+        "priorAgreements": [],
+        "positions": [],
+        "options": [],
+        "trials": [],
+        "reviews": [],
+        "evidence": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "075-workflow-2-record",
+          "priorAgreements": [],
+          "competingAccounts": [
+            {
+              "id": "075-wf-2-source",
+              "source": "primary case artifact 075-E2",
+              "version": "v1",
+              "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+              "status": "current",
+              "authority": "primary domain evidence"
+            }
+          ],
+          "participantTerms": [],
+          "options": [],
+          "trialTerms": [],
+          "findings": [],
+          "exitsCompleted": [],
+          "unresolved": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "075-wf-2-source",
-          "source": "primary case artifact 075-E2",
-          "version": "v1",
-          "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "075-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "075-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "075-wf-2-source",
-          "source": "primary case artifact 075-E2",
-          "version": "v1",
-          "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "participantResponses": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disputedAccounts": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "trialObservations": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "withdrawals": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "safetyOrRightsFlags": [
+          {
+            "id": "075-wf-2-source",
+            "source": "primary case artifact 075-E2",
+            "version": "v1",
+            "text": "R22 proposes moving the shared-tool shed. Existing minutes give R14 key custody through October; no signed amendment changes that term.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "mediator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Community Agreement Mediator",
@@ -371,12 +493,11 @@
   },
   {
     "id": "075-workflow-3",
-    "root": "runCase.nl",
+    "root": "mediateAgreement.nl",
     "split_group": "world-075-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Community Agreement Mediator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "dispute": {
           "id": "075-workflow-3-record",
           "caseId": "075-workflow-3",
           "sourceRefs": [
@@ -407,36 +528,98 @@
             "MIN-14",
             "DRAFT-75"
           ]
+        },
+        "priorAgreements": [],
+        "positions": [],
+        "options": [],
+        "trials": [],
+        "reviews": [],
+        "evidence": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "075-workflow-3-record",
+          "priorAgreements": [],
+          "competingAccounts": [
+            {
+              "id": "075-event-3",
+              "source": "current domain record 075-E3",
+              "version": "v1",
+              "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+              "status": "current",
+              "authority": "primary domain evidence"
+            }
+          ],
+          "participantTerms": [],
+          "options": [],
+          "trialTerms": [],
+          "findings": [],
+          "exitsCompleted": [],
+          "unresolved": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "075-event-3",
-          "source": "current domain record 075-E3",
-          "version": "v1",
-          "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "075-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "075-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "075-event-3",
-          "source": "current domain record 075-E3",
-          "version": "v1",
-          "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "participantResponses": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disputedAccounts": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "trialObservations": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "withdrawals": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "safetyOrRightsFlags": [
+          {
+            "id": "075-event-3",
+            "source": "current domain record 075-E3",
+            "version": "v1",
+            "text": "Participants R14 and R22 trialled closing time O-3 (20:00) on two Saturdays. R14 reports the trial worked; R22 reports missing a 19:30 medication pickup because the gate was already locked. Both comments are in trial log TL-75 v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "mediator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Community Agreement Mediator",
@@ -459,12 +642,11 @@
   },
   {
     "id": "075-workflow-4",
-    "root": "runCase.nl",
+    "root": "mediateAgreement.nl",
     "split_group": "world-075-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Community Agreement Mediator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "dispute": {
           "id": "075-workflow-4-record",
           "caseId": "075-workflow-4",
           "sourceRefs": [
@@ -495,36 +677,98 @@
             "MIN-14",
             "DRAFT-75"
           ]
+        },
+        "priorAgreements": [],
+        "positions": [],
+        "options": [],
+        "trials": [],
+        "reviews": [],
+        "evidence": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "075-workflow-4-record",
+          "priorAgreements": [],
+          "competingAccounts": [
+            {
+              "id": "075-event-4",
+              "source": "current domain record 075-E4",
+              "version": "v1",
+              "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+              "status": "current",
+              "authority": "primary domain evidence"
+            }
+          ],
+          "participantTerms": [],
+          "options": [],
+          "trialTerms": [],
+          "findings": [],
+          "exitsCompleted": [],
+          "unresolved": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "075-event-4",
-          "source": "current domain record 075-E4",
-          "version": "v1",
-          "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "075-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "075-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "075-event-4",
-          "source": "current domain record 075-E4",
-          "version": "v1",
-          "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "participantResponses": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disputedAccounts": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "trialObservations": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "withdrawals": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "safetyOrRightsFlags": [
+          {
+            "id": "075-event-4",
+            "source": "current domain record 075-E4",
+            "version": "v1",
+            "text": "Participant R22 withdrew consent to take part in mediation at 14:10 on 2026-10-26 under exit clause EC-2. EC-2 records that the mediator stops direct contact and retains only the minimum audit note; the other participant’s consent remains active.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "mediator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Community Agreement Mediator",
@@ -547,12 +791,11 @@
   },
   {
     "id": "075-workflow-5",
-    "root": "runCase.nl",
+    "root": "mediateAgreement.nl",
     "split_group": "world-075-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Community Agreement Mediator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "dispute": {
           "id": "075-workflow-5-record",
           "caseId": "075-workflow-5",
           "sourceRefs": [
@@ -583,36 +826,98 @@
             "MIN-14",
             "DRAFT-75"
           ]
+        },
+        "priorAgreements": [],
+        "positions": [],
+        "options": [],
+        "trials": [],
+        "reviews": [],
+        "evidence": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "075-workflow-5-record",
+          "priorAgreements": [],
+          "competingAccounts": [
+            {
+              "id": "075-event-5",
+              "source": "current domain record 075-E5",
+              "version": "v1",
+              "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+              "status": "current",
+              "authority": "primary domain evidence"
+            }
+          ],
+          "participantTerms": [],
+          "options": [],
+          "trialTerms": [],
+          "findings": [],
+          "exitsCompleted": [],
+          "unresolved": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "075-event-5",
-          "source": "current domain record 075-E5",
-          "version": "v1",
-          "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "075-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "075-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "075-event-5",
-          "source": "current domain record 075-E5",
-          "version": "v1",
-          "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "participantResponses": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disputedAccounts": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "trialObservations": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "withdrawals": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "safetyOrRightsFlags": [
+          {
+            "id": "075-event-5",
+            "source": "current domain record 075-E5",
+            "version": "v1",
+            "text": "Dispute RN-75 concerns the fence line between plots 4 and 5. The file includes a signed property-boundary objection from landholder L-2 and a report of a direct threat at the gate on 2026-10-25; community protocol CP-3 names the qualified safety/legal liaison.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "mediator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Community Agreement Mediator",

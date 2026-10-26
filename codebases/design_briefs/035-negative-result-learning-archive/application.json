@@ -1,0 +1,156 @@
+{
+  "schema": "natlang.application/1",
+  "id": "035",
+  "title": "Negative-result learning archive",
+  "entrypoint": "negativeResultDossier.nl",
+  "interfaces": [
+    {
+      "name": "negativeResultDossier",
+      "path": "negativeResultDossier.nl",
+      "purpose": "Reconstruct attempts, gate inference, compare rival causes, design pre-registered follow-ups, and revise scoped lessons."
+    },
+    {
+      "name": "reconstructAttemptHistories",
+      "path": "negativeResultDossier/reconstructAttemptHistories.nl",
+      "purpose": "Align intended and actually executed procedures with the complete measurement chain."
+    },
+    {
+      "name": "adjudicateInferenceValidity",
+      "path": "negativeResultDossier/adjudicateInferenceValidity.nl",
+      "purpose": "Keep valid negative, invalid, incomplete, and uncertain outcomes epistemically distinct."
+    },
+    {
+      "name": "compareRivalMechanisms",
+      "path": "negativeResultDossier/compareRivalMechanisms.nl",
+      "purpose": "Keep demonstrated causes and plausible alternatives linked to supporting and contrary observations."
+    },
+    {
+      "name": "designDiscriminatingFollowups",
+      "path": "negativeResultDossier/designDiscriminatingFollowups.nl",
+      "purpose": "Declare rival-specific outcome predictions and enforce safe, authorized bounds."
+    },
+    {
+      "name": "reviseScopedLessons",
+      "path": "negativeResultDossier/reviseScopedLessons.nl",
+      "purpose": "Version lessons by tested conditions and preserve contradictory and superseding evidence."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "reconstructAttempt",
+        "paths": [
+          "negativeResultDossier/reconstructAttemptHistories/orderExecutionEvents.nl"
+        ]
+      },
+      {
+        "stage": "classifyFailure",
+        "paths": [
+          "negativeResultDossier/adjudicateInferenceValidity/testMeasurementIntegrity.nl",
+          "negativeResultDossier/adjudicateInferenceValidity/testCompletion.nl"
+        ]
+      },
+      {
+        "stage": "compareExplanations",
+        "paths": [
+          "negativeResultDossier/compareRivalMechanisms/extractDemonstratedMechanisms.nl",
+          "negativeResultDossier/compareRivalMechanisms/attachContradictoryObservations.nl"
+        ]
+      },
+      {
+        "stage": "designFollowups",
+        "paths": [
+          "negativeResultDossier/designDiscriminatingFollowups/declarePredictionsBeforeExecution.nl",
+          "negativeResultDossier/designDiscriminatingFollowups/verifyFollowupConstraints.nl"
+        ]
+      },
+      {
+        "stage": "maintainLessons",
+        "paths": [
+          "negativeResultDossier/reviseScopedLessons/contractLessonApplicability.nl",
+          "negativeResultDossier/reviseScopedLessons/preserveKnowledgeHistory.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "negativeResultDossier/adjudicateInferenceValidity/testCompletion.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "negativeResultDossier/reviseScopedLessons/contractLessonApplicability.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "negativeResultDossier/requestRestrictedMethodReview.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "negativeResultDossier/connectSharedProcessFailures.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "negativeResultDossier/designDiscriminatingFollowups/declarePredictionsBeforeExecution.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "recordFamilies": [
+      "ResearchAttempt",
+      "NegativeFinding",
+      "FailureExplanation",
+      "DiscriminatingExperiment",
+      "ResearchLesson"
+    ],
+    "history": "append-only attempt and lesson revisions with supersession links"
+  },
+  "effects": {
+    "proposed": [
+      "restricted-method-review",
+      "follow-up-approval"
+    ],
+    "dispatch": "researcher-authorized; no experiment execution from an archive proposal"
+  },
+  "source_files": [
+    "negativeResultDossier.nl",
+    "negativeResultDossier/adjudicateInferenceValidity.nl",
+    "negativeResultDossier/adjudicateInferenceValidity/compareObservedResultToRegisteredPrediction.nl",
+    "negativeResultDossier/adjudicateInferenceValidity/testCompletion.nl",
+    "negativeResultDossier/adjudicateInferenceValidity/testMeasurementIntegrity.nl",
+    "negativeResultDossier/attempt/audit/qualify.nl",
+    "negativeResultDossier/causes/audit/qualify.nl",
+    "negativeResultDossier/compareRivalMechanisms.nl",
+    "negativeResultDossier/compareRivalMechanisms/attachContradictoryObservations.nl",
+    "negativeResultDossier/compareRivalMechanisms/extractDemonstratedMechanisms.nl",
+    "negativeResultDossier/compareRivalMechanisms/retainPlausibleRivals.nl",
+    "negativeResultDossier/connectSharedProcessFailures.nl",
+    "negativeResultDossier/designDiscriminatingFollowups.nl",
+    "negativeResultDossier/designDiscriminatingFollowups/chooseMinimalChange.nl",
+    "negativeResultDossier/designDiscriminatingFollowups/declarePredictionsBeforeExecution.nl",
+    "negativeResultDossier/designDiscriminatingFollowups/verifyFollowupConstraints.nl",
+    "negativeResultDossier/followups/audit/qualify.nl",
+    "negativeResultDossier/inference/audit/qualify.nl",
+    "negativeResultDossier/lessons/audit/qualify.nl",
+    "negativeResultDossier/reconstructAttemptHistories.nl",
+    "negativeResultDossier/reconstructAttemptHistories/extractIntendedProcedure.nl",
+    "negativeResultDossier/reconstructAttemptHistories/orderExecutionEvents.nl",
+    "negativeResultDossier/reconstructAttemptHistories/validateMeasurementChain.nl",
+    "negativeResultDossier/requestRestrictedMethodReview.nl",
+    "negativeResultDossier/reviseScopedLessons.nl",
+    "negativeResultDossier/reviseScopedLessons/contractLessonApplicability.nl",
+    "negativeResultDossier/reviseScopedLessons/linkContradictoryAndSupersedingRuns.nl",
+    "negativeResultDossier/reviseScopedLessons/preserveKnowledgeHistory.nl",
+    "types.ts"
+  ]
+}

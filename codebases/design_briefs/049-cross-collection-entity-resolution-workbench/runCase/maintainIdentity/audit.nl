@@ -1,5 +1,0 @@
----
-args: { draft: DraftIdentityRevision, prepared: PreparedEvidence, decisions: DecisionAtom[] }
-returns: AuditResult
----
-Independently compare every populated IdentityRevision field with source versions and a plausible rival interpretation. `verdict = await qualify(draft, prepared, decisions)` and include that child result. Gate: Consumer impact and reversibility verified before promoting an identity revision. Explain the decisive evidence and smallest repair target; never weaken the gate.

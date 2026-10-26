@@ -145,3 +145,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type TerminologyOwner = { id: string };
+export type TerminologyChange = { occurrences: EvidenceItem[]; expertOpinions: EvidenceItem[]; regionalGuidance: EvidenceItem[]; inflectionReviews: EvidenceItem[]; releasedContent: EvidenceItem[] };
+export type TerminologyDossier = { project: TerminologyProject; occurrences: TermOccurrence[]; concepts: MultilingualConcept[]; options: TermOption[]; decisions: TerminologyDecision[]; impacts: TerminologyImpact[]; evidence: EvidenceItem[]; checkpoint: TerminologyCheckpoint };
+export type SenseCluster = { occurrenceIds: string[]; conceptCandidate: string; definition: string; usageContexts: string[]; regionalScopes: string[]; disputedBoundary: string[]; evidenceIds: string[]; };
+export type InflectionCandidate = { optionId: string; language: string; grammaticalContext: string; forms: string[]; reviewState: 'approved'|'pending'|'rejected'; evidenceIds: string[]; };
+export type MigrationPlan = { decisionId: string; affectedContentIds: string[]; priorVersion: string; targetVersion: string; stagedChanges: string[]; mixedWorkflowBlockers: string[]; approvals: string[]; };
+export type TerminologyCheckpoint = { revision: string; occurrences: TermOccurrence[]; clusters: SenseCluster[]; concepts: MultilingualConcept[]; options: TermOption[]; inflections: InflectionCandidate[]; decisions: TerminologyDecision[]; migrations: MigrationPlan[]; openDisagreements: string[]; };
+export type TerminologyProposal = { application: 'Multilingual Terminology Negotiation Workbench'; status: 'ready-for-review'|'blocked'; occurrences: TermOccurrence[]; concepts: MultilingualConcept[]; options: TermOption[]; inflections: InflectionCandidate[]; decision: TerminologyDecision; migrations: MigrationPlan[]; openDisagreements: string[]; blockers: string[]; actionBoundary: string; resumeState: TerminologyCheckpoint; };
+
+export type TermOptionSet = { options: TermOption[]; inflections: InflectionCandidate[]; blockers: string[]; };

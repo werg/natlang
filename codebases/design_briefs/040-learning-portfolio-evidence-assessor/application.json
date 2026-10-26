@@ -1,0 +1,108 @@
+{
+  "schema": "natlang.application/1",
+  "id": "040",
+  "title": "Learning portfolio evidence assessor",
+  "entrypoint": "reviewLearnerPortfolio.nl",
+  "interfaces": [
+    {
+      "name": "reviewLearnerPortfolio",
+      "path": "reviewLearnerPortfolio.nl",
+      "purpose": "Assess an evidence portfolio against a versioned competency standard and prepare an assessor-bound recommendation."
+    },
+    {
+      "name": "rehearAttributionCorrection",
+      "path": "reviewLearnerPortfolio/rehearAttributionCorrection.nl",
+      "purpose": "Reassess only the competency mappings changed by a learner's versioned attribution appeal."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "indexEvidence",
+        "paths": [
+          "reviewLearnerPortfolio/distinguishPortfolioContributions.nl"
+        ]
+      },
+      {
+        "stage": "mapCompetencies",
+        "paths": [
+          "reviewLearnerPortfolio/mapObservedWorkToCompetencies.nl"
+        ]
+      },
+      {
+        "stage": "assessSufficiency",
+        "paths": [
+          "reviewLearnerPortfolio/testEvidenceSufficiency.nl"
+        ]
+      },
+      {
+        "stage": "formNextTasks",
+        "paths": [
+          "reviewLearnerPortfolio/closeMostConsequentialEvidenceGap.nl"
+        ]
+      },
+      {
+        "stage": "prepareAssessment",
+        "paths": [
+          "reviewLearnerPortfolio/assembleAssessorDecision.nl",
+          "reviewLearnerPortfolio/rehearAttributionCorrection.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "reviewLearnerPortfolio/distinguishPortfolioContributions.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "reviewLearnerPortfolio/testEvidenceSufficiency.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "reviewLearnerPortfolio/testEvidenceSufficiency.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "reviewLearnerPortfolio/mapObservedWorkToCompetencies.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "reviewLearnerPortfolio/rehearAttributionCorrection.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "findings": "immutable source evidence, framework version, prior finding version, and appeal lineage"
+  },
+  "effects": {
+    "highStakesOutcome": "recommendation only until named assessor approval",
+    "appeal": "versioned reassessment limited to affected competency mappings"
+  },
+  "source_files": [
+    "qualification/assessSufficiency.nl",
+    "qualification/formNextTasks.nl",
+    "qualification/indexEvidence.nl",
+    "qualification/mapCompetencies.nl",
+    "qualification/prepareAssessment.nl",
+    "reviewLearnerPortfolio.nl",
+    "reviewLearnerPortfolio/assembleAssessorDecision.nl",
+    "reviewLearnerPortfolio/assembleAssessorDecision/identifyClaimedOutcomesWithoutEvidence.nl",
+    "reviewLearnerPortfolio/closeMostConsequentialEvidenceGap.nl",
+    "reviewLearnerPortfolio/distinguishPortfolioContributions.nl",
+    "reviewLearnerPortfolio/mapObservedWorkToCompetencies.nl",
+    "reviewLearnerPortfolio/rehearAttributionCorrection.nl",
+    "reviewLearnerPortfolio/testEvidenceSufficiency.nl",
+    "types.ts"
+  ]
+}

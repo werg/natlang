@@ -143,3 +143,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type Archivist = { id: string };
+export type ArchiveChange = { transcriptUpdates: EvidenceItem[]; speakerResponses: EvidenceItem[]; consentChanges: EvidenceItem[]; correctionEvidence: EvidenceItem[]; disclosureReviews: EvidenceItem[] };
+export type OralHistoryDossier = { project: OralHistoryProject; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; questions: OralHistoryQuestion[]; editions: OralHistoryEdition[]; evidence: EvidenceItem[]; checkpoint: OralArchiveCheckpoint };
+export type ConsentSpan = { speakerId: string; interviewId: string; sourceSpan: string; permittedUses: string[]; publicationAudience: string; state: 'current'|'withdrawn'|'uncertain'; evidenceIds: string[]; };
+export type AccountRelation = { accountIds: string[]; relation: 'same-event'|'related'|'disputed'|'unresolved'; competingDates: string[]; contexts: string[]; basis: string; sourceIds: string[]; };
+export type DerivativeLineage = { derivativeId: string; sourceSpanIds: string[]; consentIds: string[]; derivativeKind: string; status: 'permitted'|'retract'|'review'|'withheld'; };
+export type OralArchiveCheckpoint = { revision: string; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; consent: ConsentSpan[]; questions: OralHistoryQuestion[]; editions: OralHistoryEdition[]; lineage: DerivativeLineage[]; withdrawnSpans: string[]; obligations: string[]; };
+export type OralArchiveProposal = { application: 'Oral History Reconciliation Archive'; status: 'ready-for-review'|'blocked'; accounts: OralHistoryAccount[]; references: OralHistoryReference[]; comparisons: RecollectionComparison[]; questions: OralHistoryQuestion[]; edition: OralHistoryEdition; consent: ConsentSpan[]; retractLineage: DerivativeLineage[]; disclosureFindings: string[]; blockers: string[]; actionBoundary: string; resumeState: OralArchiveCheckpoint; };

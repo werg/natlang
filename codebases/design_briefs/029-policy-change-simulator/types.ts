@@ -1,3 +1,7 @@
+
+
+
+
 export type RecordMeta = { tenantId: ID; id: ID; version: number; schemaVersion: string; state: string; createdAt: DateTime; updatedAt: DateTime; createdBy: ID; sourceRefs: Ref[]; decisionRefs: Ref[]; sensitivity: string[]; purposeIds: ID[]; retentionPolicyId: ID };
 export type ID = string; export type Hash = string; export type LocalDate = string; export type DateTime = string; export type Decimal = string; export type Ratio = { numerator: Decimal; denominator: Decimal }; export type Quantity = { value: Decimal; unit: string }; export type Money = { minorUnits: string; currency: string; scale: number };
 export type Ref = { tenantId: ID; objectId: ID; version: string; hash: Hash };
@@ -46,3 +50,17 @@ export type RevisionProposal = { target: string; change: string; regressionRisks
 export type StageOutputs = { stage1: StageResultPolicyDelta; stage2: StageResultPolicyCaseFacts; stage3: StageResultOutcomeDifference; stage4: StageResultBoundaryScenario; stage5: StageResultPolicyOption };
 export type UnresolvedQuestions = { stage1: Question[]; stage2: Question[]; stage3: Question[]; stage4: Question[]; stage5: Question[] };
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; graph: WorkGraphProposal; evidencePlan: EvidencePlan; stage1: StageResultPolicyDelta; stage2: StageResultPolicyCaseFacts; stage3: StageResultOutcomeDifference; stage4: StageResultBoundaryScenario; stage5: StageResultPolicyOption; unresolved: UnresolvedQuestions; collectionFindings: CollectionFinding; reviewQuestions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revision: RevisionProposal; proposedActions: ActionProposal[]; commitAllowed: boolean };
+export type PolicyScenarioRequest = { caseId: string; baselinePolicyId: string; candidatePolicyId: string; caseCollectionId: string; policyOwnerId: string; purpose: string; expectedVersion: string };
+export type PolicyReplayResult = { policyId: string; caseId: string; inputDigest: string; outcome: string; duties: string[]; permissions: string[]; timing: string[]; escalations: string[]; engineVersion: string; executionId: string; evidenceRefs: string[] };
+export type PolicyReplayPair = { caseId: string; baseline: PolicyReplayResult; candidate: PolicyReplayResult };
+export type PolicySimulationDossier = { simulations: PolicySimulation[]; evidencePages: EvidencePage[]; policyCandidates: PolicyCandidate[]; searchedPartitions: string[]; cases: PolicyCaseFacts[]; replayPairs: PolicyReplayPair[]; ownerEdits: EvidencePage[]; dedupChanges: EvidencePage[]; adoptionReceipts: EvidencePage[] };
+export type PolicyGuardrail = { disposition: string; blockedCaseIds: string[]; preservedCaseIds: string[]; evidenceRefs: string[]; proposedActions: ActionProposal[] };
+export type PolicySimulationResult = { caseId: string; delta: PolicyDeltaSet; cohort: CohortReview; replayBinding: PolicyReplayBinding; outcomes: PolicyOutcomeSet | null; regressions: RegressionSuite | null; boundaries: BoundaryMatrix | null; adoption: PolicyGuardrail; proposal: PolicyOptionProposal | null; openQuestions: string[]; commitAllowed: boolean };
+export type PolicyReplayBinding = { verifiedPairs: PolicyReplayPair[]; blockedCaseIds: string[]; issues: string[]; evidenceRefs: string[] };
+export type PolicyDeltaSet = { baselineHash: string; candidateHash: string; changedConditionIds: string[]; changedConsequences: string[]; protectedSafeguards: string[]; effectiveWindow: string; unresolvedPrecedence: string[] };
+export type CohortReview = { snapshotHash: string; cases: PolicyCaseFacts[]; indeterminateIds: string[]; dedupChangedIds: string[]; sourceRefs: string[] };
+export type PolicyOutcomePair = { caseId: string; baseline: PolicyReplayResult; candidate: PolicyReplayResult; changedDuties: string[]; changedPermissions: string[]; changedTiming: string[]; changedEscalations: string[]; causalConditions: string[]; unresolved: string[] };
+export type PolicyOutcomeSet = { baselineHash: string; candidateHash: string; cohortHash: string; pairs: PolicyOutcomePair[]; unpairedCaseIds: string[]; evidenceRefs: string[] };
+export type RegressionSuite = { preservedExceptionCaseIds: string[]; lostSafeguardCaseIds: string[]; missingRegressionIds: string[]; nextTests: string[] };
+export type BoundaryMatrix = { testedBoundaryPairs: string[]; untestedCombinations: string[]; indeterminateCaseIds: string[]; sourceOutcomeRefs: string[] };
+export type PolicyOptionProposal = { candidateHash: string; affectedCohortIds: string[]; expectedOutcomeChanges: string[]; retainedSafeguards: string[]; unresolvedTradeoffs: string[]; approvalOwnerId: string; adoptionRevalidationRequired: string[] };

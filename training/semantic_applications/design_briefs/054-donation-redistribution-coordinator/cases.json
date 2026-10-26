@@ -1,7 +1,7 @@
 [
   {
     "id": "054-donation-redistribution-coordinator-gate-supported",
-    "root": "runCase/normalizeDonations/audit/qualify.nl",
+    "root": "qualification/normalizeDonations.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
       "draft": {
@@ -42,7 +42,7 @@
             "version": "v1",
             "authority": "named source owner, current version",
             "observedAt": "2026-10-01",
-            "text": "Donor D54 offers mixed children’s coats; recipient R54 needs adult medium and accepts adult large only as substitute. Case case-54; current first-stage record values: {\"availabilityWindow\": \"donor collection on 2026-10-04\", \"condition\": \"mixed sizes; sort before allocation\", \"donorId\": \"donor-D54\", \"itemDescription\": \"mixed child-size winter coats; recipient requests adult medium and accepts adult large substitute\", \"quantity\": {\"unit\": \"coats\", \"value\": \"12\"}}",
+            "text": "Donor D54 offers mixed children\u2019s coats; recipient R54 needs adult medium and accepts adult large only as substitute. Case case-54; current first-stage record values: {\"availabilityWindow\": \"donor collection on 2026-10-04\", \"condition\": \"mixed sizes; sort before allocation\", \"donorId\": \"donor-D54\", \"itemDescription\": \"mixed child-size winter coats; recipient requests adult medium and accepts adult large substitute\", \"quantity\": {\"unit\": \"coats\", \"value\": \"12\"}}",
             "supports": [],
             "contradicts": [],
             "status": "current"
@@ -69,12 +69,12 @@
     },
     "expected": "pass",
     "oracle": "exact",
-    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children’s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
+    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children\u2019s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
     "difficulty": "medium"
   },
   {
     "id": "054-donation-redistribution-coordinator-gate-contradictory",
-    "root": "runCase/normalizeDonations/audit/qualify.nl",
+    "root": "qualification/normalizeDonations.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
       "draft": {
@@ -115,7 +115,7 @@
             "version": "v1",
             "authority": "named source owner, current version",
             "observedAt": "2026-10-01",
-            "text": "Donor D54 offers mixed children’s coats; recipient R54 needs adult medium and accepts adult large only as substitute. Case case-54; current first-stage record values: {\"availabilityWindow\": \"donor collection on 2026-10-04\", \"condition\": \"mixed sizes; sort before allocation\", \"donorId\": \"donor-D54\", \"itemDescription\": \"mixed child-size winter coats; recipient requests adult medium and accepts adult large substitute\", \"quantity\": {\"unit\": \"coats\", \"value\": \"12\"}}",
+            "text": "Donor D54 offers mixed children\u2019s coats; recipient R54 needs adult medium and accepts adult large only as substitute. Case case-54; current first-stage record values: {\"availabilityWindow\": \"donor collection on 2026-10-04\", \"condition\": \"mixed sizes; sort before allocation\", \"donorId\": \"donor-D54\", \"itemDescription\": \"mixed child-size winter coats; recipient requests adult medium and accepts adult large substitute\", \"quantity\": {\"unit\": \"coats\", \"value\": \"12\"}}",
             "supports": [],
             "contradicts": [],
             "status": "current"
@@ -142,12 +142,12 @@
     },
     "expected": "fail",
     "oracle": "exact",
-    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children’s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
+    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children\u2019s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
     "difficulty": "hard"
   },
   {
     "id": "054-donation-redistribution-coordinator-gate-missing",
-    "root": "runCase/normalizeDonations/audit/qualify.nl",
+    "root": "qualification/normalizeDonations.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
       "draft": {
@@ -194,18 +194,17 @@
     },
     "expected": "needs-review",
     "oracle": "exact",
-    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children’s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
+    "scenario": "winter-kit offers and recipient allocation requests: Recipient R-54 requests adult medium coats and accepts a stated substitute of adult large. Donor D-54 offers mixed children\u2019s sizes; two other recipients need the same limited adult-medium stock. Apply the first-stage gate to the record and source versions; Bundle allocation must honor stated need, acceptable substitute, and the supplied fairness rule.",
     "difficulty": "hard"
   },
   {
     "id": "054-donation-redistribution-coordinator-operational-1",
-    "root": "runCase.nl",
+    "root": "coordinateDonationRound.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "054-donation-redistribution-coordinator-operational-1",
-        "goal": "Review the Donation redistribution coordinator evidence for case 054-donation-redistribution-coordinator-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "round": {
+        "roundId": "054-donation-redistribution-coordinator-operational-1",
+        "offerEvidence": [
           {
             "id": "054-operational-detail-1-source-v2",
             "source": "Donation redistribution coordinator operational event log",
@@ -220,16 +219,36 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "recipientEvidence": [
+          {
+            "id": "054-operational-detail-1-source-v2",
+            "source": "Donation redistribution coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R054 Donation steward records: Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available. This current event is source 054-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-1. The supplied typed prior 054-prior-donationoffer-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "054-operational-detail-1-source-v2"
+        "confirmedNeeds": [],
+        "transportCapacity": [],
+        "priorAllocations": [],
+        "collectionDayUpdates": [],
+        "recipientConsents": [],
+        "deliveryMode": "not supplied",
+        "recallRules": [
+          "current named-source authority; applicability must be checked against version and scope"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "offeredLots": [
+          {
             "id": "054-prior-donationoffer-detail-1-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -244,7 +263,7 @@
             "condition": "mixed sizes; sort before allocation",
             "availabilityWindow": "donor collection on 2026-10-04"
           }
-        }
+        ]
       }
     },
     "expected": {
@@ -255,7 +274,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-1 against this factual event: Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available. Original §9 detail: A donor changes the quantity on collection day: recompute affected allocations without hiding unmet needs. Correct handling applies “recompute affected allocations without hiding unmet needs.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-1 against this factual event: Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available. Original \u00a79 detail: A donor changes the quantity on collection day: recompute affected allocations without hiding unmet needs. Correct handling applies \u201crecompute affected allocations without hiding unmet needs.\u201d only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
     },
     "scenario": "Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available.",
     "difficulty": "medium",
@@ -263,19 +282,18 @@
     "brief_detail": "A donor changes the quantity on collection day: recompute affected allocations without hiding unmet needs.",
     "boundary_assertions": {
       "view": "The accountable reviewer view presents this observed event: Donor D54 revises the collection quantity for winter coats from 80 to 52 on collection day at 07:30. Allocation plan A54 has 46 units assigned to recipients and 20 additional units counted as available. It links source 054-operational-detail-1-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-1-v1 v1 and keeps unresolved scope visible for D54, A54.",
-      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-1-v1 v1 and versions only the affected state for D54, A54 against source 054-operational-detail-1-source-v2 v2; it applies “recompute affected allocations without hiding unmet needs.” with the source evidence attached and claims no committed write.",
-      "effects": "The proposed effect is limited to D54, A54 and the scope supported by source 054-operational-detail-1-source-v2 v2; it represents “recompute affected allocations without hiding unmet needs.” as pending approval and is not marked dispatched or complete."
+      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-1-v1 v1 and versions only the affected state for D54, A54 against source 054-operational-detail-1-source-v2 v2; it applies \u201crecompute affected allocations without hiding unmet needs.\u201d with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D54, A54 and the scope supported by source 054-operational-detail-1-source-v2 v2; it represents \u201crecompute affected allocations without hiding unmet needs.\u201d as pending approval and is not marked dispatched or complete."
     }
   },
   {
     "id": "054-donation-redistribution-coordinator-operational-2",
-    "root": "runCase.nl",
+    "root": "coordinateDonationRound.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "054-donation-redistribution-coordinator-operational-2",
-        "goal": "Review the Donation redistribution coordinator evidence for case 054-donation-redistribution-coordinator-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "round": {
+        "roundId": "054-donation-redistribution-coordinator-operational-2",
+        "offerEvidence": [
           {
             "id": "054-operational-detail-2-source-v2",
             "source": "Donation redistribution coordinator operational event log",
@@ -290,16 +308,36 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "recipientEvidence": [
+          {
+            "id": "054-operational-detail-2-source-v2",
+            "source": "Donation redistribution coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R054 Donation steward records: Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement. This current event is source 054-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-2. The supplied typed prior 054-prior-donationoffer-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "054-operational-detail-2-source-v2"
+        "confirmedNeeds": [],
+        "transportCapacity": [],
+        "priorAllocations": [],
+        "collectionDayUpdates": [],
+        "recipientConsents": [],
+        "deliveryMode": "not supplied",
+        "recallRules": [
+          "current named-source authority; applicability must be checked against version and scope"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "offeredLots": [
+          {
             "id": "054-prior-donationoffer-detail-2-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -314,7 +352,7 @@
             "condition": "mixed sizes; sort before allocation",
             "availabilityWindow": "donor collection on 2026-10-04"
           }
-        }
+        ]
       }
     },
     "expected": {
@@ -325,7 +363,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-2 against this factual event: Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement. Original §9 detail: A recipient cannot store a large bundle: split delivery or propose a suitable alternative. Correct handling applies “split delivery or propose a suitable alternative.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-2 against this factual event: Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement. Original \u00a79 detail: A recipient cannot store a large bundle: split delivery or propose a suitable alternative. Correct handling applies \u201csplit delivery or propose a suitable alternative.\u201d only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
     },
     "scenario": "Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement.",
     "difficulty": "hard",
@@ -333,19 +371,18 @@
     "brief_detail": "A recipient cannot store a large bundle: split delivery or propose a suitable alternative.",
     "boundary_assertions": {
       "view": "The accountable reviewer view presents this observed event: Recipient R54-8 can store 10 coat bundles at once but the offered bundle contains 36. Delivery note lists a second trip as possible; recipient has not accepted a different storage arrangement. It links source 054-operational-detail-2-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-2-v1 v1 and keeps unresolved scope visible for R54-8.",
-      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-2-v1 v1 and versions only the affected state for R54-8 against source 054-operational-detail-2-source-v2 v2; it applies “split delivery or propose a suitable alternative.” with the source evidence attached and claims no committed write.",
-      "effects": "The proposed effect is limited to R54-8 and the scope supported by source 054-operational-detail-2-source-v2 v2; it represents “split delivery or propose a suitable alternative.” as pending approval and is not marked dispatched or complete."
+      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-2-v1 v1 and versions only the affected state for R54-8 against source 054-operational-detail-2-source-v2 v2; it applies \u201csplit delivery or propose a suitable alternative.\u201d with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R54-8 and the scope supported by source 054-operational-detail-2-source-v2 v2; it represents \u201csplit delivery or propose a suitable alternative.\u201d as pending approval and is not marked dispatched or complete."
     }
   },
   {
     "id": "054-donation-redistribution-coordinator-operational-3",
-    "root": "runCase.nl",
+    "root": "coordinateDonationRound.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "054-donation-redistribution-coordinator-operational-3",
-        "goal": "Review the Donation redistribution coordinator evidence for case 054-donation-redistribution-coordinator-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "round": {
+        "roundId": "054-donation-redistribution-coordinator-operational-3",
+        "offerEvidence": [
           {
             "id": "054-operational-detail-3-source-v2",
             "source": "Donation redistribution coordinator operational event log",
@@ -360,16 +397,36 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "recipientEvidence": [
+          {
+            "id": "054-operational-detail-3-source-v2",
+            "source": "Donation redistribution coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R054 Donation steward records: Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor. This current event is source 054-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-3. The supplied typed prior 054-prior-donationoffer-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "054-operational-detail-3-source-v2"
+        "confirmedNeeds": [],
+        "transportCapacity": [],
+        "priorAllocations": [],
+        "collectionDayUpdates": [],
+        "recipientConsents": [],
+        "deliveryMode": "not supplied",
+        "recallRules": [
+          "current named-source authority; applicability must be checked against version and scope"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "offeredLots": [
+          {
             "id": "054-prior-donationoffer-detail-3-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -384,7 +441,7 @@
             "condition": "mixed sizes; sort before allocation",
             "availabilityWindow": "donor collection on 2026-10-04"
           }
-        }
+        ]
       }
     },
     "expected": {
@@ -395,7 +452,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-3 against this factual event: Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor. Original §9 detail: A donor requests private recipient details: provide only consented information. Correct handling applies “provide only consented information.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-3 against this factual event: Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor. Original \u00a79 detail: A donor requests private recipient details: provide only consented information. Correct handling applies \u201cprovide only consented information.\u201d only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
     },
     "scenario": "Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor.",
     "difficulty": "medium",
@@ -403,43 +460,62 @@
     "brief_detail": "A donor requests private recipient details: provide only consented information.",
     "boundary_assertions": {
       "view": "The accountable reviewer view presents this observed event: Donor D54 asks volunteer V54 for recipient home addresses. Consent records authorize sharing delivery time windows with the driver, not recipient identity or household address with the donor. It links source 054-operational-detail-3-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-3-v1 v1 and keeps unresolved scope visible for D54, V54.",
-      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-3-v1 v1 and versions only the affected state for D54, V54 against source 054-operational-detail-3-source-v2 v2; it applies “provide only consented information.” with the source evidence attached and claims no committed write.",
-      "effects": "The proposed effect is limited to D54, V54 and the scope supported by source 054-operational-detail-3-source-v2 v2; it represents “provide only consented information.” as pending approval and is not marked dispatched or complete."
+      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-3-v1 v1 and versions only the affected state for D54, V54 against source 054-operational-detail-3-source-v2 v2; it applies \u201cprovide only consented information.\u201d with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to D54, V54 and the scope supported by source 054-operational-detail-3-source-v2 v2; it represents \u201cprovide only consented information.\u201d as pending approval and is not marked dispatched or complete."
     }
   },
   {
     "id": "054-donation-redistribution-coordinator-operational-4",
-    "root": "runCase.nl",
+    "root": "coordinateDonationRound.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "054-donation-redistribution-coordinator-operational-4",
-        "goal": "Review the Donation redistribution coordinator evidence for case 054-donation-redistribution-coordinator-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "round": {
+        "roundId": "054-donation-redistribution-coordinator-operational-4",
+        "offerEvidence": [
           {
             "id": "054-operational-detail-4-source-v2",
             "source": "Donation redistribution coordinator operational event log",
             "version": "v2",
             "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
             "observedAt": "2026-10-05T10:15:00Z",
-            "text": "R054 Donation steward records: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as “low priority.” This current event is source 054-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-4. The supplied typed prior 054-prior-donationoffer-detail-4-v1 v1 is preserved for comparison.",
+            "text": "R054 Donation steward records: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d This current event is source 054-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-4. The supplied typed prior 054-prior-donationoffer-detail-4-v1 v1 is preserved for comparison.",
             "supports": [
-              "Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as “low priority.”"
+              "Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d"
             ],
             "contradicts": [],
             "status": "current"
           }
         ],
-        "policy": [
+        "recipientEvidence": [
+          {
+            "id": "054-operational-detail-4-source-v2",
+            "source": "Donation redistribution coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R054 Donation steward records: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d This current event is source 054-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-4. The supplied typed prior 054-prior-donationoffer-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "054-operational-detail-4-source-v2"
+        "confirmedNeeds": [],
+        "transportCapacity": [],
+        "priorAllocations": [],
+        "collectionDayUpdates": [],
+        "recipientConsents": [],
+        "deliveryMode": "not supplied",
+        "recallRules": [
+          "current named-source authority; applicability must be checked against version and scope"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "offeredLots": [
+          {
             "id": "054-prior-donationoffer-detail-4-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -454,7 +530,7 @@
             "condition": "mixed sizes; sort before allocation",
             "availabilityWindow": "donor collection on 2026-10-04"
           }
-        }
+        ]
       }
     },
     "expected": {
@@ -465,27 +541,26 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-4 against this factual event: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as “low priority.” Original §9 detail: A recipient declines an item: preserve dignity and reallocate without penalizing future need. Correct handling applies “preserve dignity and reallocate without penalizing future need.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-4 against this factual event: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d Original \u00a79 detail: A recipient declines an item: preserve dignity and reallocate without penalizing future need. Correct handling applies \u201cpreserve dignity and reallocate without penalizing future need.\u201d only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
     },
-    "scenario": "Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as “low priority.”",
+    "scenario": "Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d",
     "difficulty": "hard",
     "operational_detail_id": 4,
     "brief_detail": "A recipient declines an item: preserve dignity and reallocate without penalizing future need.",
     "boundary_assertions": {
-      "view": "The accountable reviewer view presents this observed event: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as “low priority.” It links source 054-operational-detail-4-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-4-v1 v1 and keeps unresolved scope visible for R54-11.",
-      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-4-v1 v1 and versions only the affected state for R54-11 against source 054-operational-detail-4-source-v2 v2; it applies “preserve dignity and reallocate without penalizing future need.” with the source evidence attached and claims no committed write.",
-      "effects": "The proposed effect is limited to R54-11 and the scope supported by source 054-operational-detail-4-source-v2 v2; it represents “preserve dignity and reallocate without penalizing future need.” as pending approval and is not marked dispatched or complete."
+      "view": "The accountable reviewer view presents this observed event: Recipient R54-11 declines an item bundle because the sizes do not fit. Their future eligibility record has no restriction; allocation board currently labels the refusal as \u201clow priority.\u201d It links source 054-operational-detail-4-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-4-v1 v1 and keeps unresolved scope visible for R54-11.",
+      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-4-v1 v1 and versions only the affected state for R54-11 against source 054-operational-detail-4-source-v2 v2; it applies \u201cpreserve dignity and reallocate without penalizing future need.\u201d with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to R54-11 and the scope supported by source 054-operational-detail-4-source-v2 v2; it represents \u201cpreserve dignity and reallocate without penalizing future need.\u201d as pending approval and is not marked dispatched or complete."
     }
   },
   {
     "id": "054-donation-redistribution-coordinator-operational-5",
-    "root": "runCase.nl",
+    "root": "coordinateDonationRound.nl",
     "split_group": "054-donation-redistribution-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "054-donation-redistribution-coordinator-operational-5",
-        "goal": "Review the Donation redistribution coordinator evidence for case 054-donation-redistribution-coordinator-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "round": {
+        "roundId": "054-donation-redistribution-coordinator-operational-5",
+        "offerEvidence": [
           {
             "id": "054-operational-detail-5-source-v2",
             "source": "Donation redistribution coordinator operational event log",
@@ -500,16 +575,36 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "recipientEvidence": [
+          {
+            "id": "054-operational-detail-5-source-v2",
+            "source": "Donation redistribution coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R054 Donation steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R054 Donation steward records: Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution. This current event is source 054-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 054-donation-redistribution-coordinator-operational-5. The supplied typed prior 054-prior-donationoffer-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "allocationRules": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "054-operational-detail-5-source-v2"
+        "confirmedNeeds": [],
+        "transportCapacity": [],
+        "priorAllocations": [],
+        "collectionDayUpdates": [],
+        "recipientConsents": [],
+        "deliveryMode": "not supplied",
+        "recallRules": [
+          "current named-source authority; applicability must be checked against version and scope"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "offeredLots": [
+          {
             "id": "054-prior-donationoffer-detail-5-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -524,7 +619,7 @@
             "condition": "mixed sizes; sort before allocation",
             "availabilityWindow": "donor collection on 2026-10-04"
           }
-        }
+        ]
       }
     },
     "expected": {
@@ -535,7 +630,7 @@
     },
     "oracle": {
       "level": "judged",
-      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-5 against this factual event: Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution. Original §9 detail: An item has a recall or handling restriction: quarantine it under the supplied safety policy. Correct handling applies “quarantine it under the supplied safety policy.” only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
+      "rubric": "Judge case 054-donation-redistribution-coordinator-operational-5 against this factual event: Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution. Original \u00a79 detail: An item has a recall or handling restriction: quarantine it under the supplied safety policy. Correct handling applies \u201cquarantine it under the supplied safety policy.\u201d only to the identified object and source versions. The view must expose the decision-relevant evidence and uncertainty; the proposal must preserve the prior version and carry an evidence-linked versioned update; consequential changes stay approval-bound with no completed external effect claimed. Reject unsupported assumptions, broader scope changes, evidence erasure, automatic authorization or claims of a real write/dispatch."
     },
     "scenario": "Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution.",
     "difficulty": "hard",
@@ -543,8 +638,8 @@
     "brief_detail": "An item has a recall or handling restriction: quarantine it under the supplied safety policy.",
     "boundary_assertions": {
       "view": "The accountable reviewer view presents this observed event: Item LOT54-22 is covered by recall notice RC54 for a restricted batch. Handling policy HP54 requires quarantine pending safety review; the warehouse still lists 12 units as available for redistribution. It links source 054-operational-detail-5-source-v2 v2 with prior typed DonationOffer record 054-prior-donationoffer-detail-5-v1 v1 and keeps unresolved scope visible for LOT54-22, RC54, HP54.",
-      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-5-v1 v1 and versions only the affected state for LOT54-22, RC54, HP54 against source 054-operational-detail-5-source-v2 v2; it applies “quarantine it under the supplied safety policy.” with the source evidence attached and claims no committed write.",
-      "effects": "The proposed effect is limited to LOT54-22, RC54, HP54 and the scope supported by source 054-operational-detail-5-source-v2 v2; it represents “quarantine it under the supplied safety policy.” as pending approval and is not marked dispatched or complete."
+      "durable_state": "The proposal retains prior record 054-prior-donationoffer-detail-5-v1 v1 and versions only the affected state for LOT54-22, RC54, HP54 against source 054-operational-detail-5-source-v2 v2; it applies \u201cquarantine it under the supplied safety policy.\u201d with the source evidence attached and claims no committed write.",
+      "effects": "The proposed effect is limited to LOT54-22, RC54, HP54 and the scope supported by source 054-operational-detail-5-source-v2 v2; it represents \u201cquarantine it under the supplied safety policy.\u201d as pending approval and is not marked dispatched or complete."
     }
   }
 ]

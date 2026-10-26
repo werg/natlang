@@ -143,3 +143,14 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type NavigatorAgent = { id: string };
+export type ServiceChange = { newEvidence: EvidenceItem[]; ruleUpdates: EvidenceItem[]; helperConsent: EvidenceItem[]; agencyReceipts: EvidenceItem[]; formExceptions: EvidenceItem[] };
+export type NavigationDossier = { navigation: ServiceNavigation; situation: ServiceSituation[]; pathways: ServicePathway[]; questions: NavigationQuestion[]; tasks: ApplicationTask[]; statuses: ServiceApplicationStatus[]; catalogRules: EvidenceItem[]; evidence: EvidenceItem[]; checkpoint: NavigationCheckpoint };
+export type EvidenceRoute = { condition: string; acceptedAlternatives: string[]; providedEvidenceIds: string[]; verificationState: 'verified'|'pending'|'missing'|'rejected'; ruleVersion: string; };
+export type PathwayGraph = { pathways: ServicePathway[]; evidenceRoutes: EvidenceRoute[]; excludedRoutes: string[]; changedRuleIds: string[]; blockers: string[]; };
+export type ApplicationTruth = { pathwayId: string; representedFacts: string[]; unsupportedFields: string[]; clarificationTasks: string[]; helperScope: string; };
+export type ReceiptReconciliation = { statuses: ServiceApplicationStatus[]; receiptRefs: string[]; uncertainSubmissions: string[]; safeToResubmit: string[]; blockers: string[]; };
+export type NavigationCheckpoint = { revision: string; situation: ServiceSituation[]; pathways: PathwayGraph; questions: NavigationQuestion[]; tasks: ApplicationTask[]; applicationTruths: ApplicationTruth[]; agencyReceipts: EvidenceItem[]; consentVersion: string; };
+export type ApplicationWork = { tasks: ApplicationTask[]; truths: ApplicationTruth[]; blockers: string[]; };
+export type NavigatorProposal = { application: 'Public Service Application Navigator'; status: 'ready-for-review'|'blocked'; situation: ServiceSituation[]; pathwayGraph: PathwayGraph; questions: NavigationQuestion[]; tasks: ApplicationTask[]; applicationTruths: ApplicationTruth[]; outcome: ReceiptReconciliation; blockers: string[]; actionBoundary: string; resumeState: NavigationCheckpoint; };

@@ -1,7 +1,7 @@
 [
   {
     "id": "062-tender-scope-gap-resolver-gate-supported",
-    "root": "runCase/normalizeBids/audit/qualify.nl",
+    "root": "qualification/normalizeBids.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
       "draft": {
@@ -76,7 +76,7 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-gate-contradictory",
-    "root": "runCase/normalizeBids/audit/qualify.nl",
+    "root": "qualification/normalizeBids.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
       "draft": {
@@ -149,7 +149,7 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-gate-missing",
-    "root": "runCase/normalizeBids/audit/qualify.nl",
+    "root": "qualification/normalizeBids.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
       "draft": {
@@ -201,37 +201,13 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-operational-1",
-    "root": "runCase.nl",
+    "root": "resolveTenderScope.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
-      "input": {
+      "tender": {
         "caseId": "062-tender-scope-gap-resolver-operational-1",
-        "goal": "Review the Tender scope gap resolver evidence for case 062-tender-scope-gap-resolver-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "bidScopes": [
           {
-            "id": "062-operational-detail-1-source-v2",
-            "source": "Tender scope gap resolver operational event log",
-            "version": "v2",
-            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
-            "observedAt": "2026-10-02T10:15:00Z",
-            "text": "R062 Tender steward records: Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed. This current event is source 062-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-1. The supplied typed prior 062-prior-bidscope-detail-1-v1 v1 is preserved for comparison.",
-            "supports": [
-              "Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed."
-            ],
-            "contradicts": [],
-            "status": "current"
-          }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "062-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
             "id": "062-prior-bidscope-detail-1-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -248,7 +224,27 @@
               "temporary weather protection unassigned"
             ]
           }
-        }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-1-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R062 Tender steward records: Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed. This current event is source 062-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-1. The supplied typed prior 062-prior-bidscope-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Bidder A62 prices earthworks with a $50,000 allowance based on an estimated 400 cubic metres, while bidder B62 gives a firm price for 360 cubic metres. Bid comparison currently treats both quantities as fixed."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
       }
     },
     "expected": {
@@ -273,37 +269,13 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-operational-2",
-    "root": "runCase.nl",
+    "root": "resolveTenderScope.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
-      "input": {
+      "tender": {
         "caseId": "062-tender-scope-gap-resolver-operational-2",
-        "goal": "Review the Tender scope gap resolver evidence for case 062-tender-scope-gap-resolver-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "bidScopes": [
           {
-            "id": "062-operational-detail-2-source-v2",
-            "source": "Tender scope gap resolver operational event log",
-            "version": "v2",
-            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
-            "observedAt": "2026-10-03T10:15:00Z",
-            "text": "R062 Tender steward records: Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list. This current event is source 062-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-2. The supplied typed prior 062-prior-bidscope-detail-2-v1 v1 is preserved for comparison.",
-            "supports": [
-              "Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list."
-            ],
-            "contradicts": [],
-            "status": "current"
-          }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "062-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
             "id": "062-prior-bidscope-detail-2-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -320,7 +292,27 @@
               "temporary weather protection unassigned"
             ]
           }
-        }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-2-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R062 Tender steward records: Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list. This current event is source 062-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-2. The supplied typed prior 062-prior-bidscope-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Clarification CL62-7 changes bidder B’s exclusion for fire stopping on interface matrix cells F12–F18. The matrix still lists those cells as excluded and the revision log has no affected-row list."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
       }
     },
     "expected": {
@@ -345,37 +337,13 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-operational-3",
-    "root": "runCase.nl",
+    "root": "resolveTenderScope.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
-      "input": {
+      "tender": {
         "caseId": "062-tender-scope-gap-resolver-operational-3",
-        "goal": "Review the Tender scope gap resolver evidence for case 062-tender-scope-gap-resolver-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "bidScopes": [
           {
-            "id": "062-operational-detail-3-source-v2",
-            "source": "Tender scope gap resolver operational event log",
-            "version": "v2",
-            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
-            "observedAt": "2026-10-04T10:15:00Z",
-            "text": "R062 Tender steward records: Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.” This current event is source 062-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-3. The supplied typed prior 062-prior-bidscope-detail-3-v1 v1 is preserved for comparison.",
-            "supports": [
-              "Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.”"
-            ],
-            "contradicts": [],
-            "status": "current"
-          }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "062-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
             "id": "062-prior-bidscope-detail-3-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -392,7 +360,27 @@
               "temporary weather protection unassigned"
             ]
           }
-        }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-3-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R062 Tender steward records: Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.” This current event is source 062-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-3. The supplied typed prior 062-prior-bidscope-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Trade A62 assumes Trade B supplies connector K62; Trade B’s bid excludes K62 and cites Trade A as supplier. Responsibility matrix has both cells marked “by others.”"
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
       }
     },
     "expected": {
@@ -417,37 +405,13 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-operational-4",
-    "root": "runCase.nl",
+    "root": "resolveTenderScope.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
-      "input": {
+      "tender": {
         "caseId": "062-tender-scope-gap-resolver-operational-4",
-        "goal": "Review the Tender scope gap resolver evidence for case 062-tender-scope-gap-resolver-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "bidScopes": [
           {
-            "id": "062-operational-detail-4-source-v2",
-            "source": "Tender scope gap resolver operational event log",
-            "version": "v2",
-            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
-            "observedAt": "2026-10-05T10:15:00Z",
-            "text": "R062 Tender steward records: Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price. This current event is source 062-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-4. The supplied typed prior 062-prior-bidscope-detail-4-v1 v1 is preserved for comparison.",
-            "supports": [
-              "Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price."
-            ],
-            "contradicts": [],
-            "status": "current"
-          }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "062-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
             "id": "062-prior-bidscope-detail-4-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -464,7 +428,27 @@
               "temporary weather protection unassigned"
             ]
           }
-        }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-4-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R062 Tender steward records: Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price. This current event is source 062-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-4. The supplied typed prior 062-prior-bidscope-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Bidder C62 revision 4 received at 16:40 removes the commissioning line included in revision 3. Evaluation workbook still carries the revision-3 coverage finding and price."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
       }
     },
     "expected": {
@@ -489,37 +473,13 @@
   },
   {
     "id": "062-tender-scope-gap-resolver-operational-5",
-    "root": "runCase.nl",
+    "root": "resolveTenderScope.nl",
     "split_group": "062-tender-scope-gap-resolver",
     "inputs": {
-      "input": {
+      "tender": {
         "caseId": "062-tender-scope-gap-resolver-operational-5",
-        "goal": "Review the Tender scope gap resolver evidence for case 062-tender-scope-gap-resolver-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "bidScopes": [
           {
-            "id": "062-operational-detail-5-source-v2",
-            "source": "Tender scope gap resolver operational event log",
-            "version": "v2",
-            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
-            "observedAt": "2026-10-06T10:15:00Z",
-            "text": "R062 Tender steward records: Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount. This current event is source 062-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-5. The supplied typed prior 062-prior-bidscope-detail-5-v1 v1 is preserved for comparison.",
-            "supports": [
-              "Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount."
-            ],
-            "contradicts": [],
-            "status": "current"
-          }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "062-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
             "id": "062-prior-bidscope-detail-5-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -536,7 +496,27 @@
               "temporary weather protection unassigned"
             ]
           }
-        }
+        ],
+        "requirements": [],
+        "bidRevisions": [],
+        "clarifications": [],
+        "interfacePairs": [],
+        "commissioningRequirements": [],
+        "evidence": [
+          {
+            "id": "062-operational-detail-5-source-v2",
+            "source": "Tender scope gap resolver operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R062 Tender steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R062 Tender steward records: Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount. This current event is source 062-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 062-tender-scope-gap-resolver-operational-5. The supplied typed prior 062-prior-bidscope-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Lowest bid B62 omits commissioning test C62-1 and operator training T62-2, both required for functional handover. Price ranking shows B62 first based solely on total amount."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ]
       }
     },
     "expected": {

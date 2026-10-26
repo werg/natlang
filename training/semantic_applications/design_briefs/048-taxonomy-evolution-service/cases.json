@@ -1,7 +1,7 @@
 [
   {
     "id": "048-taxonomy-evolution-service-gate-supported",
-    "root": "runCase/assessFit/audit/qualify.nl",
+    "root": "qualification/assessFit.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
       "draft": {
@@ -74,7 +74,7 @@
   },
   {
     "id": "048-taxonomy-evolution-service-gate-contradictory",
-    "root": "runCase/assessFit/audit/qualify.nl",
+    "root": "qualification/assessFit.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
       "draft": {
@@ -147,7 +147,7 @@
   },
   {
     "id": "048-taxonomy-evolution-service-gate-missing",
-    "root": "runCase/assessFit/audit/qualify.nl",
+    "root": "qualification/assessFit.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
       "draft": {
@@ -199,13 +199,12 @@
   },
   {
     "id": "048-taxonomy-evolution-service-operational-1",
-    "root": "runCase.nl",
+    "root": "evolveTaxonomyVersion.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
-      "input": {
-        "caseId": "048-taxonomy-evolution-service-operational-1",
-        "goal": "Review the Taxonomy evolution service evidence for case 048-taxonomy-evolution-service-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "taxonomy": {
+        "taxonomyId": "not supplied",
+        "sourceEvidence": [
           {
             "id": "048-operational-detail-1-source-v2",
             "source": "Taxonomy evolution service operational event log",
@@ -220,31 +219,47 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "priorFit": {
+          "id": "048-prior-categoryfit-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "048-taxonomy-evolution-service-operational-1",
+          "recordId": "household-account-048",
+          "candidateCategoryIds": [
+            "personal-account",
+            "organization-account",
+            "shared-household-account"
+          ],
+          "fit": "overlap",
+          "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+        },
+        "baselineVersion": "not supplied",
+        "candidateVersion": "draft",
+        "currentDefinitions": [],
+        "positiveAndNegativeExamples": [],
+        "stewardBranches": [],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "048-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "048-prior-categoryfit-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "048-taxonomy-evolution-service-operational-1",
-            "recordId": "household-account-048",
-            "candidateCategoryIds": [
-              "personal-account",
-              "organization-account",
-              "shared-household-account"
+        "rareConceptImportanceEvidence": [
+          {
+            "id": "048-operational-detail-1-source-v2",
+            "source": "Taxonomy evolution service operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R048 Taxonomy steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R048 Taxonomy steward records: Category C48-17 was renamed “shared household” to “joint household” in taxonomy v4; its stable ID, inclusion rule and example set are unchanged. Historical dashboards key on C48-17. This current event is source 048-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 048-taxonomy-evolution-service-operational-1. The supplied typed prior 048-prior-categoryfit-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Category C48-17 was renamed “shared household” to “joint household” in taxonomy v4; its stable ID, inclusion rule and example set are unchanged. Historical dashboards key on C48-17."
             ],
-            "fit": "overlap",
-            "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "downstreamLabelContracts": [],
+        "historicalRecords": [],
+        "changedRecordIds": [
+          "048-operational-detail-1-source-v2"
+        ]
       }
     },
     "expected": {
@@ -269,13 +284,12 @@
   },
   {
     "id": "048-taxonomy-evolution-service-operational-2",
-    "root": "runCase.nl",
+    "root": "evolveTaxonomyVersion.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
-      "input": {
-        "caseId": "048-taxonomy-evolution-service-operational-2",
-        "goal": "Review the Taxonomy evolution service evidence for case 048-taxonomy-evolution-service-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "taxonomy": {
+        "taxonomyId": "not supplied",
+        "sourceEvidence": [
           {
             "id": "048-operational-detail-2-source-v2",
             "source": "Taxonomy evolution service operational event log",
@@ -290,31 +304,47 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "priorFit": {
+          "id": "048-prior-categoryfit-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "048-taxonomy-evolution-service-operational-2",
+          "recordId": "household-account-048",
+          "candidateCategoryIds": [
+            "personal-account",
+            "organization-account",
+            "shared-household-account"
+          ],
+          "fit": "overlap",
+          "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+        },
+        "baselineVersion": "not supplied",
+        "candidateVersion": "draft",
+        "currentDefinitions": [],
+        "positiveAndNegativeExamples": [],
+        "stewardBranches": [],
         "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "048-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "048-prior-categoryfit-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "048-taxonomy-evolution-service-operational-2",
-            "recordId": "household-account-048",
-            "candidateCategoryIds": [
-              "personal-account",
-              "organization-account",
-              "shared-household-account"
+        "rareConceptImportanceEvidence": [
+          {
+            "id": "048-operational-detail-2-source-v2",
+            "source": "Taxonomy evolution service operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R048 Taxonomy steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R048 Taxonomy steward records: Historic series H48 has records only at parent category level before 2020; the later child split between “repair” and “reuse” cannot be reconstructed for those years. This current event is source 048-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 048-taxonomy-evolution-service-operational-2. The supplied typed prior 048-prior-categoryfit-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Historic series H48 has records only at parent category level before 2020; the later child split between “repair” and “reuse” cannot be reconstructed for those years."
             ],
-            "fit": "overlap",
-            "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "downstreamLabelContracts": [],
+        "historicalRecords": [],
+        "changedRecordIds": [
+          "048-operational-detail-2-source-v2"
+        ]
       }
     },
     "expected": {
@@ -339,13 +369,12 @@
   },
   {
     "id": "048-taxonomy-evolution-service-operational-3",
-    "root": "runCase.nl",
+    "root": "evolveTaxonomyVersion.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
-      "input": {
-        "caseId": "048-taxonomy-evolution-service-operational-3",
-        "goal": "Review the Taxonomy evolution service evidence for case 048-taxonomy-evolution-service-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "taxonomy": {
+        "taxonomyId": "not supplied",
+        "sourceEvidence": [
           {
             "id": "048-operational-detail-3-source-v2",
             "source": "Taxonomy evolution service operational event log",
@@ -360,31 +389,47 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "priorFit": {
+          "id": "048-prior-categoryfit-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "048-taxonomy-evolution-service-operational-3",
+          "recordId": "household-account-048",
+          "candidateCategoryIds": [
+            "personal-account",
+            "organization-account",
+            "shared-household-account"
+          ],
+          "fit": "overlap",
+          "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+        },
+        "baselineVersion": "not supplied",
+        "candidateVersion": "draft",
+        "currentDefinitions": [],
+        "positiveAndNegativeExamples": [],
+        "stewardBranches": [],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "048-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "048-prior-categoryfit-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "048-taxonomy-evolution-service-operational-3",
-            "recordId": "household-account-048",
-            "candidateCategoryIds": [
-              "personal-account",
-              "organization-account",
-              "shared-household-account"
+        "rareConceptImportanceEvidence": [
+          {
+            "id": "048-operational-detail-3-source-v2",
+            "source": "Taxonomy evolution service operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R048 Taxonomy steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R048 Taxonomy steward records: Downstream export system X48 accepts one category label per item. Source taxonomy allows both “assistive technology” and “home equipment” for item R48-22; export drops the second label without a warning. This current event is source 048-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 048-taxonomy-evolution-service-operational-3. The supplied typed prior 048-prior-categoryfit-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Downstream export system X48 accepts one category label per item. Source taxonomy allows both “assistive technology” and “home equipment” for item R48-22; export drops the second label without a warning."
             ],
-            "fit": "overlap",
-            "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "downstreamLabelContracts": [],
+        "historicalRecords": [],
+        "changedRecordIds": [
+          "048-operational-detail-3-source-v2"
+        ]
       }
     },
     "expected": {
@@ -409,13 +454,12 @@
   },
   {
     "id": "048-taxonomy-evolution-service-operational-4",
-    "root": "runCase.nl",
+    "root": "evolveTaxonomyVersion.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
-      "input": {
-        "caseId": "048-taxonomy-evolution-service-operational-4",
-        "goal": "Review the Taxonomy evolution service evidence for case 048-taxonomy-evolution-service-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "taxonomy": {
+        "taxonomyId": "not supplied",
+        "sourceEvidence": [
           {
             "id": "048-operational-detail-4-source-v2",
             "source": "Taxonomy evolution service operational event log",
@@ -430,31 +474,47 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "priorFit": {
+          "id": "048-prior-categoryfit-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "048-taxonomy-evolution-service-operational-4",
+          "recordId": "household-account-048",
+          "candidateCategoryIds": [
+            "personal-account",
+            "organization-account",
+            "shared-household-account"
+          ],
+          "fit": "overlap",
+          "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+        },
+        "baselineVersion": "not supplied",
+        "candidateVersion": "draft",
+        "currentDefinitions": [],
+        "positiveAndNegativeExamples": [],
+        "stewardBranches": [],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "048-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "048-prior-categoryfit-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "048-taxonomy-evolution-service-operational-4",
-            "recordId": "household-account-048",
-            "candidateCategoryIds": [
-              "personal-account",
-              "organization-account",
-              "shared-household-account"
+        "rareConceptImportanceEvidence": [
+          {
+            "id": "048-operational-detail-4-source-v2",
+            "source": "Taxonomy evolution service operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R048 Taxonomy steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R048 Taxonomy steward records: Rare category C48-rare appears in 2 of 18,000 records but identifies a safety-critical accessibility need. Two steward-reviewed source notes support the classification; frequency-only rule would exclude it. This current event is source 048-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 048-taxonomy-evolution-service-operational-4. The supplied typed prior 048-prior-categoryfit-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rare category C48-rare appears in 2 of 18,000 records but identifies a safety-critical accessibility need. Two steward-reviewed source notes support the classification; frequency-only rule would exclude it."
             ],
-            "fit": "overlap",
-            "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "downstreamLabelContracts": [],
+        "historicalRecords": [],
+        "changedRecordIds": [
+          "048-operational-detail-4-source-v2"
+        ]
       }
     },
     "expected": {
@@ -479,13 +539,12 @@
   },
   {
     "id": "048-taxonomy-evolution-service-operational-5",
-    "root": "runCase.nl",
+    "root": "evolveTaxonomyVersion.nl",
     "split_group": "048-taxonomy-evolution-service",
     "inputs": {
-      "input": {
-        "caseId": "048-taxonomy-evolution-service-operational-5",
-        "goal": "Review the Taxonomy evolution service evidence for case 048-taxonomy-evolution-service-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "taxonomy": {
+        "taxonomyId": "not supplied",
+        "sourceEvidence": [
           {
             "id": "048-operational-detail-5-source-v2",
             "source": "Taxonomy evolution service operational event log",
@@ -500,31 +559,47 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "priorFit": {
+          "id": "048-prior-categoryfit-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "048-taxonomy-evolution-service-operational-5",
+          "recordId": "household-account-048",
+          "candidateCategoryIds": [
+            "personal-account",
+            "organization-account",
+            "shared-household-account"
+          ],
+          "fit": "overlap",
+          "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+        },
+        "baselineVersion": "not supplied",
+        "candidateVersion": "draft",
+        "currentDefinitions": [],
+        "positiveAndNegativeExamples": [],
+        "stewardBranches": [],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "048-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "048-prior-categoryfit-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "048-taxonomy-evolution-service-operational-5",
-            "recordId": "household-account-048",
-            "candidateCategoryIds": [
-              "personal-account",
-              "organization-account",
-              "shared-household-account"
+        "rareConceptImportanceEvidence": [
+          {
+            "id": "048-operational-detail-5-source-v2",
+            "source": "Taxonomy evolution service operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R048 Taxonomy steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R048 Taxonomy steward records: Steward Maya Chen edits branch B48-a and steward Leo Park edits related branch B48-b. Both change the boundary between “community service” and “public service”; neither merge request includes the other branch fingerprint. This current event is source 048-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 048-taxonomy-evolution-service-operational-5. The supplied typed prior 048-prior-categoryfit-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Steward Maya Chen edits branch B48-a and steward Leo Park edits related branch B48-b. Both change the boundary between “community service” and “public service”; neither merge request includes the other branch fingerprint."
             ],
-            "fit": "overlap",
-            "boundaryIssue": "shared household spans personal and organization boundaries; preserve old category IDs"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "downstreamLabelContracts": [],
+        "historicalRecords": [],
+        "changedRecordIds": [
+          "048-operational-detail-5-source-v2"
+        ]
       }
     },
     "expected": {

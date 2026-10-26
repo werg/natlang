@@ -1,17 +1,9 @@
 # 087 — Oral History Reconciliation Archive
 
-## Source-derived procedure
+## Distinct algorithm: preserve speaker accounts as a consent-scoped event graph, not a merged narrative
 
-Five domain stages: segmentAccounts, resolveReferences, reconcileEvents, formFollowups, publishArchive. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+The archive segments each interview into speaker-attributed accounts with their exact time span and certainty language. Mentioned names create reference candidates rather than identity facts; a nickname shared by several people remains unresolved. Event reconciliation places recollections side by side, preserving different dates and contextual cues instead of forcing consensus.
 
-## Domain algorithms and gates
+Consent is a graph of permitted source spans and derivatives. A speaker's withdrawal of one anecdote invalidates only its quotations, references and summaries, while unrelated material remains available under its own consent. Public editions are checked for indirect disclosure: even a de-identified summary can reveal a restricted speaker when combined with rare dates, places or relationships. Follow-up questions ask for context without leading the speaker toward a preferred chronology or identity.
 
-- **segmentAccounts** — Segment interviews into attributable accounts while preserving surrounding context and the speaker’s expressions of uncertainty. Distinguish firsthand recollection, hearsay, later interpretation, and quoted speech rather than presenting them all as equivalent historical evidence. Gate: Attribution and evidentiary character remain explicit.
-- **resolveReferences** — Resolve names, places, and relationships using authorized contextual evidence, preserving aliases and uncertainty. Avoid merging people with similar names or assuming a pronoun’s referent when the interview context supports multiple interpretations. Gate: Identity links are evidence-backed or remain provisional.
-- **reconcileEvents** — Compare accounts of potentially shared events, aligning chronology and scope while preserving different perspectives. Distinguish factual contradiction from differences in emphasis or memory precision, and do not manufacture one authoritative narrative from majority agreement. Gate: Conflicting recollections remain attributed and searchable.
-- **formFollowups** — Generate neutral follow-up questions that could clarify identities, chronology, or context without leading speakers toward a preferred account. Respect consent and participation boundaries, and distinguish clarification from challenging a person’s memory as false. Gate: Questions are nonleading, relevant, and within consent scope.
-- **publishArchive** — Assemble an attributed narrative and search index that preserve disagreement and access restrictions. Apply consent to quotations, identities, and derived summaries, and maintain edition history when participants correct or withdraw material. Gate: No restricted content leaks through summaries, search snippets, or merged narratives.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+The resumable archive stores transcript versions, account spans, identity candidates, event comparisons, consent changes, derivative lineage, publication review and withdrawal actions. Every edition is versioned and traceable to the exact consent state that authorized it.

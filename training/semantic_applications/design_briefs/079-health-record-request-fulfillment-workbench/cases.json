@@ -1,7 +1,7 @@
 [
   {
     "id": "079-first-gate-pass",
-    "root": "runCase/interpretAuthorization/audit/qualify.nl",
+    "root": "fulfillHealthRecordRequest/verifyRecordAuthorization.nl",
     "split_group": "world-079-first-gate",
     "inputs": {
       "evidence": {
@@ -63,7 +63,7 @@
   },
   {
     "id": "079-first-gate-fail",
-    "root": "runCase/interpretAuthorization/audit/qualify.nl",
+    "root": "fulfillHealthRecordRequest/verifyRecordAuthorization.nl",
     "split_group": "world-079-first-gate",
     "inputs": {
       "evidence": {
@@ -124,7 +124,7 @@
   },
   {
     "id": "079-first-gate-needs-review",
-    "root": "runCase/interpretAuthorization/audit/qualify.nl",
+    "root": "fulfillHealthRecordRequest/verifyRecordAuthorization.nl",
     "split_group": "world-079-first-gate",
     "inputs": {
       "evidence": {
@@ -186,12 +186,11 @@
   },
   {
     "id": "079-workflow-1",
-    "root": "runCase.nl",
+    "root": "fulfillHealthRecordRequest.nl",
     "split_group": "world-079-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Health Record Request Fulfillment Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "request": {
           "id": "079-workflow-1-record",
           "caseId": "079-workflow-1",
           "sourceRefs": [
@@ -213,36 +212,157 @@
           "requestedScope": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
           "authorizationId": "AUTH-79",
           "recordsOfficerId": "RO-6"
+        },
+        "authorization": {
+          "id": "079-workflow-1-record:authorization",
+          "caseId": "079-workflow-1",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordAuthorization",
+          "subject": "unverified authorization scope",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "authorizedRecipientId": "",
+          "permittedCategories": [],
+          "dateWindow": "",
+          "expiresAt": ""
+        },
+        "selection": {
+          "id": "079-workflow-1-record:selection",
+          "caseId": "079-workflow-1",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordSelection",
+          "subject": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "patientId": "P79",
+          "episodeIds": [],
+          "documentIds": [],
+          "missingCoverage": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17."
+        },
+        "findings": [],
+        "fulfillment": null,
+        "delivery": null,
+        "evidence": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "079-workflow-1-record",
+          "authorization": {
+            "requesterId": "R-79",
+            "patientId": "P79",
+            "recipientId": "",
+            "permittedCategories": [],
+            "dateWindow": "",
+            "expiresAt": "",
+            "current": false,
+            "blockers": [
+              "authorization evidence not yet bound"
+            ],
+            "evidenceIds": []
+          },
+          "episodeSearchRefs": [],
+          "documentReviews": [],
+          "rendered": null,
+          "delivery": null,
+          "amendments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "079-wf-1-source",
-          "source": "primary case artifact 079-E1",
-          "version": "v1",
-          "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "079-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "079-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "079-wf-1-source",
-          "source": "primary case artifact 079-E1",
-          "version": "v1",
-          "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "authorizationUpdates": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "indexedRecords": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "renderedArtifacts": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "metadataScans": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "approvalReceipts": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryReceipts": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctedRecords": [
+          {
+            "id": "079-wf-1-source",
+            "source": "primary case artifact 079-E1",
+            "version": "v1",
+            "text": "Authorization A-79 permits radiology report and discharge summary for recipient R-79 through 2026-05-17. Review is still pending on 2026-05-18.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "officer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Health Record Request Fulfillment Workbench",
@@ -265,12 +385,11 @@
   },
   {
     "id": "079-workflow-2",
-    "root": "runCase.nl",
+    "root": "fulfillHealthRecordRequest.nl",
     "split_group": "world-079-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Health Record Request Fulfillment Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "request": {
           "id": "079-workflow-2-record",
           "caseId": "079-workflow-2",
           "sourceRefs": [
@@ -292,36 +411,157 @@
           "requestedScope": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
           "authorizationId": "AUTH-79",
           "recordsOfficerId": "RO-6"
+        },
+        "authorization": {
+          "id": "079-workflow-2-record:authorization",
+          "caseId": "079-workflow-2",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordAuthorization",
+          "subject": "unverified authorization scope",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "authorizedRecipientId": "",
+          "permittedCategories": [],
+          "dateWindow": "",
+          "expiresAt": ""
+        },
+        "selection": {
+          "id": "079-workflow-2-record:selection",
+          "caseId": "079-workflow-2",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordSelection",
+          "subject": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "patientId": "P79",
+          "episodeIds": [],
+          "documentIds": [],
+          "missingCoverage": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17."
+        },
+        "findings": [],
+        "fulfillment": null,
+        "delivery": null,
+        "evidence": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "079-workflow-2-record",
+          "authorization": {
+            "requesterId": "R-79",
+            "patientId": "P79",
+            "recipientId": "",
+            "permittedCategories": [],
+            "dateWindow": "",
+            "expiresAt": "",
+            "current": false,
+            "blockers": [
+              "authorization evidence not yet bound"
+            ],
+            "evidenceIds": []
+          },
+          "episodeSearchRefs": [],
+          "documentReviews": [],
+          "rendered": null,
+          "delivery": null,
+          "amendments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "079-event-2",
-          "source": "current domain record 079-E2",
-          "version": "v1",
-          "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "079-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "079-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "079-event-2",
-          "source": "current domain record 079-E2",
-          "version": "v1",
-          "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "authorizationUpdates": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "indexedRecords": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "renderedArtifacts": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "metadataScans": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "approvalReceipts": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryReceipts": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctedRecords": [
+          {
+            "id": "079-event-2",
+            "source": "current domain record 079-E2",
+            "version": "v1",
+            "text": "Requested discharge summary D-79 includes a scanned page naming a family member’s HIV test result. The signed authorization A-79 covers patient P-79’s own radiology report only; targeted privacy review for third-party information is not recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "officer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Health Record Request Fulfillment Workbench",
@@ -344,12 +584,11 @@
   },
   {
     "id": "079-workflow-3",
-    "root": "runCase.nl",
+    "root": "fulfillHealthRecordRequest.nl",
     "split_group": "world-079-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Health Record Request Fulfillment Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "request": {
           "id": "079-workflow-3-record",
           "caseId": "079-workflow-3",
           "sourceRefs": [
@@ -371,36 +610,157 @@
           "requestedScope": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
           "authorizationId": "AUTH-79",
           "recordsOfficerId": "RO-6"
+        },
+        "authorization": {
+          "id": "079-workflow-3-record:authorization",
+          "caseId": "079-workflow-3",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordAuthorization",
+          "subject": "unverified authorization scope",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "authorizedRecipientId": "",
+          "permittedCategories": [],
+          "dateWindow": "",
+          "expiresAt": ""
+        },
+        "selection": {
+          "id": "079-workflow-3-record:selection",
+          "caseId": "079-workflow-3",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordSelection",
+          "subject": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "patientId": "P79",
+          "episodeIds": [],
+          "documentIds": [],
+          "missingCoverage": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17."
+        },
+        "findings": [],
+        "fulfillment": null,
+        "delivery": null,
+        "evidence": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "079-workflow-3-record",
+          "authorization": {
+            "requesterId": "R-79",
+            "patientId": "P79",
+            "recipientId": "",
+            "permittedCategories": [],
+            "dateWindow": "",
+            "expiresAt": "",
+            "current": false,
+            "blockers": [
+              "authorization evidence not yet bound"
+            ],
+            "evidenceIds": []
+          },
+          "episodeSearchRefs": [],
+          "documentReviews": [],
+          "rendered": null,
+          "delivery": null,
+          "amendments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "079-event-3",
-          "source": "current domain record 079-E3",
-          "version": "v1",
-          "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "079-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "079-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "079-event-3",
-          "source": "current domain record 079-E3",
-          "version": "v1",
-          "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "authorizationUpdates": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "indexedRecords": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "renderedArtifacts": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "metadataScans": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "approvalReceipts": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryReceipts": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctedRecords": [
+          {
+            "id": "079-event-3",
+            "source": "current domain record 079-E3",
+            "version": "v1",
+            "text": "Request R-79 is limited to the 2026-02-11 surgery episode. The archive export also contains an unrelated 2025 behavioral-health note in the same patient folder; the episode index distinguishes the two records.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "officer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Health Record Request Fulfillment Workbench",
@@ -423,12 +783,11 @@
   },
   {
     "id": "079-workflow-4",
-    "root": "runCase.nl",
+    "root": "fulfillHealthRecordRequest.nl",
     "split_group": "world-079-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Health Record Request Fulfillment Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "request": {
           "id": "079-workflow-4-record",
           "caseId": "079-workflow-4",
           "sourceRefs": [
@@ -450,36 +809,157 @@
           "requestedScope": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
           "authorizationId": "AUTH-79",
           "recordsOfficerId": "RO-6"
+        },
+        "authorization": {
+          "id": "079-workflow-4-record:authorization",
+          "caseId": "079-workflow-4",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordAuthorization",
+          "subject": "unverified authorization scope",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "authorizedRecipientId": "",
+          "permittedCategories": [],
+          "dateWindow": "",
+          "expiresAt": ""
+        },
+        "selection": {
+          "id": "079-workflow-4-record:selection",
+          "caseId": "079-workflow-4",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordSelection",
+          "subject": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "patientId": "P79",
+          "episodeIds": [],
+          "documentIds": [],
+          "missingCoverage": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17."
+        },
+        "findings": [],
+        "fulfillment": null,
+        "delivery": null,
+        "evidence": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "079-workflow-4-record",
+          "authorization": {
+            "requesterId": "R-79",
+            "patientId": "P79",
+            "recipientId": "",
+            "permittedCategories": [],
+            "dateWindow": "",
+            "expiresAt": "",
+            "current": false,
+            "blockers": [
+              "authorization evidence not yet bound"
+            ],
+            "evidenceIds": []
+          },
+          "episodeSearchRefs": [],
+          "documentReviews": [],
+          "rendered": null,
+          "delivery": null,
+          "amendments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "079-event-4",
-          "source": "current domain record 079-E4",
-          "version": "v1",
-          "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "079-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "079-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "079-event-4",
-          "source": "current domain record 079-E4",
-          "version": "v1",
-          "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "authorizationUpdates": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "indexedRecords": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "renderedArtifacts": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "metadataScans": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "approvalReceipts": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryReceipts": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctedRecords": [
+          {
+            "id": "079-event-4",
+            "source": "current domain record 079-E4",
+            "version": "v1",
+            "text": "Export P-79 v1 contains a hidden PDF comment with staff initials and a workstation path in document metadata. Rendered pages look clear; metadata inspection log has not been completed and no sanitized export is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "officer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Health Record Request Fulfillment Workbench",
@@ -502,12 +982,11 @@
   },
   {
     "id": "079-workflow-5",
-    "root": "runCase.nl",
+    "root": "fulfillHealthRecordRequest.nl",
     "split_group": "world-079-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Health Record Request Fulfillment Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "request": {
           "id": "079-workflow-5-record",
           "caseId": "079-workflow-5",
           "sourceRefs": [
@@ -529,36 +1008,157 @@
           "requestedScope": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
           "authorizationId": "AUTH-79",
           "recordsOfficerId": "RO-6"
+        },
+        "authorization": {
+          "id": "079-workflow-5-record:authorization",
+          "caseId": "079-workflow-5",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordAuthorization",
+          "subject": "unverified authorization scope",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "authorizedRecipientId": "",
+          "permittedCategories": [],
+          "dateWindow": "",
+          "expiresAt": ""
+        },
+        "selection": {
+          "id": "079-workflow-5-record:selection",
+          "caseId": "079-workflow-5",
+          "sourceRefs": [],
+          "state": "draft",
+          "kind": "RecordSelection",
+          "subject": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17.",
+          "status": "unknown",
+          "evidenceIds": [],
+          "fields": {},
+          "patientId": "P79",
+          "episodeIds": [],
+          "documentIds": [],
+          "missingCoverage": "Radiology report and discharge summary, 2026-01-01 through 2026-04-17."
+        },
+        "findings": [],
+        "fulfillment": null,
+        "delivery": null,
+        "evidence": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "079-workflow-5-record",
+          "authorization": {
+            "requesterId": "R-79",
+            "patientId": "P79",
+            "recipientId": "",
+            "permittedCategories": [],
+            "dateWindow": "",
+            "expiresAt": "",
+            "current": false,
+            "blockers": [
+              "authorization evidence not yet bound"
+            ],
+            "evidenceIds": []
+          },
+          "episodeSearchRefs": [],
+          "documentReviews": [],
+          "rendered": null,
+          "delivery": null,
+          "amendments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "079-event-5",
-          "source": "current domain record 079-E5",
-          "version": "v1",
-          "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "079-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "079-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "079-event-5",
-          "source": "current domain record 079-E5",
-          "version": "v1",
-          "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "authorizationUpdates": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "indexedRecords": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "renderedArtifacts": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "metadataScans": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "approvalReceipts": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryReceipts": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctedRecords": [
+          {
+            "id": "079-event-5",
+            "source": "current domain record 079-E5",
+            "version": "v1",
+            "text": "Clinic B acknowledged receiving package P-79 on 2026-10-10. On 2026-10-12 record correction CR-79 changes the allergy entry from “no known allergy” to “penicillin allergy”; the disclosure register still points to P-79 v1.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "officer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Health Record Request Fulfillment Workbench",

@@ -143,3 +143,11 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type TransitionCoordinator = { id: string };
+export type TransitionChange = { equipmentReceipts: EvidenceItem[]; caregiverResponses: EvidenceItem[]; transportUpdates: EvidenceItem[]; appointmentUpdates: EvidenceItem[]; clinicalReviews: EvidenceItem[]; receivingAcknowledgments: EvidenceItem[] };
+export type TransitionDossier = { transition: CareTransition; requirements: TransitionRequirement[]; participants: TransitionParticipant[]; tasks: TransitionTask[]; options: TransitionOption[]; readiness: TransitionReadiness[]; evidence: EvidenceItem[]; checkpoint: TransitionCheckpoint };
+export type PrerequisiteState = { taskId: string; prerequisites: string[]; satisfiedBy: string[]; blockedBy: string[]; state: 'blocked'|'ready'|'completed'|'unknown'; };
+export type ScheduleImpact = { taskId: string; priorWindow: string; revisedWindow: string; affectedAppointments: string[]; accessConflicts: string[]; sourceIds: string[]; };
+export type TransitionCheckpoint = { revision: string; transition: CareTransition; taskStates: PrerequisiteState[]; schedule: ScheduleImpact[]; equipmentDeliveryRefs: string[]; caregiverAcceptances: string[]; clinicalReviewRefs: string[]; receivingAckRefs: string[]; lastCompletedTaskIds: string[]; blockers: string[]; };
+export type TransitionProposal = { application: 'Care Transition Logistics Coordinator'; status: 'ready-for-review'|'blocked'; dependencyStates: PrerequisiteState[]; scheduleImpacts: ScheduleImpact[]; options: TransitionOption[]; readiness: TransitionReadiness[]; blockedTasks: string[]; clinicalEscalations: string[]; actionBoundary: string; resumeState: TransitionCheckpoint; };

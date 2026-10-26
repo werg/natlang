@@ -1,0 +1,98 @@
+{
+  "schema": "natlang.application/1",
+  "id": "045",
+  "title": "Technical debt campaign planner",
+  "entrypoint": "planDebtCampaign.nl",
+  "interfaces": [
+    {
+      "name": "planDebtCampaign",
+      "path": "planDebtCampaign.nl",
+      "purpose": "Convert observed workflow friction into bounded, dependency-aware improvement waves and verify results against preserved exposure."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "collectSymptoms",
+        "paths": [
+          "planDebtCampaign/groundWorkflowFriction.nl"
+        ]
+      },
+      {
+        "stage": "formMechanisms",
+        "paths": [
+          "planDebtCampaign/testDebtMechanisms.nl"
+        ]
+      },
+      {
+        "stage": "designWorkPackages",
+        "paths": [
+          "planDebtCampaign/scopeFiniteImprovements.nl"
+        ]
+      },
+      {
+        "stage": "sequenceCampaign",
+        "paths": [
+          "planDebtCampaign/sequenceByDependenciesAndCapacity.nl"
+        ]
+      },
+      {
+        "stage": "verifyImprovement",
+        "paths": [
+          "planDebtCampaign/compareOperationalImprovement.nl",
+          "planDebtCampaign/compareOperationalImprovement/verifyRetiredWorkaroundDependents.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planDebtCampaign/scopeFiniteImprovements.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planDebtCampaign/scopeFiniteImprovements.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planDebtCampaign/compareOperationalImprovement.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planDebtCampaign/scopeFiniteImprovements.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planDebtCampaign/compareOperationalImprovement/verifyRetiredWorkaroundDependents.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "campaign": "versioned symptom/mechanism links, package scope baselines, dependency waves, and outcome denominators"
+  },
+  "effects": {
+    "workPackages": "proposal only until named interface owners and sponsor authorize the campaign",
+    "cleanup": "blocked until undocumented consumer discovery and runbook/alert dependency checks complete"
+  },
+  "source_files": [
+    "planDebtCampaign.nl",
+    "planDebtCampaign/compareOperationalImprovement.nl",
+    "planDebtCampaign/compareOperationalImprovement/verifyRetiredWorkaroundDependents.nl",
+    "planDebtCampaign/groundWorkflowFriction.nl",
+    "planDebtCampaign/scopeFiniteImprovements.nl",
+    "planDebtCampaign/sequenceByDependenciesAndCapacity.nl",
+    "planDebtCampaign/testDebtMechanisms.nl",
+    "qualification/collectSymptoms.nl",
+    "types.ts"
+  ]
+}

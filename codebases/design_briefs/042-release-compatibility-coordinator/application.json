@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.application/1",
+  "id": "042",
+  "title": "Release compatibility coordinator",
+  "entrypoint": "coordinateReleaseTransition.nl",
+  "interfaces": [
+    {
+      "name": "coordinateReleaseTransition",
+      "path": "coordinateReleaseTransition.nl",
+      "purpose": "Evaluate behavioral compatibility per consumer, pair replays, stage migration, and reconcile rollback and communications against exact revisions."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretChanges",
+        "paths": [
+          "coordinateReleaseTransition/compareObservedReleaseBehavior.nl"
+        ]
+      },
+      {
+        "stage": "mapConsumers",
+        "paths": [
+          "coordinateReleaseTransition/traceBehaviorConsumers.nl"
+        ]
+      },
+      {
+        "stage": "replayCompatibility",
+        "paths": [
+          "coordinateReleaseTransition/pairBaselineAndCandidateRuns.nl"
+        ]
+      },
+      {
+        "stage": "planMigration",
+        "paths": [
+          "coordinateReleaseTransition/sequenceMigrationByRisk.nl",
+          "coordinateReleaseTransition/sequenceMigrationByRisk/verifyWaveRollbackEvidence.nl"
+        ]
+      },
+      {
+        "stage": "coordinateRelease",
+        "paths": [
+          "coordinateReleaseTransition/decideReleaseReadiness.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinateReleaseTransition/pairBaselineAndCandidateRuns.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinateReleaseTransition/traceBehaviorConsumers.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinateReleaseTransition/sequenceMigrationByRisk.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinateReleaseTransition/testRollbackDataCompatibility.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinateReleaseTransition/bindReleaseCommunications.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "releaseIdentity": "exact baseline and candidate revision pair, pinned customer window, and migration-wave lineage"
+  },
+  "effects": {
+    "migration": "plan only; owner-controlled execution after wave-specific rollback qualification",
+    "documentation": "candidate-only until matching release artifact is promoted"
+  },
+  "source_files": [
+    "coordinateReleaseTransition.nl",
+    "coordinateReleaseTransition/bindReleaseCommunications.nl",
+    "coordinateReleaseTransition/compareObservedReleaseBehavior.nl",
+    "coordinateReleaseTransition/decideReleaseReadiness.nl",
+    "coordinateReleaseTransition/pairBaselineAndCandidateRuns.nl",
+    "coordinateReleaseTransition/sequenceMigrationByRisk.nl",
+    "coordinateReleaseTransition/sequenceMigrationByRisk/verifyWaveRollbackEvidence.nl",
+    "coordinateReleaseTransition/testRollbackDataCompatibility.nl",
+    "coordinateReleaseTransition/traceBehaviorConsumers.nl",
+    "qualification/interpretChanges.nl",
+    "types.ts"
+  ]
+}

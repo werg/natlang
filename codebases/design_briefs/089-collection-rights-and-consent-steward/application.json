@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.application/1",
+  "id": "089",
+  "title": "Collection Rights And Consent Steward",
+  "entrypoint": "stewardCollectionUse.nl",
+  "interfaces": [
+    {
+      "name": "stewardCollectionUse",
+      "path": "stewardCollectionUse.nl",
+      "purpose": "Test a proposed collection use against every item's rights, channel, audience, attribution and duration scope."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "extractPermissions",
+        "paths": [
+          "stewardCollectionUse/extractUsePermissions.nl",
+          "stewardCollectionUse/verifyCollectionPermission.nl"
+        ]
+      },
+      {
+        "stage": "interpretUse",
+        "paths": [
+          "stewardCollectionUse/interpretProposedUse.nl"
+        ]
+      },
+      {
+        "stage": "assessCompatibility",
+        "paths": [
+          "stewardCollectionUse/intersectUseRights.nl",
+          "stewardCollectionUse/intersectUseRights/checkPermissionIntersection.nl"
+        ]
+      },
+      {
+        "stage": "requestClearance",
+        "paths": [
+          "stewardCollectionUse/createClearanceRequests.nl"
+        ]
+      },
+      {
+        "stage": "maintainUseRegister",
+        "paths": [
+          "stewardCollectionUse/maintainRightsRegister.nl",
+          "stewardCollectionUse/maintainRightsRegister/traceAffectedDerivatives.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "stewardCollectionUse/extractUsePermissions.nl",
+          "stewardCollectionUse/intersectUseRights.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "stewardCollectionUse/intersectUseRights.nl",
+          "stewardCollectionUse/intersectUseRights/checkPermissionIntersection.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "stewardCollectionUse/maintainRightsRegister.nl",
+          "stewardCollectionUse/maintainRightsRegister/traceAffectedDerivatives.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "stewardCollectionUse/intersectUseRights.nl",
+          "stewardCollectionUse/intersectUseRights/checkPermissionIntersection.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "stewardCollectionUse/maintainRightsRegister.nl",
+          "stewardCollectionUse/maintainRightsRegister/traceAffectedDerivatives.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "stewardCollectionUse.nl",
+    "stewardCollectionUse/createClearanceRequests.nl",
+    "stewardCollectionUse/extractUsePermissions.nl",
+    "stewardCollectionUse/interpretProposedUse.nl",
+    "stewardCollectionUse/intersectUseRights.nl",
+    "stewardCollectionUse/intersectUseRights/checkPermissionIntersection.nl",
+    "stewardCollectionUse/maintainRightsRegister.nl",
+    "stewardCollectionUse/maintainRightsRegister/traceAffectedDerivatives.nl",
+    "stewardCollectionUse/verifyCollectionPermission.nl",
+    "types.ts"
+  ]
+}

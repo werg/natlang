@@ -1,7 +1,7 @@
 [
   {
     "id": "064-facility-complaint-to-work-order-system-gate-supported",
-    "root": "runCase/interpretComplaint/audit/qualify.nl",
+    "root": "qualification/interpretComplaint.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
       "draft": {
@@ -73,7 +73,7 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-gate-contradictory",
-    "root": "runCase/interpretComplaint/audit/qualify.nl",
+    "root": "qualification/interpretComplaint.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
       "draft": {
@@ -145,7 +145,7 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-gate-missing",
-    "root": "runCase/interpretComplaint/audit/qualify.nl",
+    "root": "qualification/interpretComplaint.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
       "draft": {
@@ -197,12 +197,32 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-operational-1",
-    "root": "runCase.nl",
+    "root": "triageFacilityIssue.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
-      "input": {
+      "serviceCase": {
         "caseId": "064-facility-complaint-to-work-order-system-operational-1",
-        "goal": "Review the Facility complaint-to-work-order system evidence for case 064-facility-complaint-to-work-order-system-operational-1; return a traceable proposal from the supplied records.",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-1",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
         "evidence": [
           {
             "id": "064-operational-detail-1-source-v2",
@@ -217,31 +237,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "064-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "064-prior-facilityobservation-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "064-facility-complaint-to-work-order-system-operational-1",
-            "locationId": "ceiling-zone-C64",
-            "assetCandidateIds": [
-              "light-fitting-L64",
-              "roof-drain-R64"
-            ],
-            "symptom": "water leak after heavy rain near light fitting",
-            "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -266,12 +262,32 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-operational-2",
-    "root": "runCase.nl",
+    "root": "triageFacilityIssue.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
-      "input": {
+      "serviceCase": {
         "caseId": "064-facility-complaint-to-work-order-system-operational-2",
-        "goal": "Review the Facility complaint-to-work-order system evidence for case 064-facility-complaint-to-work-order-system-operational-2; return a traceable proposal from the supplied records.",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-2",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
         "evidence": [
           {
             "id": "064-operational-detail-2-source-v2",
@@ -286,31 +302,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "064-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "064-prior-facilityobservation-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "064-facility-complaint-to-work-order-system-operational-2",
-            "locationId": "ceiling-zone-C64",
-            "assetCandidateIds": [
-              "light-fitting-L64",
-              "roof-drain-R64"
-            ],
-            "symptom": "water leak after heavy rain near light fitting",
-            "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -335,12 +327,32 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-operational-3",
-    "root": "runCase.nl",
+    "root": "triageFacilityIssue.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
-      "input": {
+      "serviceCase": {
         "caseId": "064-facility-complaint-to-work-order-system-operational-3",
-        "goal": "Review the Facility complaint-to-work-order system evidence for case 064-facility-complaint-to-work-order-system-operational-3; return a traceable proposal from the supplied records.",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-3",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
         "evidence": [
           {
             "id": "064-operational-detail-3-source-v2",
@@ -355,31 +367,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "064-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "064-prior-facilityobservation-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "064-facility-complaint-to-work-order-system-operational-3",
-            "locationId": "ceiling-zone-C64",
-            "assetCandidateIds": [
-              "light-fitting-L64",
-              "roof-drain-R64"
-            ],
-            "symptom": "water leak after heavy rain near light fitting",
-            "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -404,12 +392,32 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-operational-4",
-    "root": "runCase.nl",
+    "root": "triageFacilityIssue.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
-      "input": {
+      "serviceCase": {
         "caseId": "064-facility-complaint-to-work-order-system-operational-4",
-        "goal": "Review the Facility complaint-to-work-order system evidence for case 064-facility-complaint-to-work-order-system-operational-4; return a traceable proposal from the supplied records.",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-4",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
         "evidence": [
           {
             "id": "064-operational-detail-4-source-v2",
@@ -424,31 +432,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "064-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "064-prior-facilityobservation-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "064-facility-complaint-to-work-order-system-operational-4",
-            "locationId": "ceiling-zone-C64",
-            "assetCandidateIds": [
-              "light-fitting-L64",
-              "roof-drain-R64"
-            ],
-            "symptom": "water leak after heavy rain near light fitting",
-            "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -473,12 +457,32 @@
   },
   {
     "id": "064-facility-complaint-to-work-order-system-operational-5",
-    "root": "runCase.nl",
+    "root": "triageFacilityIssue.nl",
     "split_group": "064-facility-complaint-to-work-order-system",
     "inputs": {
-      "input": {
+      "serviceCase": {
         "caseId": "064-facility-complaint-to-work-order-system-operational-5",
-        "goal": "Review the Facility complaint-to-work-order system evidence for case 064-facility-complaint-to-work-order-system-operational-5; return a traceable proposal from the supplied records.",
+        "initialObservation": {
+          "id": "064-prior-facilityobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "064-facility-complaint-to-work-order-system-operational-5",
+          "locationId": "ceiling-zone-C64",
+          "assetCandidateIds": [
+            "light-fitting-L64",
+            "roof-drain-R64"
+          ],
+          "symptom": "water leak after heavy rain near light fitting",
+          "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
+        },
+        "locationAliases": [],
+        "officialLocations": [],
+        "timePatterns": [],
+        "accessPermissions": [],
+        "repairHistory": [],
+        "relatedReports": [],
+        "updatePreferences": [],
         "evidence": [
           {
             "id": "064-operational-detail-5-source-v2",
@@ -493,31 +497,7 @@
             "contradicts": [],
             "status": "current"
           }
-        ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "064-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "064-prior-facilityobservation-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "064-facility-complaint-to-work-order-system-operational-5",
-            "locationId": "ceiling-zone-C64",
-            "assetCandidateIds": [
-              "light-fitting-L64",
-              "roof-drain-R64"
-            ],
-            "symptom": "water leak after heavy rain near light fitting",
-            "occurrencePattern": "only reported during rain; prior patch occurred in dry weather"
-          }
-        }
+        ]
       }
     },
     "expected": {

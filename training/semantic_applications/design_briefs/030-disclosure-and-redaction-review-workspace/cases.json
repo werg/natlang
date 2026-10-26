@@ -315,19 +315,22 @@
   },
   {
     "id": "030-workflow-01",
-    "root": "runCase.nl",
+    "root": "prepareDisclosure.nl",
     "split_group": "design-brief-app-030",
     "inputs": {
       "request": {
         "caseId": "SYN-030-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "recipientId": "Dana Cho",
+        "purpose": "October board packet",
+        "documentIds": [
+          "PDF-D30",
+          "ROSTER-D30"
+        ],
+        "reviewOwnerId": "Reviewer-30",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "cases": [
           {
             "recipientId": "Dana Cho",
             "purpose": "October board packet",
@@ -402,6 +405,36 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "documentInspections": [],
+        "redactionReceipts": [],
+        "renderReceipts": [],
+        "recipientApprovals": [],
+        "challengeMappings": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "030-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requester Dana Cho is authorized for the board packet dated October 1–31; the disclosure instruction excludes employee medical notes and permits aggregate staffing totals."
+              },
+              {
+                "id": "E2",
+                "source": "030-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "PDF D-30 contains visible redacted blocks but hidden OCR text still includes address 44 Oak St after export."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -424,19 +457,22 @@
   },
   {
     "id": "030-workflow-02",
-    "root": "runCase.nl",
+    "root": "prepareDisclosure.nl",
     "split_group": "design-brief-app-030",
     "inputs": {
       "request": {
         "caseId": "SYN-030-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "recipientId": "Dana Cho",
+        "purpose": "October board packet",
+        "documentIds": [
+          "PDF-D30",
+          "ROSTER-D30"
+        ],
+        "reviewOwnerId": "Reviewer-30",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "cases": [
           {
             "recipientId": "Dana Cho",
             "purpose": "October board packet",
@@ -511,6 +547,36 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "documentInspections": [],
+        "redactionReceipts": [],
+        "renderReceipts": [],
+        "recipientApprovals": [],
+        "challengeMappings": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "030-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requester Dana Cho is authorized for the board packet dated October 1–31; the disclosure instruction excludes employee medical notes and permits aggregate staffing totals."
+              },
+              {
+                "id": "E2",
+                "source": "030-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Export filename F-30 includes patient name and PDF metadata carries the same name after visible redaction."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -533,19 +599,22 @@
   },
   {
     "id": "030-workflow-03",
-    "root": "runCase.nl",
+    "root": "prepareDisclosure.nl",
     "split_group": "design-brief-app-030",
     "inputs": {
       "request": {
         "caseId": "SYN-030-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "recipientId": "Dana Cho",
+        "purpose": "October board packet",
+        "documentIds": [
+          "PDF-D30",
+          "ROSTER-D30"
+        ],
+        "reviewOwnerId": "Reviewer-30",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "cases": [
           {
             "recipientId": "Dana Cho",
             "purpose": "October board packet",
@@ -620,6 +689,36 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "documentInspections": [],
+        "redactionReceipts": [],
+        "renderReceipts": [],
+        "recipientApprovals": [],
+        "challengeMappings": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "030-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requester Dana Cho is authorized for the board packet dated October 1–31; the disclosure instruction excludes employee medical notes and permits aggregate staffing totals."
+              },
+              {
+                "id": "E2",
+                "source": "030-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Approval A-30 names recipient Dana Cho; delivery request now names vendor V-30."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -642,19 +741,22 @@
   },
   {
     "id": "030-workflow-04",
-    "root": "runCase.nl",
+    "root": "prepareDisclosure.nl",
     "split_group": "design-brief-app-030",
     "inputs": {
       "request": {
         "caseId": "SYN-030-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "recipientId": "Dana Cho",
+        "purpose": "October board packet",
+        "documentIds": [
+          "PDF-D30",
+          "ROSTER-D30"
+        ],
+        "reviewOwnerId": "Reviewer-30",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "cases": [
           {
             "recipientId": "Dana Cho",
             "purpose": "October board packet",
@@ -729,6 +831,36 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "documentInspections": [],
+        "redactionReceipts": [],
+        "renderReceipts": [],
+        "recipientApprovals": [],
+        "challengeMappings": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "030-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requester Dana Cho is authorized for the board packet dated October 1–31; the disclosure instruction excludes employee medical notes and permits aggregate staffing totals."
+              },
+              {
+                "id": "E2",
+                "source": "030-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Redaction removes phrase 'only for adults' from allowed guidance, changing the eligibility meaning."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -751,19 +883,22 @@
   },
   {
     "id": "030-workflow-05",
-    "root": "runCase.nl",
+    "root": "prepareDisclosure.nl",
     "split_group": "design-brief-app-030",
     "inputs": {
       "request": {
         "caseId": "SYN-030-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "recipientId": "Dana Cho",
+        "purpose": "October board packet",
+        "documentIds": [
+          "PDF-D30",
+          "ROSTER-D30"
+        ],
+        "reviewOwnerId": "Reviewer-30",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "evidence": {
+        "cases": [
           {
             "recipientId": "Dana Cho",
             "purpose": "October board packet",
@@ -838,6 +973,36 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "documentInspections": [],
+        "redactionReceipts": [],
+        "renderReceipts": [],
+        "recipientApprovals": [],
+        "challengeMappings": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "030-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Requester Dana Cho is authorized for the board packet dated October 1–31; the disclosure instruction excludes employee medical notes and permits aggregate staffing totals."
+              },
+              {
+                "id": "E2",
+                "source": "030-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Artifact X-30 released at hash H-30 maps to source spans 14-18 and 34-36; reviewer receipt lists both spans."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

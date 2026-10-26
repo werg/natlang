@@ -1,17 +1,7 @@
 # 086 — Museum Exhibition Curator
 
-## Source-derived procedure
+## Distinct algorithm: preserve an interpretation argument across object, room and reproduction constraints
 
-Five domain stages: interpretCollection, formNarratives, designVisitorPaths, writeInterpretation, qualifyExhibition. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+The curator builds an argument whose claims are supported by collection evidence and specific objects. Loan availability, provenance limitations, community display restrictions, conservation light exposure and duration are hard constraints on each object projection. If a loan is withdrawn, the argument is reframed; a weaker object is not silently substituted as if it carried the same evidence.
 
-## Domain algorithms and gates
-
-- **interpretCollection** — Read artifact records, scholarship, provenance, and conservation guidance to identify what can be responsibly said and displayed. Separate documented facts from contested interpretations and preserve restrictions on handling, light, duration, or cultural presentation. Gate: Every proposed fact and display use has evidence and applicable permission.
-- **formNarratives** — Generate distinct interpretive arguments that connect artifacts meaningfully rather than merely grouping them by topic. Include alternative perspectives and uncertainties, identify missing evidence, and avoid inventing historical continuity to make a more dramatic story. Gate: Narrative claims remain supported and contested interpretations are represented fairly.
-- **designVisitorPaths** — Organize the exhibition into zones and visitor paths that support the argument and audience needs. Offer multiple levels of engagement, preserve accessibility and conservation constraints, and use exact space and flow services for feasibility checks. Gate: Physical layout and artifact constraints are feasible under supplied venue data.
-- **writeInterpretation** — Write labels, introductions, and supporting text that are engaging without overstating evidence. Distinguish fact, attribution, and interpretation, preserve culturally sensitive context, and keep terminology consistent across the visitor journey. Gate: Every material claim is supported or explicitly framed as interpretation.
-- **qualifyExhibition** — Review the complete exhibition for narrative coherence, factual support, rights, conservation, accessibility, and operational feasibility. Compare alternative arrangements, resolve conflicts with qualified owners, and freeze the approved content and installation plan together. Gate: All required specialist approvals and exact physical constraints pass before installation.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+The visitor path is a directed sequence of zones with optional branches. Each later label must contain the context necessary to understand its claim even when visitors skip an earlier zone. A display restriction applies across physical galleries, images, online previews and derivative publicity. Label compression may remove repetition but must preserve the critical qualification and provenance limit. The release version binds object list, placement/light/duration, label text, visitor-path context, community permissions and online renditions. Conservation changes invalidate only affected placements and all dependent releases.

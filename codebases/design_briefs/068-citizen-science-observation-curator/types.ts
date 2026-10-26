@@ -79,3 +79,17 @@ export type StageResultCuratedObservation = { accepted: CuratedObservation[]; un
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; normalizeObservations: StageResultFieldObservation; resolveTerminology: StageResultObservationInterpretation; detectDuplicates: StageResultObservationLink; requestVerification: StageResultObservationQuestion; publishCurated: StageResultCuratedObservation; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { normalizeObservations: StageResultFieldObservation; resolveTerminology: StageResultObservationInterpretation; detectDuplicates: StageResultObservationLink; requestVerification: StageResultObservationQuestion; publishCurated: StageResultCuratedObservation; };
+
+export type CuratorIdentity = { id: string };
+export type ObservationSubmission = { observation: FieldObservation; originalText: string; originalTimestamp: string; declaredTimezone: string; locationPrecision: string; mediaHashes: string[]; evidence: Evidence[] };
+export type ObservationCorrection = { observationId: string; expertId: string; priorInterpretationId: string; newConceptIds: string[]; rationale: string; evidence: Evidence[] };
+export type CurationCollection = { review: ObservationReview; vocabulary: string[]; disclosureRule: string; restrictedPrecision: string; publicPrecision: string };
+export type CurationCheckpoint = { revision: string; submissions: ObservationSubmission[]; interpretations: ObservationInterpretation[]; links: ObservationLink[]; questions: ObservationQuestion[]; curated: CuratedObservation[]; correctionHistory: ObservationCorrection[]; invalidatedDerivativeIds: string[]; };
+export type CurationRequest = { submissions: ObservationSubmission[]; corrections: ObservationCorrection[]; answerEvidence: Evidence[]; requestedObservationIds: string[] };
+export type ObservationComparison = { leftId: string; rightId: string; relation: 'same-event'|'independent'|'related'|'unknown'; basis: string; evidenceIds: string[]; blockers: string[] };
+export type CurationProposal = { application: 'Citizen-science observation curator'; status: 'ready-for-review'|'blocked'; normalized: FieldObservation[]; interpretations: ObservationInterpretation[]; links: ObservationLink[]; questions: ObservationQuestion[]; publicRecords: CuratedObservation[]; rawProvenance: string[]; privacyFindings: string[]; invalidatedDerivativeIds: string[]; blockers: string[]; actionBoundary: string; resumeState: CurationCheckpoint; };
+export type NormalizedBatch = { observations: FieldObservation[]; rawProvenance: string[]; unresolvedMetadata: string[]; };
+export type CandidateSet = { interpretations: ObservationInterpretation[]; unresolved: string[]; questions: string[]; };
+export type DuplicateGraph = { links: ObservationLink[]; unresolved: ObservationComparison[]; mediaAttachments: Record<string,string[]>; };
+export type QuestionSet = { questions: ObservationQuestion[]; safetyBlockers: string[]; };
+export type PublicProjection = { records: CuratedObservation[]; privacyFindings: string[]; invalidatedDerivativeIds: string[]; blockers: string[]; };

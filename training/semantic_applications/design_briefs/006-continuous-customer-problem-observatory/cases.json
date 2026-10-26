@@ -274,19 +274,22 @@
   },
   {
     "id": "006-workflow-01",
-    "root": "runCase.nl",
+    "root": "observeCustomerProblems.nl",
     "split_group": "design-brief-app-006",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-006-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "studyQuestion": "How many independent checkout problems did outage INC-6 reveal?",
+        "targetPopulation": "603 account IDs linked to outage INC-6",
+        "intervalStart": "2026-09-01",
+        "intervalEnd": "2026-10-01",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "expectedSnapshotVersion": "v1",
+        "stableConceptIds": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "observations": {
+        "snapshotVersion": "v1",
+        "studies": [
           {
             "question": "How many independent checkout problems did outage INC-6 reveal?",
             "populationDefinition": "603 account IDs linked to outage INC-6",
@@ -312,7 +315,7 @@
             "retentionPolicyId": "retention-006"
           }
         ],
-        "evidencePages": [
+        "conversationAndSurveyPages": [
           {
             "evidence": [
               {
@@ -338,7 +341,111 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "exposureFrames": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Outage INC-6 generated 4,812 tickets across 603 account IDs; event ID INC-6 is shared, so ticket count is not independent discovery count."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "identityMappingEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Outage INC-6 generated 4,812 tickets across 603 account IDs; event ID INC-6 is shared, so ticket count is not independent discovery count."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "consentEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Outage INC-6 generated 4,812 tickets across 603 account IDs; event ID INC-6 is shared, so ticket count is not independent discovery count."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "channelCoverage": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Outage INC-6 generated 4,812 tickets across 603 account IDs; event ID INC-6 is shared, so ticket count is not independent discovery count."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-006",
             "authority": "named case owner",
@@ -375,19 +482,22 @@
   },
   {
     "id": "006-workflow-02",
-    "root": "runCase.nl",
+    "root": "observeCustomerProblems.nl",
     "split_group": "design-brief-app-006",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-006-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "studyQuestion": "How many independent checkout problems did outage INC-6 reveal?",
+        "targetPopulation": "603 account IDs linked to outage INC-6",
+        "intervalStart": "2026-09-01",
+        "intervalEnd": "2026-10-01",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "expectedSnapshotVersion": "v1",
+        "stableConceptIds": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "observations": {
+        "snapshotVersion": "v1",
+        "studies": [
           {
             "question": "How many independent checkout problems did outage INC-6 reveal?",
             "populationDefinition": "603 account IDs linked to outage INC-6",
@@ -413,7 +523,7 @@
             "retentionPolicyId": "retention-006"
           }
         ],
-        "evidencePages": [
+        "conversationAndSurveyPages": [
           {
             "evidence": [
               {
@@ -439,7 +549,111 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "exposureFrames": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Survey channel SC-6 stopped collecting on Oct 1; the prior comparison quarter used that channel for 72% of responses."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "identityMappingEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Survey channel SC-6 stopped collecting on Oct 1; the prior comparison quarter used that channel for 72% of responses."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "consentEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Survey channel SC-6 stopped collecting on Oct 1; the prior comparison quarter used that channel for 72% of responses."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "channelCoverage": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Survey channel SC-6 stopped collecting on Oct 1; the prior comparison quarter used that channel for 72% of responses."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-006",
             "authority": "named case owner",
@@ -476,19 +690,22 @@
   },
   {
     "id": "006-workflow-03",
-    "root": "runCase.nl",
+    "root": "observeCustomerProblems.nl",
     "split_group": "design-brief-app-006",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-006-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "studyQuestion": "How many independent checkout problems did outage INC-6 reveal?",
+        "targetPopulation": "603 account IDs linked to outage INC-6",
+        "intervalStart": "2026-09-01",
+        "intervalEnd": "2026-10-01",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "expectedSnapshotVersion": "v1",
+        "stableConceptIds": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "observations": {
+        "snapshotVersion": "v1",
+        "studies": [
           {
             "question": "How many independent checkout problems did outage INC-6 reveal?",
             "populationDefinition": "603 account IDs linked to outage INC-6",
@@ -514,7 +731,7 @@
             "retentionPolicyId": "retention-006"
           }
         ],
-        "evidencePages": [
+        "conversationAndSurveyPages": [
           {
             "evidence": [
               {
@@ -540,7 +757,111 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "exposureFrames": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent receipt C-6 was withdrawn by customer U-6 on Oct 9; quote Q-6 and summary derivative SD-6 cite the consent."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "identityMappingEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent receipt C-6 was withdrawn by customer U-6 on Oct 9; quote Q-6 and summary derivative SD-6 cite the consent."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "consentEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent receipt C-6 was withdrawn by customer U-6 on Oct 9; quote Q-6 and summary derivative SD-6 cite the consent."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "channelCoverage": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-10",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Consent receipt C-6 was withdrawn by customer U-6 on Oct 9; quote Q-6 and summary derivative SD-6 cite the consent."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-006",
             "authority": "named case owner",
@@ -577,19 +898,22 @@
   },
   {
     "id": "006-workflow-04",
-    "root": "runCase.nl",
+    "root": "observeCustomerProblems.nl",
     "split_group": "design-brief-app-006",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-006-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "studyQuestion": "How many independent checkout problems did outage INC-6 reveal?",
+        "targetPopulation": "603 account IDs linked to outage INC-6",
+        "intervalStart": "2026-09-01",
+        "intervalEnd": "2026-10-01",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "expectedSnapshotVersion": "v1",
+        "stableConceptIds": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "observations": {
+        "snapshotVersion": "v1",
+        "studies": [
           {
             "question": "How many independent checkout problems did outage INC-6 reveal?",
             "populationDefinition": "603 account IDs linked to outage INC-6",
@@ -615,7 +939,7 @@
             "retentionPolicyId": "retention-006"
           }
         ],
-        "evidencePages": [
+        "conversationAndSurveyPages": [
           {
             "evidence": [
               {
@@ -641,7 +965,111 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "exposureFrames": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Migration map MAP-6 changes customer IDs U-6A to U-6B effective Oct 5; both IDs resolve to one source account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "identityMappingEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Migration map MAP-6 changes customer IDs U-6A to U-6B effective Oct 5; both IDs resolve to one source account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "consentEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Migration map MAP-6 changes customer IDs U-6A to U-6B effective Oct 5; both IDs resolve to one source account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "channelCoverage": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-06",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Migration map MAP-6 changes customer IDs U-6A to U-6B effective Oct 5; both IDs resolve to one source account."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-006",
             "authority": "named case owner",
@@ -678,19 +1106,22 @@
   },
   {
     "id": "006-workflow-05",
-    "root": "runCase.nl",
+    "root": "observeCustomerProblems.nl",
     "split_group": "design-brief-app-006",
     "inputs": {
-      "request": {
+      "question": {
         "caseId": "SYN-006-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
+        "studyQuestion": "How many independent checkout problems did outage INC-6 reveal?",
+        "targetPopulation": "603 account IDs linked to outage INC-6",
+        "intervalStart": "2026-09-01",
+        "intervalEnd": "2026-10-01",
         "requestedBy": "case owner",
-        "expectedVersion": "v1"
+        "expectedSnapshotVersion": "v1",
+        "stableConceptIds": []
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "observations": {
+        "snapshotVersion": "v1",
+        "studies": [
           {
             "question": "How many independent checkout problems did outage INC-6 reveal?",
             "populationDefinition": "603 account IDs linked to outage INC-6",
@@ -716,7 +1147,7 @@
             "retentionPolicyId": "retention-006"
           }
         ],
-        "evidencePages": [
+        "conversationAndSurveyPages": [
           {
             "evidence": [
               {
@@ -742,7 +1173,111 @@
             "complete": true
           }
         ],
-        "policyCandidates": [
+        "exposureFrames": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Topic label 'slow checkout' changed to 'checkout latency'; concept ID CON-6 remains stable in the versioned taxonomy."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "identityMappingEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Topic label 'slow checkout' changed to 'checkout latency'; concept ID CON-6 remains stable in the versioned taxonomy."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "consentEvents": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Topic label 'slow checkout' changed to 'checkout latency'; concept ID CON-6 remains stable in the versioned taxonomy."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "channelCoverage": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "006-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Customer L-14 reports that the replacement cartridge leaks after two days and asks for a working replacement; the support call recording contains the customer's words."
+              },
+              {
+                "id": "E2",
+                "source": "006-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Topic label 'slow checkout' changed to 'checkout latency'; concept ID CON-6 remains stable in the versioned taxonomy."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "policies": [
           {
             "id": "POL-006",
             "authority": "named case owner",

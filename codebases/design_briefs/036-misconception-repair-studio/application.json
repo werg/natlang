@@ -1,0 +1,178 @@
+{
+  "schema": "natlang.application/1",
+  "id": "036",
+  "title": "Misconception repair studio",
+  "entrypoint": "learningRepairSession.nl",
+  "interfaces": [
+    {
+      "name": "learningRepairSession",
+      "path": "learningRepairSession.nl",
+      "purpose": "Run a safe diagnosis, repair, transfer, checkpoint, and bounded-handoff session.",
+      "stateParameter": "checkpoint",
+      "stateResultPath": [
+        "checkpoint"
+      ]
+    },
+    {
+      "name": "assessTaskBeforeDiagnosis",
+      "path": "learningRepairSession/assessTaskBeforeDiagnosis.nl",
+      "purpose": "Resolve prompt, answer-space, accessibility, and prerequisite validity before learner inference."
+    },
+    {
+      "name": "interpretLearnerEvidence",
+      "path": "learningRepairSession/interpretLearnerEvidence.nl",
+      "purpose": "Record observed work and classify its error type without identity-based diagnosis."
+    },
+    {
+      "name": "testCompetingExplanations",
+      "path": "learningRepairSession/testCompetingExplanations.nl",
+      "purpose": "Retain rival hypotheses and choose neutral distinguishing questions."
+    },
+    {
+      "name": "buildUnbiasedProbe",
+      "path": "learningRepairSession/buildUnbiasedProbe.nl",
+      "purpose": "Generate and verify an accessible one-feature diagnostic with hidden labels."
+    },
+    {
+      "name": "preserveCompetencyAcrossAccommodation",
+      "path": "learningRepairSession/preserveCompetencyAcrossAccommodation.nl",
+      "purpose": "Change presentation while auditing the target competency and answer-space invariants."
+    },
+    {
+      "name": "planContrastiveRepair",
+      "path": "learningRepairSession/planContrastiveRepair.nl",
+      "purpose": "Provide checked explanations and bounded fading practice."
+    },
+    {
+      "name": "assessNovelUnassistedTransfer",
+      "path": "learningRepairSession/assessNovelUnassistedTransfer.nl",
+      "purpose": "Separate novel independent transfer from rehearsed or hinted success."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretResponses",
+        "paths": [
+          "learningRepairSession/interpretLearnerEvidence/compareResponseToAcceptedStrategies.nl",
+          "learningRepairSession/interpretLearnerEvidence/locateWorkEvidence.nl"
+        ]
+      },
+      {
+        "stage": "formHypotheses",
+        "paths": [
+          "learningRepairSession/testCompetingExplanations/enumerateRivalHypotheses.nl"
+        ]
+      },
+      {
+        "stage": "generateDiagnostics",
+        "paths": [
+          "learningRepairSession/buildUnbiasedProbe/varyOneConceptualFeature.nl",
+          "learningRepairSession/buildUnbiasedProbe/independentlyVerifyAnswerClasses.nl"
+        ]
+      },
+      {
+        "stage": "planRepair",
+        "paths": [
+          "learningRepairSession/planContrastiveRepair/selectVerifiedExplanation.nl",
+          "learningRepairSession/planContrastiveRepair/scheduleFadingPractice.nl"
+        ]
+      },
+      {
+        "stage": "verifyTransfer",
+        "paths": [
+          "learningRepairSession/assessNovelUnassistedTransfer/verifyNovelTaskSurface.nl",
+          "learningRepairSession/assessNovelUnassistedTransfer/verifyNoHintContamination.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "learningRepairSession/interpretLearnerEvidence/compareResponseToAcceptedStrategies.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "learningRepairSession/assessTaskBeforeDiagnosis/inspectTaskWording.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "learningRepairSession/resumeLearningCheckpoint.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "learningRepairSession/preserveCompetencyAcrossAccommodation/auditCompetencyInvariant.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "learningRepairSession/offerBoundedInstructorHandoff.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "recordFamilies": [
+      "LearningCase",
+      "ResponseObservation",
+      "MisconceptionHypothesis",
+      "DiagnosticTask",
+      "LearningIntervention",
+      "TransferFinding"
+    ],
+    "state": "checkpointed; private hypotheses and learner-visible text are separate"
+  },
+  "effects": {
+    "proposed": [
+      "instructor task-repair request",
+      "bounded instructor handoff"
+    ],
+    "dispatch": "instructor-controlled; no automatic grade or learner-model mutation"
+  },
+  "source_files": [
+    "learningRepairSession.nl",
+    "learningRepairSession/assessNovelUnassistedTransfer.nl",
+    "learningRepairSession/assessNovelUnassistedTransfer/updateCompetencyConservatively.nl",
+    "learningRepairSession/assessNovelUnassistedTransfer/verifyNoHintContamination.nl",
+    "learningRepairSession/assessNovelUnassistedTransfer/verifyNovelTaskSurface.nl",
+    "learningRepairSession/assessTaskBeforeDiagnosis.nl",
+    "learningRepairSession/assessTaskBeforeDiagnosis/compareTaskPrerequisites.nl",
+    "learningRepairSession/assessTaskBeforeDiagnosis/inspectAcceptedSolutionSpace.nl",
+    "learningRepairSession/assessTaskBeforeDiagnosis/inspectTaskWording.nl",
+    "learningRepairSession/buildUnbiasedProbe.nl",
+    "learningRepairSession/buildUnbiasedProbe/independentlyVerifyAnswerClasses.nl",
+    "learningRepairSession/buildUnbiasedProbe/rejectUnlearnedPrerequisiteLeak.nl",
+    "learningRepairSession/buildUnbiasedProbe/varyOneConceptualFeature.nl",
+    "learningRepairSession/diagnostic/audit/qualify.nl",
+    "learningRepairSession/hypotheses/audit/qualify.nl",
+    "learningRepairSession/interpretLearnerEvidence.nl",
+    "learningRepairSession/interpretLearnerEvidence/classifyResponseError.nl",
+    "learningRepairSession/interpretLearnerEvidence/compareResponseToAcceptedStrategies.nl",
+    "learningRepairSession/interpretLearnerEvidence/locateWorkEvidence.nl",
+    "learningRepairSession/offerBoundedInstructorHandoff.nl",
+    "learningRepairSession/planContrastiveRepair.nl",
+    "learningRepairSession/planContrastiveRepair/constructContrastiveExamples.nl",
+    "learningRepairSession/planContrastiveRepair/scheduleFadingPractice.nl",
+    "learningRepairSession/planContrastiveRepair/selectVerifiedExplanation.nl",
+    "learningRepairSession/preserveCompetencyAcrossAccommodation.nl",
+    "learningRepairSession/preserveCompetencyAcrossAccommodation/auditCompetencyInvariant.nl",
+    "learningRepairSession/preserveCompetencyAcrossAccommodation/transformPresentationForAccess.nl",
+    "learningRepairSession/repair/audit/qualify.nl",
+    "learningRepairSession/response/audit/qualify.nl",
+    "learningRepairSession/resumeLearningCheckpoint.nl",
+    "learningRepairSession/saveLearningProgress.nl",
+    "learningRepairSession/testCompetingExplanations.nl",
+    "learningRepairSession/testCompetingExplanations/chooseDiscriminatingQuestion.nl",
+    "learningRepairSession/testCompetingExplanations/enumerateRivalHypotheses.nl",
+    "learningRepairSession/transfer/audit/qualify.nl",
+    "types.ts"
+  ]
+}

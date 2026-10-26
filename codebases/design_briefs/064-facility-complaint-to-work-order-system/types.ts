@@ -79,3 +79,18 @@ export type StageResultFacilityResolution = { accepted: FacilityResolution[]; un
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretComplaint: StageResultFacilityObservation; linkRelatedIssues: StageResultFacilityIssueGroup; formWorkOrders: StageResultFacilityWorkOrder; coordinateVisits: StageResultFacilityVisit; verifyResolution: StageResultFacilityResolution; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretComplaint: StageResultFacilityObservation; linkRelatedIssues: StageResultFacilityIssueGroup; formWorkOrders: StageResultFacilityWorkOrder; coordinateVisits: StageResultFacilityVisit; verifyResolution: StageResultFacilityResolution; };
+
+export type FacilityServiceCase = { caseId: ID; initialObservation: FacilityObservation; locationAliases: FacilityLocationAlias[]; officialLocations: FacilityLocation[]; timePatterns: ComplaintTimePattern[]; accessPermissions: VisitAccessPermission[]; repairHistory: FacilityRepairHistory[]; relatedReports: OccupantReport[]; updatePreferences: PrivacyUpdatePreference[]; evidence: Evidence[] };
+export type FacilityLocationAlias = { alias: string; officialLocationId: ID; verifiedBy: Ref | null };
+export type FacilityLocation = { locationId: ID; officialName: string; assetIds: ID[] };
+export type ComplaintTimePattern = { issueId: ID; observedWindows: string[]; conditions: string[]; evidenceRefs: Ref[] };
+export type VisitAccessPermission = { locationId: ID; permittedWindows: string[]; contactMethod: string; consentRef: Ref | null; expiresAt: string | null };
+export type FacilityRepairHistory = { issueId: ID; locationId: ID; mechanism: string; priorWorkOrder: ID; verifiedResult: string; recurrenceEvidence: Ref[] };
+export type OccupantReport = { reportId: ID; locationId: ID; issueDescription: string; reporterId: ID; shareScope: string; evidenceRef: Ref };
+export type PrivacyUpdatePreference = { recipientId: ID; permittedFields: string[]; caseAlias: string; consentRef: Ref };
+export type FacilityDispatchPacket = { caseId: ID; officialLocationId: ID | null; locationBlockers: string[]; linkedIssueIds: ID[]; workOrderTasks: string[]; visitWindow: string[]; accessBlockers: string[]; observationPlan: string[]; privateUpdatePackets: string[]; mechanismEscalation: string[]; dispatchAllowed: boolean; commitAllowed: boolean };
+export type FacilityLocationResolution = { locationId: ID | null; alias: string; blockers: string[]; candidates: ID[] };
+
+export type FacilityIssueCluster = { issueIds: ID[]; sharedMechanism: string; reporterPartitions: string[]; unresolvedLinks: string[] };
+export type ConsentedVisitPlan = { windows: string[]; blockers: string[]; failedAttemptRecord: string };
+export type FacilityWorkOrderPlan = { tasks: string[]; observationPlan: string[]; escalation: string[] };

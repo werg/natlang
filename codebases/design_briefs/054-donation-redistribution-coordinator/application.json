@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.application/1",
+  "id": "054",
+  "title": "Donation redistribution coordinator",
+  "entrypoint": "coordinateDonationRound.nl",
+  "interfaces": [
+    {
+      "name": "coordinateDonationRound",
+      "path": "coordinateDonationRound.nl",
+      "purpose": "Qualify confirmed donations, fit complete bundles to recipient-stated constraints, allocate under supplied fairness rules, and plan consented delivery."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeDonations",
+        "paths": [
+          "coordinateDonationRound/qualifyConfirmedDonationStock.nl"
+        ]
+      },
+      {
+        "stage": "interpretNeeds",
+        "paths": [
+          "coordinateDonationRound/confirmRecipientConstraints.nl"
+        ]
+      },
+      {
+        "stage": "constructBundles",
+        "paths": [
+          "coordinateDonationRound/assemblePurposeFitBundles.nl"
+        ]
+      },
+      {
+        "stage": "applyAllocation",
+        "paths": [
+          "coordinateDonationRound/applyFairAllocationRules.nl"
+        ]
+      },
+      {
+        "stage": "coordinateDelivery",
+        "paths": [
+          "coordinateDonationRound/proposeConsentedDelivery.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "coordinateDonationRound/qualifyConfirmedDonationStock/reconcileCollectionDayQuantity.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "coordinateDonationRound/assemblePurposeFitBundles.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "coordinateDonationRound/proposeConsentedDelivery/minimizeRecipientDisclosure.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "coordinateDonationRound/proposeConsentedDelivery.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "coordinateDonationRound/quarantineRestrictedOffers.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "allocation": "confirmed quantities, policy version, unmet needs, and distinct delivery/acceptance states"
+  },
+  "effects": {
+    "delivery": "consent-bound proposal only until availability recheck and coordinator dispatch",
+    "recipientPrivacy": "share minimum explicitly consented data or mediate the handoff"
+  },
+  "source_files": [
+    "coordinateDonationRound.nl",
+    "coordinateDonationRound/applyFairAllocationRules.nl",
+    "coordinateDonationRound/assemblePurposeFitBundles.nl",
+    "coordinateDonationRound/confirmRecipientConstraints.nl",
+    "coordinateDonationRound/proposeConsentedDelivery.nl",
+    "coordinateDonationRound/proposeConsentedDelivery/minimizeRecipientDisclosure.nl",
+    "coordinateDonationRound/qualifyConfirmedDonationStock.nl",
+    "coordinateDonationRound/qualifyConfirmedDonationStock/reconcileCollectionDayQuantity.nl",
+    "coordinateDonationRound/quarantineRestrictedOffers.nl",
+    "qualification/normalizeDonations.nl",
+    "types.ts"
+  ]
+}

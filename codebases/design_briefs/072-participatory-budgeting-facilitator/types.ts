@@ -141,3 +141,11 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type BudgetFacilitator = { id: string };
+export type PortfolioChange = { revisedEstimates: EvidenceItem[]; proposerReviews: EvidenceItem[]; locationConstraints: EvidenceItem[]; deliveryChanges: EvidenceItem[] };
+export type BudgetDossier = { round: BudgetRound; proposals: CivicProposal[]; relationships: ProposalRelationship[]; feasibility: ProposalFeasibility[]; portfolios: CivicPortfolio[]; decisionPackets: BudgetDecisionPacket[]; evidence: EvidenceItem[]; checkpoint: BudgetCheckpoint };
+export type EnablingWorkNode = { id: string; work: string; cost: Money; sourceIds: string[]; enablesProposalIds: string[]; status: 'supported'|'unresolved' };
+export type PortfolioLedger = { nodes: EnablingWorkNode[]; proposalIds: string[]; exactTotal: Money; withinBudget: boolean; unresolvedCosts: string[]; proposerReviewsNeeded: string[]; }
+export type BudgetCheckpoint = { edition: string; proposals: CivicProposal[]; relationships: ProposalRelationship[]; feasibility: ProposalFeasibility[]; portfolios: CivicPortfolio[]; selectedProposalIds: string[]; deliveryChanges: EvidenceItem[]; invalidatedPortfolioIds: string[]; };
+export type BudgetProposalSession = { application: 'Participatory Budgeting Facilitator'; status: 'ready-for-deliberation'|'blocked'; relationships: ProposalRelationship[]; feasibility: ProposalFeasibility[]; portfolios: CivicPortfolio[]; enablingWork: PortfolioLedger; packet: BudgetDecisionPacket; invalidatedPortfolioIds: string[]; blockers: string[]; actionBoundary: string; resumeState: BudgetCheckpoint; };

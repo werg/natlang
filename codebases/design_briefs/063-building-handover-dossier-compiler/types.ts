@@ -79,3 +79,16 @@ export type StageResultHandoverDossier = { accepted: HandoverDossier[]; unresolv
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; recoverRequirements: StageResultHandoverRequirement; resolveAssets: StageResultAssetIdentity; matchArtifacts: StageResultHandoverEvidence; planClosure: StageResultHandoverClosureTask; assembleDossier: StageResultHandoverDossier; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { recoverRequirements: StageResultHandoverRequirement; resolveAssets: StageResultAssetIdentity; matchArtifacts: StageResultHandoverEvidence; planClosure: StageResultHandoverClosureTask; assembleDossier: StageResultHandoverDossier; };
+
+export type HandoverCompilationInput = { caseId: ID; requirements: HandoverRequirement[]; installedAssets: InstalledAssetVariant[]; manuals: VariantManual[]; certificates: AssetCertificate[]; portalDeliverables: PortalDeliverable[]; exportProfiles: AccessibleExportProfile[]; temporaryArrangements: TemporaryArrangement[]; evidence: Evidence[] };
+export type InstalledAssetVariant = { assetId: ID; officialTag: string; model: string; variant: string; location: string; evidenceRef: Ref };
+export type VariantManual = { manualId: ID; model: string; variantScope: string[]; sections: ManualSection[]; format: string; sourceVersion: string };
+export type ManualSection = { sectionId: ID; topic: string; applicableVariantIds: string[] };
+export type AssetCertificate = { certificateId: ID; namedAssetId: ID; model: string; revision: string; status: string; evidenceRef: Ref };
+export type PortalDeliverable = { deliverableId: ID; portalUrl: string; expiry: string; permittedArchive: boolean; contentHash: string | null; format: string; owner: string };
+export type AccessibleExportProfile = { requiredBy: string; acceptedFormats: string[]; accessibilityRequirement: string; approvedConverter: string | null };
+export type TemporaryArrangement = { arrangementId: ID; affectedAssetIds: ID[]; description: string; expiresOn: string; followUpTask: string; owner: string; evidenceRef: Ref };
+export type AssetManualMatch = { assetId: ID; variant: string; manualId: ID | null; relevantSections: ID[]; blockers: string[] };
+export type CertificateMatch = { certificateId: ID; assetId: ID; accepted: boolean; reason: string };
+export type DossierArchiveAction = { deliverableId: ID; action: string; hash: string | null; blocker: string };
+export type DossierPackage = { caseId: ID; manuals: AssetManualMatch[]; certificates: CertificateMatch[]; archiveActions: DossierArchiveAction[]; accessibleExports: string[]; transferredObligations: string[]; missingRequirements: string[]; readyForAcceptance: boolean; commitAllowed: boolean };

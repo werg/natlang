@@ -79,3 +79,19 @@ export type StageResultFabricationAgreement = { accepted: FabricationAgreement[]
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; recoverRequirements: StageResultFabricationRequirement; generateConcepts: StageResultFabricationConcept; planProduction: StageResultFabricationRoute; calculateQuote: StageResultFabricationEstimate; confirmScope: StageResultFabricationAgreement; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { recoverRequirements: StageResultFabricationRequirement; generateConcepts: StageResultFabricationConcept; planProduction: StageResultFabricationRoute; calculateQuote: StageResultFabricationEstimate; confirmScope: StageResultFabricationAgreement; };
+
+export type CustomQuoteProposalCase = { caseId: ID; customerRequirements: FabricationRequirement[]; measurements: ShopMeasurement[]; concepts: ShopConcept[]; equipment: ShopCapability[]; materials: MaterialOffer[]; finishReferences: FinishReference[]; certificateRequirements: CertificateRequirement[]; acceptedSamples: Ref[]; designRevisions: FabricationRevision[]; evidence: Evidence[]; selectedConceptId: ID | null };
+export type QuoteRequirementRecord = { requirementId: ID; function: string; dimension: string; tolerance: string; finish: string; requiredCertificate: string; approvalRef: Ref | null };
+export type ShopMeasurement = { featureId: ID; value: string; unit: string; method: string; tolerance: string; verified: boolean; evidenceRef: Ref };
+export type ShopConcept = { conceptId: ID; featureIds: ID[]; materialId: ID; process: string; toolingChange: boolean; finishRef: Ref; certification: string[] };
+export type ShopCapability = { process: string; equipmentId: ID; capacity: string; certificationScope: string[]; active: boolean };
+export type MaterialOffer = { materialId: ID; unitCost: string; currency: string; validUntil: string; supplierRef: Ref; processCompatible: boolean };
+export type FinishReference = { referenceId: Ref; physicalSample: boolean; customerAccepted: boolean; appearanceDescription: string };
+export type CertificateRequirement = { scope: string; requiredStandard: string; evidenceRef: Ref | null };
+export type FabricationRevision = { revisionId: ID; changedFeatureIds: ID[]; toolingAffected: boolean; customerApproved: boolean };
+export type QuoteFeasibility = { missingMeasurements: string[]; conceptBlockers: string[]; capabilityGaps: string[]; finishAcceptanceGaps: string[]; certificationGaps: string[]; provisional: boolean };
+export type CustomQuoteProposal = { caseId: ID; selectedConceptId: ID | null; feasibility: QuoteFeasibility; productionRoute: string[]; materialCostBasis: string[]; toolingCostChanges: string[]; quoteExpiry: string; quoteStatus: string; scopeConfirmation: string[]; commitAllowed: boolean };
+export type MeasurementQualification = { acceptedMeasurements: ShopMeasurement[]; missingMeasurements: string[] };
+export type ConceptSelection = { conceptId: ID | null; blockers: string[]; finishAcceptanceGaps: string[]; concept: ShopConcept | null };
+export type ShopRouteAssessment = { steps: string[]; capabilityGaps: string[]; certificationGaps: string[]; specialistTasks: string[] };
+export type MaterialPriceReview = { costBasis: string[]; expiredMaterialIds: ID[]; toolingChanges: string[]; earliestExpiry: string };

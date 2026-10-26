@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.application/1",
+  "id": "060",
+  "title": "Custom fabrication quoting desk",
+  "entrypoint": "composeFabricationQuote.nl",
+  "interfaces": [
+    {
+      "name": "composeFabricationQuote",
+      "path": "composeFabricationQuote.nl",
+      "purpose": "Build a provisional fabrication quote from verified dimensions, accepted finish references, certified shop capability, and current material pricing."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverRequirements",
+        "paths": [
+          "composeFabricationQuote/qualifyShopMeasurements.nl"
+        ]
+      },
+      {
+        "stage": "generateConcepts",
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      },
+      {
+        "stage": "planProduction",
+        "paths": [
+          "composeFabricationQuote/matchCertifiedShopRoute.nl"
+        ]
+      },
+      {
+        "stage": "calculateQuote",
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "stage": "confirmScope",
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "composeFabricationQuote/qualifyShopMeasurements.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "composeFabricationQuote/selectFabricationConcept.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "composeFabricationQuote/validateMaterialPricing.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "composeFabricationQuote/matchCertifiedShopRoute.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "quote revision and customer acceptance evidence",
+    "writes": "provisional quote only"
+  },
+  "effects": [
+    "scope confirmation request",
+    "specialist capability referral"
+  ],
+  "source_files": [
+    "composeFabricationQuote.nl",
+    "composeFabricationQuote/matchCertifiedShopRoute.nl",
+    "composeFabricationQuote/qualifyShopMeasurements.nl",
+    "composeFabricationQuote/selectFabricationConcept.nl",
+    "composeFabricationQuote/validateMaterialPricing.nl",
+    "qualification/recoverRequirements.nl",
+    "types.ts"
+  ]
+}

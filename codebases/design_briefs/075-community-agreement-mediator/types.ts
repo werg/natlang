@@ -143,3 +143,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type Mediator = { id: string };
+export type MediationChange = { participantResponses: EvidenceItem[]; disputedAccounts: EvidenceItem[]; trialObservations: EvidenceItem[]; withdrawals: EvidenceItem[]; safetyOrRightsFlags: EvidenceItem[] };
+export type MediationDossier = { dispute: CommunityDispute; priorAgreements: ExistingAgreement[]; positions: MediationPosition[]; options: CommunityOption[]; trials: AgreementTrial[]; reviews: AgreementReview[]; evidence: EvidenceItem[]; checkpoint: MediationCheckpoint };
+export type ParticipantTermState = { participantId: string; termId: string; state: 'accepted'|'declined'|'pending'|'withdrawn'; evidenceIds: string[] };
+export type TrialTerms = { id: string; participants: string[]; terms: string[]; start: string; end: string; reviewTrigger: string; exitProcess: string; acceptance: ParticipantTermState[]; };
+export type DivergentTrialFinding = { participantId: string; outcome: string; sourceIds: string[]; unresolved: string[]; };
+export type MediationCheckpoint = { revision: string; priorAgreements: ExistingAgreement[]; competingAccounts: EvidenceItem[]; participantTerms: ParticipantTermState[]; options: CommunityOption[]; trialTerms: TrialTerms[]; findings: DivergentTrialFinding[]; exitsCompleted: string[]; unresolved: string[]; };
+export type MediationProposal = { application: 'Community Agreement Mediator'; status: 'ready-for-review'|'blocked'; positions: MediationPosition[]; options: CommunityOption[]; trial: TrialTerms | null; participantTerms: ParticipantTermState[]; divergentFindings: DivergentTrialFinding[]; referrals: string[]; exitActions: string[]; blockers: string[]; actionBoundary: string; resumeState: MediationCheckpoint; };

@@ -1,7 +1,7 @@
 [
   {
     "id": "071-first-gate-pass",
-    "root": "runCase/extractArguments/audit/qualify.nl",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
     "split_group": "world-071-first-gate",
     "inputs": {
       "evidence": {
@@ -61,7 +61,7 @@
   },
   {
     "id": "071-first-gate-fail",
-    "root": "runCase/extractArguments/audit/qualify.nl",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
     "split_group": "world-071-first-gate",
     "inputs": {
       "evidence": {
@@ -121,7 +121,7 @@
   },
   {
     "id": "071-first-gate-needs-review",
-    "root": "runCase/extractArguments/audit/qualify.nl",
+    "root": "synthesizeConsultation/extractScopedArguments/verifyArgumentAttribution.nl",
     "split_group": "world-071-first-gate",
     "inputs": {
       "evidence": {
@@ -182,12 +182,11 @@
   },
   {
     "id": "071-workflow-1",
-    "root": "runCase.nl",
+    "root": "synthesizeConsultation.nl",
     "split_group": "world-071-workflow-1",
     "inputs": {
-      "request": "Prepare a consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence.",
-      "records": [
-        {
+      "docket": {
+        "consultation": {
           "id": "071-workflow-1-record",
           "caseId": "071-workflow-1",
           "sourceRefs": [
@@ -212,36 +211,49 @@
           "scopeStatementId": "SCOPE-7",
           "analystId": "A4",
           "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-1-source",
+            "source": "consultation packet 1",
+            "version": "v1",
+            "text": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-1-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "071-wf-1-source",
-          "source": "consultation packet 1",
-          "version": "v1",
-          "text": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "071-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "071-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "071-wf-1-source",
-          "source": "consultation packet 1",
-          "version": "v1",
-          "text": "S11 from R1: “Please add weekend bus lanes.” S12 from R2 repeats the same template sentence. Participant IDs differ; neither record is a duplicate ingestion.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ]
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Consultation Synthesis Studio",
@@ -264,12 +276,11 @@
   },
   {
     "id": "071-workflow-2",
-    "root": "runCase.nl",
+    "root": "synthesizeConsultation.nl",
     "split_group": "world-071-workflow-2",
     "inputs": {
-      "request": "Prepare a consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence.",
-      "records": [
-        {
+      "docket": {
+        "consultation": {
           "id": "071-workflow-2-record",
           "caseId": "071-workflow-2",
           "sourceRefs": [
@@ -293,36 +304,49 @@
           "scopeStatementId": "SCOPE-7",
           "analystId": "A4",
           "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-2-source",
+            "source": "consultation packet 2",
+            "version": "v1",
+            "text": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-2-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "071-wf-2-source",
-          "source": "consultation packet 2",
-          "version": "v1",
-          "text": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "071-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "071-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "071-wf-2-source",
-          "source": "consultation packet 2",
-          "version": "v1",
-          "text": "S17 from resident R9: “I support weekend bus lanes because wheelchair boarding is slower; I oppose removing the accessible curb stop.”",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ]
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Consultation Synthesis Studio",
@@ -345,12 +369,11 @@
   },
   {
     "id": "071-workflow-3",
-    "root": "runCase.nl",
+    "root": "synthesizeConsultation.nl",
     "split_group": "world-071-workflow-3",
     "inputs": {
-      "request": "Prepare a consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence.",
-      "records": [
-        {
+      "docket": {
+        "consultation": {
           "id": "071-workflow-3-record",
           "caseId": "071-workflow-3",
           "sourceRefs": [
@@ -374,36 +397,49 @@
           "scopeStatementId": "SCOPE-7",
           "analystId": "A4",
           "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-3-source",
+            "source": "consultation submission S18 and consent form C-18",
+            "version": "v2",
+            "text": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-3-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "071-wf-3-source",
-          "source": "consultation submission S18 and consent form C-18",
-          "version": "v2",
-          "text": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "071-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "071-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "071-wf-3-source",
-          "source": "consultation submission S18 and consent form C-18",
-          "version": "v2",
-          "text": "Submission S18 from resident R18 includes the verbatim account, “My insulin pump failed during the overnight shift at Lakeside Clinic.” Consent form C-18, signed 2026-10-21, authorizes anonymous theme summaries only; it does not grant verbatim quotation or naming the clinic. The source index links the quotation to R18, and the public-report permission field is blank.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Consultation Synthesis Studio",
@@ -426,12 +462,11 @@
   },
   {
     "id": "071-workflow-4",
-    "root": "runCase.nl",
+    "root": "synthesizeConsultation.nl",
     "split_group": "world-071-workflow-4",
     "inputs": {
-      "request": "Prepare a consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence.",
-      "records": [
-        {
+      "docket": {
+        "consultation": {
           "id": "071-workflow-4-record",
           "caseId": "071-workflow-4",
           "sourceRefs": [
@@ -455,36 +490,49 @@
           "scopeStatementId": "SCOPE-7",
           "analystId": "A4",
           "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-4-source",
+            "source": "consultation packet 4",
+            "version": "v1",
+            "text": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-4-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "071-wf-4-source",
-          "source": "consultation packet 4",
-          "version": "v1",
-          "text": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "071-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "071-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "071-wf-4-source",
-          "source": "consultation packet 4",
-          "version": "v1",
-          "text": "S23 arrived at 19:20 after the ordinary close. Exception EX-4, signed by the consultation owner, accepts submissions until 20:00.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ]
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Consultation Synthesis Studio",
@@ -507,12 +555,11 @@
   },
   {
     "id": "071-workflow-5",
-    "root": "runCase.nl",
+    "root": "synthesizeConsultation.nl",
     "split_group": "world-071-workflow-5",
     "inputs": {
-      "request": "Prepare a consultation synthesis proposal from the frozen submissions, scope, and response-owner evidence.",
-      "records": [
-        {
+      "docket": {
+        "consultation": {
           "id": "071-workflow-5-record",
           "caseId": "071-workflow-5",
           "sourceRefs": [
@@ -536,36 +583,49 @@
           "scopeStatementId": "SCOPE-7",
           "analystId": "A4",
           "responseOwnerId": "O2"
+        },
+        "submissions": [],
+        "relations": [],
+        "themes": [],
+        "responseOptions": [],
+        "report": null,
+        "evidence": [
+          {
+            "id": "071-wf-5-source",
+            "source": "consultation packet 5",
+            "version": "v1",
+            "text": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
+            "status": "current",
+            "authority": "consultation record"
+          }
+        ],
+        "checkpoint": {
+          "edition": "071-workflow-5-record",
+          "argumentMap": [],
+          "relations": [],
+          "themes": [],
+          "responses": [],
+          "report": null,
+          "includedLateSubmissionRefs": [],
+          "privacyRedactions": [],
+          "challengedCoverageDeltas": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "071-wf-5-source",
-          "source": "consultation packet 5",
-          "version": "v1",
-          "text": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "071-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "071-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "071-wf-5-source",
-          "source": "consultation packet 5",
-          "version": "v1",
-          "text": "Reviewer challenge C9 says the draft omitted the wheelchair boarding concern in S17; the source index links C9 to S17 and the accessibility theme.",
-          "status": "current",
-          "authority": "consultation record"
-        }
-      ]
+      },
+      "delta": {
+        "newSubmissions": [],
+        "lateSubmissionRefs": [],
+        "challengedThemeIds": [],
+        "privacyConsents": []
+      },
+      "update": {
+        "responseOwnerId": "O2",
+        "decisionQuestions": [],
+        "challengedThemeIds": [],
+        "acceptedLateSubmissionRefs": []
+      },
+      "editor": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Public Consultation Synthesis Studio",

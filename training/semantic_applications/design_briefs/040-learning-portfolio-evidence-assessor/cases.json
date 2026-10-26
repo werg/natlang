@@ -1,7 +1,7 @@
 [
   {
     "id": "040-learning-portfolio-evidence-assessor-gate-supported",
-    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "root": "qualification/indexEvidence.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
       "draft": {
@@ -70,7 +70,7 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-gate-contradictory",
-    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "root": "qualification/indexEvidence.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
       "draft": {
@@ -139,7 +139,7 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-gate-missing",
-    "root": "runCase/indexEvidence/audit/qualify.nl",
+    "root": "qualification/indexEvidence.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
       "draft": {
@@ -191,13 +191,13 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-operational-1",
-    "root": "runCase.nl",
+    "root": "reviewLearnerPortfolio.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
-      "input": {
+      "portfolio": {
         "caseId": "040-learning-portfolio-evidence-assessor-operational-1",
-        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "requestedOutcome": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-1; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "040-operational-detail-1-source-v2",
             "source": "Learning portfolio evidence assessor operational event log",
@@ -212,27 +212,30 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorPortfolioEvidence": {
+          "id": "040-prior-portfolioevidence-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "040-learning-portfolio-evidence-assessor-operational-1",
+          "artifactId": "portfolio-audio-040",
+          "contribution": "learner rehearsed the opening only",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed"
+        },
+        "frameworkStandard": "current named-source authority; applicability must be checked against version and scope",
+        "frameworkVersion": "not-provided",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
+        "recencyRule": "no recency rule supplied",
+        "accommodationRule": "no accommodation rule supplied",
+        "stakes": "unknown",
+        "priorFinding": null,
         "changedEvidenceIds": [
           "040-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "040-prior-portfolioevidence-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "040-learning-portfolio-evidence-assessor-operational-1",
-            "artifactId": "portfolio-audio-040",
-            "contribution": "learner rehearsed the opening only",
-            "context": "rubric requires an unprompted answer to a novel question",
-            "authorshipStatus": "learner-authored; independent response not observed"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -257,13 +260,13 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-operational-2",
-    "root": "runCase.nl",
+    "root": "reviewLearnerPortfolio.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
-      "input": {
+      "portfolio": {
         "caseId": "040-learning-portfolio-evidence-assessor-operational-2",
-        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "requestedOutcome": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-2; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "040-operational-detail-2-source-v2",
             "source": "Learning portfolio evidence assessor operational event log",
@@ -278,27 +281,30 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorPortfolioEvidence": {
+          "id": "040-prior-portfolioevidence-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "040-learning-portfolio-evidence-assessor-operational-2",
+          "artifactId": "artifact-A40",
+          "contribution": "learner-authored individual field protocol with calibration log CAL-40",
+          "context": "competency C40; supplied recency rule remains valid unless competency standard or source materially changes; standard version unchanged since 2024",
+          "authorshipStatus": "dated 2024-05-10; verified by learner L40; no material standard/source change recorded"
+        },
+        "frameworkStandard": "current named-source authority; applicability must be checked against version and scope",
+        "frameworkVersion": "not-provided",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "unclear",
+        "recencyRule": "no recency rule supplied",
+        "accommodationRule": "no accommodation rule supplied",
+        "stakes": "unknown",
+        "priorFinding": null,
         "changedEvidenceIds": [
           "040-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "040-prior-portfolioevidence-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "040-learning-portfolio-evidence-assessor-operational-2",
-            "artifactId": "artifact-A40",
-            "contribution": "learner-authored individual field protocol with calibration log CAL-40",
-            "context": "competency C40; supplied recency rule remains valid unless competency standard or source materially changes; standard version unchanged since 2024",
-            "authorshipStatus": "dated 2024-05-10; verified by learner L40; no material standard/source change recorded"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -323,13 +329,13 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-operational-3",
-    "root": "runCase.nl",
+    "root": "reviewLearnerPortfolio.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
-      "input": {
+      "portfolio": {
         "caseId": "040-learning-portfolio-evidence-assessor-operational-3",
-        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "requestedOutcome": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-3; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "040-operational-detail-3-source-v2",
             "source": "Learning portfolio evidence assessor operational event log",
@@ -344,27 +350,30 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorPortfolioEvidence": {
+          "id": "040-prior-portfolioevidence-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "040-learning-portfolio-evidence-assessor-operational-3",
+          "artifactId": "portfolio-audio-040",
+          "contribution": "learner rehearsed the opening only",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed"
+        },
+        "frameworkStandard": "current named-source authority; applicability must be checked against version and scope",
+        "frameworkVersion": "not-provided",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
+        "recencyRule": "no recency rule supplied",
+        "accommodationRule": "no accommodation rule supplied",
+        "stakes": "unknown",
+        "priorFinding": null,
         "changedEvidenceIds": [
           "040-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "040-prior-portfolioevidence-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "040-learning-portfolio-evidence-assessor-operational-3",
-            "artifactId": "portfolio-audio-040",
-            "contribution": "learner rehearsed the opening only",
-            "context": "rubric requires an unprompted answer to a novel question",
-            "authorshipStatus": "learner-authored; independent response not observed"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -389,13 +398,13 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-operational-4",
-    "root": "runCase.nl",
+    "root": "reviewLearnerPortfolio.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
-      "input": {
+      "portfolio": {
         "caseId": "040-learning-portfolio-evidence-assessor-operational-4",
-        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "requestedOutcome": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-4; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "040-operational-detail-4-source-v2",
             "source": "Learning portfolio evidence assessor operational event log",
@@ -410,27 +419,30 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorPortfolioEvidence": {
+          "id": "040-prior-portfolioevidence-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "040-learning-portfolio-evidence-assessor-operational-4",
+          "artifactId": "portfolio-audio-040",
+          "contribution": "learner rehearsed the opening only",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed"
+        },
+        "frameworkStandard": "current named-source authority; applicability must be checked against version and scope",
+        "frameworkVersion": "not-provided",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
+        "recencyRule": "no recency rule supplied",
+        "accommodationRule": "no accommodation rule supplied",
+        "stakes": "unknown",
+        "priorFinding": null,
         "changedEvidenceIds": [
           "040-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "040-prior-portfolioevidence-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "040-learning-portfolio-evidence-assessor-operational-4",
-            "artifactId": "portfolio-audio-040",
-            "contribution": "learner rehearsed the opening only",
-            "context": "rubric requires an unprompted answer to a novel question",
-            "authorshipStatus": "learner-authored; independent response not observed"
-          }
-        }
+        ]
       }
     },
     "expected": {
@@ -455,13 +467,13 @@
   },
   {
     "id": "040-learning-portfolio-evidence-assessor-operational-5",
-    "root": "runCase.nl",
+    "root": "reviewLearnerPortfolio.nl",
     "split_group": "040-learning-portfolio-evidence-assessor",
     "inputs": {
-      "input": {
+      "portfolio": {
         "caseId": "040-learning-portfolio-evidence-assessor-operational-5",
-        "goal": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+        "requestedOutcome": "Review the Learning portfolio evidence assessor evidence for case 040-learning-portfolio-evidence-assessor-operational-5; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "040-operational-detail-5-source-v2",
             "source": "Learning portfolio evidence assessor operational event log",
@@ -476,27 +488,30 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorPortfolioEvidence": {
+          "id": "040-prior-portfolioevidence-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "040-learning-portfolio-evidence-assessor-operational-5",
+          "artifactId": "portfolio-audio-040",
+          "contribution": "learner rehearsed the opening only",
+          "context": "rubric requires an unprompted answer to a novel question",
+          "authorshipStatus": "learner-authored; independent response not observed"
+        },
+        "frameworkStandard": "current named-source authority; applicability must be checked against version and scope",
+        "frameworkVersion": "not-provided",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
+        "recencyRule": "no recency rule supplied",
+        "accommodationRule": "no accommodation rule supplied",
+        "stakes": "unknown",
+        "priorFinding": null,
         "changedEvidenceIds": [
           "040-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "040-prior-portfolioevidence-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "040-learning-portfolio-evidence-assessor-operational-5",
-            "artifactId": "portfolio-audio-040",
-            "contribution": "learner rehearsed the opening only",
-            "context": "rubric requires an unprompted answer to a novel question",
-            "authorshipStatus": "learner-authored; independent response not observed"
-          }
-        }
+        ]
       }
     },
     "expected": {

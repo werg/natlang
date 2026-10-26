@@ -80,3 +80,16 @@ export type StageResultQualityClosure = { accepted: QualityClosure[]; unresolved
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; normalizeDefects: StageResultDefectObservation; traceExposure: StageResultQualityExposure; compareCauses: StageResultQualityHypothesis; planCorrection: StageResultQualityActionPlan; verifyEffectiveness: StageResultQualityClosure; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { normalizeDefects: StageResultDefectObservation; traceExposure: StageResultQualityExposure; compareCauses: StageResultQualityHypothesis; planCorrection: StageResultQualityActionPlan; verifyEffectiveness: StageResultQualityClosure; };
+
+export type QualityEscapeCase = { caseId: ID; observedDefects: DefectObservation[]; lotLineage: LotLineage[]; processHistories: ProcessHistory[]; inspectionMethods: InspectionMethod[]; holds: UnitHold[]; correctiveActions: CorrectiveActionRecord[]; evidence: Evidence[]; eventNote: string; priorClosure: QualityClosure | null };
+export type LotLineage = { lotId: ID; parentLotId: ID | null; processId: ID; routeVersion: string; quantity: number; reworkRef: Ref | null };
+export type ProcessHistory = { processId: ID; lotId: ID; routeVersion: string; operation: string; observedResult: string; operatorRef: Ref | null; evidenceRef: Ref };
+export type InspectionMethod = { methodId: ID; revision: string; detectionThreshold: string; coverage: string; activeFrom: string; activeUntil: string | null };
+export type UnitHold = { lotId: ID; unitIds: ID[]; scope: string; disposition: string; evidenceRef: Ref };
+export type CorrectiveActionRecord = { actionId: ID; targetLotIds: ID[]; change: string; completed: boolean; verificationRefs: Ref[] };
+export type EscapeTrace = { affectedLots: ID[]; reworkedBranches: ID[]; exposureBoundaries: string[]; preservedHistories: ID[] };
+export type DefectRateComparison = { comparable: boolean; methodChanges: string[]; defectEvidence: string[]; detectionChange: string; rateClaim: string };
+export type CausalReview = { mechanisms: string[]; supportingRefs: Ref[]; contraryRefs: Ref[]; discriminatingTests: string[]; blameInferenceBlocked: boolean };
+export type ContainmentDisposition = { heldUnitIds: ID[]; releasableUnitIds: ID[]; unresolvedLotIds: ID[]; releaseBasis: string[] };
+export type EffectivenessReview = { reopened: boolean; failedActionIds: ID[]; recurrenceEvidence: Ref[]; nextVerification: string; closurePermitted: boolean };
+export type QualityEscapeProposal = { caseId: ID; trace: EscapeTrace; comparison: DefectRateComparison; causes: CausalReview; containment: ContainmentDisposition; effectiveness: EffectivenessReview; commitAllowed: boolean };

@@ -1,0 +1,98 @@
+{
+  "schema": "natlang.application/1",
+  "id": "058",
+  "title": "Maintenance planning and handover system",
+  "entrypoint": "prepareMaintenanceHandover.nl",
+  "interfaces": [
+    {
+      "name": "prepareMaintenanceHandover",
+      "path": "prepareMaintenanceHandover.nl",
+      "purpose": "Resolve official asset identity, sequence approved maintenance prerequisites, retain unverified work, and transfer live isolation and recurrence watch between shifts."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretObservations",
+        "paths": [
+          "prepareMaintenanceHandover/resolveOfficialAsset.nl"
+        ]
+      },
+      {
+        "stage": "selectProcedure",
+        "paths": [
+          "prepareMaintenanceHandover/orderByProcedurePrerequisites.nl"
+        ]
+      },
+      {
+        "stage": "constructWorkPlan",
+        "paths": [
+          "prepareMaintenanceHandover/assessRevisionSubstitutions.nl"
+        ]
+      },
+      {
+        "stage": "interpretProgress",
+        "paths": [
+          "prepareMaintenanceHandover/verifyReportedCompletion.nl"
+        ]
+      },
+      {
+        "stage": "composeHandover",
+        "paths": [
+          "prepareMaintenanceHandover/handOverLiveIsolation.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "prepareMaintenanceHandover/verifyReportedCompletion.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "prepareMaintenanceHandover/assessRevisionSubstitutions.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "prepareMaintenanceHandover/handOverLiveIsolation.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "prepareMaintenanceHandover/carryRecurringFaultWatch.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "prepareMaintenanceHandover/resolveOfficialAsset.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "task verification, asset identity, isolation checkpoints, recurring fault watch",
+    "writes": "maintenance proposal only"
+  },
+  "effects": [
+    "maintenance dispatch proposal",
+    "shift handover note"
+  ],
+  "source_files": [
+    "prepareMaintenanceHandover.nl",
+    "prepareMaintenanceHandover/assessRevisionSubstitutions.nl",
+    "prepareMaintenanceHandover/carryRecurringFaultWatch.nl",
+    "prepareMaintenanceHandover/handOverLiveIsolation.nl",
+    "prepareMaintenanceHandover/orderByProcedurePrerequisites.nl",
+    "prepareMaintenanceHandover/resolveOfficialAsset.nl",
+    "prepareMaintenanceHandover/verifyReportedCompletion.nl",
+    "qualification/interpretObservations.nl",
+    "types.ts"
+  ]
+}

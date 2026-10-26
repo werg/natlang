@@ -1,17 +1,7 @@
 # 072 — Participatory Budgeting Facilitator
 
-## Source-derived procedure
+## Distinct algorithm: compose a costed dependency portfolio before the public vote
 
-Five domain stages: interpretProposals, assessOverlap, qualifyFeasibility, constructPortfolios, prepareDeliberation. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+This facilitator builds an enabling-work graph across proposals. Shared infrastructure is a single costed node with edges to the proposals it enables; it is counted once in a portfolio total, while each proposal retains its own intended benefit and proposer. Complementary proposals may be combined only after each proposer reviews the merged scope. A changed estimate invalidates only portfolios that depend on that proposal or its shared work.
 
-## Domain algorithms and gates
-
-- **interpretProposals** — Translate informal proposals into clear intended outcomes, work scope, and affected groups. Preserve the proposer’s intent, distinguish a preferred implementation from the underlying benefit, and request clarification where ambiguity changes feasibility or eligibility. Gate: Proposal normalization does not silently change the project’s purpose.
-- **assessOverlap** — Compare proposals by intended benefit, location, and required work. Identify genuine duplicates and complementary bundles without merging projects whose similar wording masks different communities or uses; obtain proposer review for material combinations. Gate: Merging preserves distinct intents and does not erase minority proposals.
-- **qualifyFeasibility** — Compare proposals with supplied eligibility, resource, and delivery rules, using exact estimates and qualified assessments where necessary. Separate infeasibility from missing information and provide a clear path for revision rather than silently excluding difficult proposals. Gate: Eligibility and feasibility decisions cite supplied rules and verified estimates.
-- **constructPortfolios** — Enumerate feasible combinations under exact budget and dependency constraints, accounting for shared work and mutually exclusive uses. Present alternatives for deliberation without autonomously choosing political priorities or inferring participant preferences from personal data. Gate: Exact budget feasibility and complete disclosure of exclusions and dependencies.
-- **prepareDeliberation** — Produce accessible comparisons, maps or structured location views, and clear decision procedures. Preserve proposer corrections, record the authorized community decision, and transfer selected projects into accountable delivery plans with explicit acceptance criteria. Gate: Selection follows the published process and the selected portfolio matches its approved scope.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+Feasibility is distinct from popularity. Location-sensitive constraints are supplied and shown at relevant scope without resident profiling. Portfolios are compared under the published budget and allocation rules, then the deliberation packet reports dependencies, tradeoffs, evidence gaps and voting boundary. A revised cost reopens feasibility and portfolio totals before any vote or approval. Delivery scope changes after selection create a new change record subject to the applicable community approval rule; they do not rewrite the selected proposal.

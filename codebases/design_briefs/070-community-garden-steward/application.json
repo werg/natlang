@@ -1,0 +1,105 @@
+{
+  "schema": "natlang.application/1",
+  "id": "070",
+  "title": "Community garden steward",
+  "entrypoint": "stewardGardenSeason.nl",
+  "interfaces": [
+    {
+      "name": "stewardGardenSeason",
+      "path": "stewardGardenSeason.nl",
+      "purpose": "Reconcile one garden season without turning preferences into duties or unaccepted allocations."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretPreferences",
+        "paths": [
+          "stewardGardenSeason/interpretMemberAgreements.nl",
+          "stewardGardenSeason/verifyGardenPreference.nl"
+        ]
+      },
+      {
+        "stage": "modelPlots",
+        "paths": [
+          "stewardGardenSeason/inspectPlotConditions.nl"
+        ]
+      },
+      {
+        "stage": "generatePlans",
+        "paths": [
+          "stewardGardenSeason/coDesignPlotAlternatives.nl",
+          "stewardGardenSeason/coDesignPlotAlternatives/verifyGardenAccessAndRules.nl",
+          "stewardGardenSeason/coDesignPlotAlternatives/compareMemberTradeoffs.nl"
+        ]
+      },
+      {
+        "stage": "negotiateAllocation",
+        "paths": [
+          "stewardGardenSeason/negotiatePlotAllocation.nl",
+          "stewardGardenSeason/negotiatePlotAllocation/bindMemberResponses.nl"
+        ]
+      },
+      {
+        "stage": "coordinateSeason",
+        "paths": [
+          "stewardGardenSeason/rollSeasonBoard.nl",
+          "stewardGardenSeason/rollSeasonBoard/holdBrokenToolTasks.nl",
+          "stewardGardenSeason/rollSeasonBoard/transferDepartingMemberCare.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "stewardGardenSeason/interpretMemberAgreements.nl",
+          "stewardGardenSeason/negotiatePlotAllocation.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "stewardGardenSeason/rollSeasonBoard.nl",
+          "stewardGardenSeason/rollSeasonBoard/holdBrokenToolTasks.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "stewardGardenSeason/inspectPlotConditions.nl",
+          "stewardGardenSeason/coDesignPlotAlternatives.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "stewardGardenSeason/negotiatePlotAllocation.nl",
+          "stewardGardenSeason/negotiatePlotAllocation/bindMemberResponses.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "stewardGardenSeason/rollSeasonBoard.nl",
+          "stewardGardenSeason/rollSeasonBoard/transferDepartingMemberCare.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "stewardGardenSeason.nl",
+    "stewardGardenSeason/coDesignPlotAlternatives.nl",
+    "stewardGardenSeason/coDesignPlotAlternatives/compareMemberTradeoffs.nl",
+    "stewardGardenSeason/coDesignPlotAlternatives/verifyGardenAccessAndRules.nl",
+    "stewardGardenSeason/inspectPlotConditions.nl",
+    "stewardGardenSeason/interpretMemberAgreements.nl",
+    "stewardGardenSeason/negotiatePlotAllocation.nl",
+    "stewardGardenSeason/negotiatePlotAllocation/bindMemberResponses.nl",
+    "stewardGardenSeason/rollSeasonBoard.nl",
+    "stewardGardenSeason/rollSeasonBoard/holdBrokenToolTasks.nl",
+    "stewardGardenSeason/rollSeasonBoard/transferDepartingMemberCare.nl",
+    "stewardGardenSeason/verifyGardenPreference.nl",
+    "types.ts"
+  ]
+}

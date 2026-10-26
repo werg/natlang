@@ -1,0 +1,97 @@
+{
+  "schema": "natlang.application/1",
+  "id": "056",
+  "title": "Quality escape investigator",
+  "entrypoint": "investigateQualityEscape.nl",
+  "interfaces": [
+    {
+      "name": "investigateQualityEscape",
+      "path": "investigateQualityEscape.nl",
+      "purpose": "Trace escaped defects through preserved rework genealogy, compare inspection regimes, scope containment by unit, and reopen recurrence failures."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "normalizeDefects",
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "stage": "traceExposure",
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "stage": "compareCauses",
+        "paths": [
+          "investigateQualityEscape/reviewCausalMechanisms.nl"
+        ]
+      },
+      {
+        "stage": "planCorrection",
+        "paths": [
+          "investigateQualityEscape/reconcileUnitHoldScope.nl"
+        ]
+      },
+      {
+        "stage": "verifyEffectiveness",
+        "paths": [
+          "investigateQualityEscape/retestPriorClosure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "investigateQualityEscape/traceReworkedLotExposure.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "investigateQualityEscape/compareInspectionRegimes.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "investigateQualityEscape/reviewCausalMechanisms.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "investigateQualityEscape/reconcileUnitHoldScope.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "investigateQualityEscape/retestPriorClosure.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "caseState": "prior closure and unit-specific hold disposition",
+    "writes": "proposal only"
+  },
+  "effects": [
+    "lot-specific hold/release proposal",
+    "corrective-action retest request"
+  ],
+  "source_files": [
+    "investigateQualityEscape.nl",
+    "investigateQualityEscape/compareInspectionRegimes.nl",
+    "investigateQualityEscape/reconcileUnitHoldScope.nl",
+    "investigateQualityEscape/retestPriorClosure.nl",
+    "investigateQualityEscape/reviewCausalMechanisms.nl",
+    "investigateQualityEscape/traceReworkedLotExposure.nl",
+    "qualification/normalizeDefects.nl",
+    "types.ts"
+  ]
+}

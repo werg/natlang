@@ -1,7 +1,7 @@
 [
   {
     "id": "042-release-compatibility-coordinator-gate-supported",
-    "root": "runCase/interpretChanges/audit/qualify.nl",
+    "root": "qualification/interpretChanges.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
       "draft": {
@@ -70,7 +70,7 @@
   },
   {
     "id": "042-release-compatibility-coordinator-gate-contradictory",
-    "root": "runCase/interpretChanges/audit/qualify.nl",
+    "root": "qualification/interpretChanges.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
       "draft": {
@@ -139,7 +139,7 @@
   },
   {
     "id": "042-release-compatibility-coordinator-gate-missing",
-    "root": "runCase/interpretChanges/audit/qualify.nl",
+    "root": "qualification/interpretChanges.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
       "draft": {
@@ -191,13 +191,14 @@
   },
   {
     "id": "042-release-compatibility-coordinator-operational-1",
-    "root": "runCase.nl",
+    "root": "coordinateReleaseTransition.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "042-release-compatibility-coordinator-operational-1",
-        "goal": "Review the Release compatibility coordinator evidence for case 042-release-compatibility-coordinator-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-1",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
           {
             "id": "042-operational-detail-1-source-v2",
             "source": "Release compatibility coordinator operational event log",
@@ -212,26 +213,47 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-1-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R042 Release steward records: SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent. This current event is source 042-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 042-release-compatibility-coordinator-operational-1. The supplied typed prior 042-prior-behavioralchange-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "SDK 4.3 changes the default `owner` field from null to empty string without changing the schema version. Consumer reports C42-1 and C42-2 branch differently on those values; the compatibility matrix lists both consumers as default-dependent."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "changedRequirementIds": [
           "042-operational-detail-1-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "042-prior-behavioralchange-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "042-release-compatibility-coordinator-operational-1",
-            "componentId": "sdk-4.2-owner-field",
-            "oldBehavior": "anonymous owner is null and means unknown",
-            "newBehavior": "anonymous owner is empty string and means unassigned",
-            "affectedContract": "consumer distinguishes unknown from unassigned"
-          }
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-1",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
         }
       }
     },
@@ -257,13 +279,14 @@
   },
   {
     "id": "042-release-compatibility-coordinator-operational-2",
-    "root": "runCase.nl",
+    "root": "coordinateReleaseTransition.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "042-release-compatibility-coordinator-operational-2",
-        "goal": "Review the Release compatibility coordinator evidence for case 042-release-compatibility-coordinator-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-2",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
           {
             "id": "042-operational-detail-2-source-v2",
             "source": "Release compatibility coordinator operational event log",
@@ -278,26 +301,47 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-2-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R042 Release steward records: Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager. This current event is source 042-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 042-release-compatibility-coordinator-operational-2. The supplied typed prior 042-prior-behavioralchange-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Integration I42 sends customer status events but its support owner field is blank in the service catalog and escalation roster. Migration M42 changes its endpoint next week; no accountable team has accepted the rollback pager."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "unclear",
-        "changedEvidenceIds": [
+        "changedRequirementIds": [
           "042-operational-detail-2-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "042-prior-behavioralchange-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "042-release-compatibility-coordinator-operational-2",
-            "componentId": "sdk-4.2-owner-field",
-            "oldBehavior": "anonymous owner is null and means unknown",
-            "newBehavior": "anonymous owner is empty string and means unassigned",
-            "affectedContract": "consumer distinguishes unknown from unassigned"
-          }
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-2",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
         }
       }
     },
@@ -323,13 +367,14 @@
   },
   {
     "id": "042-release-compatibility-coordinator-operational-3",
-    "root": "runCase.nl",
+    "root": "coordinateReleaseTransition.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "042-release-compatibility-coordinator-operational-3",
-        "goal": "Review the Release compatibility coordinator evidence for case 042-release-compatibility-coordinator-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-3",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
           {
             "id": "042-operational-detail-3-source-v2",
             "source": "Release compatibility coordinator operational event log",
@@ -344,26 +389,47 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-3-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R042 Release steward records: Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date. This current event is source 042-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 042-release-compatibility-coordinator-operational-3. The supplied typed prior 042-prior-behavioralchange-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Customer C42 pins SDK 3.8 in a signed deployment manifest through 2027-03-31. Its recorded contract tests expect `owner=null` for anonymous records, and the supported-version policy includes 3.x until that date."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "changedRequirementIds": [
           "042-operational-detail-3-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "042-prior-behavioralchange-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "042-release-compatibility-coordinator-operational-3",
-            "componentId": "sdk-4.2-owner-field",
-            "oldBehavior": "anonymous owner is null and means unknown",
-            "newBehavior": "anonymous owner is empty string and means unassigned",
-            "affectedContract": "consumer distinguishes unknown from unassigned"
-          }
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-3",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
         }
       }
     },
@@ -389,13 +455,14 @@
   },
   {
     "id": "042-release-compatibility-coordinator-operational-4",
-    "root": "runCase.nl",
+    "root": "coordinateReleaseTransition.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "042-release-compatibility-coordinator-operational-4",
-        "goal": "Review the Release compatibility coordinator evidence for case 042-release-compatibility-coordinator-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-4",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
           {
             "id": "042-operational-detail-4-source-v2",
             "source": "Release compatibility coordinator operational event log",
@@ -410,26 +477,47 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-4-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R042 Release steward records: Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only. This current event is source 042-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 042-release-compatibility-coordinator-operational-4. The supplied typed prior 042-prior-behavioralchange-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback plan RB42 restores the old database schema while 136 records written with the new `owner_status` field exist after cutover. The migration rehearsal has no mapping for those records and the write ledger is append-only."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "changedRequirementIds": [
           "042-operational-detail-4-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "042-prior-behavioralchange-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "042-release-compatibility-coordinator-operational-4",
-            "componentId": "sdk-4.2-owner-field",
-            "oldBehavior": "anonymous owner is null and means unknown",
-            "newBehavior": "anonymous owner is empty string and means unassigned",
-            "affectedContract": "consumer distinguishes unknown from unassigned"
-          }
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-4",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
         }
       }
     },
@@ -455,13 +543,14 @@
   },
   {
     "id": "042-release-compatibility-coordinator-operational-5",
-    "root": "runCase.nl",
+    "root": "coordinateReleaseTransition.nl",
     "split_group": "042-release-compatibility-coordinator",
     "inputs": {
-      "input": {
-        "caseId": "042-release-compatibility-coordinator-operational-5",
-        "goal": "Review the Release compatibility coordinator evidence for case 042-release-compatibility-coordinator-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "release": {
+        "releaseId": "042-release-compatibility-coordinator-operational-5",
+        "baselineRevision": "v1",
+        "candidateRevision": "v2",
+        "changeEvidence": [
           {
             "id": "042-operational-detail-5-source-v2",
             "source": "Release compatibility coordinator operational event log",
@@ -476,26 +565,47 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "consumerEvidence": [
+          {
+            "id": "042-operational-detail-5-source-v2",
+            "source": "Release compatibility coordinator operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R042 Release steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R042 Release steward records: As of 2026-10-06, documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 remains candidate with a decision date of Oct 24. Current page metadata labels the examples “current”. This current event is source 042-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 042-release-compatibility-coordinator-operational-5. The supplied typed prior 042-prior-behavioralchange-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Documentation page D42 for release 4.3 is queued for public release on Oct 18; release manifest R42 is still in candidate status with a decision date of Oct 24. Current page metadata labels the examples “current”."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
+        "changedRequirementIds": [
           "042-operational-detail-5-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "042-prior-behavioralchange-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "042-release-compatibility-coordinator-operational-5",
-            "componentId": "sdk-4.2-owner-field",
-            "oldBehavior": "anonymous owner is null and means unknown",
-            "newBehavior": "anonymous owner is empty string and means unassigned",
-            "affectedContract": "consumer distinguishes unknown from unassigned"
-          }
+        "existingBehavior": {
+          "id": "042-prior-behavioralchange-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "042-release-compatibility-coordinator-operational-5",
+          "componentId": "sdk-4.2-owner-field",
+          "oldBehavior": "anonymous owner is null and means unknown",
+          "newBehavior": "anonymous owner is empty string and means unassigned",
+          "affectedContract": "consumer distinguishes unknown from unassigned"
+        },
+        "pinnedVersions": [],
+        "unownedIntegrationIds": [],
+        "rollbackDataPlan": {
+          "candidateWrites": [],
+          "baselineReadableFields": [],
+          "reconciliationSteps": [],
+          "irreversibleLosses": [],
+          "rehearsalRefs": []
         }
       }
     },

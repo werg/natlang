@@ -1,0 +1,103 @@
+{
+  "schema": "natlang.application/1",
+  "id": "046",
+  "title": "Semantic analysis work-order compiler",
+  "entrypoint": "compileAnalysisWorkOrder.nl",
+  "interfaces": [
+    {
+      "name": "compileAnalysisWorkOrder",
+      "path": "compileAnalysisWorkOrder.nl",
+      "purpose": "Compile a semantics-first typed analysis graph that respects access policy and declared row grain."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "formalizeQuestion",
+        "paths": [
+          "compileAnalysisWorkOrder/decomposeQuestionSemantics.nl"
+        ]
+      },
+      {
+        "stage": "inspectData",
+        "paths": [
+          "compileAnalysisWorkOrder/bindMeaningToAuthorizedFields.nl",
+          "compileAnalysisWorkOrder/bindMeaningToAuthorizedFields/excludeRestrictedRowsBeforeExposure.nl"
+        ]
+      },
+      {
+        "stage": "compileGraph",
+        "paths": [
+          "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph.nl",
+          "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph/checkJoinCardinality.nl",
+          "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph/checkAcyclicTypedGraph.nl"
+        ]
+      },
+      {
+        "stage": "executeAndAudit",
+        "paths": [
+          "compileAnalysisWorkOrder/reconcileAnalysisPartitions.nl"
+        ]
+      },
+      {
+        "stage": "explainResult",
+        "paths": [
+          "compileAnalysisWorkOrder/explainMaterializedAnalysis.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "compileAnalysisWorkOrder/decomposeQuestionSemantics.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph/checkJoinCardinality.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "compileAnalysisWorkOrder/bindMeaningToAuthorizedFields/excludeRestrictedRowsBeforeExposure.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "compileAnalysisWorkOrder/reconcileAnalysisPartitions/pinRubricVersionForReclassification.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "compileAnalysisWorkOrder/reconcileAnalysisPartitions.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "analysisRun": "typed work graph, access-filtered universe, output grain, rubric version, and row disposition lineage"
+  },
+  "effects": {
+    "restrictedRows": "excluded before semantic processing",
+    "execution": "materialized values are accepted only as supplied run evidence; otherwise output remains a work order"
+  },
+  "source_files": [
+    "compileAnalysisWorkOrder.nl",
+    "compileAnalysisWorkOrder/bindMeaningToAuthorizedFields.nl",
+    "compileAnalysisWorkOrder/bindMeaningToAuthorizedFields/excludeRestrictedRowsBeforeExposure.nl",
+    "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph.nl",
+    "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph/checkAcyclicTypedGraph.nl",
+    "compileAnalysisWorkOrder/compileGrainPreservingAnalysisGraph/checkJoinCardinality.nl",
+    "compileAnalysisWorkOrder/decomposeQuestionSemantics.nl",
+    "compileAnalysisWorkOrder/explainMaterializedAnalysis.nl",
+    "compileAnalysisWorkOrder/reconcileAnalysisPartitions.nl",
+    "compileAnalysisWorkOrder/reconcileAnalysisPartitions/pinRubricVersionForReclassification.nl",
+    "qualification/formalizeQuestion.nl",
+    "types.ts"
+  ]
+}

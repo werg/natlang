@@ -1,0 +1,98 @@
+{
+  "schema": "natlang.application/1",
+  "id": "066",
+  "title": "Habitat restoration planner",
+  "entrypoint": "planHabitatStewardship.nl",
+  "interfaces": [
+    {
+      "name": "planHabitatStewardship",
+      "path": "planHabitatStewardship.nl",
+      "purpose": "Restrict sensitive species locations, compare seasonal surveys only under supported methods, record sampling effort, stop expired-permission field tasks, and escalate adverse intervention effects to qualified experts."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretBaseline",
+        "paths": [
+          "planHabitatStewardship/compareSurveySeasons.nl"
+        ]
+      },
+      {
+        "stage": "translateObjectives",
+        "paths": [
+          "planHabitatStewardship/designEffortDenominators.nl"
+        ]
+      },
+      {
+        "stage": "constructInterventions",
+        "paths": [
+          "planHabitatStewardship/qualifyInterventionAccess.nl"
+        ]
+      },
+      {
+        "stage": "planMonitoring",
+        "paths": [
+          "planHabitatStewardship/designEffortDenominators.nl"
+        ]
+      },
+      {
+        "stage": "adaptManagement",
+        "paths": [
+          "planHabitatStewardship/respondToUnexpectedRestorationEffect.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "planHabitatStewardship/restrictSensitiveSpeciesLocations.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "planHabitatStewardship/compareSurveySeasons.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "planHabitatStewardship/qualifyInterventionAccess.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "planHabitatStewardship/respondToUnexpectedRestorationEffect.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "planHabitatStewardship/designEffortDenominators.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "seasonal monitoring and permission-scoped field tasks",
+    "writes": "management and monitoring proposals only"
+  },
+  "effects": [
+    "expert ecological review",
+    "permission renewal request",
+    "field task suspension proposal"
+  ],
+  "source_files": [
+    "planHabitatStewardship.nl",
+    "planHabitatStewardship/compareSurveySeasons.nl",
+    "planHabitatStewardship/designEffortDenominators.nl",
+    "planHabitatStewardship/qualifyInterventionAccess.nl",
+    "planHabitatStewardship/respondToUnexpectedRestorationEffect.nl",
+    "planHabitatStewardship/restrictSensitiveSpeciesLocations.nl",
+    "qualification/interpretBaseline.nl",
+    "types.ts"
+  ]
+}

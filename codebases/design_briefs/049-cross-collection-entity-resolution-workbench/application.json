@@ -1,0 +1,98 @@
+{
+  "schema": "natlang.application/1",
+  "id": "049",
+  "title": "Cross-collection entity resolution workbench",
+  "entrypoint": "resolveCrossCollectionIdentities.nl",
+  "interfaces": [
+    {
+      "name": "resolveCrossCollectionIdentities",
+      "path": "resolveCrossCollectionIdentities.nl",
+      "purpose": "Generate access-bound candidates, judge identity with positive and cannot-link evidence, reconcile constrained clusters, and prepare reversible canonical identity revisions."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "constructCandidates",
+        "paths": [
+          "resolveCrossCollectionIdentities/generateAccessBoundIdentityCandidates.nl"
+        ]
+      },
+      {
+        "stage": "judgePairs",
+        "paths": [
+          "resolveCrossCollectionIdentities/weighIdentityPairEvidence.nl",
+          "resolveCrossCollectionIdentities/weighIdentityPairEvidence/qualifyIdentityEvidenceStrength.nl"
+        ]
+      },
+      {
+        "stage": "reconcileClusters",
+        "paths": [
+          "resolveCrossCollectionIdentities/mergeOnlyConsistentIdentityComponents.nl"
+        ]
+      },
+      {
+        "stage": "constructCanonical",
+        "paths": [
+          "resolveCrossCollectionIdentities/attributeFieldClaims.nl"
+        ]
+      },
+      {
+        "stage": "maintainIdentity",
+        "paths": [
+          "resolveCrossCollectionIdentities/stageReversibleIdentityCorrection.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "resolveCrossCollectionIdentities/weighIdentityPairEvidence.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "resolveCrossCollectionIdentities/weighIdentityPairEvidence/qualifyIdentityEvidenceStrength.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "resolveCrossCollectionIdentities/stageReversibleIdentityCorrection.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "resolveCrossCollectionIdentities/weighIdentityPairEvidence.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "resolveCrossCollectionIdentities/attributeFieldClaims.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "identityGraph": "source-preserving graph versions, interval-bound identities, cannot-link evidence, and reversible correction history"
+  },
+  "effects": {
+    "mergeOrSplit": "proposal only until steward approval and downstream consumer migration proof",
+    "sourceRevocation": "remove contribution and reassess dependent canonical values and identity links"
+  },
+  "source_files": [
+    "qualification/constructCandidates.nl",
+    "resolveCrossCollectionIdentities.nl",
+    "resolveCrossCollectionIdentities/attributeFieldClaims.nl",
+    "resolveCrossCollectionIdentities/generateAccessBoundIdentityCandidates.nl",
+    "resolveCrossCollectionIdentities/mergeOnlyConsistentIdentityComponents.nl",
+    "resolveCrossCollectionIdentities/stageReversibleIdentityCorrection.nl",
+    "resolveCrossCollectionIdentities/weighIdentityPairEvidence.nl",
+    "resolveCrossCollectionIdentities/weighIdentityPairEvidence/qualifyIdentityEvidenceStrength.nl",
+    "types.ts"
+  ]
+}

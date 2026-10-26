@@ -1,7 +1,7 @@
 [
   {
     "id": "046-semantic-analysis-work-order-compiler-gate-supported",
-    "root": "runCase/formalizeQuestion/audit/qualify.nl",
+    "root": "qualification/formalizeQuestion.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
       "draft": {
@@ -74,7 +74,7 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-gate-contradictory",
-    "root": "runCase/formalizeQuestion/audit/qualify.nl",
+    "root": "qualification/formalizeQuestion.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
       "draft": {
@@ -147,7 +147,7 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-gate-missing",
-    "root": "runCase/formalizeQuestion/audit/qualify.nl",
+    "root": "qualification/formalizeQuestion.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
       "draft": {
@@ -199,13 +199,13 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-operational-1",
-    "root": "runCase.nl",
+    "root": "compileAnalysisWorkOrder.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
-      "input": {
-        "caseId": "046-semantic-analysis-work-order-compiler-operational-1",
-        "goal": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "analysis": {
+        "requestId": "046-semantic-analysis-work-order-compiler-operational-1",
+        "questionText": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-1; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "046-operational-detail-1-source-v2",
             "source": "Semantic analysis work-order compiler operational event log",
@@ -220,31 +220,37 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "schemaCatalog": [],
+        "recordRelationships": [],
+        "accessRules": [],
+        "requesterId": null,
+        "requestAudience": "accountable reviewer",
+        "approvedMeaning": [],
         "authorityStatus": "authorized",
+        "requestedGroup": [],
+        "outputGrain": "one customer",
+        "rubricVersion": "not supplied",
         "changedEvidenceIds": [
           "046-operational-detail-1-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "046-prior-analysismeaning-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "046-semantic-analysis-work-order-compiler-operational-1",
-            "population": "customers with an effective active interval overlapping Q2",
-            "semanticPredicates": [
-              "status is active at any time in Q2",
-              "reopened June 20 counts from reopening date"
-            ],
-            "timeRelation": "interval overlap with quarter boundaries",
-            "outputGrain": "one customer",
-            "ambiguity": "missing end date does not establish activity"
-          }
-        }
+        "priorMeaning": {
+          "id": "046-prior-analysismeaning-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "046-semantic-analysis-work-order-compiler-operational-1",
+          "population": "customers with an effective active interval overlapping Q2",
+          "semanticPredicates": [
+            "status is active at any time in Q2",
+            "reopened June 20 counts from reopening date"
+          ],
+          "timeRelation": "interval overlap with quarter boundaries",
+          "outputGrain": "one customer",
+          "ambiguity": "missing end date does not establish activity"
+        },
+        "priorRun": null,
+        "materializedRows": [],
+        "resultEvidence": []
       }
     },
     "expected": {
@@ -269,13 +275,13 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-operational-2",
-    "root": "runCase.nl",
+    "root": "compileAnalysisWorkOrder.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
-      "input": {
-        "caseId": "046-semantic-analysis-work-order-compiler-operational-2",
-        "goal": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "analysis": {
+        "requestId": "046-semantic-analysis-work-order-compiler-operational-2",
+        "questionText": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-2; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "046-operational-detail-2-source-v2",
             "source": "Semantic analysis work-order compiler operational event log",
@@ -290,31 +296,37 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "schemaCatalog": [],
+        "recordRelationships": [],
+        "accessRules": [],
+        "requesterId": null,
+        "requestAudience": "accountable reviewer",
+        "approvedMeaning": [],
         "authorityStatus": "unclear",
+        "requestedGroup": [],
+        "outputGrain": "one customer",
+        "rubricVersion": "not supplied",
         "changedEvidenceIds": [
           "046-operational-detail-2-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "046-prior-analysismeaning-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "046-semantic-analysis-work-order-compiler-operational-2",
-            "population": "customers with an effective active interval overlapping Q2",
-            "semanticPredicates": [
-              "status is active at any time in Q2",
-              "reopened June 20 counts from reopening date"
-            ],
-            "timeRelation": "interval overlap with quarter boundaries",
-            "outputGrain": "one customer",
-            "ambiguity": "missing end date does not establish activity"
-          }
-        }
+        "priorMeaning": {
+          "id": "046-prior-analysismeaning-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "046-semantic-analysis-work-order-compiler-operational-2",
+          "population": "customers with an effective active interval overlapping Q2",
+          "semanticPredicates": [
+            "status is active at any time in Q2",
+            "reopened June 20 counts from reopening date"
+          ],
+          "timeRelation": "interval overlap with quarter boundaries",
+          "outputGrain": "one customer",
+          "ambiguity": "missing end date does not establish activity"
+        },
+        "priorRun": null,
+        "materializedRows": [],
+        "resultEvidence": []
       }
     },
     "expected": {
@@ -339,13 +351,13 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-operational-3",
-    "root": "runCase.nl",
+    "root": "compileAnalysisWorkOrder.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
-      "input": {
-        "caseId": "046-semantic-analysis-work-order-compiler-operational-3",
-        "goal": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "analysis": {
+        "requestId": "046-semantic-analysis-work-order-compiler-operational-3",
+        "questionText": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-3; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "046-operational-detail-3-source-v2",
             "source": "Semantic analysis work-order compiler operational event log",
@@ -360,31 +372,37 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "schemaCatalog": [],
+        "recordRelationships": [],
+        "accessRules": [],
+        "requesterId": null,
+        "requestAudience": "accountable reviewer",
+        "approvedMeaning": [],
         "authorityStatus": "authorized",
+        "requestedGroup": [],
+        "outputGrain": "one customer",
+        "rubricVersion": "not supplied",
         "changedEvidenceIds": [
           "046-operational-detail-3-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "046-prior-analysismeaning-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "046-semantic-analysis-work-order-compiler-operational-3",
-            "population": "customers with an effective active interval overlapping Q2",
-            "semanticPredicates": [
-              "status is active at any time in Q2",
-              "reopened June 20 counts from reopening date"
-            ],
-            "timeRelation": "interval overlap with quarter boundaries",
-            "outputGrain": "one customer",
-            "ambiguity": "missing end date does not establish activity"
-          }
-        }
+        "priorMeaning": {
+          "id": "046-prior-analysismeaning-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "046-semantic-analysis-work-order-compiler-operational-3",
+          "population": "customers with an effective active interval overlapping Q2",
+          "semanticPredicates": [
+            "status is active at any time in Q2",
+            "reopened June 20 counts from reopening date"
+          ],
+          "timeRelation": "interval overlap with quarter boundaries",
+          "outputGrain": "one customer",
+          "ambiguity": "missing end date does not establish activity"
+        },
+        "priorRun": null,
+        "materializedRows": [],
+        "resultEvidence": []
       }
     },
     "expected": {
@@ -409,13 +427,13 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-operational-4",
-    "root": "runCase.nl",
+    "root": "compileAnalysisWorkOrder.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
-      "input": {
-        "caseId": "046-semantic-analysis-work-order-compiler-operational-4",
-        "goal": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "analysis": {
+        "requestId": "046-semantic-analysis-work-order-compiler-operational-4",
+        "questionText": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-4; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "046-operational-detail-4-source-v2",
             "source": "Semantic analysis work-order compiler operational event log",
@@ -430,31 +448,37 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "schemaCatalog": [],
+        "recordRelationships": [],
+        "accessRules": [],
+        "requesterId": null,
+        "requestAudience": "accountable reviewer",
+        "approvedMeaning": [],
         "authorityStatus": "authorized",
+        "requestedGroup": [],
+        "outputGrain": "one customer",
+        "rubricVersion": "not supplied",
         "changedEvidenceIds": [
           "046-operational-detail-4-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "046-prior-analysismeaning-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "046-semantic-analysis-work-order-compiler-operational-4",
-            "population": "customers with an effective active interval overlapping Q2",
-            "semanticPredicates": [
-              "status is active at any time in Q2",
-              "reopened June 20 counts from reopening date"
-            ],
-            "timeRelation": "interval overlap with quarter boundaries",
-            "outputGrain": "one customer",
-            "ambiguity": "missing end date does not establish activity"
-          }
-        }
+        "priorMeaning": {
+          "id": "046-prior-analysismeaning-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "046-semantic-analysis-work-order-compiler-operational-4",
+          "population": "customers with an effective active interval overlapping Q2",
+          "semanticPredicates": [
+            "status is active at any time in Q2",
+            "reopened June 20 counts from reopening date"
+          ],
+          "timeRelation": "interval overlap with quarter boundaries",
+          "outputGrain": "one customer",
+          "ambiguity": "missing end date does not establish activity"
+        },
+        "priorRun": null,
+        "materializedRows": [],
+        "resultEvidence": []
       }
     },
     "expected": {
@@ -479,13 +503,13 @@
   },
   {
     "id": "046-semantic-analysis-work-order-compiler-operational-5",
-    "root": "runCase.nl",
+    "root": "compileAnalysisWorkOrder.nl",
     "split_group": "046-semantic-analysis-work-order-compiler",
     "inputs": {
-      "input": {
-        "caseId": "046-semantic-analysis-work-order-compiler-operational-5",
-        "goal": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "analysis": {
+        "requestId": "046-semantic-analysis-work-order-compiler-operational-5",
+        "questionText": "Review the Semantic analysis work-order compiler evidence for case 046-semantic-analysis-work-order-compiler-operational-5; return a traceable proposal from the supplied records.",
+        "sourceEvidence": [
           {
             "id": "046-operational-detail-5-source-v2",
             "source": "Semantic analysis work-order compiler operational event log",
@@ -500,31 +524,37 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
+        "schemaCatalog": [],
+        "recordRelationships": [],
+        "accessRules": [],
+        "requesterId": null,
+        "requestAudience": "accountable reviewer",
+        "approvedMeaning": [],
         "authorityStatus": "authorized",
+        "requestedGroup": [],
+        "outputGrain": "one customer",
+        "rubricVersion": "not supplied",
         "changedEvidenceIds": [
           "046-operational-detail-5-source-v2"
         ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "046-prior-analysismeaning-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "046-semantic-analysis-work-order-compiler-operational-5",
-            "population": "customers with an effective active interval overlapping Q2",
-            "semanticPredicates": [
-              "status is active at any time in Q2",
-              "reopened June 20 counts from reopening date"
-            ],
-            "timeRelation": "interval overlap with quarter boundaries",
-            "outputGrain": "one customer",
-            "ambiguity": "missing end date does not establish activity"
-          }
-        }
+        "priorMeaning": {
+          "id": "046-prior-analysismeaning-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "046-semantic-analysis-work-order-compiler-operational-5",
+          "population": "customers with an effective active interval overlapping Q2",
+          "semanticPredicates": [
+            "status is active at any time in Q2",
+            "reopened June 20 counts from reopening date"
+          ],
+          "timeRelation": "interval overlap with quarter boundaries",
+          "outputGrain": "one customer",
+          "ambiguity": "missing end date does not establish activity"
+        },
+        "priorRun": null,
+        "materializedRows": [],
+        "resultEvidence": []
       }
     },
     "expected": {

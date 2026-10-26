@@ -79,3 +79,19 @@ export type StageResultRepairOutcome = { accepted: RepairOutcome[]; unresolved: 
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretSymptoms: StageResultRepairSymptom; planDiagnostics: StageResultRepairDiagnostic; matchRepairers: StageResultRepairAssignment; coordinateWork: StageResultRepairWorkPlan; captureOutcomes: StageResultRepairOutcome; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretSymptoms: StageResultRepairSymptom; planDiagnostics: StageResultRepairDiagnostic; matchRepairers: StageResultRepairAssignment; coordinateWork: StageResultRepairWorkPlan; captureOutcomes: StageResultRepairOutcome; };
+
+export type CooperativeRepairRequest = { requestId: ID; priorSymptom: RepairSymptom; customerId: ID | null; itemId: ID; reportedObservations: string[]; priorAttemptNotes: string[]; riskFlags: string[]; approvedProcedures: ApprovedCheck[]; repairers: Repairer[]; toolWindows: SharedToolWindow[]; parts: SparePart[]; budget: BudgetAuthorization; customerEvidence: Evidence[]; workshopRules: string[]; outcomeChecks: RepairCheck[]; priorState: RepairCheckpoint | null };
+export type ApprovedCheck = { procedureId: ID; instruction: string; distinguishes: string[]; allowedRisk: string; skill: string; stopCondition: string };
+export type Repairer = { id: ID; skills: string[]; qualifications: QualificationProof[]; availability: string[]; consentedTasks: string[]; supervisorId: ID | null };
+export type QualificationProof = { skill: string; scope: string; expiresOn: string; evidenceRef: Ref };
+export type SharedToolWindow = { toolId: ID; window: string; reservedFor: ID[] };
+export type SparePart = { partId: ID; compatibilityClaim: string; compatibilityEvidence: Ref[]; quantity: number; cost: string };
+export type BudgetAuthorization = { limit: string; approvedScope: string[]; approvalRef: Ref; customerConsent: string };
+export type RepairCheck = { checkId: ID; method: string; observes: string; sourceRef: Ref };
+export type RepairCheckpoint = { stage: string; completedTaskIds: ID[]; symptomVersion: string; pendingMonitoring: string[] };
+export type SymptomSeparation = { observations: string[]; hypotheses: string[]; unresolvedAttribution: string[]; isolationNeeded: boolean };
+export type ApprovedRepairDiagnostic = { procedureId: ID; check: string; requiredSkill: string; expectedDistinction: string; stopCondition: string; route: "workshop" | "specialist" | "blocked" };
+export type RepairerMatch = { taskId: ID; repairerId: ID; skillEvidence: Ref[]; supervised: boolean; slot: string };
+export type RepairSequence = { steps: string[]; toolReservations: string[]; compatiblePartIds: ID[]; approvalRef: Ref; blockedChanges: string[]; route: "workshop" | "specialist" | "blocked" };
+export type VerifiedRepairOutcome = { comparedChecks: string[]; verified: boolean; remainingIssue: string; recurrenceWatch: string[]; specialistReferral: string; scopedLesson: string };
+export type RepairDispatchProposal = { requestId: ID; symptom: SymptomSeparation; diagnostic: ApprovedRepairDiagnostic; assignments: RepairerMatch[]; work: RepairSequence; outcome: VerifiedRepairOutcome; checkpoint: RepairCheckpoint; commitAllowed: boolean };

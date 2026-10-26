@@ -81,3 +81,16 @@ export type StageResultHarvestRevision = { accepted: HarvestRevision[]; unresolv
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretReadiness: StageResultHarvestReadiness; recoverCommitments: StageResultHarvestCommitment; matchLots: StageResultHarvestMatch; scheduleResources: StageResultHarvestPlan; replanDelivery: StageResultHarvestRevision; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretReadiness: StageResultHarvestReadiness; recoverCommitments: StageResultHarvestCommitment; matchLots: StageResultHarvestMatch; scheduleResources: StageResultHarvestPlan; replanDelivery: StageResultHarvestRevision; };
+
+export type HarvestCoordinator = { id: string };
+export type LotRevision = { lotId: string; priorEstimate: string; revisedEstimate: string; sourceVersion: string; exactVariety: string; qualityState: string; readinessWindow: string; uncertain: boolean };
+export type HarvestChange = { changedLotIds: string[]; observedEvidence: Evidence[]; rejectedSubstitutionIds: string[]; physicalReceipts: MovementReceipt[] };
+export type MovementReceipt = { id: string; lotId: string; phase: 'harvested' | 'stored' | 'delivered'; quantity: Quantity; observedAt: string; sourceVersion: string };
+export type HarvestDeskState = { round: HarvestRound; priorLots: LotRevision[]; readiness: HarvestReadiness[]; commitments: HarvestCommitment[]; matches: HarvestMatch[]; plans: HarvestPlan[]; movementReceipts: MovementReceipt[]; changedSourceIds: string[]; revision: string };
+export type FieldDelta = { lots: LotRevision[]; evidence: Evidence[]; unresolved: string[]; affectedCommitments: string[] };
+export type LotSuitability = { lotId: string; commitmentId: string; eligible: boolean; usableQuantity: Quantity; reasons: string[]; evidenceIds: string[] };
+export type LotAllocation = { edges: LotSuitability[]; allocatedByLot: Record<string, Quantity>; unmetCommitments: string[]; blockedEdges: LotSuitability[]; };
+export type CapacityFit = { feasible: boolean; plan: HarvestPlan[]; resourceHolds: string[]; overlaps: string[]; quantityConserved: boolean; blockers: string[]; };
+export type MovementReconciliation = { harvested: Record<string, Quantity>; stored: Record<string, Quantity>; delivered: Record<string, Quantity>; unexplained: string[]; fulfilledCommitments: string[]; };
+export type HarvestCheckpoint = { priorRevision: string; revision: string; priorLots: LotRevision[]; readiness: HarvestReadiness[]; commitments: HarvestCommitment[]; matches: HarvestMatch[]; plans: HarvestPlan[]; movementReceipts: MovementReceipt[]; unresolved: string[]; };
+export type HarvestControlProposal = { application: 'Agricultural Cooperative Harvest Coordinator'; status: 'ready-for-review' | 'blocked'; changedLots: LotRevision[]; readiness: HarvestReadiness[]; commitments: HarvestCommitment[]; allocation: LotAllocation; resources: CapacityFit; movement: MovementReconciliation; affectedCommitmentIds: string[]; actionBoundary: string; mustPreserve: string[]; blockers: string[]; resumeState: HarvestCheckpoint; };

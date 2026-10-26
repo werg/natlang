@@ -1,0 +1,115 @@
+{
+  "schema": "natlang.application/1",
+  "id": "038",
+  "title": "Project-based learning director",
+  "entrypoint": "directProjectCycle.nl",
+  "interfaces": [
+    {
+      "name": "directProjectCycle",
+      "path": "directProjectCycle.nl",
+      "purpose": "Map required goals to learner-owned demonstrations, sequence a feasible project, adapt support without substitution, and rehearse late changes."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "translateGoals",
+        "paths": [
+          "directProjectCycle/translateGoalsToEvidence.nl"
+        ]
+      },
+      {
+        "stage": "designProject",
+        "paths": [
+          "directProjectCycle/designCollaborativeChallenge.nl"
+        ]
+      },
+      {
+        "stage": "sequenceMilestones",
+        "paths": [
+          "directProjectCycle/sequenceMilestonesAgainstCapacity.nl",
+          "directProjectCycle/orderMilestoneDependencies.nl"
+        ]
+      },
+      {
+        "stage": "adaptScaffolding",
+        "paths": [
+          "directProjectCycle/adaptSupportWithoutAuthorship.nl"
+        ]
+      },
+      {
+        "stage": "introduceComplications",
+        "paths": [
+          "directProjectCycle/rehearseLateComplication.nl",
+          "directProjectCycle/chooseProjectStatus.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "directProjectCycle/sequenceMilestonesAgainstCapacity.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "directProjectCycle/designCollaborativeChallenge.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "directProjectCycle/adaptSupportWithoutAuthorship.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "directProjectCycle/rehearseLateComplication.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "directProjectCycle/rehearseLateComplication.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "checkpoint": "versioned learner evidence and scaffold exposure; group artifacts remain separately attributable"
+  },
+  "effects": {
+    "teacherApproval": "required before consequential schedule or assessment changes",
+    "learnerEvidence": "proposals only; system-generated support never counts as learner work"
+  },
+  "source_files": [
+    "directProjectCycle.nl",
+    "directProjectCycle/adaptSupportWithoutAuthorship.nl",
+    "directProjectCycle/adaptSupportWithoutAuthorship/designIndividualAuthorshipChecks.nl",
+    "directProjectCycle/adaptSupportWithoutAuthorship/inspectSupportForAuthorshipLeak.nl",
+    "directProjectCycle/chooseProjectStatus.nl",
+    "directProjectCycle/designCollaborativeChallenge.nl",
+    "directProjectCycle/designCollaborativeChallenge/compareGoalPreservingMaterials.nl",
+    "directProjectCycle/designCollaborativeChallenge/makeEachRoleConsequential.nl",
+    "directProjectCycle/orderMilestoneDependencies.nl",
+    "directProjectCycle/rehearseLateComplication.nl",
+    "directProjectCycle/rehearseLateComplication/judgeCreativeRouteByCompetency.nl",
+    "directProjectCycle/rehearseLateComplication/testRemainingDeadlineCapacity.nl",
+    "directProjectCycle/saveProjectCheckpoint.nl",
+    "directProjectCycle/sequenceMilestonesAgainstCapacity.nl",
+    "directProjectCycle/sequenceMilestonesAgainstCapacity/compareLearnerWorkload.nl",
+    "directProjectCycle/sequenceMilestonesAgainstCapacity/redistributeLogisticsPreservingEvidence.nl",
+    "directProjectCycle/translateGoalsToEvidence.nl",
+    "directProjectCycle/translateGoalsToEvidence/decomposeGoalIntoObservableFacets.nl",
+    "directProjectCycle/translateGoalsToEvidence/locateLearnerDemonstration.nl",
+    "qualification/adaptScaffolding.nl",
+    "qualification/designProject.nl",
+    "qualification/introduceComplications.nl",
+    "qualification/sequenceMilestones.nl",
+    "qualification/translateGoals.nl",
+    "types.ts"
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "schema": "natlang.application/1",
+  "id": "073",
+  "title": "Public Service Application Navigator",
+  "entrypoint": "navigateServiceApplication.nl",
+  "interfaces": [
+    {
+      "name": "navigateServiceApplication",
+      "path": "navigateServiceApplication.nl",
+      "purpose": "Map an applicant's situation to permitted evidence routes, truthful tasks and safe receipt recovery."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretSituation",
+        "paths": [
+          "navigateServiceApplication/interpretApplicantSituation.nl",
+          "navigateServiceApplication/interpretSituationGate.nl"
+        ]
+      },
+      {
+        "stage": "identifyPathways",
+        "paths": [
+          "navigateServiceApplication/buildEvidencePathways.nl",
+          "navigateServiceApplication/buildEvidencePathways/verifyAlternativeEvidence.nl"
+        ]
+      },
+      {
+        "stage": "chooseQuestions",
+        "paths": [
+          "navigateServiceApplication/askDecisionChangingQuestions.nl"
+        ]
+      },
+      {
+        "stage": "assembleApplications",
+        "paths": [
+          "navigateServiceApplication/prepareTruthfulApplicationTasks.nl",
+          "navigateServiceApplication/prepareTruthfulApplicationTasks/bindHelperConsent.nl"
+        ]
+      },
+      {
+        "stage": "trackOutcomes",
+        "paths": [
+          "navigateServiceApplication/reconcileAgencyReceipts.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "navigateServiceApplication/buildEvidencePathways.nl",
+          "navigateServiceApplication/buildEvidencePathways/verifyAlternativeEvidence.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "navigateServiceApplication/buildEvidencePathways.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "navigateServiceApplication/askDecisionChangingQuestions.nl",
+          "navigateServiceApplication/prepareTruthfulApplicationTasks.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "navigateServiceApplication/reconcileAgencyReceipts.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "navigateServiceApplication/prepareTruthfulApplicationTasks.nl",
+          "navigateServiceApplication/prepareTruthfulApplicationTasks/bindHelperConsent.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "navigateServiceApplication.nl",
+    "navigateServiceApplication/askDecisionChangingQuestions.nl",
+    "navigateServiceApplication/buildEvidencePathways.nl",
+    "navigateServiceApplication/buildEvidencePathways/verifyAlternativeEvidence.nl",
+    "navigateServiceApplication/interpretApplicantSituation.nl",
+    "navigateServiceApplication/interpretSituationGate.nl",
+    "navigateServiceApplication/prepareTruthfulApplicationTasks.nl",
+    "navigateServiceApplication/prepareTruthfulApplicationTasks/bindHelperConsent.nl",
+    "navigateServiceApplication/reconcileAgencyReceipts.nl",
+    "types.ts"
+  ]
+}

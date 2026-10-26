@@ -286,19 +286,20 @@
   },
   {
     "id": "029-workflow-01",
-    "root": "runCase.nl",
+    "root": "simulatePolicyChange.nl",
     "split_group": "design-brief-app-029",
     "inputs": {
       "request": {
         "caseId": "SYN-029-01",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baselinePolicyId": "P-29-V3",
+        "candidatePolicyId": "P-29-V4",
+        "caseCollectionId": "HISTORICAL-29",
+        "policyOwnerId": "Owner-29",
+        "purpose": "Compare reimbursement threshold changes while retaining fraud safeguards",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "simulations": [
           {
             "baselinePolicyId": "P-29-V3",
             "candidatePolicyId": "P-29-V4",
@@ -365,6 +366,86 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "cases": [],
+        "replayPairs": [],
+        "ownerEdits": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Historical case H-29 lacks field claimant_type introduced in policy v4; no source supports imputing individual or organization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "dedupChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Historical case H-29 lacks field claimant_type introduced in policy v4; no source supports imputing individual or organization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adoptionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Historical case H-29 lacks field claimant_type introduced in policy v4; no source supports imputing individual or organization."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -387,19 +468,20 @@
   },
   {
     "id": "029-workflow-02",
-    "root": "runCase.nl",
+    "root": "simulatePolicyChange.nl",
     "split_group": "design-brief-app-029",
     "inputs": {
       "request": {
         "caseId": "SYN-029-02",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baselinePolicyId": "P-29-V3",
+        "candidatePolicyId": "P-29-V4",
+        "caseCollectionId": "HISTORICAL-29",
+        "policyOwnerId": "Owner-29",
+        "purpose": "Compare reimbursement threshold changes while retaining fraud safeguards",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "simulations": [
           {
             "baselinePolicyId": "P-29-V3",
             "candidatePolicyId": "P-29-V4",
@@ -466,6 +548,86 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "cases": [],
+        "replayPairs": [],
+        "ownerEdits": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy owner edited candidate P-29 during run; snapshot hash changed from H-a to H-b at 11:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "dedupChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy owner edited candidate P-29 during run; snapshot hash changed from H-a to H-b at 11:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adoptionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy owner edited candidate P-29 during run; snapshot hash changed from H-a to H-b at 11:03."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -488,19 +650,20 @@
   },
   {
     "id": "029-workflow-03",
-    "root": "runCase.nl",
+    "root": "simulatePolicyChange.nl",
     "split_group": "design-brief-app-029",
     "inputs": {
       "request": {
         "caseId": "SYN-029-03",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baselinePolicyId": "P-29-V3",
+        "candidatePolicyId": "P-29-V4",
+        "caseCollectionId": "HISTORICAL-29",
+        "policyOwnerId": "Owner-29",
+        "purpose": "Compare reimbursement threshold changes while retaining fraud safeguards",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "simulations": [
           {
             "baselinePolicyId": "P-29-V3",
             "candidatePolicyId": "P-29-V4",
@@ -567,6 +730,86 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "cases": [],
+        "replayPairs": [],
+        "ownerEdits": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Rare exception case X-29 changes from allowed to denied even as overall approval count increases by 2%."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "dedupChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Rare exception case X-29 changes from allowed to denied even as overall approval count increases by 2%."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adoptionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Rare exception case X-29 changes from allowed to denied even as overall approval count increases by 2%."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -589,19 +832,20 @@
   },
   {
     "id": "029-workflow-04",
-    "root": "runCase.nl",
+    "root": "simulatePolicyChange.nl",
     "split_group": "design-brief-app-029",
     "inputs": {
       "request": {
         "caseId": "SYN-029-04",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baselinePolicyId": "P-29-V3",
+        "candidatePolicyId": "P-29-V4",
+        "caseCollectionId": "HISTORICAL-29",
+        "policyOwnerId": "Owner-29",
+        "purpose": "Compare reimbursement threshold changes while retaining fraud safeguards",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "simulations": [
           {
             "baselinePolicyId": "P-29-V3",
             "candidatePolicyId": "P-29-V4",
@@ -668,6 +912,86 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "cases": [],
+        "replayPairs": [],
+        "ownerEdits": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Deduplication removed 14 duplicate records; outcome delta is reported separately from policy effect."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "dedupChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Deduplication removed 14 duplicate records; outcome delta is reported separately from policy effect."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adoptionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-02",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Deduplication removed 14 duplicate records; outcome delta is reported separately from policy effect."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },
@@ -690,19 +1014,20 @@
   },
   {
     "id": "029-workflow-05",
-    "root": "runCase.nl",
+    "root": "simulatePolicyChange.nl",
     "split_group": "design-brief-app-029",
     "inputs": {
       "request": {
         "caseId": "SYN-029-05",
-        "objective": "Review the current case against its versioned records and identify supported decisions, unresolved questions, and review work.",
-        "scope": "one named case",
-        "requestedBy": "case owner",
+        "baselinePolicyId": "P-29-V3",
+        "candidatePolicyId": "P-29-V4",
+        "caseCollectionId": "HISTORICAL-29",
+        "policyOwnerId": "Owner-29",
+        "purpose": "Compare reimbursement threshold changes while retaining fraud safeguards",
         "expectedVersion": "v1"
       },
-      "snapshot": {
-        "version": "v1",
-        "caseRecords": [
+      "dossier": {
+        "simulations": [
           {
             "baselinePolicyId": "P-29-V3",
             "candidatePolicyId": "P-29-V4",
@@ -769,6 +1094,86 @@
         ],
         "searchedPartitions": [
           "case-folder-2026"
+        ],
+        "cases": [],
+        "replayPairs": [],
+        "ownerEdits": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy P-29 adopted v3 on Oct 8; candidate v4 is still under review."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "dedupChanges": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy P-29 adopted v3 on Oct 8; candidate v4 is still under review."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
+        ],
+        "adoptionReceipts": [
+          {
+            "evidence": [
+              {
+                "id": "E1",
+                "source": "029-source-1",
+                "version": "v1",
+                "observedAt": "2026-10-01",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy v5 changes the reimbursement cutoff from $50 to $75; identity verification and fraud-review safeguards remain unchanged in the signed diff."
+              },
+              {
+                "id": "E2",
+                "source": "029-source-2",
+                "version": "v2",
+                "observedAt": "2026-10-09",
+                "authority": "named case owner",
+                "scope": "one named case, current period",
+                "text": "Policy P-29 adopted v3 on Oct 8; candidate v4 is still under review."
+              }
+            ],
+            "searchedPartition": "case-folder-2026",
+            "complete": true
+          }
         ]
       }
     },

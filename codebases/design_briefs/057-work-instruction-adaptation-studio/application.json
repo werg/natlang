@@ -1,0 +1,98 @@
+{
+  "schema": "natlang.application/1",
+  "id": "057",
+  "title": "Work instruction adaptation studio",
+  "entrypoint": "adaptWorkInstruction.nl",
+  "interfaces": [
+    {
+      "name": "adaptWorkInstruction",
+      "path": "adaptWorkInstruction.nl",
+      "purpose": "Adapt an approved procedure while resolving equipment aliases, preserving warning semantics, replaying interruptions, and withdrawing superseded floor copies."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverProcedure",
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      },
+      {
+        "stage": "mapLocalContext",
+        "paths": [
+          "adaptWorkInstruction/resolveFloorTerminology.nl"
+        ]
+      },
+      {
+        "stage": "constructVariant",
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      },
+      {
+        "stage": "replayProcedure",
+        "paths": [
+          "adaptWorkInstruction/replayRestartAndExceptions.nl"
+        ]
+      },
+      {
+        "stage": "releaseInstruction",
+        "paths": [
+          "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "adaptWorkInstruction/resolveFloorTerminology.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "adaptWorkInstruction/preserveWarningMeaning.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "adaptWorkInstruction/replayRestartAndExceptions.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "adaptWorkInstruction/assembleLocalVariant.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "versioned instruction variant and copy withdrawal tasks",
+    "writes": "approval-gated proposal only"
+  },
+  "effects": [
+    "withdrawal task",
+    "instruction approval packet"
+  ],
+  "source_files": [
+    "adaptWorkInstruction.nl",
+    "adaptWorkInstruction/assembleLocalVariant.nl",
+    "adaptWorkInstruction/assembleLocalVariant/mapProcedureStepsToVerifiedControls.nl",
+    "adaptWorkInstruction/enumerateFloorCopyWithdrawal.nl",
+    "adaptWorkInstruction/preserveWarningMeaning.nl",
+    "adaptWorkInstruction/replayRestartAndExceptions.nl",
+    "adaptWorkInstruction/resolveFloorTerminology.nl",
+    "qualification/recoverProcedure.nl",
+    "types.ts"
+  ]
+}

@@ -143,3 +143,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type AdaptationReviewer = { id: string };
+export type AdaptationChange = { audienceEvidence: EvidenceItem[]; reviewerResponses: EvidenceItem[]; learnerTestResults: EvidenceItem[]; curriculumUpdates: EvidenceItem[] };
+export type LearningDossier = { program: TrainingAdaptation; mechanisms: TrainingMechanism[]; contextFindings: ContextFitFinding[]; scenarios: AdaptedScenario[]; tests: AdaptationTest[]; releases: AdaptedTrainingRelease[]; evidence: EvidenceItem[]; checkpoint: LearningCheckpoint };
+export type CompetencyKernel = { competencyId: string; requiredDecision: string; decisionComplexity: string[]; incidentalElements: string[]; sourceVersion: string; evidenceIds: string[]; };
+export type AudienceFit = { mechanismId: string; fitEvidence: string[]; unfamiliarElements: string[]; reviewerDisagreements: string[]; stereotypeRisks: string[]; scopeLimit: string; blockers: string[]; };
+export type ComplexityComparison = { mechanismId: string; decisionStepsBefore: string[]; decisionStepsAfter: string[]; preservedTradeoffs: string[]; omittedDemands: string[]; blockers: string[]; };
+export type LearningCheckpoint = { revision: string; program: TrainingAdaptation; kernels: CompetencyKernel[]; fit: AudienceFit[]; scenarios: AdaptedScenario[]; tests: AdaptationTest[]; releases: AdaptedTrainingRelease[]; invalidatedScenarioIds: string[]; reviewerApprovals: string[]; };
+export type AdaptationProposal = { application: 'Cross Cultural Training Adaptation Studio'; status: 'ready-for-review'|'blocked'; kernels: CompetencyKernel[]; fit: AudienceFit[]; scenarios: AdaptedScenario[]; complexity: ComplexityComparison[]; tests: AdaptationTest[]; release: AdaptedTrainingRelease; blockers: string[]; actionBoundary: string; resumeState: LearningCheckpoint; };

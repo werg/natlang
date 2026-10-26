@@ -1,7 +1,7 @@
 [
   {
     "id": "039-apprenticeship-practice-simulator-gate-supported",
-    "root": "runCase/authorSituation/audit/qualify.nl",
+    "root": "qualification/authorSituation.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
       "draft": {
@@ -82,7 +82,7 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-gate-contradictory",
-    "root": "runCase/authorSituation/audit/qualify.nl",
+    "root": "qualification/authorSituation.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
       "draft": {
@@ -160,7 +160,7 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-gate-missing",
-    "root": "runCase/authorSituation/audit/qualify.nl",
+    "root": "qualification/authorSituation.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
       "draft": {
@@ -212,13 +212,14 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-operational-1",
-    "root": "runCase.nl",
+    "root": "simulateApprenticeshipTurn.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
-      "input": {
-        "caseId": "039-apprenticeship-practice-simulator-operational-1",
-        "goal": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "turn": {
+        "sessionId": "039-apprenticeship-practice-simulator-operational-1",
+        "turnId": "039-operational-detail-1-source-v2",
+        "utterance": "R039 Apprenticeship steward records: During simulator run S39, trainee Nia Cole asks whether the red pressure gauge is upstream or downstream of valve V39. The equipment diagram labels gauge G39 upstream; the scripted prompt list contains no question matching hers. This current event is source 039-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 039-apprenticeship-practice-simulator-operational-1. The supplied typed prior 039-prior-practicescenario-detail-1-v1 v1 is preserved for comparison.",
+        "sourceEvidence": [
           {
             "id": "039-operational-detail-1-source-v2",
             "source": "Apprenticeship practice simulator operational event log",
@@ -233,38 +234,77 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "039-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "039-prior-practicescenario-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "039-apprenticeship-practice-simulator-operational-1",
-            "initialFacts": [
-              "press jammed",
-              "guard open"
-            ],
-            "hiddenFacts": [
-              "zero-energy state is not verified"
-            ],
-            "actorGoals": [
-              "clear jam without injury"
-            ],
-            "allowedActions": [
-              "stop",
-              "isolate",
-              "verify zero energy",
-              "request supervisor"
-            ]
-          }
+        "actor": {
+          "id": "accountable reviewer",
+          "visibleFactIds": [
+            "press jammed",
+            "guard open"
+          ],
+          "authorizedReferences": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ]
+        },
+        "world": {
+          "resources": [],
+          "visibleFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "stateJson": "{\"id\":\"039-prior-practicescenario-detail-1-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-1\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}"
+        },
+        "procedure": {
+          "id": "039-prior-practicescenario-detail-1-v1",
+          "requiredActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ],
+          "preconditions": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ],
+          "unsafeConditions": [],
+          "recoverySteps": []
+        },
+        "scenarioFamily": "039-apprenticeship-practice-simulator-operational-1",
+        "learningObjective": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-1; return a traceable proposal from the supplied records.",
+        "seed": "039-prior-practicescenario-detail-1-v1",
+        "checkpoint": {
+          "sessionId": "039-apprenticeship-practice-simulator-operational-1",
+          "version": 0,
+          "appliedTransitionIds": [],
+          "seenChallengeIds": [],
+          "lastTransitionId": "",
+          "worldStateJson": "{\"id\":\"039-prior-practicescenario-detail-1-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-1\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}",
+          "actorKnowledgeJson": "[\"press jammed\",\"guard open\"]"
+        },
+        "actionHistory": [],
+        "sourceScenario": {
+          "id": "039-prior-practicescenario-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "039-apprenticeship-practice-simulator-operational-1",
+          "initialFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "actorGoals": [
+            "clear jam without injury"
+          ],
+          "allowedActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ]
         }
       }
     },
@@ -290,13 +330,14 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-operational-2",
-    "root": "runCase.nl",
+    "root": "simulateApprenticeshipTurn.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
-      "input": {
-        "caseId": "039-apprenticeship-practice-simulator-operational-2",
-        "goal": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "turn": {
+        "sessionId": "039-apprenticeship-practice-simulator-operational-2",
+        "turnId": "039-operational-detail-2-source-v2",
+        "utterance": "R039 Apprenticeship steward records: Simulator run S39 turn 7 records action `isolate-press` once under key `S39-turn7-isolate`; the network connection dropped before the client received the acknowledgment. The world log shows the press isolated and turn 7 committed; no second action record exists. This current event is source 039-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 039-apprenticeship-practice-simulator-operational-2. The supplied typed prior 039-prior-practicescenario-detail-2-v1 v1 is preserved for comparison.",
+        "sourceEvidence": [
           {
             "id": "039-operational-detail-2-source-v2",
             "source": "Apprenticeship practice simulator operational event log",
@@ -311,38 +352,77 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
         "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "039-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "039-prior-practicescenario-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "039-apprenticeship-practice-simulator-operational-2",
-            "initialFacts": [
-              "press jammed",
-              "guard open"
-            ],
-            "hiddenFacts": [
-              "zero-energy state is not verified"
-            ],
-            "actorGoals": [
-              "clear jam without injury"
-            ],
-            "allowedActions": [
-              "stop",
-              "isolate",
-              "verify zero energy",
-              "request supervisor"
-            ]
-          }
+        "actor": {
+          "id": "accountable reviewer",
+          "visibleFactIds": [
+            "press jammed",
+            "guard open"
+          ],
+          "authorizedReferences": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ]
+        },
+        "world": {
+          "resources": [],
+          "visibleFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "stateJson": "{\"id\":\"039-prior-practicescenario-detail-2-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-2\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}"
+        },
+        "procedure": {
+          "id": "039-prior-practicescenario-detail-2-v1",
+          "requiredActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ],
+          "preconditions": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ],
+          "unsafeConditions": [],
+          "recoverySteps": []
+        },
+        "scenarioFamily": "039-apprenticeship-practice-simulator-operational-2",
+        "learningObjective": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-2; return a traceable proposal from the supplied records.",
+        "seed": "039-prior-practicescenario-detail-2-v1",
+        "checkpoint": {
+          "sessionId": "039-apprenticeship-practice-simulator-operational-2",
+          "version": 0,
+          "appliedTransitionIds": [],
+          "seenChallengeIds": [],
+          "lastTransitionId": "",
+          "worldStateJson": "{\"id\":\"039-prior-practicescenario-detail-2-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-2\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}",
+          "actorKnowledgeJson": "[\"press jammed\",\"guard open\"]"
+        },
+        "actionHistory": [],
+        "sourceScenario": {
+          "id": "039-prior-practicescenario-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "039-apprenticeship-practice-simulator-operational-2",
+          "initialFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "actorGoals": [
+            "clear jam without injury"
+          ],
+          "allowedActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ]
         }
       }
     },
@@ -368,13 +448,14 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-operational-3",
-    "root": "runCase.nl",
+    "root": "simulateApprenticeshipTurn.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
-      "input": {
-        "caseId": "039-apprenticeship-practice-simulator-operational-3",
-        "goal": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "turn": {
+        "sessionId": "039-apprenticeship-practice-simulator-operational-3",
+        "turnId": "039-operational-detail-3-source-v2",
+        "utterance": "R039 Apprenticeship steward records: In the virtual press scenario, trainee Nia Cole selects “reach into jam and pull stock” while the guard is open and zero-energy verification is absent. The approved scenario policy allows virtual stop/refusal and consequence simulation; the execution trace is simulator-only. This current event is source 039-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 039-apprenticeship-practice-simulator-operational-3. The supplied typed prior 039-prior-practicescenario-detail-3-v1 v1 is preserved for comparison.",
+        "sourceEvidence": [
           {
             "id": "039-operational-detail-3-source-v2",
             "source": "Apprenticeship practice simulator operational event log",
@@ -389,38 +470,77 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "039-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "039-prior-practicescenario-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "039-apprenticeship-practice-simulator-operational-3",
-            "initialFacts": [
-              "press jammed",
-              "guard open"
-            ],
-            "hiddenFacts": [
-              "zero-energy state is not verified"
-            ],
-            "actorGoals": [
-              "clear jam without injury"
-            ],
-            "allowedActions": [
-              "stop",
-              "isolate",
-              "verify zero energy",
-              "request supervisor"
-            ]
-          }
+        "actor": {
+          "id": "accountable reviewer",
+          "visibleFactIds": [
+            "press jammed",
+            "guard open"
+          ],
+          "authorizedReferences": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ]
+        },
+        "world": {
+          "resources": [],
+          "visibleFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "stateJson": "{\"id\":\"039-prior-practicescenario-detail-3-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-3\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}"
+        },
+        "procedure": {
+          "id": "039-prior-practicescenario-detail-3-v1",
+          "requiredActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ],
+          "preconditions": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ],
+          "unsafeConditions": [],
+          "recoverySteps": []
+        },
+        "scenarioFamily": "039-apprenticeship-practice-simulator-operational-3",
+        "learningObjective": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-3; return a traceable proposal from the supplied records.",
+        "seed": "039-prior-practicescenario-detail-3-v1",
+        "checkpoint": {
+          "sessionId": "039-apprenticeship-practice-simulator-operational-3",
+          "version": 0,
+          "appliedTransitionIds": [],
+          "seenChallengeIds": [],
+          "lastTransitionId": "",
+          "worldStateJson": "{\"id\":\"039-prior-practicescenario-detail-3-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-3\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}",
+          "actorKnowledgeJson": "[\"press jammed\",\"guard open\"]"
+        },
+        "actionHistory": [],
+        "sourceScenario": {
+          "id": "039-prior-practicescenario-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "039-apprenticeship-practice-simulator-operational-3",
+          "initialFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "actorGoals": [
+            "clear jam without injury"
+          ],
+          "allowedActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ]
         }
       }
     },
@@ -446,13 +566,14 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-operational-4",
-    "root": "runCase.nl",
+    "root": "simulateApprenticeshipTurn.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
-      "input": {
-        "caseId": "039-apprenticeship-practice-simulator-operational-4",
-        "goal": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "turn": {
+        "sessionId": "039-apprenticeship-practice-simulator-operational-4",
+        "turnId": "039-operational-detail-4-source-v2",
+        "utterance": "R039 Apprenticeship steward records: World template S39-v1 has been assigned to cohorts C1 and C2. The C2 copy changes learner name, machine serial and work-order dates, while its competency objective, hazard state and scoring rubric fingerprints match v1. This current event is source 039-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 039-apprenticeship-practice-simulator-operational-4. The supplied typed prior 039-prior-practicescenario-detail-4-v1 v1 is preserved for comparison.",
+        "sourceEvidence": [
           {
             "id": "039-operational-detail-4-source-v2",
             "source": "Apprenticeship practice simulator operational event log",
@@ -467,38 +588,77 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "039-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "039-prior-practicescenario-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "039-apprenticeship-practice-simulator-operational-4",
-            "initialFacts": [
-              "press jammed",
-              "guard open"
-            ],
-            "hiddenFacts": [
-              "zero-energy state is not verified"
-            ],
-            "actorGoals": [
-              "clear jam without injury"
-            ],
-            "allowedActions": [
-              "stop",
-              "isolate",
-              "verify zero energy",
-              "request supervisor"
-            ]
-          }
+        "actor": {
+          "id": "accountable reviewer",
+          "visibleFactIds": [
+            "press jammed",
+            "guard open"
+          ],
+          "authorizedReferences": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ]
+        },
+        "world": {
+          "resources": [],
+          "visibleFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "stateJson": "{\"id\":\"039-prior-practicescenario-detail-4-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-4\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}"
+        },
+        "procedure": {
+          "id": "039-prior-practicescenario-detail-4-v1",
+          "requiredActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ],
+          "preconditions": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ],
+          "unsafeConditions": [],
+          "recoverySteps": []
+        },
+        "scenarioFamily": "039-apprenticeship-practice-simulator-operational-4",
+        "learningObjective": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-4; return a traceable proposal from the supplied records.",
+        "seed": "039-prior-practicescenario-detail-4-v1",
+        "checkpoint": {
+          "sessionId": "039-apprenticeship-practice-simulator-operational-4",
+          "version": 0,
+          "appliedTransitionIds": [],
+          "seenChallengeIds": [],
+          "lastTransitionId": "",
+          "worldStateJson": "{\"id\":\"039-prior-practicescenario-detail-4-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-4\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}",
+          "actorKnowledgeJson": "[\"press jammed\",\"guard open\"]"
+        },
+        "actionHistory": [],
+        "sourceScenario": {
+          "id": "039-prior-practicescenario-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "039-apprenticeship-practice-simulator-operational-4",
+          "initialFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "actorGoals": [
+            "clear jam without injury"
+          ],
+          "allowedActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ]
         }
       }
     },
@@ -524,13 +684,14 @@
   },
   {
     "id": "039-apprenticeship-practice-simulator-operational-5",
-    "root": "runCase.nl",
+    "root": "simulateApprenticeshipTurn.nl",
     "split_group": "039-apprenticeship-practice-simulator",
     "inputs": {
-      "input": {
-        "caseId": "039-apprenticeship-practice-simulator-operational-5",
-        "goal": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "turn": {
+        "sessionId": "039-apprenticeship-practice-simulator-operational-5",
+        "turnId": "039-operational-detail-5-source-v2",
+        "utterance": "R039 Apprenticeship steward records: Trainee Nia Cole reaches the successful production target in run S39 but the trace shows no isolation action and no zero-energy check. A chance alignment in the simulated press clears the jam before contact; the target counter reaches 10. This current event is source 039-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 039-apprenticeship-practice-simulator-operational-5. The supplied typed prior 039-prior-practicescenario-detail-5-v1 v1 is preserved for comparison.",
+        "sourceEvidence": [
           {
             "id": "039-operational-detail-5-source-v2",
             "source": "Apprenticeship practice simulator operational event log",
@@ -545,38 +706,77 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "039-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "039-prior-practicescenario-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "039-apprenticeship-practice-simulator-operational-5",
-            "initialFacts": [
-              "press jammed",
-              "guard open"
-            ],
-            "hiddenFacts": [
-              "zero-energy state is not verified"
-            ],
-            "actorGoals": [
-              "clear jam without injury"
-            ],
-            "allowedActions": [
-              "stop",
-              "isolate",
-              "verify zero energy",
-              "request supervisor"
-            ]
-          }
+        "actor": {
+          "id": "accountable reviewer",
+          "visibleFactIds": [
+            "press jammed",
+            "guard open"
+          ],
+          "authorizedReferences": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ]
+        },
+        "world": {
+          "resources": [],
+          "visibleFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "stateJson": "{\"id\":\"039-prior-practicescenario-detail-5-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-5\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}"
+        },
+        "procedure": {
+          "id": "039-prior-practicescenario-detail-5-v1",
+          "requiredActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ],
+          "preconditions": [
+            "current named-source authority; applicability must be checked against version and scope"
+          ],
+          "unsafeConditions": [],
+          "recoverySteps": []
+        },
+        "scenarioFamily": "039-apprenticeship-practice-simulator-operational-5",
+        "learningObjective": "Review the Apprenticeship practice simulator evidence for case 039-apprenticeship-practice-simulator-operational-5; return a traceable proposal from the supplied records.",
+        "seed": "039-prior-practicescenario-detail-5-v1",
+        "checkpoint": {
+          "sessionId": "039-apprenticeship-practice-simulator-operational-5",
+          "version": 0,
+          "appliedTransitionIds": [],
+          "seenChallengeIds": [],
+          "lastTransitionId": "",
+          "worldStateJson": "{\"id\":\"039-prior-practicescenario-detail-5-v1\",\"version\":\"v1\",\"createdAt\":\"2026-10-01\",\"updatedAt\":\"2026-10-01\",\"caseId\":\"039-apprenticeship-practice-simulator-operational-5\",\"initialFacts\":[\"press jammed\",\"guard open\"],\"hiddenFacts\":[\"zero-energy state is not verified\"],\"actorGoals\":[\"clear jam without injury\"],\"allowedActions\":[\"stop\",\"isolate\",\"verify zero energy\",\"request supervisor\"]}",
+          "actorKnowledgeJson": "[\"press jammed\",\"guard open\"]"
+        },
+        "actionHistory": [],
+        "sourceScenario": {
+          "id": "039-prior-practicescenario-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "039-apprenticeship-practice-simulator-operational-5",
+          "initialFacts": [
+            "press jammed",
+            "guard open"
+          ],
+          "hiddenFacts": [
+            "zero-energy state is not verified"
+          ],
+          "actorGoals": [
+            "clear jam without injury"
+          ],
+          "allowedActions": [
+            "stop",
+            "isolate",
+            "verify zero energy",
+            "request supervisor"
+          ]
         }
       }
     },

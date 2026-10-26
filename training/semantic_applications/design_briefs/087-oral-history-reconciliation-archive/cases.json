@@ -1,7 +1,7 @@
 [
   {
     "id": "087-first-gate-pass",
-    "root": "runCase/segmentAccounts/audit/qualify.nl",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
     "split_group": "world-087-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "087-first-gate-fail",
-    "root": "runCase/segmentAccounts/audit/qualify.nl",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
     "split_group": "world-087-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "087-first-gate-needs-review",
-    "root": "runCase/segmentAccounts/audit/qualify.nl",
+    "root": "archiveOralHistory/verifyAccountSpan.nl",
     "split_group": "world-087-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "087-workflow-1",
-    "root": "runCase.nl",
+    "root": "archiveOralHistory.nl",
     "split_group": "world-087-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Oral History Reconciliation Archive proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "087-workflow-1-record",
           "caseId": "087-workflow-1",
           "sourceRefs": [
@@ -211,36 +210,90 @@
           "archivistId": "ARCH-7",
           "consentRegisterId": "CONSENT-87",
           "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-1-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "087-event-1",
-          "source": "two consented interview records",
-          "version": "v1",
-          "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
-          "status": "current",
-          "authority": "primary oral-history record"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "087-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "087-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "087-event-1",
-          "source": "two consented interview records",
-          "version": "v1",
-          "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
-          "status": "current",
-          "authority": "primary oral-history record"
-        }
-      ]
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-1",
+            "source": "two consented interview records",
+            "version": "v1",
+            "text": "Speakers SPK-87-A and SPK-87-B describe the same mill-closure storm: A recalls “probably February 1978,” while B recalls “perhaps January 1979.” Both mark the year uncertain; neither gives an exact date.",
+            "status": "current",
+            "authority": "primary oral-history record"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Oral History Reconciliation Archive",
@@ -263,12 +316,11 @@
   },
   {
     "id": "087-workflow-2",
-    "root": "runCase.nl",
+    "root": "archiveOralHistory.nl",
     "split_group": "world-087-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Oral History Reconciliation Archive proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "087-workflow-2-record",
           "caseId": "087-workflow-2",
           "sourceRefs": [
@@ -293,36 +345,90 @@
           "archivistId": "ARCH-7",
           "consentRegisterId": "CONSENT-87",
           "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-2-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "087-wf-2-source",
-          "source": "primary case artifact 087-E2",
-          "version": "v1",
-          "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "087-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "087-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "087-wf-2-source",
-          "source": "primary case artifact 087-E2",
-          "version": "v1",
-          "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-wf-2-source",
+            "source": "primary case artifact 087-E2",
+            "version": "v1",
+            "text": "Speaker withdraws anecdote A-7 under consent form C-87; transcript and draft exhibit still contain the anecdote.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Oral History Reconciliation Archive",
@@ -345,12 +451,11 @@
   },
   {
     "id": "087-workflow-3",
-    "root": "runCase.nl",
+    "root": "archiveOralHistory.nl",
     "split_group": "world-087-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Oral History Reconciliation Archive proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "087-workflow-3-record",
           "caseId": "087-workflow-3",
           "sourceRefs": [
@@ -375,36 +480,90 @@
           "archivistId": "ARCH-7",
           "consentRegisterId": "CONSENT-87",
           "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-3-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "087-wf-3-source",
-          "source": "audio segment 00:14:22 and interview index v3",
-          "version": "v3",
-          "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "087-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "087-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "087-wf-3-source",
-          "source": "audio segment 00:14:22 and interview index v3",
-          "version": "v3",
-          "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-wf-3-source",
+            "source": "audio segment 00:14:22 and interview index v3",
+            "version": "v3",
+            "text": "At audio 00:14:22, speaker SPK-87-A says, “Red brought the lantern to the mill.” Interview index v3 lists three people called “Red” in the settlement at that time: Rosa Bell (mill worker), Rafael Ortiz (dock laborer), and Rowan Ellis (speaker’s cousin). A second source says a worker carried the lantern but does not name the person. No audio segment or family link identifies which candidate the nickname denotes.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Oral History Reconciliation Archive",
@@ -427,12 +586,11 @@
   },
   {
     "id": "087-workflow-4",
-    "root": "runCase.nl",
+    "root": "archiveOralHistory.nl",
     "split_group": "world-087-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Oral History Reconciliation Archive proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "087-workflow-4-record",
           "caseId": "087-workflow-4",
           "sourceRefs": [
@@ -457,36 +615,90 @@
           "archivistId": "ARCH-7",
           "consentRegisterId": "CONSENT-87",
           "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-4-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "087-event-4",
-          "source": "current domain record 087-E4",
-          "version": "v1",
-          "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "087-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "087-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "087-event-4",
-          "source": "current domain record 087-E4",
-          "version": "v1",
-          "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-4",
+            "source": "current domain record 087-E4",
+            "version": "v1",
+            "text": "At audio 00:14:22 speaker SPK-87 corrects transcript attribution: the sentence assigned to interviewer I-2 was spoken by guest G-3. Exhibit draft ED-87 and quotation Q-12 still attribute it to I-2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Oral History Reconciliation Archive",
@@ -509,12 +721,11 @@
   },
   {
     "id": "087-workflow-5",
-    "root": "runCase.nl",
+    "root": "archiveOralHistory.nl",
     "split_group": "world-087-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Oral History Reconciliation Archive proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "087-workflow-5-record",
           "caseId": "087-workflow-5",
           "sourceRefs": [
@@ -539,36 +750,90 @@
           "archivistId": "ARCH-7",
           "consentRegisterId": "CONSENT-87",
           "publicationAudience": "Local history readers."
+        },
+        "accounts": [],
+        "references": [],
+        "comparisons": [],
+        "questions": [],
+        "editions": [],
+        "evidence": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "087-workflow-5-record",
+          "accounts": [],
+          "references": [],
+          "comparisons": [],
+          "consent": [],
+          "questions": [],
+          "editions": [],
+          "lineage": [],
+          "withdrawnSpans": [],
+          "obligations": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "087-event-5",
-          "source": "current domain record 087-E5",
-          "version": "v1",
-          "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "087-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "087-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "087-event-5",
-          "source": "current domain record 087-E5",
-          "version": "v1",
-          "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "transcriptUpdates": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "speakerResponses": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "consentChanges": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "correctionEvidence": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "disclosureReviews": [
+          {
+            "id": "087-event-5",
+            "source": "current domain record 087-E5",
+            "version": "v1",
+            "text": "Restricted interview RI-87 is limited to research staff; a public summary names the only person present at the described clinic and repeats a distinctive date. Access condition C-87 permits no public identifying detail.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "archivist": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Oral History Reconciliation Archive",

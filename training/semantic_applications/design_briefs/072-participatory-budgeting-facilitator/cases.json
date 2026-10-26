@@ -1,7 +1,7 @@
 [
   {
     "id": "072-first-gate-pass",
-    "root": "runCase/interpretProposals/audit/qualify.nl",
+    "root": "facilitateBudgetRound/verifyProposalIntent.nl",
     "split_group": "world-072-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "072-first-gate-fail",
-    "root": "runCase/interpretProposals/audit/qualify.nl",
+    "root": "facilitateBudgetRound/verifyProposalIntent.nl",
     "split_group": "world-072-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "072-first-gate-needs-review",
-    "root": "runCase/interpretProposals/audit/qualify.nl",
+    "root": "facilitateBudgetRound/verifyProposalIntent.nl",
     "split_group": "world-072-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "072-workflow-1",
-    "root": "runCase.nl",
+    "root": "facilitateBudgetRound.nl",
     "split_group": "world-072-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Participatory Budgeting Facilitator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "round": {
           "id": "072-workflow-1-record",
           "caseId": "072-workflow-1",
           "sourceRefs": [
@@ -215,36 +214,60 @@
           },
           "ruleSetId": "RULE-PB-4",
           "facilitatorId": "FAC-3"
+        },
+        "proposals": [],
+        "relationships": [],
+        "feasibility": [],
+        "portfolios": [],
+        "decisionPackets": [],
+        "evidence": [
+          {
+            "id": "072-wf-1-source",
+            "source": "primary case artifact 072-E1",
+            "version": "v1",
+            "text": "Portfolio file PB-72 lists library ramp proposal A at EUR 8,000 and garden proposal B at EUR 12,000. Both budgets include drainage work W4 at EUR 5,000; total available round budget is EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "proposals": [],
+          "relationships": [],
+          "feasibility": [],
+          "portfolios": [],
+          "selectedProposalIds": [],
+          "deliveryChanges": [],
+          "invalidatedPortfolioIds": [],
+          "edition": "072-workflow-1-record"
         }
-      ],
-      "evidence": [
-        {
-          "id": "072-wf-1-source",
-          "source": "primary case artifact 072-E1",
-          "version": "v1",
-          "text": "Portfolio file PB-72 lists library ramp proposal A at EUR 8,000 and garden proposal B at EUR 12,000. Both budgets include drainage work W4 at EUR 5,000; total available round budget is EUR 25,000.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "072-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "072-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "072-wf-1-source",
-          "source": "primary case artifact 072-E1",
-          "version": "v1",
-          "text": "Portfolio file PB-72 lists library ramp proposal A at EUR 8,000 and garden proposal B at EUR 12,000. Both budgets include drainage work W4 at EUR 5,000; total available round budget is EUR 25,000.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "revisedEstimates": [
+          {
+            "id": "072-wf-1-source",
+            "source": "primary case artifact 072-E1",
+            "version": "v1",
+            "text": "Portfolio file PB-72 lists library ramp proposal A at EUR 8,000 and garden proposal B at EUR 12,000. Both budgets include drainage work W4 at EUR 5,000; total available round budget is EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "proposerReviews": [],
+        "locationConstraints": [
+          {
+            "id": "072-wf-1-source",
+            "source": "primary case artifact 072-E1",
+            "version": "v1",
+            "text": "Portfolio file PB-72 lists library ramp proposal A at EUR 8,000 and garden proposal B at EUR 12,000. Both budgets include drainage work W4 at EUR 5,000; total available round budget is EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryChanges": []
+      },
+      "facilitator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Participatory Budgeting Facilitator",
@@ -267,12 +290,11 @@
   },
   {
     "id": "072-workflow-2",
-    "root": "runCase.nl",
+    "root": "facilitateBudgetRound.nl",
     "split_group": "world-072-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Participatory Budgeting Facilitator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "round": {
           "id": "072-workflow-2-record",
           "caseId": "072-workflow-2",
           "sourceRefs": [
@@ -301,36 +323,60 @@
           },
           "ruleSetId": "RULE-PB-4",
           "facilitatorId": "FAC-3"
+        },
+        "proposals": [],
+        "relationships": [],
+        "feasibility": [],
+        "portfolios": [],
+        "decisionPackets": [],
+        "evidence": [
+          {
+            "id": "072-wf-2-source",
+            "source": "primary case artifact 072-E2",
+            "version": "v1",
+            "text": "On revision v2 proposal B estimate rises to EUR 15,500. With proposal A at EUR 8,000 and shared drainage W4 at EUR 5,000 once, portfolio total is EUR 28,500 against EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "proposals": [],
+          "relationships": [],
+          "feasibility": [],
+          "portfolios": [],
+          "selectedProposalIds": [],
+          "deliveryChanges": [],
+          "invalidatedPortfolioIds": [],
+          "edition": "072-workflow-2-record"
         }
-      ],
-      "evidence": [
-        {
-          "id": "072-wf-2-source",
-          "source": "primary case artifact 072-E2",
-          "version": "v1",
-          "text": "On revision v2 proposal B estimate rises to EUR 15,500. With proposal A at EUR 8,000 and shared drainage W4 at EUR 5,000 once, portfolio total is EUR 28,500 against EUR 25,000.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "072-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "072-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "072-wf-2-source",
-          "source": "primary case artifact 072-E2",
-          "version": "v1",
-          "text": "On revision v2 proposal B estimate rises to EUR 15,500. With proposal A at EUR 8,000 and shared drainage W4 at EUR 5,000 once, portfolio total is EUR 28,500 against EUR 25,000.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "revisedEstimates": [
+          {
+            "id": "072-wf-2-source",
+            "source": "primary case artifact 072-E2",
+            "version": "v1",
+            "text": "On revision v2 proposal B estimate rises to EUR 15,500. With proposal A at EUR 8,000 and shared drainage W4 at EUR 5,000 once, portfolio total is EUR 28,500 against EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "proposerReviews": [],
+        "locationConstraints": [
+          {
+            "id": "072-wf-2-source",
+            "source": "primary case artifact 072-E2",
+            "version": "v1",
+            "text": "On revision v2 proposal B estimate rises to EUR 15,500. With proposal A at EUR 8,000 and shared drainage W4 at EUR 5,000 once, portfolio total is EUR 28,500 against EUR 25,000.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryChanges": []
+      },
+      "facilitator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Participatory Budgeting Facilitator",
@@ -353,12 +399,11 @@
   },
   {
     "id": "072-workflow-3",
-    "root": "runCase.nl",
+    "root": "facilitateBudgetRound.nl",
     "split_group": "world-072-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Participatory Budgeting Facilitator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "round": {
           "id": "072-workflow-3-record",
           "caseId": "072-workflow-3",
           "sourceRefs": [
@@ -387,36 +432,60 @@
           },
           "ruleSetId": "RULE-PB-4",
           "facilitatorId": "FAC-3"
+        },
+        "proposals": [],
+        "relationships": [],
+        "feasibility": [],
+        "portfolios": [],
+        "decisionPackets": [],
+        "evidence": [
+          {
+            "id": "072-wf-3-source",
+            "source": "primary case artifact 072-E3",
+            "version": "v1",
+            "text": "Merged proposal M-72 changes B beneficiaries from 35 Pine Street households to library visitors. Proposer R3 has not signed the change notice.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "proposals": [],
+          "relationships": [],
+          "feasibility": [],
+          "portfolios": [],
+          "selectedProposalIds": [],
+          "deliveryChanges": [],
+          "invalidatedPortfolioIds": [],
+          "edition": "072-workflow-3-record"
         }
-      ],
-      "evidence": [
-        {
-          "id": "072-wf-3-source",
-          "source": "primary case artifact 072-E3",
-          "version": "v1",
-          "text": "Merged proposal M-72 changes B beneficiaries from 35 Pine Street households to library visitors. Proposer R3 has not signed the change notice.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "072-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "072-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "072-wf-3-source",
-          "source": "primary case artifact 072-E3",
-          "version": "v1",
-          "text": "Merged proposal M-72 changes B beneficiaries from 35 Pine Street households to library visitors. Proposer R3 has not signed the change notice.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "revisedEstimates": [
+          {
+            "id": "072-wf-3-source",
+            "source": "primary case artifact 072-E3",
+            "version": "v1",
+            "text": "Merged proposal M-72 changes B beneficiaries from 35 Pine Street households to library visitors. Proposer R3 has not signed the change notice.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "proposerReviews": [],
+        "locationConstraints": [
+          {
+            "id": "072-wf-3-source",
+            "source": "primary case artifact 072-E3",
+            "version": "v1",
+            "text": "Merged proposal M-72 changes B beneficiaries from 35 Pine Street households to library visitors. Proposer R3 has not signed the change notice.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryChanges": []
+      },
+      "facilitator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Participatory Budgeting Facilitator",
@@ -439,12 +508,11 @@
   },
   {
     "id": "072-workflow-4",
-    "root": "runCase.nl",
+    "root": "facilitateBudgetRound.nl",
     "split_group": "world-072-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Participatory Budgeting Facilitator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "round": {
           "id": "072-workflow-4-record",
           "caseId": "072-workflow-4",
           "sourceRefs": [
@@ -473,36 +541,60 @@
           },
           "ruleSetId": "RULE-PB-4",
           "facilitatorId": "FAC-3"
+        },
+        "proposals": [],
+        "relationships": [],
+        "feasibility": [],
+        "portfolios": [],
+        "decisionPackets": [],
+        "evidence": [
+          {
+            "id": "072-wf-4-source",
+            "source": "primary case artifact 072-E4",
+            "version": "v1",
+            "text": "Proposal B site record identifies parcel P-14 in the floodplain. Supplied zoning clause Z9 prohibits new fill at that parcel.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "proposals": [],
+          "relationships": [],
+          "feasibility": [],
+          "portfolios": [],
+          "selectedProposalIds": [],
+          "deliveryChanges": [],
+          "invalidatedPortfolioIds": [],
+          "edition": "072-workflow-4-record"
         }
-      ],
-      "evidence": [
-        {
-          "id": "072-wf-4-source",
-          "source": "primary case artifact 072-E4",
-          "version": "v1",
-          "text": "Proposal B site record identifies parcel P-14 in the floodplain. Supplied zoning clause Z9 prohibits new fill at that parcel.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "072-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "072-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "072-wf-4-source",
-          "source": "primary case artifact 072-E4",
-          "version": "v1",
-          "text": "Proposal B site record identifies parcel P-14 in the floodplain. Supplied zoning clause Z9 prohibits new fill at that parcel.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "revisedEstimates": [
+          {
+            "id": "072-wf-4-source",
+            "source": "primary case artifact 072-E4",
+            "version": "v1",
+            "text": "Proposal B site record identifies parcel P-14 in the floodplain. Supplied zoning clause Z9 prohibits new fill at that parcel.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "proposerReviews": [],
+        "locationConstraints": [
+          {
+            "id": "072-wf-4-source",
+            "source": "primary case artifact 072-E4",
+            "version": "v1",
+            "text": "Proposal B site record identifies parcel P-14 in the floodplain. Supplied zoning clause Z9 prohibits new fill at that parcel.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryChanges": []
+      },
+      "facilitator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Participatory Budgeting Facilitator",
@@ -525,12 +617,11 @@
   },
   {
     "id": "072-workflow-5",
-    "root": "runCase.nl",
+    "root": "facilitateBudgetRound.nl",
     "split_group": "world-072-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Participatory Budgeting Facilitator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "round": {
           "id": "072-workflow-5-record",
           "caseId": "072-workflow-5",
           "sourceRefs": [
@@ -559,36 +650,60 @@
           },
           "ruleSetId": "RULE-PB-4",
           "facilitatorId": "FAC-3"
+        },
+        "proposals": [],
+        "relationships": [],
+        "feasibility": [],
+        "portfolios": [],
+        "decisionPackets": [],
+        "evidence": [
+          {
+            "id": "072-wf-5-source",
+            "source": "primary case artifact 072-E5",
+            "version": "v1",
+            "text": "Construction update C-72 changes ramp width from 1.8 m to 1.2 m. Community rule CR-4 requires a new public vote for changed access scope.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "proposals": [],
+          "relationships": [],
+          "feasibility": [],
+          "portfolios": [],
+          "selectedProposalIds": [],
+          "deliveryChanges": [],
+          "invalidatedPortfolioIds": [],
+          "edition": "072-workflow-5-record"
         }
-      ],
-      "evidence": [
-        {
-          "id": "072-wf-5-source",
-          "source": "primary case artifact 072-E5",
-          "version": "v1",
-          "text": "Construction update C-72 changes ramp width from 1.8 m to 1.2 m. Community rule CR-4 requires a new public vote for changed access scope.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "072-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "072-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "072-wf-5-source",
-          "source": "primary case artifact 072-E5",
-          "version": "v1",
-          "text": "Construction update C-72 changes ramp width from 1.8 m to 1.2 m. Community rule CR-4 requires a new public vote for changed access scope.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "revisedEstimates": [
+          {
+            "id": "072-wf-5-source",
+            "source": "primary case artifact 072-E5",
+            "version": "v1",
+            "text": "Construction update C-72 changes ramp width from 1.8 m to 1.2 m. Community rule CR-4 requires a new public vote for changed access scope.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "proposerReviews": [],
+        "locationConstraints": [
+          {
+            "id": "072-wf-5-source",
+            "source": "primary case artifact 072-E5",
+            "version": "v1",
+            "text": "Construction update C-72 changes ramp width from 1.8 m to 1.2 m. Community rule CR-4 requires a new public vote for changed access scope.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveryChanges": []
+      },
+      "facilitator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Participatory Budgeting Facilitator",

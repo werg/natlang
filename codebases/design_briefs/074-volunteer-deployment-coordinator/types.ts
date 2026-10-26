@@ -145,3 +145,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type DeploymentCoordinator = { id: string };
+export type MissionChange = { withdrawals: EvidenceItem[]; qualificationUpdates: EvidenceItem[]; modeChanges: EvidenceItem[]; accessInformation: EvidenceItem[]; completions: EvidenceItem[] };
+export type MissionDossier = { mission: VolunteerMission; requirements: MissionRequirement[]; capabilities: VolunteerCapability[]; teams: VolunteerTeam[]; briefings: VolunteerBriefing[]; revisions: VolunteerRevision[]; evidence: EvidenceItem[]; checkpoint: MissionCheckpoint };
+export type CapabilityCoverage = { requirementId: string; coveredBy: string[]; missingQualification: string[]; expiredQualification: string[]; availabilityConflicts: string[]; consentConflicts: string[]; };
+export type SupervisionEdge = { traineeId: string; supervisorId: string; requirementId: string; window: string; verified: boolean; evidenceIds: string[] };
+export type BriefingProjection = { volunteerId: string; role: string; disclosedAccessRefs: string[]; disclosureWindow: string; acknowledgments: string[]; };
+export type MissionCheckpoint = { revision: string; mission: VolunteerMission; requirements: MissionRequirement[]; capabilities: VolunteerCapability[]; teams: VolunteerTeam[]; supervision: SupervisionEdge[]; briefings: BriefingProjection[]; withdrawals: string[]; completionReceipts: string[]; };
+export type DeploymentProposal = { application: 'Volunteer Deployment Coordinator'; status: 'ready-for-review'|'blocked'; coverage: CapabilityCoverage[]; team: VolunteerTeam; supervision: SupervisionEdge[]; briefings: BriefingProjection[]; revision: VolunteerRevision; blockers: string[]; actionBoundary: string; resumeState: MissionCheckpoint; };

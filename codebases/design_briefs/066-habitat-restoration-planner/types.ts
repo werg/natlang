@@ -79,3 +79,19 @@ export type StageResultRestorationRevision = { accepted: RestorationRevision[]; 
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretBaseline: StageResultHabitatObservation; translateObjectives: StageResultRestorationObjective; constructInterventions: StageResultRestorationOption; planMonitoring: StageResultMonitoringTask; adaptManagement: StageResultRestorationRevision; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretBaseline: StageResultHabitatObservation; translateObjectives: StageResultRestorationObjective; constructInterventions: StageResultRestorationOption; planMonitoring: StageResultMonitoringTask; adaptManagement: StageResultRestorationRevision; };
+
+export type RestorationPlanningInput = { caseId: ID; baseline: HabitatObservation[]; objectives: RestorationObjectiveRecord[]; surveys: HabitatSurvey[]; speciesLocations: SensitiveSpeciesRecord[]; interventions: RestorationIntervention[]; landPermissions: FieldAccessPermission[]; impactReports: InterventionImpact[]; volunteerSamples: VolunteerSample[]; expertRoster: ExpertReviewScope[]; evidence: Evidence[] };
+export type RestorationObjectiveRecord = { objectiveId: ID; target: string; areaIds: ID[]; indicatorIds: ID[]; seasonWindow: string; authorityRef: Ref };
+export type HabitatSurvey = { surveyId: ID; areaId: ID; method: string; season: string; observedAt: string; effort: string; observations: string[]; evidenceRef: Ref };
+export type SensitiveSpeciesRecord = { recordId: ID; exactCoordinate: string; sensitivity: string; accessRule: string; evidenceRef: Ref };
+export type RestorationIntervention = { interventionId: ID; areaIds: ID[]; action: string; objectiveIds: ID[]; permissionIds: ID[]; stopConditions: string[]; qualifiedLead: string };
+export type FieldAccessPermission = { permissionId: ID; areaId: ID; permittedActions: string[]; expiresAt: string; ownerRef: Ref };
+export type InterventionImpact = { reportId: ID; interventionId: ID; observation: string; severity: string; observedAt: string; evidenceRef: Ref };
+export type VolunteerSample = { sampleId: ID; areaId: ID; method: string; season: string; effortDuration: string; observerCount: number; observations: string[]; evidenceRef: Ref };
+export type ExpertReviewScope = { expertId: ID; taxaOrSystem: string[]; qualificationRef: Ref; available: boolean };
+export type SpeciesDisclosurePlan = { volunteerView: string[]; publicView: string[]; exactLocationView: string[]; restrictedRecordIds: ID[] };
+export type SurveyComparison = { comparablePairs: string[]; incomparablePairs: string[]; confoundingChanges: string[] };
+export type MonitoringDesign = { objectiveIndicators: string[]; seasonalRounds: string[]; effortFields: string[]; repeatMethods: string[]; comparabilityWarnings: string[] };
+export type HabitatActionPlan = { caseId: ID; disclosure: SpeciesDisclosurePlan; comparison: SurveyComparison; monitoring: MonitoringDesign; permittedActions: ID[]; stoppedActions: ID[]; suspendedInterventions: ID[]; expertEscalations: string[]; unresolvedPermissions: ID[]; commitAllowed: boolean };
+export type FieldActionAuthorization = { permittedActions: ID[]; stoppedActions: ID[]; unresolvedPermissionIds: ID[] };
+export type EcologicalIncidentReview = { suspendedInterventions: ID[]; reviewRequests: string[]; preservedObservationRefs: Ref[] };

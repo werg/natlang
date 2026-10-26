@@ -1,7 +1,7 @@
 [
   {
     "id": "070-community-garden-steward-gate-supported",
-    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "root": "stewardGardenSeason/verifyGardenPreference.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
       "draft": {
@@ -70,7 +70,7 @@
   },
   {
     "id": "070-community-garden-steward-gate-contradictory",
-    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "root": "stewardGardenSeason/verifyGardenPreference.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
       "draft": {
@@ -139,7 +139,7 @@
   },
   {
     "id": "070-community-garden-steward-gate-missing",
-    "root": "runCase/interpretPreferences/audit/qualify.nl",
+    "root": "stewardGardenSeason/verifyGardenPreference.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
       "draft": {
@@ -191,12 +191,40 @@
   },
   {
     "id": "070-community-garden-steward-operational-1",
-    "root": "runCase.nl",
+    "root": "stewardGardenSeason.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
-      "input": {
-        "caseId": "070-community-garden-steward-operational-1",
-        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-1; return a traceable proposal from the supplied records.",
+      "garden": {
+        "season": {
+          "id": "070-community-garden-steward-operational-1:season",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "gardenId": "",
+          "memberIds": [
+            "member-M70 (Dana Lee)"
+          ],
+          "plotIds": [],
+          "season": "",
+          "coordinatorId": "accountable reviewer"
+        },
+        "preferences": [
+          {
+            "id": "070-prior-gardenpreference-detail-1-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-1",
+            "memberId": "member-M70 (Dana Lee)",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning",
+            "accessibilityNeed": "member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)"
+          }
+        ],
+        "constraints": [],
+        "plans": [],
+        "agreements": [],
+        "tasks": [],
         "evidence": [
           {
             "id": "070-operational-detail-1-source-v2",
@@ -212,27 +240,55 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "070-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "070-prior-gardenpreference-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "070-community-garden-steward-operational-1",
-            "memberId": "member-M70 (Dana Lee)",
-            "desiredUse": "quiet accessible path across plot P70",
-            "availability": "unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning",
-            "accessibilityNeed": "member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)"
-          }
+        "checkpoint": {
+          "revision": "v1",
+          "preferences": [
+            {
+              "id": "070-prior-gardenpreference-detail-1-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "070-community-garden-steward-operational-1",
+              "memberId": "member-M70 (Dana Lee)",
+              "desiredUse": "quiet accessible path across plot P70",
+              "availability": "unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning",
+              "accessibilityNeed": "member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)"
+            }
+          ],
+          "constraints": [],
+          "plans": [],
+          "agreements": [],
+          "tasks": [],
+          "toolReservations": [],
+          "completedTaskRefs": [],
+          "transferredRights": []
         }
+      },
+      "change": {
+        "unavailableMemberIds": [
+          "member-M70 (Dana Lee)"
+        ],
+        "brokenToolIds": [],
+        "newAssessments": [],
+        "memberResponses": [
+          {
+            "id": "070-operational-detail-1-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-14T09:00:00Z",
+            "text": "R070 Community steward records: Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task. This current event is source 070-operational-detail-1-source-v2 v2, observed 2026-10-14T09:00:00Z, for case 070-community-garden-steward-operational-1. The supplied typed prior 070-prior-gardenpreference-detail-1-v1 v1 is preserved for comparison. Typed record fields for this workflow are {\"accessibilityNeed\": \"member M70 requires continuous step-free path; potential replacements R70 (Tuesday only, not consented) and K70 (Saturday only, not consented)\", \"availability\": \"unavailable 2026-10-14 through 2026-10-28; previously assigned Saturday irrigation and Tuesday compost-turning\", \"desiredUse\": \"quiet accessible path across plot P70\", \"memberId\": \"member-M70 (Dana Lee)\"}.",
+            "supports": [
+              "Member M70 (Dana Lee) reports being unavailable from Oct 14 through Oct 28 and withdraws from Saturday irrigation and Tuesday compost-turning duties. Member R70 is free Tuesdays but has not agreed to irrigation; member K70 is available Saturdays only and has not accepted the compost task."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "departures": []
+      },
+      "steward": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -257,12 +313,40 @@
   },
   {
     "id": "070-community-garden-steward-operational-2",
-    "root": "runCase.nl",
+    "root": "stewardGardenSeason.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
-      "input": {
-        "caseId": "070-community-garden-steward-operational-2",
-        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-2; return a traceable proposal from the supplied records.",
+      "garden": {
+        "season": {
+          "id": "070-community-garden-steward-operational-2:season",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "gardenId": "",
+          "memberIds": [
+            "member-M70"
+          ],
+          "plotIds": [],
+          "season": "",
+          "coordinatorId": "accountable reviewer"
+        },
+        "preferences": [
+          {
+            "id": "070-prior-gardenpreference-detail-2-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-2",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        ],
+        "constraints": [],
+        "plans": [],
+        "agreements": [],
+        "tasks": [],
         "evidence": [
           {
             "id": "070-operational-detail-2-source-v2",
@@ -278,27 +362,55 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "070-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "070-prior-gardenpreference-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "070-community-garden-steward-operational-2",
-            "memberId": "member-M70",
-            "desiredUse": "quiet accessible path across plot P70",
-            "availability": "weekly maintenance on Saturday morning",
-            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
-          }
+        "checkpoint": {
+          "revision": "v1",
+          "preferences": [
+            {
+              "id": "070-prior-gardenpreference-detail-2-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "070-community-garden-steward-operational-2",
+              "memberId": "member-M70",
+              "desiredUse": "quiet accessible path across plot P70",
+              "availability": "weekly maintenance on Saturday morning",
+              "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+            }
+          ],
+          "constraints": [],
+          "plans": [],
+          "agreements": [],
+          "tasks": [],
+          "toolReservations": [],
+          "completedTaskRefs": [],
+          "transferredRights": []
         }
+      },
+      "change": {
+        "unavailableMemberIds": [
+          "member-M70"
+        ],
+        "brokenToolIds": [],
+        "newAssessments": [],
+        "memberResponses": [
+          {
+            "id": "070-operational-detail-2-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R070 Community steward records: Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled. This current event is source 070-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 070-community-garden-steward-operational-2. The supplied typed prior 070-prior-gardenpreference-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Shared tool T70-4 (soil auger) breaks during plot P70 sampling. Reservation ledger has member M70 booked 10:00–12:00 and member R70 booked 12:00–14:00; repair estimate is two days and neither reservation was canceled."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "departures": []
+      },
+      "steward": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -323,12 +435,40 @@
   },
   {
     "id": "070-community-garden-steward-operational-3",
-    "root": "runCase.nl",
+    "root": "stewardGardenSeason.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
-      "input": {
-        "caseId": "070-community-garden-steward-operational-3",
-        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-3; return a traceable proposal from the supplied records.",
+      "garden": {
+        "season": {
+          "id": "070-community-garden-steward-operational-3:season",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "gardenId": "",
+          "memberIds": [
+            "member-M70"
+          ],
+          "plotIds": [],
+          "season": "",
+          "coordinatorId": "accountable reviewer"
+        },
+        "preferences": [
+          {
+            "id": "070-prior-gardenpreference-detail-3-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-3",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        ],
+        "constraints": [],
+        "plans": [],
+        "agreements": [],
+        "tasks": [],
         "evidence": [
           {
             "id": "070-operational-detail-3-source-v2",
@@ -344,27 +484,55 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "070-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "070-prior-gardenpreference-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "070-community-garden-steward-operational-3",
-            "memberId": "member-M70",
-            "desiredUse": "quiet accessible path across plot P70",
-            "availability": "weekly maintenance on Saturday morning",
-            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
-          }
+        "checkpoint": {
+          "revision": "v1",
+          "preferences": [
+            {
+              "id": "070-prior-gardenpreference-detail-3-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "070-community-garden-steward-operational-3",
+              "memberId": "member-M70",
+              "desiredUse": "quiet accessible path across plot P70",
+              "availability": "weekly maintenance on Saturday morning",
+              "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+            }
+          ],
+          "constraints": [],
+          "plans": [],
+          "agreements": [],
+          "tasks": [],
+          "toolReservations": [],
+          "completedTaskRefs": [],
+          "transferredRights": []
         }
+      },
+      "change": {
+        "unavailableMemberIds": [
+          "member-M70"
+        ],
+        "brokenToolIds": [],
+        "newAssessments": [],
+        "memberResponses": [
+          {
+            "id": "070-operational-detail-3-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R070 Community steward records: Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached. This current event is source 070-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 070-community-garden-steward-operational-3. The supplied typed prior 070-prior-gardenpreference-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Plot P70 condition report lists “soil moisture uncertain” after two weeks without a sensor reading. Proposed planting change P70-8 would replace a drought-sensitive crop; no soil sample or gardener assessment is attached."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "departures": []
+      },
+      "steward": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -389,12 +557,40 @@
   },
   {
     "id": "070-community-garden-steward-operational-4",
-    "root": "runCase.nl",
+    "root": "stewardGardenSeason.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
-      "input": {
-        "caseId": "070-community-garden-steward-operational-4",
-        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-4; return a traceable proposal from the supplied records.",
+      "garden": {
+        "season": {
+          "id": "070-community-garden-steward-operational-4:season",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "gardenId": "",
+          "memberIds": [
+            "member-M70"
+          ],
+          "plotIds": [],
+          "season": "",
+          "coordinatorId": "accountable reviewer"
+        },
+        "preferences": [
+          {
+            "id": "070-prior-gardenpreference-detail-4-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-4",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        ],
+        "constraints": [],
+        "plans": [],
+        "agreements": [],
+        "tasks": [],
         "evidence": [
           {
             "id": "070-operational-detail-4-source-v2",
@@ -410,27 +606,55 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "070-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "070-prior-gardenpreference-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "070-community-garden-steward-operational-4",
-            "memberId": "member-M70",
-            "desiredUse": "quiet accessible path across plot P70",
-            "availability": "weekly maintenance on Saturday morning",
-            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
-          }
+        "checkpoint": {
+          "revision": "v1",
+          "preferences": [
+            {
+              "id": "070-prior-gardenpreference-detail-4-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "070-community-garden-steward-operational-4",
+              "memberId": "member-M70",
+              "desiredUse": "quiet accessible path across plot P70",
+              "availability": "weekly maintenance on Saturday morning",
+              "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+            }
+          ],
+          "constraints": [],
+          "plans": [],
+          "agreements": [],
+          "tasks": [],
+          "toolReservations": [],
+          "completedTaskRefs": [],
+          "transferredRights": []
         }
+      },
+      "change": {
+        "unavailableMemberIds": [
+          "member-M70"
+        ],
+        "brokenToolIds": [],
+        "newAssessments": [],
+        "memberResponses": [
+          {
+            "id": "070-operational-detail-4-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R070 Community steward records: On 2026-10-05, member M70 reports a successful harvest from trial allocation TA70-3 for plot P70. The four-week agreement remains in force through Oct 31; no renewal consent is signed. This current event is source 070-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 070-community-garden-steward-operational-4. The supplied typed prior 070-prior-gardenpreference-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Trial allocation TA70-3 gives member M70 plot P70 for a four-week test. The member reports a successful harvest, but the written agreement labels the allocation “trial through Oct 31”; no renewal consent is signed."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "departures": []
+      },
+      "steward": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -455,12 +679,40 @@
   },
   {
     "id": "070-community-garden-steward-operational-5",
-    "root": "runCase.nl",
+    "root": "stewardGardenSeason.nl",
     "split_group": "070-community-garden-steward",
     "inputs": {
-      "input": {
-        "caseId": "070-community-garden-steward-operational-5",
-        "goal": "Review the Community garden steward evidence for case 070-community-garden-steward-operational-5; return a traceable proposal from the supplied records.",
+      "garden": {
+        "season": {
+          "id": "070-community-garden-steward-operational-5:season",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "gardenId": "",
+          "memberIds": [
+            "member-M70"
+          ],
+          "plotIds": [],
+          "season": "",
+          "coordinatorId": "accountable reviewer"
+        },
+        "preferences": [
+          {
+            "id": "070-prior-gardenpreference-detail-5-v1",
+            "version": "v1",
+            "createdAt": "2026-10-01",
+            "updatedAt": "2026-10-01",
+            "caseId": "070-community-garden-steward-operational-5",
+            "memberId": "member-M70",
+            "desiredUse": "quiet accessible path across plot P70",
+            "availability": "weekly maintenance on Saturday morning",
+            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+          }
+        ],
+        "constraints": [],
+        "plans": [],
+        "agreements": [],
+        "tasks": [],
         "evidence": [
           {
             "id": "070-operational-detail-5-source-v2",
@@ -476,27 +728,55 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "070-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "070-prior-gardenpreference-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "070-community-garden-steward-operational-5",
-            "memberId": "member-M70",
-            "desiredUse": "quiet accessible path across plot P70",
-            "availability": "weekly maintenance on Saturday morning",
-            "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
-          }
+        "checkpoint": {
+          "revision": "v1",
+          "preferences": [
+            {
+              "id": "070-prior-gardenpreference-detail-5-v1",
+              "version": "v1",
+              "createdAt": "2026-10-01",
+              "updatedAt": "2026-10-01",
+              "caseId": "070-community-garden-steward-operational-5",
+              "memberId": "member-M70",
+              "desiredUse": "quiet accessible path across plot P70",
+              "availability": "weekly maintenance on Saturday morning",
+              "accessibilityNeed": "continuous step-free path; shared event use requires member agreement"
+            }
+          ],
+          "constraints": [],
+          "plans": [],
+          "agreements": [],
+          "tasks": [],
+          "toolReservations": [],
+          "completedTaskRefs": [],
+          "transferredRights": []
         }
+      },
+      "change": {
+        "unavailableMemberIds": [
+          "member-M70"
+        ],
+        "brokenToolIds": [],
+        "newAssessments": [],
+        "memberResponses": [
+          {
+            "id": "070-operational-detail-5-source-v2",
+            "source": "Community garden steward operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R070 Community steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R070 Community steward records: Member M70 gave notice on 2026-10-06 that they will leave the garden on 2026-10-20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and harvest rights for produce already planted; no successor has accepted handover. This current event is source 070-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 070-community-garden-steward-operational-5. The supplied typed prior 070-prior-gardenpreference-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Member M70 gives notice of leaving the garden on Oct 20, mid-season. Current agreement assigns watering for beds P70-A and P70-B and grants harvest rights for produce already planted; no successor has accepted handover."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "departures": []
+      },
+      "steward": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {

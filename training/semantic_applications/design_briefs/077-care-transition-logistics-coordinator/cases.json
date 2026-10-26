@@ -1,7 +1,7 @@
 [
   {
     "id": "077-first-gate-pass",
-    "root": "runCase/extractLogistics/audit/qualify.nl",
+    "root": "coordinateCareTransition/verifyTransitionRequirement.nl",
     "split_group": "world-077-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "077-first-gate-fail",
-    "root": "runCase/extractLogistics/audit/qualify.nl",
+    "root": "coordinateCareTransition/verifyTransitionRequirement.nl",
     "split_group": "world-077-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "077-first-gate-needs-review",
-    "root": "runCase/extractLogistics/audit/qualify.nl",
+    "root": "coordinateCareTransition/verifyTransitionRequirement.nl",
     "split_group": "world-077-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "077-workflow-1",
-    "root": "runCase.nl",
+    "root": "coordinateCareTransition.nl",
     "split_group": "world-077-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Care Transition Logistics Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "transition": {
           "id": "077-workflow-1-record",
           "caseId": "077-workflow-1",
           "sourceRefs": [
@@ -208,36 +207,122 @@
           "destinationId": "HOME-12",
           "coordinatorId": "NURSE-4",
           "transitionWindow": "2026-04-20 15:00"
+        },
+        "requirements": [],
+        "participants": [],
+        "tasks": [],
+        "options": [],
+        "readiness": [],
+        "evidence": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "077-workflow-1-record",
+          "transition": {
+            "id": "077-workflow-1-record",
+            "caseId": "077-workflow-1",
+            "sourceRefs": [
+              "077-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "CareTransition",
+            "subject": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "candidate",
+            "evidenceIds": [
+              "077-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "077-wf-1-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P77",
+            "approvedPlanId": "PLAN-77",
+            "destinationId": "HOME-12",
+            "coordinatorId": "NURSE-4",
+            "transitionWindow": "2026-04-20 15:00"
+          },
+          "taskStates": [],
+          "schedule": [],
+          "equipmentDeliveryRefs": [],
+          "caregiverAcceptances": [],
+          "clinicalReviewRefs": [],
+          "receivingAckRefs": [],
+          "lastCompletedTaskIds": [],
+          "blockers": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "077-wf-1-source",
-          "source": "primary case artifact 077-E1",
-          "version": "v1",
-          "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "077-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "077-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "077-wf-1-source",
-          "source": "primary case artifact 077-E1",
-          "version": "v1",
-          "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "equipmentReceipts": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "caregiverResponses": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transportUpdates": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicalReviews": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "receivingAcknowledgments": [
+          {
+            "id": "077-wf-1-source",
+            "source": "primary case artifact 077-E1",
+            "version": "v1",
+            "text": "Transition plan T-77 books accessible vehicle V-4 for 15:00. Equipment E-9 is booked at the destination but has no delivery scan.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Care Transition Logistics Coordinator",
@@ -260,12 +345,11 @@
   },
   {
     "id": "077-workflow-2",
-    "root": "runCase.nl",
+    "root": "coordinateCareTransition.nl",
     "split_group": "world-077-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Care Transition Logistics Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "transition": {
           "id": "077-workflow-2-record",
           "caseId": "077-workflow-2",
           "sourceRefs": [
@@ -287,36 +371,122 @@
           "destinationId": "HOME-12",
           "coordinatorId": "NURSE-4",
           "transitionWindow": "2026-04-20 15:00"
+        },
+        "requirements": [],
+        "participants": [],
+        "tasks": [],
+        "options": [],
+        "readiness": [],
+        "evidence": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "077-workflow-2-record",
+          "transition": {
+            "id": "077-workflow-2-record",
+            "caseId": "077-workflow-2",
+            "sourceRefs": [
+              "077-event-2"
+            ],
+            "state": "draft",
+            "kind": "CareTransition",
+            "subject": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "candidate",
+            "evidenceIds": [
+              "077-event-2"
+            ],
+            "fields": {
+              "sourceArtifact": "077-event-2",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P77",
+            "approvedPlanId": "PLAN-77",
+            "destinationId": "HOME-12",
+            "coordinatorId": "NURSE-4",
+            "transitionWindow": "2026-04-20 15:00"
+          },
+          "taskStates": [],
+          "schedule": [],
+          "equipmentDeliveryRefs": [],
+          "caregiverAcceptances": [],
+          "clinicalReviewRefs": [],
+          "receivingAckRefs": [],
+          "lastCompletedTaskIds": [],
+          "blockers": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "077-event-2",
-          "source": "current domain record 077-E2",
-          "version": "v1",
-          "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "077-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "077-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "077-event-2",
-          "source": "current domain record 077-E2",
-          "version": "v1",
-          "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "equipmentReceipts": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "caregiverResponses": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transportUpdates": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicalReviews": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "receivingAcknowledgments": [
+          {
+            "id": "077-event-2",
+            "source": "current domain record 077-E2",
+            "version": "v1",
+            "text": "Caregiver C-8 told coordinator M-77 on 2026-10-26 that they cannot accept the home-care role starting 2026-10-27. No backup caregiver has accepted; the patient still needs two-person transfer support at home.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Care Transition Logistics Coordinator",
@@ -339,12 +509,11 @@
   },
   {
     "id": "077-workflow-3",
-    "root": "runCase.nl",
+    "root": "coordinateCareTransition.nl",
     "split_group": "world-077-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Care Transition Logistics Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "transition": {
           "id": "077-workflow-3-record",
           "caseId": "077-workflow-3",
           "sourceRefs": [
@@ -366,36 +535,122 @@
           "destinationId": "HOME-12",
           "coordinatorId": "NURSE-4",
           "transitionWindow": "2026-04-20 15:00"
+        },
+        "requirements": [],
+        "participants": [],
+        "tasks": [],
+        "options": [],
+        "readiness": [],
+        "evidence": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "077-workflow-3-record",
+          "transition": {
+            "id": "077-workflow-3-record",
+            "caseId": "077-workflow-3",
+            "sourceRefs": [
+              "077-wf-3-source"
+            ],
+            "state": "draft",
+            "kind": "CareTransition",
+            "subject": "Patient P-77 asks to leave at 15:00; receiving nurse N4 confirms medication review at 14:30 but has not confirmed home equipment.",
+            "status": "candidate",
+            "evidenceIds": [
+              "077-wf-3-source"
+            ],
+            "fields": {
+              "sourceArtifact": "077-wf-3-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P77",
+            "approvedPlanId": "PLAN-77",
+            "destinationId": "HOME-12",
+            "coordinatorId": "NURSE-4",
+            "transitionWindow": "2026-04-20 15:00"
+          },
+          "taskStates": [],
+          "schedule": [],
+          "equipmentDeliveryRefs": [],
+          "caregiverAcceptances": [],
+          "clinicalReviewRefs": [],
+          "receivingAckRefs": [],
+          "lastCompletedTaskIds": [],
+          "blockers": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "077-wf-3-source",
-          "source": "primary case artifact 077-E3",
-          "version": "v1",
-          "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "077-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "077-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "077-wf-3-source",
-          "source": "primary case artifact 077-E3",
-          "version": "v1",
-          "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "equipmentReceipts": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "caregiverResponses": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transportUpdates": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicalReviews": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "receivingAcknowledgments": [
+          {
+            "id": "077-wf-3-source",
+            "source": "primary case artifact 077-E3",
+            "version": "v1",
+            "text": "Transport provider notice TN-77 v2 changes accessible pickup for transition T-77 from 15:00 to 15:40 on 2026-10-27. Medication review N4 is booked for 16:00, and accessible destination entry W-77 closes at 15:30; prior schedule v1 still shows 15:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Care Transition Logistics Coordinator",
@@ -418,12 +673,11 @@
   },
   {
     "id": "077-workflow-4",
-    "root": "runCase.nl",
+    "root": "coordinateCareTransition.nl",
     "split_group": "world-077-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Care Transition Logistics Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "transition": {
           "id": "077-workflow-4-record",
           "caseId": "077-workflow-4",
           "sourceRefs": [
@@ -445,36 +699,122 @@
           "destinationId": "HOME-12",
           "coordinatorId": "NURSE-4",
           "transitionWindow": "2026-04-20 15:00"
+        },
+        "requirements": [],
+        "participants": [],
+        "tasks": [],
+        "options": [],
+        "readiness": [],
+        "evidence": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "077-workflow-4-record",
+          "transition": {
+            "id": "077-workflow-4-record",
+            "caseId": "077-workflow-4",
+            "sourceRefs": [
+              "077-event-4"
+            ],
+            "state": "draft",
+            "kind": "CareTransition",
+            "subject": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "candidate",
+            "evidenceIds": [
+              "077-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "077-event-4",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P77",
+            "approvedPlanId": "PLAN-77",
+            "destinationId": "HOME-12",
+            "coordinatorId": "NURSE-4",
+            "transitionWindow": "2026-04-20 15:00"
+          },
+          "taskStates": [],
+          "schedule": [],
+          "equipmentDeliveryRefs": [],
+          "caregiverAcceptances": [],
+          "clinicalReviewRefs": [],
+          "receivingAckRefs": [],
+          "lastCompletedTaskIds": [],
+          "blockers": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "077-event-4",
-          "source": "current domain record 077-E4",
-          "version": "v1",
-          "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "077-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "077-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "077-event-4",
-          "source": "current domain record 077-E4",
-          "version": "v1",
-          "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "equipmentReceipts": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "caregiverResponses": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transportUpdates": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicalReviews": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "receivingAcknowledgments": [
+          {
+            "id": "077-event-4",
+            "source": "current domain record 077-E4",
+            "version": "v1",
+            "text": "Plan T-77 proposes replacing prescribed transfer aid A-2 with a standing aid A-5 because A-2 is delayed. The clinician’s discharge order requires a full-body sling; no clinician review or substitution approval is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Care Transition Logistics Coordinator",
@@ -497,12 +837,11 @@
   },
   {
     "id": "077-workflow-5",
-    "root": "runCase.nl",
+    "root": "coordinateCareTransition.nl",
     "split_group": "world-077-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Care Transition Logistics Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "transition": {
           "id": "077-workflow-5-record",
           "caseId": "077-workflow-5",
           "sourceRefs": [
@@ -524,36 +863,122 @@
           "destinationId": "HOME-12",
           "coordinatorId": "NURSE-4",
           "transitionWindow": "2026-04-20 15:00"
+        },
+        "requirements": [],
+        "participants": [],
+        "tasks": [],
+        "options": [],
+        "readiness": [],
+        "evidence": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "077-workflow-5-record",
+          "transition": {
+            "id": "077-workflow-5-record",
+            "caseId": "077-workflow-5",
+            "sourceRefs": [
+              "077-wf-5-source"
+            ],
+            "state": "draft",
+            "kind": "CareTransition",
+            "subject": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "candidate",
+            "evidenceIds": [
+              "077-wf-5-source"
+            ],
+            "fields": {
+              "sourceArtifact": "077-wf-5-source",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P77",
+            "approvedPlanId": "PLAN-77",
+            "destinationId": "HOME-12",
+            "coordinatorId": "NURSE-4",
+            "transitionWindow": "2026-04-20 15:00"
+          },
+          "taskStates": [],
+          "schedule": [],
+          "equipmentDeliveryRefs": [],
+          "caregiverAcceptances": [],
+          "clinicalReviewRefs": [],
+          "receivingAckRefs": [],
+          "lastCompletedTaskIds": [],
+          "blockers": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "077-wf-5-source",
-          "source": "primary case artifact 077-E5",
-          "version": "v1",
-          "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "077-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "077-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "077-wf-5-source",
-          "source": "primary case artifact 077-E5",
-          "version": "v1",
-          "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "equipmentReceipts": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "caregiverResponses": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "transportUpdates": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "clinicalReviews": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "receivingAcknowledgments": [
+          {
+            "id": "077-wf-5-source",
+            "source": "primary case artifact 077-E5",
+            "version": "v1",
+            "text": "Discharge acknowledgment is present, but home oxygen supplier receipt is absent and installation remains unconfirmed.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Care Transition Logistics Coordinator",

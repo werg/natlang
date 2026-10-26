@@ -1,7 +1,7 @@
 [
   {
     "id": "047-domain-data-migration-workshop-gate-supported",
-    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "root": "qualification/recoverSourceMeaning.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
       "draft": {
@@ -73,7 +73,7 @@
   },
   {
     "id": "047-domain-data-migration-workshop-gate-contradictory",
-    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "root": "qualification/recoverSourceMeaning.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
       "draft": {
@@ -145,7 +145,7 @@
   },
   {
     "id": "047-domain-data-migration-workshop-gate-missing",
-    "root": "runCase/recoverSourceMeaning/audit/qualify.nl",
+    "root": "qualification/recoverSourceMeaning.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
       "draft": {
@@ -197,13 +197,12 @@
   },
   {
     "id": "047-domain-data-migration-workshop-operational-1",
-    "root": "runCase.nl",
+    "root": "rehearseDomainMigration.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
-      "input": {
-        "caseId": "047-domain-data-migration-workshop-operational-1",
-        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "migration": {
+        "migrationId": "047-domain-data-migration-workshop-operational-1",
+        "sourceEvidence": [
           {
             "id": "047-operational-detail-1-source-v2",
             "source": "Domain data migration workshop operational event log",
@@ -218,30 +217,58 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
+        "priorSourceMeaning": {
+          "id": "047-prior-sourcefieldmeaning-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "047-domain-data-migration-workshop-operational-1",
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code"
+        },
+        "targetSchema": "not supplied in current evidence",
+        "targetSchemaFields": [],
+        "sourceRecords": [],
+        "sourceDeltas": [
+          {
+            "id": "047-operational-detail-1-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R047 Domain steward records: System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward. This current event is source 047-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 047-domain-data-migration-workshop-operational-1. The supplied typed prior 047-prior-sourcefieldmeaning-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "047-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "047-prior-sourcefieldmeaning-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "047-domain-data-migration-workshop-operational-1",
-            "systemId": "regional-customer-master",
-            "field": "status_code_7",
-            "meaning": "suspended in North; legacy-closed in South",
-            "missingStates": [
-              "not supplied"
+        "approvedMappingVersion": null,
+        "targetWriteEvidence": [
+          {
+            "id": "047-operational-detail-1-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R047 Domain steward records: System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward. This current event is source 047-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 047-domain-data-migration-workshop-operational-1. The supplied typed prior 047-prior-sourcefieldmeaning-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "System North-47 and South-47 both issue customer identifier 00421. North’s record is valid from 2021-01-01 to 2024-12-31; South’s separate record is valid from 2025-01-01 onward."
             ],
-            "conditionalUse": "interpret using region and effective date; retain original code"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "rollbackPolicy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ]
       }
     },
     "expected": {
@@ -266,13 +293,12 @@
   },
   {
     "id": "047-domain-data-migration-workshop-operational-2",
-    "root": "runCase.nl",
+    "root": "rehearseDomainMigration.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
-      "input": {
-        "caseId": "047-domain-data-migration-workshop-operational-2",
-        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "migration": {
+        "migrationId": "047-domain-data-migration-workshop-operational-2",
+        "sourceEvidence": [
           {
             "id": "047-operational-detail-2-source-v2",
             "source": "Domain data migration workshop operational event log",
@@ -287,30 +313,58 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
+        "priorSourceMeaning": {
+          "id": "047-prior-sourcefieldmeaning-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "047-domain-data-migration-workshop-operational-2",
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code"
+        },
+        "targetSchema": "not supplied in current evidence",
+        "targetSchemaFields": [],
+        "sourceRecords": [],
+        "sourceDeltas": [
+          {
+            "id": "047-operational-detail-2-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R047 Domain steward records: Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value. This current event is source 047-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 047-domain-data-migration-workshop-operational-2. The supplied typed prior 047-prior-sourcefieldmeaning-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
         ],
         "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "047-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "047-prior-sourcefieldmeaning-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "047-domain-data-migration-workshop-operational-2",
-            "systemId": "regional-customer-master",
-            "field": "status_code_7",
-            "meaning": "suspended in North; legacy-closed in South",
-            "missingStates": [
-              "not supplied"
+        "approvedMappingVersion": null,
+        "targetWriteEvidence": [
+          {
+            "id": "047-operational-detail-2-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R047 Domain steward records: Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value. This current event is source 047-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 047-domain-data-migration-workshop-operational-2. The supplied typed prior 047-prior-sourcefieldmeaning-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Source field `middle_name` uses null for “not collected”; field `phone` uses null for “not supplied”; `status_code` null means “not applicable to this region.” The three mappings currently collapse all nulls to one target value."
             ],
-            "conditionalUse": "interpret using region and effective date; retain original code"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "rollbackPolicy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ]
       }
     },
     "expected": {
@@ -335,13 +389,12 @@
   },
   {
     "id": "047-domain-data-migration-workshop-operational-3",
-    "root": "runCase.nl",
+    "root": "rehearseDomainMigration.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
-      "input": {
-        "caseId": "047-domain-data-migration-workshop-operational-3",
-        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "migration": {
+        "migrationId": "047-domain-data-migration-workshop-operational-3",
+        "sourceEvidence": [
           {
             "id": "047-operational-detail-3-source-v2",
             "source": "Domain data migration workshop operational event log",
@@ -356,30 +409,58 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
+        "priorSourceMeaning": {
+          "id": "047-prior-sourcefieldmeaning-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "047-domain-data-migration-workshop-operational-3",
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code"
+        },
+        "targetSchema": "not supplied in current evidence",
+        "targetSchemaFields": [],
+        "sourceRecords": [],
+        "sourceDeltas": [
+          {
+            "id": "047-operational-detail-3-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-12T09:30:00Z",
+            "text": "R047 Domain steward records: Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta. This current event is source 047-operational-detail-3-source-v2 v2, observed 2026-10-12T09:30:00Z, for case 047-domain-data-migration-workshop-operational-3. The supplied typed prior 047-prior-sourcefieldmeaning-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "047-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "047-prior-sourcefieldmeaning-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "047-domain-data-migration-workshop-operational-3",
-            "systemId": "regional-customer-master",
-            "field": "status_code_7",
-            "meaning": "suspended in North; legacy-closed in South",
-            "missingStates": [
-              "not supplied"
+        "approvedMappingVersion": null,
+        "targetWriteEvidence": [
+          {
+            "id": "047-operational-detail-3-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-12T09:30:00Z",
+            "text": "R047 Domain steward records: Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta. This current event is source 047-operational-detail-3-source-v2 v2, observed 2026-10-12T09:30:00Z, for case 047-domain-data-migration-workshop-operational-3. The supplied typed prior 047-prior-sourcefieldmeaning-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Migration snapshot M47-v5 was approved at 09:00. Source CDC delta D47-88 at 09:12 changes customer 00421’s status with effective date 2026-10-12; target import has not consumed that delta."
             ],
-            "conditionalUse": "interpret using region and effective date; retain original code"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "rollbackPolicy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ]
       }
     },
     "expected": {
@@ -404,13 +485,12 @@
   },
   {
     "id": "047-domain-data-migration-workshop-operational-4",
-    "root": "runCase.nl",
+    "root": "rehearseDomainMigration.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
-      "input": {
-        "caseId": "047-domain-data-migration-workshop-operational-4",
-        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "migration": {
+        "migrationId": "047-domain-data-migration-workshop-operational-4",
+        "sourceEvidence": [
           {
             "id": "047-operational-detail-4-source-v2",
             "source": "Domain data migration workshop operational event log",
@@ -425,30 +505,58 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
+        "priorSourceMeaning": {
+          "id": "047-prior-sourcefieldmeaning-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "047-domain-data-migration-workshop-operational-4",
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code"
+        },
+        "targetSchema": "not supplied in current evidence",
+        "targetSchemaFields": [],
+        "sourceRecords": [],
+        "sourceDeltas": [
+          {
+            "id": "047-operational-detail-4-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R047 Domain steward records: Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists. This current event is source 047-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 047-domain-data-migration-workshop-operational-4. The supplied typed prior 047-prior-sourcefieldmeaning-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "047-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "047-prior-sourcefieldmeaning-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "047-domain-data-migration-workshop-operational-4",
-            "systemId": "regional-customer-master",
-            "field": "status_code_7",
-            "meaning": "suspended in North; legacy-closed in South",
-            "missingStates": [
-              "not supplied"
+        "approvedMappingVersion": null,
+        "targetWriteEvidence": [
+          {
+            "id": "047-operational-detail-4-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R047 Domain steward records: Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists. This current event is source 047-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 047-domain-data-migration-workshop-operational-4. The supplied typed prior 047-prior-sourcefieldmeaning-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Valid source case S47-404 uses status `temporary-hold`, but target enum v3 allows only active, suspended and closed. The source row has a complete identity and valid interval; no target mapping exists."
             ],
-            "conditionalUse": "interpret using region and effective date; retain original code"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "rollbackPolicy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ]
       }
     },
     "expected": {
@@ -473,13 +581,12 @@
   },
   {
     "id": "047-domain-data-migration-workshop-operational-5",
-    "root": "runCase.nl",
+    "root": "rehearseDomainMigration.nl",
     "split_group": "047-domain-data-migration-workshop",
     "inputs": {
-      "input": {
-        "caseId": "047-domain-data-migration-workshop-operational-5",
-        "goal": "Review the Domain data migration workshop evidence for case 047-domain-data-migration-workshop-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "migration": {
+        "migrationId": "047-domain-data-migration-workshop-operational-5",
+        "sourceEvidence": [
           {
             "id": "047-operational-detail-5-source-v2",
             "source": "Domain data migration workshop operational event log",
@@ -494,30 +601,58 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
+        "priorSourceMeaning": {
+          "id": "047-prior-sourcefieldmeaning-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "047-domain-data-migration-workshop-operational-5",
+          "systemId": "regional-customer-master",
+          "field": "status_code_7",
+          "meaning": "suspended in North; legacy-closed in South",
+          "missingStates": [
+            "not supplied"
+          ],
+          "conditionalUse": "interpret using region and effective date; retain original code"
+        },
+        "targetSchema": "not supplied in current evidence",
+        "targetSchemaFields": [],
+        "sourceRecords": [],
+        "sourceDeltas": [
+          {
+            "id": "047-operational-detail-5-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R047 Domain steward records: Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits. This current event is source 047-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 047-domain-data-migration-workshop-operational-5. The supplied typed prior 047-prior-sourcefieldmeaning-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
         ],
         "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "047-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "047-prior-sourcefieldmeaning-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "047-domain-data-migration-workshop-operational-5",
-            "systemId": "regional-customer-master",
-            "field": "status_code_7",
-            "meaning": "suspended in North; legacy-closed in South",
-            "missingStates": [
-              "not supplied"
+        "approvedMappingVersion": null,
+        "targetWriteEvidence": [
+          {
+            "id": "047-operational-detail-5-source-v2",
+            "source": "Domain data migration workshop operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R047 Domain steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R047 Domain steward records: Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits. This current event is source 047-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 047-domain-data-migration-workshop-operational-5. The supplied typed prior 047-prior-sourcefieldmeaning-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Rollback snapshot R47 was captured before 32 legitimate target edits were entered after migration. The reverse import plan has no row-level comparison for those post-snapshot edits."
             ],
-            "conditionalUse": "interpret using region and effective date; retain original code"
+            "contradicts": [],
+            "status": "current"
           }
-        }
+        ],
+        "rollbackPolicy": [
+          "current named-source authority; applicability must be checked against version and scope"
+        ]
       }
     },
     "expected": {

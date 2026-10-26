@@ -1,0 +1,114 @@
+{
+  "schema": "natlang.application/1",
+  "id": "039",
+  "title": "Apprenticeship practice simulator",
+  "entrypoint": "simulateApprenticeshipTurn.nl",
+  "interfaces": [
+    {
+      "name": "simulateApprenticeshipTurn",
+      "path": "simulateApprenticeshipTurn.nl",
+      "purpose": "Interpret one learner turn and advance a bounded, resumable training simulation."
+    },
+    {
+      "name": "compareObservedProcedure",
+      "path": "simulateApprenticeshipTurn/compareObservedProcedure.nl",
+      "purpose": "Debrief actual recorded actions against procedure obligations while separating process from outcome luck."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "authorSituation",
+        "paths": [
+          "simulateApprenticeshipTurn/scheduleFairScenarioChange/testRecoverableWithVisibleFacts.nl"
+        ]
+      },
+      {
+        "stage": "interpretAction",
+        "paths": [
+          "simulateApprenticeshipTurn/interpretTraineeUtterance/classifyQuestionOrAction.nl",
+          "simulateApprenticeshipTurn/matchPermittedProcedureStep.nl"
+        ]
+      },
+      {
+        "stage": "advanceWorld",
+        "paths": [
+          "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl",
+          "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyProcedureTransition.nl"
+        ]
+      },
+      {
+        "stage": "introduceChallenge",
+        "paths": [
+          "simulateApprenticeshipTurn/scheduleFairScenarioChange/chooseUnseenChallenge.nl",
+          "simulateApprenticeshipTurn/scheduleFairScenarioChange/testRecoverableWithVisibleFacts.nl"
+        ]
+      },
+      {
+        "stage": "debriefPerformance",
+        "paths": [
+          "simulateApprenticeshipTurn/compareObservedProcedure.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "simulateApprenticeshipTurn/interpretTraineeUtterance/resolveFromVisibleActorFacts.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "simulateApprenticeshipTurn/matchPermittedProcedureStep.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "simulateApprenticeshipTurn/scheduleFairScenarioChange/chooseUnseenChallenge.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "simulateApprenticeshipTurn/compareObservedProcedure.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "checkpoint": "versioned simulated world, applied turn IDs, actor knowledge partitions, and challenge seeds"
+  },
+  "effects": {
+    "unsafeAction": "simulated refusal or approved training consequence only",
+    "worldMutation": "in-memory proposal; never dispatch to real equipment"
+  },
+  "source_files": [
+    "qualification/authorSituation.nl",
+    "simulateApprenticeshipTurn.nl",
+    "simulateApprenticeshipTurn/advanceTrainingWorldOnce.nl",
+    "simulateApprenticeshipTurn/advanceTrainingWorldOnce/inspectTurnIdentifier.nl",
+    "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation.nl",
+    "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyProcedureTransition.nl",
+    "simulateApprenticeshipTurn/advanceTrainingWorldOnce/simulateApprovedTrainingOperation/verifyTrainingResourceInvariant.nl",
+    "simulateApprenticeshipTurn/checkpointTurn.nl",
+    "simulateApprenticeshipTurn/classifyQuestionOrAction.nl",
+    "simulateApprenticeshipTurn/compareObservedProcedure.nl",
+    "simulateApprenticeshipTurn/interpretTraineeUtterance.nl",
+    "simulateApprenticeshipTurn/interpretTraineeUtterance/classifyQuestionOrAction.nl",
+    "simulateApprenticeshipTurn/interpretTraineeUtterance/resolveFromVisibleActorFacts.nl",
+    "simulateApprenticeshipTurn/matchPermittedProcedureStep.nl",
+    "simulateApprenticeshipTurn/scheduleFairScenarioChange.nl",
+    "simulateApprenticeshipTurn/scheduleFairScenarioChange/chooseUnseenChallenge.nl",
+    "simulateApprenticeshipTurn/scheduleFairScenarioChange/testRecoverableWithVisibleFacts.nl",
+    "types.ts"
+  ]
+}

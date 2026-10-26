@@ -1,7 +1,7 @@
 [
   {
     "id": "069-environmental-reporting-evidence-assembler-gate-supported",
-    "root": "runCase/interpretBoundaries/audit/qualify.nl",
+    "root": "assembleEnvironmentalReport/verifyReportingBoundary.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
       "draft": {
@@ -77,7 +77,7 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-gate-contradictory",
-    "root": "runCase/interpretBoundaries/audit/qualify.nl",
+    "root": "assembleEnvironmentalReport/verifyReportingBoundary.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
       "draft": {
@@ -152,7 +152,7 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-gate-missing",
-    "root": "runCase/interpretBoundaries/audit/qualify.nl",
+    "root": "assembleEnvironmentalReport/verifyReportingBoundary.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
       "draft": {
@@ -204,13 +204,44 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-operational-1",
-    "root": "runCase.nl",
+    "root": "assembleEnvironmentalReport.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
-      "input": {
-        "caseId": "069-environmental-reporting-evidence-assembler-operational-1",
-        "goal": "Review the Environmental reporting evidence assembler evidence for case 069-environmental-reporting-evidence-assembler-operational-1; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "dossier": {
+        "report": {
+          "id": "069-environmental-reporting-evidence-assembler-operational-1:report",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "organizationId": "",
+          "reportingPeriod": "station S69, 12 May reporting date",
+          "requirementIds": [],
+          "reviewerId": "accountable reviewer",
+          "boundaryDefinition": "station S69, 12 May reporting date"
+        },
+        "boundary": {
+          "id": "069-prior-reportingboundary-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "069-environmental-reporting-evidence-assembler-operational-1",
+          "includedOperations": [
+            "station-S69-water-sampling"
+          ],
+          "excludedOperations": [
+            "unvalidated field estimate"
+          ],
+          "measurementRules": [
+            "use validated lab correction once",
+            "count exceedance days by effective measurement date"
+          ],
+          "effectiveScope": "station S69, 12 May reporting date"
+        },
+        "measures": [],
+        "allocations": [],
+        "claims": [],
+        "submissions": [],
+        "activityEvidence": [
           {
             "id": "069-operational-detail-1-source-v2",
             "source": "Environmental reporting evidence assembler operational event log",
@@ -225,16 +256,10 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "069-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "duplicateActivityIds": [],
+        "checkpoint": {
+          "edition": "v1",
+          "boundary": {
             "id": "069-prior-reportingboundary-detail-1-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -251,8 +276,37 @@
               "count exceedance days by effective measurement date"
             ],
             "effectiveScope": "station S69, 12 May reporting date"
-          }
+          },
+          "measures": [],
+          "allocations": [],
+          "claims": [],
+          "submissions": [],
+          "restatementBridge": [],
+          "invalidatedClaimIds": []
         }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "069-operational-detail-1-source-v2",
+            "source": "Environmental reporting evidence assembler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R069 Environmental steward; event version verified for this case",
+            "observedAt": "2026-10-02T10:15:00Z",
+            "text": "R069 Environmental steward records: Contractor C69 reports water-sampling activity ACT69-11 for station S69 on May 12. Internal ledger already contains physical event ACT69-11 from the station operator; both entries share timestamp and sample ID LAB69-1. This current event is source 069-operational-detail-1-source-v2 v2, observed 2026-10-02T10:15:00Z, for case 069-environmental-reporting-evidence-assembler-operational-1. The supplied typed prior 069-prior-reportingboundary-detail-1-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Contractor C69 reports water-sampling activity ACT69-11 for station S69 on May 12. Internal ledger already contains physical event ACT69-11 from the station operator; both entries share timestamp and sample ID LAB69-1."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "changedBoundary": null,
+        "proposedClaims": [],
+        "duplicateActivityCandidates": []
+      },
+      "officer": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -277,13 +331,44 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-operational-2",
-    "root": "runCase.nl",
+    "root": "assembleEnvironmentalReport.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
-      "input": {
-        "caseId": "069-environmental-reporting-evidence-assembler-operational-2",
-        "goal": "Review the Environmental reporting evidence assembler evidence for case 069-environmental-reporting-evidence-assembler-operational-2; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "dossier": {
+        "report": {
+          "id": "069-environmental-reporting-evidence-assembler-operational-2:report",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "organizationId": "",
+          "reportingPeriod": "station S69, 12 May reporting date",
+          "requirementIds": [],
+          "reviewerId": "accountable reviewer",
+          "boundaryDefinition": "station S69, 12 May reporting date"
+        },
+        "boundary": {
+          "id": "069-prior-reportingboundary-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "069-environmental-reporting-evidence-assembler-operational-2",
+          "includedOperations": [
+            "station-S69-water-sampling"
+          ],
+          "excludedOperations": [
+            "unvalidated field estimate"
+          ],
+          "measurementRules": [
+            "use validated lab correction once",
+            "count exceedance days by effective measurement date"
+          ],
+          "effectiveScope": "station S69, 12 May reporting date"
+        },
+        "measures": [],
+        "allocations": [],
+        "claims": [],
+        "submissions": [],
+        "activityEvidence": [
           {
             "id": "069-operational-detail-2-source-v2",
             "source": "Environmental reporting evidence assembler operational event log",
@@ -298,16 +383,10 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "069-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "duplicateActivityIds": [],
+        "checkpoint": {
+          "edition": "v1",
+          "boundary": {
             "id": "069-prior-reportingboundary-detail-2-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -324,8 +403,37 @@
               "count exceedance days by effective measurement date"
             ],
             "effectiveScope": "station S69, 12 May reporting date"
-          }
+          },
+          "measures": [],
+          "allocations": [],
+          "claims": [],
+          "submissions": [],
+          "restatementBridge": [],
+          "invalidatedClaimIds": []
         }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "069-operational-detail-2-source-v2",
+            "source": "Environmental reporting evidence assembler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R069 Environmental steward; event version verified for this case",
+            "observedAt": "2026-10-03T10:15:00Z",
+            "text": "R069 Environmental steward records: Meter M69-1 was replaced by M69-2 on June 15. Calibration certificates overlap for one week; the reporting workbook treats readings as a continuous series without a meter transition note. This current event is source 069-operational-detail-2-source-v2 v2, observed 2026-10-03T10:15:00Z, for case 069-environmental-reporting-evidence-assembler-operational-2. The supplied typed prior 069-prior-reportingboundary-detail-2-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Meter M69-1 was replaced by M69-2 on June 15. Calibration certificates overlap for one week; the reporting workbook treats readings as a continuous series without a meter transition note."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "changedBoundary": null,
+        "proposedClaims": [],
+        "duplicateActivityCandidates": []
+      },
+      "officer": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -350,13 +458,44 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-operational-3",
-    "root": "runCase.nl",
+    "root": "assembleEnvironmentalReport.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
-      "input": {
-        "caseId": "069-environmental-reporting-evidence-assembler-operational-3",
-        "goal": "Review the Environmental reporting evidence assembler evidence for case 069-environmental-reporting-evidence-assembler-operational-3; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "dossier": {
+        "report": {
+          "id": "069-environmental-reporting-evidence-assembler-operational-3:report",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "organizationId": "",
+          "reportingPeriod": "station S69, 12 May reporting date",
+          "requirementIds": [],
+          "reviewerId": "accountable reviewer",
+          "boundaryDefinition": "station S69, 12 May reporting date"
+        },
+        "boundary": {
+          "id": "069-prior-reportingboundary-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "069-environmental-reporting-evidence-assembler-operational-3",
+          "includedOperations": [
+            "station-S69-water-sampling"
+          ],
+          "excludedOperations": [
+            "unvalidated field estimate"
+          ],
+          "measurementRules": [
+            "use validated lab correction once",
+            "count exceedance days by effective measurement date"
+          ],
+          "effectiveScope": "station S69, 12 May reporting date"
+        },
+        "measures": [],
+        "allocations": [],
+        "claims": [],
+        "submissions": [],
+        "activityEvidence": [
           {
             "id": "069-operational-detail-3-source-v2",
             "source": "Environmental reporting evidence assembler operational event log",
@@ -371,16 +510,10 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "069-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "duplicateActivityIds": [],
+        "checkpoint": {
+          "edition": "v1",
+          "boundary": {
             "id": "069-prior-reportingboundary-detail-3-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -397,8 +530,37 @@
               "count exceedance days by effective measurement date"
             ],
             "effectiveScope": "station S69, 12 May reporting date"
-          }
+          },
+          "measures": [],
+          "allocations": [],
+          "claims": [],
+          "submissions": [],
+          "restatementBridge": [],
+          "invalidatedClaimIds": []
         }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "069-operational-detail-3-source-v2",
+            "source": "Environmental reporting evidence assembler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R069 Environmental steward; event version verified for this case",
+            "observedAt": "2026-10-04T10:15:00Z",
+            "text": "R069 Environmental steward records: Estimate E69 reports nitrate 6.8 mg/L for May 12. Lab certificate L69-v2 later measures 4.8 mg/L for the same sample; published draft still uses the estimate and has no version/restatement history. This current event is source 069-operational-detail-3-source-v2 v2, observed 2026-10-04T10:15:00Z, for case 069-environmental-reporting-evidence-assembler-operational-3. The supplied typed prior 069-prior-reportingboundary-detail-3-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Estimate E69 reports nitrate 6.8 mg/L for May 12. Lab certificate L69-v2 later measures 4.8 mg/L for the same sample; published draft still uses the estimate and has no version/restatement history."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "changedBoundary": null,
+        "proposedClaims": [],
+        "duplicateActivityCandidates": []
+      },
+      "officer": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -423,13 +585,44 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-operational-4",
-    "root": "runCase.nl",
+    "root": "assembleEnvironmentalReport.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
-      "input": {
-        "caseId": "069-environmental-reporting-evidence-assembler-operational-4",
-        "goal": "Review the Environmental reporting evidence assembler evidence for case 069-environmental-reporting-evidence-assembler-operational-4; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "dossier": {
+        "report": {
+          "id": "069-environmental-reporting-evidence-assembler-operational-4:report",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "organizationId": "",
+          "reportingPeriod": "station S69, 12 May reporting date",
+          "requirementIds": [],
+          "reviewerId": "accountable reviewer",
+          "boundaryDefinition": "station S69, 12 May reporting date"
+        },
+        "boundary": {
+          "id": "069-prior-reportingboundary-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "069-environmental-reporting-evidence-assembler-operational-4",
+          "includedOperations": [
+            "station-S69-water-sampling"
+          ],
+          "excludedOperations": [
+            "unvalidated field estimate"
+          ],
+          "measurementRules": [
+            "use validated lab correction once",
+            "count exceedance days by effective measurement date"
+          ],
+          "effectiveScope": "station S69, 12 May reporting date"
+        },
+        "measures": [],
+        "allocations": [],
+        "claims": [],
+        "submissions": [],
+        "activityEvidence": [
           {
             "id": "069-operational-detail-4-source-v2",
             "source": "Environmental reporting evidence assembler operational event log",
@@ -444,16 +637,10 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "069-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "duplicateActivityIds": [],
+        "checkpoint": {
+          "edition": "v1",
+          "boundary": {
             "id": "069-prior-reportingboundary-detail-4-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -470,8 +657,37 @@
               "count exceedance days by effective measurement date"
             ],
             "effectiveScope": "station S69, 12 May reporting date"
-          }
+          },
+          "measures": [],
+          "allocations": [],
+          "claims": [],
+          "submissions": [],
+          "restatementBridge": [],
+          "invalidatedClaimIds": []
         }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "069-operational-detail-4-source-v2",
+            "source": "Environmental reporting evidence assembler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R069 Environmental steward; event version verified for this case",
+            "observedAt": "2026-10-05T10:15:00Z",
+            "text": "R069 Environmental steward records: Report boundary expands on July 1 to include facility F69-2. Prior periods exclude that facility; current summary attributes the added 18% emissions to “operational deterioration” without separating the boundary change. This current event is source 069-operational-detail-4-source-v2 v2, observed 2026-10-05T10:15:00Z, for case 069-environmental-reporting-evidence-assembler-operational-4. The supplied typed prior 069-prior-reportingboundary-detail-4-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Report boundary expands on July 1 to include facility F69-2. Prior periods exclude that facility; current summary attributes the added 18% emissions to “operational deterioration” without separating the boundary change."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "changedBoundary": null,
+        "proposedClaims": [],
+        "duplicateActivityCandidates": []
+      },
+      "officer": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {
@@ -496,13 +712,44 @@
   },
   {
     "id": "069-environmental-reporting-evidence-assembler-operational-5",
-    "root": "runCase.nl",
+    "root": "assembleEnvironmentalReport.nl",
     "split_group": "069-environmental-reporting-evidence-assembler",
     "inputs": {
-      "input": {
-        "caseId": "069-environmental-reporting-evidence-assembler-operational-5",
-        "goal": "Review the Environmental reporting evidence assembler evidence for case 069-environmental-reporting-evidence-assembler-operational-5; return a traceable proposal from the supplied records.",
-        "evidence": [
+      "dossier": {
+        "report": {
+          "id": "069-environmental-reporting-evidence-assembler-operational-5:report",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "organizationId": "",
+          "reportingPeriod": "station S69, 12 May reporting date",
+          "requirementIds": [],
+          "reviewerId": "accountable reviewer",
+          "boundaryDefinition": "station S69, 12 May reporting date"
+        },
+        "boundary": {
+          "id": "069-prior-reportingboundary-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "069-environmental-reporting-evidence-assembler-operational-5",
+          "includedOperations": [
+            "station-S69-water-sampling"
+          ],
+          "excludedOperations": [
+            "unvalidated field estimate"
+          ],
+          "measurementRules": [
+            "use validated lab correction once",
+            "count exceedance days by effective measurement date"
+          ],
+          "effectiveScope": "station S69, 12 May reporting date"
+        },
+        "measures": [],
+        "allocations": [],
+        "claims": [],
+        "submissions": [],
+        "activityEvidence": [
           {
             "id": "069-operational-detail-5-source-v2",
             "source": "Environmental reporting evidence assembler operational event log",
@@ -517,16 +764,10 @@
             "status": "current"
           }
         ],
-        "policy": [
-          "current named-source authority; applicability must be checked against version and scope"
-        ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "069-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
+        "duplicateActivityIds": [],
+        "checkpoint": {
+          "edition": "v1",
+          "boundary": {
             "id": "069-prior-reportingboundary-detail-5-v1",
             "version": "v1",
             "createdAt": "2026-10-01",
@@ -543,8 +784,37 @@
               "count exceedance days by effective measurement date"
             ],
             "effectiveScope": "station S69, 12 May reporting date"
-          }
+          },
+          "measures": [],
+          "allocations": [],
+          "claims": [],
+          "submissions": [],
+          "restatementBridge": [],
+          "invalidatedClaimIds": []
         }
+      },
+      "change": {
+        "newEvidence": [
+          {
+            "id": "069-operational-detail-5-source-v2",
+            "source": "Environmental reporting evidence assembler operational event log",
+            "version": "v2",
+            "authority": "named accountable source owner: R069 Environmental steward; event version verified for this case",
+            "observedAt": "2026-10-06T10:15:00Z",
+            "text": "R069 Environmental steward records: Public draft P69 says station S69 “met every nitrate limit in May.” The evidence bundle includes three validated lab days and 28 unmeasured days; no full-period conclusion is supported. This current event is source 069-operational-detail-5-source-v2 v2, observed 2026-10-06T10:15:00Z, for case 069-environmental-reporting-evidence-assembler-operational-5. The supplied typed prior 069-prior-reportingboundary-detail-5-v1 v1 is preserved for comparison.",
+            "supports": [
+              "Public draft P69 says station S69 “met every nitrate limit in May.” The evidence bundle includes three validated lab days and 28 unmeasured days; no full-period conclusion is supported."
+            ],
+            "contradicts": [],
+            "status": "current"
+          }
+        ],
+        "changedBoundary": null,
+        "proposedClaims": [],
+        "duplicateActivityCandidates": []
+      },
+      "officer": {
+        "id": "accountable reviewer"
       }
     },
     "expected": {

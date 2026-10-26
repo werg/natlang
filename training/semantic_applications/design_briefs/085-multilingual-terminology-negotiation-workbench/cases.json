@@ -1,7 +1,7 @@
 [
   {
     "id": "085-first-gate-pass",
-    "root": "runCase/extractSenses/audit/qualify.nl",
+    "root": "negotiateTerminology/verifyTermOccurrence.nl",
     "split_group": "world-085-first-gate",
     "inputs": {
       "evidence": {
@@ -61,7 +61,7 @@
   },
   {
     "id": "085-first-gate-fail",
-    "root": "runCase/extractSenses/audit/qualify.nl",
+    "root": "negotiateTerminology/verifyTermOccurrence.nl",
     "split_group": "world-085-first-gate",
     "inputs": {
       "evidence": {
@@ -121,7 +121,7 @@
   },
   {
     "id": "085-first-gate-needs-review",
-    "root": "runCase/extractSenses/audit/qualify.nl",
+    "root": "negotiateTerminology/verifyTermOccurrence.nl",
     "split_group": "world-085-first-gate",
     "inputs": {
       "evidence": {
@@ -184,12 +184,11 @@
   },
   {
     "id": "085-workflow-1",
-    "root": "runCase.nl",
+    "root": "negotiateTerminology.nl",
     "split_group": "world-085-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Multilingual Terminology Negotiation Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "085-workflow-1-record",
           "caseId": "085-workflow-1",
           "sourceRefs": [
@@ -217,36 +216,89 @@
           "domainScope": "Privacy-preserving record linkage.",
           "terminologyOwnerId": "TERM-5",
           "releaseContext": "Methods text and checkout product interface."
+        },
+        "occurrences": [],
+        "concepts": [],
+        "options": [],
+        "decisions": [],
+        "impacts": [],
+        "evidence": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "085-workflow-1-record",
+          "occurrences": [],
+          "clusters": [],
+          "concepts": [],
+          "options": [],
+          "inflections": [],
+          "decisions": [],
+          "migrations": [],
+          "openDisagreements": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "085-event-1",
-          "source": "current domain record 085-E1",
-          "version": "v1",
-          "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "085-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "085-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "085-event-1",
-          "source": "current domain record 085-E1",
-          "version": "v1",
-          "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "occurrences": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "expertOpinions": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "regionalGuidance": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "inflectionReviews": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "releasedContent": [
+          {
+            "id": "085-event-1",
+            "source": "current domain record 085-E1",
+            "version": "v1",
+            "text": "Term record T-85 changes “privacy-preserving linkage” from singular to plural in an approved grammar pattern. The approved concept meaning is unchanged; released strings S-85A and S-85B use the singular form, and reviewer notes require context-aware inflection.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "owner": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Multilingual Terminology Negotiation Workbench",
@@ -269,12 +321,11 @@
   },
   {
     "id": "085-workflow-2",
-    "root": "runCase.nl",
+    "root": "negotiateTerminology.nl",
     "split_group": "world-085-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Multilingual Terminology Negotiation Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "085-workflow-2-record",
           "caseId": "085-workflow-2",
           "sourceRefs": [
@@ -302,36 +353,89 @@
           "domainScope": "Privacy-preserving record linkage.",
           "terminologyOwnerId": "TERM-5",
           "releaseContext": "Methods text and checkout product interface."
+        },
+        "occurrences": [],
+        "concepts": [],
+        "options": [],
+        "decisions": [],
+        "impacts": [],
+        "evidence": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "085-workflow-2-record",
+          "occurrences": [],
+          "clusters": [],
+          "concepts": [],
+          "options": [],
+          "inflections": [],
+          "decisions": [],
+          "migrations": [],
+          "openDisagreements": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "085-wf-2-source",
-          "source": "primary case artifact 085-E2",
-          "version": "v1",
-          "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "085-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "085-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "085-wf-2-source",
-          "source": "primary case artifact 085-E2",
-          "version": "v1",
-          "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "occurrences": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "expertOpinions": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "regionalGuidance": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "inflectionReviews": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "releasedContent": [
+          {
+            "id": "085-wf-2-source",
+            "source": "primary case artifact 085-E2",
+            "version": "v1",
+            "text": "Product string uses “archive” for both a saved file and a message-history view; target-language candidates differ by context.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "owner": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Multilingual Terminology Negotiation Workbench",
@@ -354,12 +458,11 @@
   },
   {
     "id": "085-workflow-3",
-    "root": "runCase.nl",
+    "root": "negotiateTerminology.nl",
     "split_group": "world-085-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Multilingual Terminology Negotiation Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "085-workflow-3-record",
           "caseId": "085-workflow-3",
           "sourceRefs": [
@@ -387,36 +490,89 @@
           "domainScope": "Privacy-preserving record linkage.",
           "terminologyOwnerId": "TERM-5",
           "releaseContext": "Methods text and checkout product interface."
+        },
+        "occurrences": [],
+        "concepts": [],
+        "options": [],
+        "decisions": [],
+        "impacts": [],
+        "evidence": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "085-workflow-3-record",
+          "occurrences": [],
+          "clusters": [],
+          "concepts": [],
+          "options": [],
+          "inflections": [],
+          "decisions": [],
+          "migrations": [],
+          "openDisagreements": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "085-event-3",
-          "source": "current domain record 085-E3",
-          "version": "v1",
-          "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "085-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "085-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "085-event-3",
-          "source": "current domain record 085-E3",
-          "version": "v1",
-          "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "occurrences": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "expertOpinions": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "regionalGuidance": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "inflectionReviews": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "releasedContent": [
+          {
+            "id": "085-event-3",
+            "source": "current domain record 085-E3",
+            "version": "v1",
+            "text": "Product UI uses “archive” for both a saved file and a message-history view. Termbase v5 supplies different target concepts; segment S-85-file and segment S-85-history share one source word but have distinct context keys.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "owner": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Multilingual Terminology Negotiation Workbench",
@@ -439,12 +595,11 @@
   },
   {
     "id": "085-workflow-4",
-    "root": "runCase.nl",
+    "root": "negotiateTerminology.nl",
     "split_group": "world-085-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Multilingual Terminology Negotiation Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "085-workflow-4-record",
           "caseId": "085-workflow-4",
           "sourceRefs": [
@@ -472,36 +627,89 @@
           "domainScope": "Privacy-preserving record linkage.",
           "terminologyOwnerId": "TERM-5",
           "releaseContext": "Methods text and checkout product interface."
+        },
+        "occurrences": [],
+        "concepts": [],
+        "options": [],
+        "decisions": [],
+        "impacts": [],
+        "evidence": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "085-workflow-4-record",
+          "occurrences": [],
+          "clusters": [],
+          "concepts": [],
+          "options": [],
+          "inflections": [],
+          "decisions": [],
+          "migrations": [],
+          "openDisagreements": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "085-event-4",
-          "source": "current domain record 085-E4",
-          "version": "v1",
-          "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "085-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "085-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "085-event-4",
-          "source": "current domain record 085-E4",
-          "version": "v1",
-          "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "occurrences": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "expertOpinions": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "regionalGuidance": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "inflectionReviews": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "releasedContent": [
+          {
+            "id": "085-event-4",
+            "source": "current domain record 085-E4",
+            "version": "v1",
+            "text": "Reviewers A and B disagree whether concept C-85 includes pseudonymous identifiers. Both accept that direct identifiers are excluded; definition record D-85 and locale examples do not resolve the boundary.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "owner": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Multilingual Terminology Negotiation Workbench",
@@ -524,12 +732,11 @@
   },
   {
     "id": "085-workflow-5",
-    "root": "runCase.nl",
+    "root": "negotiateTerminology.nl",
     "split_group": "world-085-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Multilingual Terminology Negotiation Workbench proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "project": {
           "id": "085-workflow-5-record",
           "caseId": "085-workflow-5",
           "sourceRefs": [
@@ -557,36 +764,89 @@
           "domainScope": "Privacy-preserving record linkage.",
           "terminologyOwnerId": "TERM-5",
           "releaseContext": "Methods text and checkout product interface."
+        },
+        "occurrences": [],
+        "concepts": [],
+        "options": [],
+        "decisions": [],
+        "impacts": [],
+        "evidence": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "085-workflow-5-record",
+          "occurrences": [],
+          "clusters": [],
+          "concepts": [],
+          "options": [],
+          "inflections": [],
+          "decisions": [],
+          "migrations": [],
+          "openDisagreements": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "085-wf-5-source",
-          "source": "primary case artifact 085-E5",
-          "version": "v1",
-          "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "085-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "085-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "085-wf-5-source",
-          "source": "primary case artifact 085-E5",
-          "version": "v1",
-          "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "occurrences": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "expertOpinions": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "regionalGuidance": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "inflectionReviews": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "releasedContent": [
+          {
+            "id": "085-wf-5-source",
+            "source": "primary case artifact 085-E5",
+            "version": "v1",
+            "text": "Glossary update v2 changes approved term T-8; three live strings still use the previous form.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "owner": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Multilingual Terminology Negotiation Workbench",

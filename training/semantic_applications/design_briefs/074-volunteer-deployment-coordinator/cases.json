@@ -1,7 +1,7 @@
 [
   {
     "id": "074-first-gate-pass",
-    "root": "runCase/interpretMission/audit/qualify.nl",
+    "root": "deployVolunteerMission/verifyMissionRequirement.nl",
     "split_group": "world-074-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "074-first-gate-fail",
-    "root": "runCase/interpretMission/audit/qualify.nl",
+    "root": "deployVolunteerMission/verifyMissionRequirement.nl",
     "split_group": "world-074-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "074-first-gate-needs-review",
-    "root": "runCase/interpretMission/audit/qualify.nl",
+    "root": "deployVolunteerMission/verifyMissionRequirement.nl",
     "split_group": "world-074-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "074-workflow-1",
-    "root": "runCase.nl",
+    "root": "deployVolunteerMission.nl",
     "split_group": "world-074-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "mission": {
+        "mission": {
           "id": "074-workflow-1-record",
           "caseId": "074-workflow-1",
           "sourceRefs": [
@@ -211,36 +210,114 @@
           ],
           "coordinatorId": "COORD-7",
           "missionWindow": "2026-04-17 08:00–12:00"
+        },
+        "requirements": [],
+        "capabilities": [],
+        "teams": [],
+        "briefings": [],
+        "revisions": [],
+        "evidence": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "074-workflow-1-record",
+          "mission": {
+            "id": "074-workflow-1-record",
+            "caseId": "074-workflow-1",
+            "sourceRefs": [
+              "074-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "VolunteerMission",
+            "subject": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "candidate",
+            "evidenceIds": [
+              "074-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "074-wf-1-source",
+              "sourceVersion": "v1"
+            },
+            "missionId": "MIS-74",
+            "objective": "Deliver 12 meal boxes on North Route before noon.",
+            "volunteerIds": [
+              "ELIO-74",
+              "P12"
+            ],
+            "coordinatorId": "COORD-7",
+            "missionWindow": "2026-04-17 08:00–12:00"
+          },
+          "requirements": [],
+          "capabilities": [],
+          "teams": [],
+          "supervision": [],
+          "briefings": [],
+          "withdrawals": [],
+          "completionReceipts": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "074-wf-1-source",
-          "source": "primary case artifact 074-E1",
-          "version": "v1",
-          "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "074-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "074-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "074-wf-1-source",
-          "source": "primary case artifact 074-E1",
-          "version": "v1",
-          "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "withdrawals": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "qualificationUpdates": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "modeChanges": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "accessInformation": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "completions": [
+          {
+            "id": "074-wf-1-source",
+            "source": "primary case artifact 074-E1",
+            "version": "v1",
+            "text": "Volunteer Elio V-74 has first-aid certificate FA-18 valid to 2026-10-01. The assigned youth-centre meal route requires child-safeguarding clearance; no clearance appears in his file.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Volunteer Deployment Coordinator",
@@ -263,12 +340,11 @@
   },
   {
     "id": "074-workflow-2",
-    "root": "runCase.nl",
+    "root": "deployVolunteerMission.nl",
     "split_group": "world-074-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "mission": {
+        "mission": {
           "id": "074-workflow-2-record",
           "caseId": "074-workflow-2",
           "sourceRefs": [
@@ -293,36 +369,114 @@
           ],
           "coordinatorId": "COORD-7",
           "missionWindow": "2026-04-17 08:00–12:00"
+        },
+        "requirements": [],
+        "capabilities": [],
+        "teams": [],
+        "briefings": [],
+        "revisions": [],
+        "evidence": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "074-workflow-2-record",
+          "mission": {
+            "id": "074-workflow-2-record",
+            "caseId": "074-workflow-2",
+            "sourceRefs": [
+              "074-wf-2-source"
+            ],
+            "state": "draft",
+            "kind": "VolunteerMission",
+            "subject": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "candidate",
+            "evidenceIds": [
+              "074-wf-2-source"
+            ],
+            "fields": {
+              "sourceArtifact": "074-wf-2-source",
+              "sourceVersion": "v1"
+            },
+            "missionId": "MIS-74",
+            "objective": "Deliver 12 meal boxes on North Route before noon.",
+            "volunteerIds": [
+              "ELIO-74",
+              "P12"
+            ],
+            "coordinatorId": "COORD-7",
+            "missionWindow": "2026-04-17 08:00–12:00"
+          },
+          "requirements": [],
+          "capabilities": [],
+          "teams": [],
+          "supervision": [],
+          "briefings": [],
+          "withdrawals": [],
+          "completionReceipts": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "074-wf-2-source",
-          "source": "primary case artifact 074-E2",
-          "version": "v1",
-          "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "074-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "074-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "074-wf-2-source",
-          "source": "primary case artifact 074-E2",
-          "version": "v1",
-          "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "withdrawals": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "qualificationUpdates": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "modeChanges": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "accessInformation": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "completions": [
+          {
+            "id": "074-wf-2-source",
+            "source": "primary case artifact 074-E2",
+            "version": "v1",
+            "text": "Elio withdraws from Route North at 07:10. Twelve deliveries are due by noon; volunteer P-12 is cleared for the first eight addresses only.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Volunteer Deployment Coordinator",
@@ -345,12 +499,11 @@
   },
   {
     "id": "074-workflow-3",
-    "root": "runCase.nl",
+    "root": "deployVolunteerMission.nl",
     "split_group": "world-074-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "mission": {
+        "mission": {
           "id": "074-workflow-3-record",
           "caseId": "074-workflow-3",
           "sourceRefs": [
@@ -375,36 +528,114 @@
           ],
           "coordinatorId": "COORD-7",
           "missionWindow": "2026-04-17 08:00–12:00"
+        },
+        "requirements": [],
+        "capabilities": [],
+        "teams": [],
+        "briefings": [],
+        "revisions": [],
+        "evidence": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "074-workflow-3-record",
+          "mission": {
+            "id": "074-workflow-3-record",
+            "caseId": "074-workflow-3",
+            "sourceRefs": [
+              "074-event-3"
+            ],
+            "state": "draft",
+            "kind": "VolunteerMission",
+            "subject": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "candidate",
+            "evidenceIds": [
+              "074-event-3"
+            ],
+            "fields": {
+              "sourceArtifact": "074-event-3",
+              "sourceVersion": "v1"
+            },
+            "missionId": "MIS-74",
+            "objective": "Deliver 12 meal boxes on North Route before noon.",
+            "volunteerIds": [
+              "ELIO-74",
+              "P12"
+            ],
+            "coordinatorId": "COORD-7",
+            "missionWindow": "2026-04-17 08:00–12:00"
+          },
+          "requirements": [],
+          "capabilities": [],
+          "teams": [],
+          "supervision": [],
+          "briefings": [],
+          "withdrawals": [],
+          "completionReceipts": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "074-event-3",
-          "source": "current domain record 074-E3",
-          "version": "v1",
-          "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "074-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "074-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "074-event-3",
-          "source": "current domain record 074-E3",
-          "version": "v1",
-          "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "withdrawals": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "qualificationUpdates": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "modeChanges": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "accessInformation": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "completions": [
+          {
+            "id": "074-event-3",
+            "source": "current domain record 074-E3",
+            "version": "v1",
+            "text": "Volunteer S-4’s assignment changed from remote dispatch to on-site setup at Depot West on 2026-10-27. S-4 has not acknowledged the new assignment; the site requires lifting up to 12 kg and has no step-free entrance.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Volunteer Deployment Coordinator",
@@ -427,12 +658,11 @@
   },
   {
     "id": "074-workflow-4",
-    "root": "runCase.nl",
+    "root": "deployVolunteerMission.nl",
     "split_group": "world-074-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "mission": {
+        "mission": {
           "id": "074-workflow-4-record",
           "caseId": "074-workflow-4",
           "sourceRefs": [
@@ -457,36 +687,114 @@
           ],
           "coordinatorId": "COORD-7",
           "missionWindow": "2026-04-17 08:00–12:00"
+        },
+        "requirements": [],
+        "capabilities": [],
+        "teams": [],
+        "briefings": [],
+        "revisions": [],
+        "evidence": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "074-workflow-4-record",
+          "mission": {
+            "id": "074-workflow-4-record",
+            "caseId": "074-workflow-4",
+            "sourceRefs": [
+              "074-event-4"
+            ],
+            "state": "draft",
+            "kind": "VolunteerMission",
+            "subject": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "candidate",
+            "evidenceIds": [
+              "074-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "074-event-4",
+              "sourceVersion": "v1"
+            },
+            "missionId": "MIS-74",
+            "objective": "Deliver 12 meal boxes on North Route before noon.",
+            "volunteerIds": [
+              "ELIO-74",
+              "P12"
+            ],
+            "coordinatorId": "COORD-7",
+            "missionWindow": "2026-04-17 08:00–12:00"
+          },
+          "requirements": [],
+          "capabilities": [],
+          "teams": [],
+          "supervision": [],
+          "briefings": [],
+          "withdrawals": [],
+          "completionReceipts": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "074-event-4",
-          "source": "current domain record 074-E4",
-          "version": "v1",
-          "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "074-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "074-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "074-event-4",
-          "source": "current domain record 074-E4",
-          "version": "v1",
-          "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "withdrawals": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "qualificationUpdates": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "modeChanges": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "accessInformation": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "completions": [
+          {
+            "id": "074-event-4",
+            "source": "current domain record 074-E4",
+            "version": "v1",
+            "text": "Route R-74 assigns volunteer J-6 to deliver sealed recipient access sheets from 09:00–11:00 on 2026-10-27. J-6 is confirmed for that route and window; the sheet lists home entry codes and recipient dietary notes, and the coordinator’s access log currently grants J-6 access through 18:00.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Volunteer Deployment Coordinator",
@@ -509,12 +817,11 @@
   },
   {
     "id": "074-workflow-5",
-    "root": "runCase.nl",
+    "root": "deployVolunteerMission.nl",
     "split_group": "world-074-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Volunteer Deployment Coordinator proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "mission": {
+        "mission": {
           "id": "074-workflow-5-record",
           "caseId": "074-workflow-5",
           "sourceRefs": [
@@ -539,36 +846,114 @@
           ],
           "coordinatorId": "COORD-7",
           "missionWindow": "2026-04-17 08:00–12:00"
+        },
+        "requirements": [],
+        "capabilities": [],
+        "teams": [],
+        "briefings": [],
+        "revisions": [],
+        "evidence": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "074-workflow-5-record",
+          "mission": {
+            "id": "074-workflow-5-record",
+            "caseId": "074-workflow-5",
+            "sourceRefs": [
+              "074-event-5"
+            ],
+            "state": "draft",
+            "kind": "VolunteerMission",
+            "subject": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "candidate",
+            "evidenceIds": [
+              "074-event-5"
+            ],
+            "fields": {
+              "sourceArtifact": "074-event-5",
+              "sourceVersion": "v1"
+            },
+            "missionId": "MIS-74",
+            "objective": "Deliver 12 meal boxes on North Route before noon.",
+            "volunteerIds": [
+              "ELIO-74",
+              "P12"
+            ],
+            "coordinatorId": "COORD-7",
+            "missionWindow": "2026-04-17 08:00–12:00"
+          },
+          "requirements": [],
+          "capabilities": [],
+          "teams": [],
+          "supervision": [],
+          "briefings": [],
+          "withdrawals": [],
+          "completionReceipts": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "074-event-5",
-          "source": "current domain record 074-E5",
-          "version": "v1",
-          "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "074-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "074-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "074-event-5",
-          "source": "current domain record 074-E5",
-          "version": "v1",
-          "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "withdrawals": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "qualificationUpdates": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "modeChanges": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "accessInformation": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "completions": [
+          {
+            "id": "074-event-5",
+            "source": "current domain record 074-E5",
+            "version": "v1",
+            "text": "Trainee volunteer T-7 is assigned Route South on 2026-10-27. Training rule TR-2 requires supervisor S-8 to accompany a trainee; S-8 is not listed on the roster and no replacement supervisor is recorded.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Volunteer Deployment Coordinator",

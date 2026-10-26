@@ -1,7 +1,7 @@
 [
   {
     "id": "036-misconception-repair-studio-gate-supported",
-    "root": "runCase/interpretResponses/audit/qualify.nl",
+    "root": "learningRepairSession/response/audit/qualify.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
       "draft": {
@@ -70,7 +70,7 @@
   },
   {
     "id": "036-misconception-repair-studio-gate-contradictory",
-    "root": "runCase/interpretResponses/audit/qualify.nl",
+    "root": "learningRepairSession/response/audit/qualify.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
       "draft": {
@@ -139,7 +139,7 @@
   },
   {
     "id": "036-misconception-repair-studio-gate-missing",
-    "root": "runCase/interpretResponses/audit/qualify.nl",
+    "root": "learningRepairSession/response/audit/qualify.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
       "draft": {
@@ -191,13 +191,13 @@
   },
   {
     "id": "036-misconception-repair-studio-operational-1",
-    "root": "runCase.nl",
+    "root": "learningRepairSession.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
-      "input": {
+      "session": {
         "caseId": "036-misconception-repair-studio-operational-1",
-        "goal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-1. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
-        "evidence": [
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-1. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
           {
             "id": "036-detail-1-response-v2",
             "source": "learner response record",
@@ -213,28 +213,27 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "authorizedPolicyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "authorized",
         "changedEvidenceIds": [
           "036-detail-1-response-v2"
         ],
-        "audience": "Instructor Mira Chen reviewing learner L-036 evidence.",
-        "domainRecords": {
-          "firstStage": {
-            "id": "036-prior-responseobservation-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "036-misconception-repair-studio-operational-1",
-            "taskId": "T-036-fractions-1",
-            "responseRef": "response-036-unconventional-v1",
-            "observedStrategy": "writes “2/8 + 4/8 = 6/8 = 3/4” for the displayed problem 1/4 + 1/2",
-            "errorLocation": "not coded; independent semantic review is pending"
-          }
+        "learnerAudience": "Instructor Mira Chen reviewing learner L-036 evidence.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-1",
+          "taskId": "T-036-fractions-1",
+          "responseRef": "response-036-unconventional-v1",
+          "observedStrategy": "writes “2/8 + 4/8 = 6/8 = 3/4” for the displayed problem 1/4 + 1/2",
+          "errorLocation": "not coded; independent semantic review is pending"
         }
-      }
+      },
+      "checkpoint": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -258,13 +257,13 @@
   },
   {
     "id": "036-misconception-repair-studio-operational-2",
-    "root": "runCase.nl",
+    "root": "learningRepairSession.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
-      "input": {
+      "session": {
         "caseId": "036-misconception-repair-studio-operational-2",
-        "goal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-2. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
-        "evidence": [
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-2. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
           {
             "id": "036-detail-2-task-v2",
             "source": "assessment item record",
@@ -280,28 +279,27 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "authorizedPolicyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
         "authorityStatus": "unclear",
         "changedEvidenceIds": [
           "036-detail-2-task-v2"
         ],
-        "audience": "Instructor and assessment editor reviewing task T-036-ambiguous.",
-        "domainRecords": {
-          "firstStage": {
-            "id": "036-prior-responseobservation-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "036-misconception-repair-studio-operational-2",
-            "taskId": "T-036-fractions-ambiguous",
-            "responseRef": "response-036-ambiguous-v1",
-            "observedStrategy": "selects 1/2 after reading “choose the larger number”; no explanation recorded",
-            "errorLocation": "prompt phrase “larger number” does not specify fraction value versus numerator"
-          }
+        "learnerAudience": "Instructor and assessment editor reviewing task T-036-ambiguous.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-2",
+          "taskId": "T-036-fractions-ambiguous",
+          "responseRef": "response-036-ambiguous-v1",
+          "observedStrategy": "selects 1/2 after reading “choose the larger number”; no explanation recorded",
+          "errorLocation": "prompt phrase “larger number” does not specify fraction value versus numerator"
         }
-      }
+      },
+      "checkpoint": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -325,13 +323,13 @@
   },
   {
     "id": "036-misconception-repair-studio-operational-3",
-    "root": "runCase.nl",
+    "root": "learningRepairSession.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
-      "input": {
+      "session": {
         "caseId": "036-misconception-repair-studio-operational-3",
-        "goal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-3. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
-        "evidence": [
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-3. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
           {
             "id": "036-session-checkpoint-v3",
             "source": "learning platform session store",
@@ -376,7 +374,7 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "authorizedPolicyClauses": [
           "Session state is supplied by the learning platform snapshot.",
           "The learner role may see task status and approved prompt content. Diagnostic labels are restricted to instructor role.",
           "Effect-ledger facts are read-only evidence; do not repeat an already delivered notification."
@@ -387,21 +385,20 @@
           "036-session-visibility-v2",
           "036-session-effect-key-v1"
         ],
-        "audience": "Learner L-036 (learner role); instructor-only annotations are outside this audience.",
-        "domainRecords": {
-          "firstStage": {
-            "id": "036-prior-responseobservation-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "036-misconception-repair-studio-operational-3",
-            "taskId": "diagnostic-fractions-2",
-            "responseRef": "task-2-completion-receipt-v1",
-            "observedStrategy": "completes the second diagnostic task with a written 3/4 comparison",
-            "errorLocation": "none recorded for the completed task"
-          }
+        "learnerAudience": "Learner L-036 (learner role); instructor-only annotations are outside this audience.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-3",
+          "taskId": "diagnostic-fractions-2",
+          "responseRef": "task-2-completion-receipt-v1",
+          "observedStrategy": "completes the second diagnostic task with a written 3/4 comparison",
+          "errorLocation": "none recorded for the completed task"
         }
-      }
+      },
+      "checkpoint": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -425,13 +422,13 @@
   },
   {
     "id": "036-misconception-repair-studio-operational-4",
-    "root": "runCase.nl",
+    "root": "learningRepairSession.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
-      "input": {
+      "session": {
         "caseId": "036-misconception-repair-studio-operational-4",
-        "goal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-4. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
-        "evidence": [
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-4. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
           {
             "id": "036-accommodation-plan-v2",
             "source": "approved accommodation registry",
@@ -461,7 +458,7 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "authorizedPolicyClauses": [
           "Approved accommodation changes response presentation only.",
           "The assessed competency remains fraction equivalence and addition.",
           "Do not infer additional accommodations or disclose sensitive details beyond the authorized reviewer."
@@ -471,21 +468,20 @@
           "036-accommodation-plan-v2",
           "036-audio-response-v1"
         ],
-        "audience": "Instructor Mira Chen and learner L-036; accommodation details are access-scoped.",
-        "domainRecords": {
-          "firstStage": {
-            "id": "036-prior-responseobservation-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "036-misconception-repair-studio-operational-4",
-            "taskId": "T-036-fractions-accommodation",
-            "responseRef": "response-036-audio-v1",
-            "observedStrategy": "explains that 1/2 is equivalent to 4/8 in an approved spoken response",
-            "errorLocation": "presentation changed from written response to audio; target competency unchanged"
-          }
+        "learnerAudience": "Instructor Mira Chen and learner L-036; accommodation details are access-scoped.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-4",
+          "taskId": "T-036-fractions-accommodation",
+          "responseRef": "response-036-audio-v1",
+          "observedStrategy": "explains that 1/2 is equivalent to 4/8 in an approved spoken response",
+          "errorLocation": "presentation changed from written response to audio; target competency unchanged"
         }
-      }
+      },
+      "checkpoint": null
     },
     "expected": {
       "preservePriorVersion": true,
@@ -509,13 +505,13 @@
   },
   {
     "id": "036-misconception-repair-studio-operational-5",
-    "root": "runCase.nl",
+    "root": "learningRepairSession.nl",
     "split_group": "036-misconception-repair-studio",
     "inputs": {
-      "input": {
+      "session": {
         "caseId": "036-misconception-repair-studio-operational-5",
-        "goal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-5. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
-        "evidence": [
+        "learningGoal": "Apply the operational-detail scenario to Misconception repair studio case 036-misconception-repair-studio-operational-5. Reconcile the named current event with the supplied typed prior record; return a reviewable proposal with evidence and unresolved conditions.",
+        "sourceEvidence": [
           {
             "id": "036-attempt-ledger-v3",
             "source": "practice platform attempt ledger",
@@ -545,7 +541,7 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "authorizedPolicyClauses": [
           "The case permits at most three guided attempts before instructor review.",
           "Do not continue automated prompting after the handoff threshold.",
           "Instructor response is a proposed human task, not an automatically completed intervention."
@@ -555,21 +551,20 @@
           "036-attempt-ledger-v3",
           "036-instructor-assignment-v1"
         ],
-        "audience": "Learner L-036 and assigned instructor Mira Chen; private learner notes remain scoped.",
-        "domainRecords": {
-          "firstStage": {
-            "id": "036-prior-responseobservation-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "036-misconception-repair-studio-operational-5",
-            "taskId": "T-036-fractions-repair",
-            "responseRef": "attempt-3-v1",
-            "observedStrategy": "three attempts do not distinguish denominator addition from copied response",
-            "errorLocation": "third unsuccessful attempt; learner asks for instructor help"
-          }
+        "learnerAudience": "Learner L-036 and assigned instructor Mira Chen; private learner notes remain scoped.",
+        "observedResponse": {
+          "id": "036-prior-responseobservation-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "036-misconception-repair-studio-operational-5",
+          "taskId": "T-036-fractions-repair",
+          "responseRef": "attempt-3-v1",
+          "observedStrategy": "three attempts do not distinguish denominator addition from copied response",
+          "errorLocation": "third unsuccessful attempt; learner asks for instructor help"
         }
-      }
+      },
+      "checkpoint": null
     },
     "expected": {
       "preservePriorVersion": true,

@@ -1,7 +1,7 @@
 [
   {
     "id": "034-interpretRequirements-supported",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "coordinateResearchWindow/requirements/audit/qualify.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "draft": {
@@ -101,7 +101,7 @@
   },
   {
     "id": "034-interpretRequirements-contradictory",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "coordinateResearchWindow/requirements/audit/qualify.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "draft": {
@@ -201,7 +201,7 @@
   },
   {
     "id": "034-interpretRequirements-missing",
-    "root": "runCase/interpretRequirements/audit/qualify.nl",
+    "root": "coordinateResearchWindow/requirements/audit/qualify.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "draft": {
@@ -301,7 +301,7 @@
   },
   {
     "id": "034-workflow-01",
-    "root": "runCase.nl",
+    "root": "coordinateResearchWindow.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "request": {
@@ -311,9 +311,9 @@
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
+      "state": {
         "version": "v1",
-        "caseRecords": [
+        "schedules": [
           {
             "projectIds": [
               "E-34A",
@@ -412,7 +412,7 @@
   },
   {
     "id": "034-workflow-02",
-    "root": "runCase.nl",
+    "root": "coordinateResearchWindow.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "request": {
@@ -422,9 +422,9 @@
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
+      "state": {
         "version": "v1",
-        "caseRecords": [
+        "schedules": [
           {
             "projectIds": [
               "E-34A",
@@ -523,7 +523,7 @@
   },
   {
     "id": "034-workflow-03",
-    "root": "runCase.nl",
+    "root": "coordinateResearchWindow.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "request": {
@@ -533,9 +533,9 @@
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
+      "state": {
         "version": "v1",
-        "caseRecords": [
+        "schedules": [
           {
             "projectIds": [
               "E-34A",
@@ -634,7 +634,7 @@
   },
   {
     "id": "034-workflow-04",
-    "root": "runCase.nl",
+    "root": "coordinateResearchWindow.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "request": {
@@ -644,9 +644,9 @@
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
+      "state": {
         "version": "v1",
-        "caseRecords": [
+        "schedules": [
           {
             "projectIds": [
               "E-34A",
@@ -745,7 +745,7 @@
   },
   {
     "id": "034-workflow-05",
-    "root": "runCase.nl",
+    "root": "coordinateResearchWindow.nl",
     "split_group": "design-brief-app-034",
     "inputs": {
       "request": {
@@ -755,9 +755,9 @@
         "requestedBy": "case owner",
         "expectedVersion": "v1"
       },
-      "snapshot": {
+      "state": {
         "version": "v1",
-        "caseRecords": [
+        "schedules": [
           {
             "projectIds": [
               "E-34A",

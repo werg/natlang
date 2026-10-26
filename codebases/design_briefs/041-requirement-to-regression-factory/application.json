@@ -1,0 +1,100 @@
+{
+  "schema": "natlang.application/1",
+  "id": "041",
+  "title": "Requirement-to-regression factory",
+  "entrypoint": "compileRegressionPlan.nl",
+  "interfaces": [
+    {
+      "name": "compileRegressionPlan",
+      "path": "compileRegressionPlan.nl",
+      "purpose": "Compile a traceable regression proposal from requirements, independent oracles, isolated execution constraints, and seeded-defect qualification."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverBehavior",
+        "paths": [
+          "compileRegressionPlan/recoverObservableContracts.nl"
+        ]
+      },
+      {
+        "stage": "modelPartitions",
+        "paths": [
+          "compileRegressionPlan/designDecisivePartitions.nl"
+        ]
+      },
+      {
+        "stage": "constructTests",
+        "paths": [
+          "compileRegressionPlan/authorIndependentOracles.nl"
+        ]
+      },
+      {
+        "stage": "interpretFailures",
+        "paths": [
+          "compileRegressionPlan/diagnoseTestFailures.nl"
+        ]
+      },
+      {
+        "stage": "qualifySuite",
+        "paths": [
+          "compileRegressionPlan/challengeSuiteWithSeededDefects.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "compileRegressionPlan/diagnoseTestFailures.nl",
+          "compileRegressionPlan/diagnoseTestFailures/preserveLoadFailureWindow.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "compileRegressionPlan/invalidateChangedAssertions.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "compileRegressionPlan/inspectExecutionBoundary.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "compileRegressionPlan/inspectExecutionBoundary.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "compileRegressionPlan/challengeSuiteWithSeededDefects.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "suite": "versioned assertion-to-requirement traceability, prior suite versions, and retained repaired-bug cases"
+  },
+  "effects": {
+    "execution": "sandbox eligibility decision only until an approved harness submits a bounded run",
+    "productionCredentials": "block before launch; never expose credential value to a fixture"
+  },
+  "source_files": [
+    "compileRegressionPlan.nl",
+    "compileRegressionPlan/authorIndependentOracles.nl",
+    "compileRegressionPlan/challengeSuiteWithSeededDefects.nl",
+    "compileRegressionPlan/designDecisivePartitions.nl",
+    "compileRegressionPlan/diagnoseTestFailures.nl",
+    "compileRegressionPlan/diagnoseTestFailures/preserveLoadFailureWindow.nl",
+    "compileRegressionPlan/inspectExecutionBoundary.nl",
+    "compileRegressionPlan/invalidateChangedAssertions.nl",
+    "compileRegressionPlan/recoverObservableContracts.nl",
+    "qualification/recoverBehavior.nl",
+    "types.ts"
+  ]
+}

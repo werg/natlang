@@ -1,7 +1,7 @@
 [
   {
     "id": "078-first-gate-pass",
-    "root": "runCase/recoverInstructions/audit/qualify.nl",
+    "root": "prepareAppointment/verifyPreparationRequirement.nl",
     "split_group": "world-078-first-gate",
     "inputs": {
       "evidence": {
@@ -60,7 +60,7 @@
   },
   {
     "id": "078-first-gate-fail",
-    "root": "runCase/recoverInstructions/audit/qualify.nl",
+    "root": "prepareAppointment/verifyPreparationRequirement.nl",
     "split_group": "world-078-first-gate",
     "inputs": {
       "evidence": {
@@ -119,7 +119,7 @@
   },
   {
     "id": "078-first-gate-needs-review",
-    "root": "runCase/recoverInstructions/audit/qualify.nl",
+    "root": "prepareAppointment/verifyPreparationRequirement.nl",
     "split_group": "world-078-first-gate",
     "inputs": {
       "evidence": {
@@ -181,12 +181,11 @@
   },
   {
     "id": "078-workflow-1",
-    "root": "runCase.nl",
+    "root": "prepareAppointment.nl",
     "split_group": "world-078-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Appointment Preparation Service proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "appointment": {
           "id": "078-workflow-1-record",
           "caseId": "078-workflow-1",
           "sourceRefs": [
@@ -211,36 +210,125 @@
             "phone",
             "large-print"
           ]
+        },
+        "requirements": [],
+        "contexts": [],
+        "checklists": [],
+        "questions": [],
+        "statuses": [],
+        "evidence": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "078-workflow-1-record",
+          "appointment": {
+            "id": "078-workflow-1-record",
+            "caseId": "078-workflow-1",
+            "sourceRefs": [
+              "078-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "AppointmentPreparation",
+            "subject": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "candidate",
+            "evidenceIds": [
+              "078-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "078-wf-1-source",
+              "sourceVersion": "v2"
+            },
+            "patientId": "P78",
+            "appointmentId": "APT-78",
+            "approvedInstructionId": "INST-78",
+            "coordinatorId": "CLINIC-2",
+            "communicationPreferences": [
+              "phone",
+              "large-print"
+            ]
+          },
+          "instructionVersion": "INST-78",
+          "appointmentVersion": "078-workflow-1-record",
+          "reminders": [],
+          "checklist": [],
+          "conflicts": [],
+          "translationReviewRefs": [],
+          "delivery": [],
+          "acknowledgments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "078-wf-1-source",
-          "source": "clinic message CM-78 and approved instruction I-78",
-          "version": "v2",
-          "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "078-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "078-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "078-wf-1-source",
-          "source": "clinic message CM-78 and approved instruction I-78",
-          "version": "v2",
-          "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "instructionUpdates": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "patientReports": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "translationReviews": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "representativeConsent": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveries": [
+          {
+            "id": "078-wf-1-source",
+            "source": "clinic message CM-78 and approved instruction I-78",
+            "version": "v2",
+            "text": "Clinic message CM-78 issued 2026-10-26 moves appointment A-78 on 2026-11-02 from 10:30 to 11:15. Approved instruction I-78 v2 says arrive 15 minutes before the appointment; reminder card RC-78 still says arrive at 10:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Appointment Preparation Service",
@@ -263,12 +351,11 @@
   },
   {
     "id": "078-workflow-2",
-    "root": "runCase.nl",
+    "root": "prepareAppointment.nl",
     "split_group": "world-078-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Appointment Preparation Service proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "appointment": {
           "id": "078-workflow-2-record",
           "caseId": "078-workflow-2",
           "sourceRefs": [
@@ -293,36 +380,125 @@
             "phone",
             "large-print"
           ]
+        },
+        "requirements": [],
+        "contexts": [],
+        "checklists": [],
+        "questions": [],
+        "statuses": [],
+        "evidence": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "078-workflow-2-record",
+          "appointment": {
+            "id": "078-workflow-2-record",
+            "caseId": "078-workflow-2",
+            "sourceRefs": [
+              "078-event-2"
+            ],
+            "state": "draft",
+            "kind": "AppointmentPreparation",
+            "subject": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "candidate",
+            "evidenceIds": [
+              "078-event-2"
+            ],
+            "fields": {
+              "sourceArtifact": "078-event-2",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P78",
+            "appointmentId": "APT-78",
+            "approvedInstructionId": "INST-78",
+            "coordinatorId": "CLINIC-2",
+            "communicationPreferences": [
+              "phone",
+              "large-print"
+            ]
+          },
+          "instructionVersion": "INST-78",
+          "appointmentVersion": "078-workflow-2-record",
+          "reminders": [],
+          "checklist": [],
+          "conflicts": [],
+          "translationReviewRefs": [],
+          "delivery": [],
+          "acknowledgments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "078-event-2",
-          "source": "current domain record 078-E2",
-          "version": "v1",
-          "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "078-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "078-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "078-event-2",
-          "source": "current domain record 078-E2",
-          "version": "v1",
-          "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "instructionUpdates": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "patientReports": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "translationReviews": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "representativeConsent": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveries": [
+          {
+            "id": "078-event-2",
+            "source": "current domain record 078-E2",
+            "version": "v1",
+            "text": "Original appointment instruction v3 says “continue prescribed medicine unless the clinic calls”; translated French version v3 omits “unless the clinic calls.” Translation reviewer F-2 has not approved the exception wording; appointment A-78 is tomorrow at 11:15.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Appointment Preparation Service",
@@ -345,12 +521,11 @@
   },
   {
     "id": "078-workflow-3",
-    "root": "runCase.nl",
+    "root": "prepareAppointment.nl",
     "split_group": "world-078-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Appointment Preparation Service proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "appointment": {
           "id": "078-workflow-3-record",
           "caseId": "078-workflow-3",
           "sourceRefs": [
@@ -375,36 +550,125 @@
             "phone",
             "large-print"
           ]
+        },
+        "requirements": [],
+        "contexts": [],
+        "checklists": [],
+        "questions": [],
+        "statuses": [],
+        "evidence": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "078-workflow-3-record",
+          "appointment": {
+            "id": "078-workflow-3-record",
+            "caseId": "078-workflow-3",
+            "sourceRefs": [
+              "078-event-3"
+            ],
+            "state": "draft",
+            "kind": "AppointmentPreparation",
+            "subject": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "candidate",
+            "evidenceIds": [
+              "078-event-3"
+            ],
+            "fields": {
+              "sourceArtifact": "078-event-3",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P78",
+            "appointmentId": "APT-78",
+            "approvedInstructionId": "INST-78",
+            "coordinatorId": "CLINIC-2",
+            "communicationPreferences": [
+              "phone",
+              "large-print"
+            ]
+          },
+          "instructionVersion": "INST-78",
+          "appointmentVersion": "078-workflow-3-record",
+          "reminders": [],
+          "checklist": [],
+          "conflicts": [],
+          "translationReviewRefs": [],
+          "delivery": [],
+          "acknowledgments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "078-event-3",
-          "source": "current domain record 078-E3",
-          "version": "v1",
-          "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "078-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "078-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "078-event-3",
-          "source": "current domain record 078-E3",
-          "version": "v1",
-          "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "instructionUpdates": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "patientReports": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "translationReviews": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "representativeConsent": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveries": [
+          {
+            "id": "078-event-3",
+            "source": "current domain record 078-E3",
+            "version": "v1",
+            "text": "Patient P-78 received clinic text I-4 saying “take your morning dose” and paper instruction I-5 saying “do not take the morning dose” for the same appointment A-78. Neither message supersedes the other; the medication field has no clinician clarification.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Appointment Preparation Service",
@@ -427,12 +691,11 @@
   },
   {
     "id": "078-workflow-4",
-    "root": "runCase.nl",
+    "root": "prepareAppointment.nl",
     "split_group": "world-078-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Appointment Preparation Service proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "appointment": {
           "id": "078-workflow-4-record",
           "caseId": "078-workflow-4",
           "sourceRefs": [
@@ -457,36 +720,125 @@
             "phone",
             "large-print"
           ]
+        },
+        "requirements": [],
+        "contexts": [],
+        "checklists": [],
+        "questions": [],
+        "statuses": [],
+        "evidence": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "078-workflow-4-record",
+          "appointment": {
+            "id": "078-workflow-4-record",
+            "caseId": "078-workflow-4",
+            "sourceRefs": [
+              "078-event-4"
+            ],
+            "state": "draft",
+            "kind": "AppointmentPreparation",
+            "subject": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "candidate",
+            "evidenceIds": [
+              "078-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "078-event-4",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P78",
+            "appointmentId": "APT-78",
+            "approvedInstructionId": "INST-78",
+            "coordinatorId": "CLINIC-2",
+            "communicationPreferences": [
+              "phone",
+              "large-print"
+            ]
+          },
+          "instructionVersion": "INST-78",
+          "appointmentVersion": "078-workflow-4-record",
+          "reminders": [],
+          "checklist": [],
+          "conflicts": [],
+          "translationReviewRefs": [],
+          "delivery": [],
+          "acknowledgments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "078-event-4",
-          "source": "current domain record 078-E4",
-          "version": "v1",
-          "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "078-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "078-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "078-event-4",
-          "source": "current domain record 078-E4",
-          "version": "v1",
-          "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "instructionUpdates": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "patientReports": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "translationReviews": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "representativeConsent": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveries": [
+          {
+            "id": "078-event-4",
+            "source": "current domain record 078-E4",
+            "version": "v1",
+            "text": "Representative R-78 asks to receive appointment messages for P-78. Consent C-78 expired on 2026-10-20 and covered transport reminders only; the current request would include medication-preparation messages.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Appointment Preparation Service",
@@ -509,12 +861,11 @@
   },
   {
     "id": "078-workflow-5",
-    "root": "runCase.nl",
+    "root": "prepareAppointment.nl",
     "split_group": "world-078-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Appointment Preparation Service proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "appointment": {
           "id": "078-workflow-5-record",
           "caseId": "078-workflow-5",
           "sourceRefs": [
@@ -539,36 +890,125 @@
             "phone",
             "large-print"
           ]
+        },
+        "requirements": [],
+        "contexts": [],
+        "checklists": [],
+        "questions": [],
+        "statuses": [],
+        "evidence": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "078-workflow-5-record",
+          "appointment": {
+            "id": "078-workflow-5-record",
+            "caseId": "078-workflow-5",
+            "sourceRefs": [
+              "078-event-5"
+            ],
+            "state": "draft",
+            "kind": "AppointmentPreparation",
+            "subject": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "candidate",
+            "evidenceIds": [
+              "078-event-5"
+            ],
+            "fields": {
+              "sourceArtifact": "078-event-5",
+              "sourceVersion": "v1"
+            },
+            "patientId": "P78",
+            "appointmentId": "APT-78",
+            "approvedInstructionId": "INST-78",
+            "coordinatorId": "CLINIC-2",
+            "communicationPreferences": [
+              "phone",
+              "large-print"
+            ]
+          },
+          "instructionVersion": "INST-78",
+          "appointmentVersion": "078-workflow-5-record",
+          "reminders": [],
+          "checklist": [],
+          "conflicts": [],
+          "translationReviewRefs": [],
+          "delivery": [],
+          "acknowledgments": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "078-event-5",
-          "source": "current domain record 078-E5",
-          "version": "v1",
-          "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "078-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "078-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "078-event-5",
-          "source": "current domain record 078-E5",
-          "version": "v1",
-          "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "instructionUpdates": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "appointmentUpdates": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "patientReports": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "translationReviews": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "representativeConsent": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "deliveries": [
+          {
+            "id": "078-event-5",
+            "source": "current domain record 078-E5",
+            "version": "v1",
+            "text": "Appointment reminder SMS M-78 to P-78 bounced at 08:42 with code UNDELIVERED. The record lists a current landline and a signed voice-call preference V-78; there is no successful-delivery receipt for SMS.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "coordinator": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Appointment Preparation Service",

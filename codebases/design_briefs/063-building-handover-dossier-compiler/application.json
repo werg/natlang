@@ -1,0 +1,99 @@
+{
+  "schema": "natlang.application/1",
+  "id": "063",
+  "title": "Building handover dossier compiler",
+  "entrypoint": "compileBuildingDossier.nl",
+  "interfaces": [
+    {
+      "name": "compileBuildingDossier",
+      "path": "compileBuildingDossier.nl",
+      "purpose": "Compile variant-specific manuals, exact-asset certificates, permitted durable archives, accessible exports, and expiring temporary obligations into a reviewable handover package."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverRequirements",
+        "paths": [
+          "compileBuildingDossier/reconcileHandoverRequirements.nl"
+        ]
+      },
+      {
+        "stage": "resolveAssets",
+        "paths": [
+          "compileBuildingDossier/matchCertificatesByExactAsset.nl"
+        ]
+      },
+      {
+        "stage": "matchArtifacts",
+        "paths": [
+          "compileBuildingDossier/selectInstalledVariantManuals.nl"
+        ]
+      },
+      {
+        "stage": "planClosure",
+        "paths": [
+          "compileBuildingDossier/transferTemporaryArrangementTasks.nl"
+        ]
+      },
+      {
+        "stage": "assembleDossier",
+        "paths": [
+          "compileBuildingDossier/reconcileHandoverRequirements.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "compileBuildingDossier/selectInstalledVariantManuals.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "compileBuildingDossier/matchCertificatesByExactAsset.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "compileBuildingDossier/assessPortalDeliverablePreservation.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "compileBuildingDossier/planAccessibleHandoverExports.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "compileBuildingDossier/transferTemporaryArrangementTasks.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "asset-linked deliverables and temporary follow-up obligations",
+    "writes": "dossier acceptance proposal only"
+  },
+  "effects": [
+    "archive task",
+    "accessible export task",
+    "temporary arrangement follow-up"
+  ],
+  "source_files": [
+    "compileBuildingDossier.nl",
+    "compileBuildingDossier/assessPortalDeliverablePreservation.nl",
+    "compileBuildingDossier/matchCertificatesByExactAsset.nl",
+    "compileBuildingDossier/planAccessibleHandoverExports.nl",
+    "compileBuildingDossier/reconcileHandoverRequirements.nl",
+    "compileBuildingDossier/selectInstalledVariantManuals.nl",
+    "compileBuildingDossier/transferTemporaryArrangementTasks.nl",
+    "qualification/recoverRequirements.nl",
+    "types.ts"
+  ]
+}

@@ -1,17 +1,7 @@
 # 088 — Historical Record Linkage Atelier
 
-## Source-derived procedure
+## Distinct algorithm: build a reversible identity network over uncertain time and changing geography
 
-Five domain stages: normalizeRecords, generateLinks, judgeIdentity, reconcileNetworks, prepareResearchView. Each stage has a bounded evidence preparation step, field-level decision, typed draft construction, and independent audit. Ten cross-cutting procedures frame scope, select authority, plan dependencies and evidence, reconcile collections, resolve questions, propose bounded repairs, prepare review, compose a recipient-specific view, and assess the impact of source deltas.
+Each historical source record is normalized without replacing recorded names, dates or places. Approximate dates become bounded intervals with the original expression preserved; place names are mapped to time-specific jurisdiction candidates rather than modern boundaries. A possible identity edge is scored only from evidence about temporal overlap, kinship, location and attributes. Reused family names across generations remain distinct unless relationship and timing evidence connect them.
 
-## Domain algorithms and gates
-
-- **normalizeRecords** — Preserve original spellings, date expressions, and geographic descriptions while creating normalized search forms. Distinguish transcription uncertainty from historical variation, and avoid converting approximate dates or changing place names into falsely precise modern facts. Gate: Original representation and uncertainty remain available.
-- **generateLinks** — Generate candidate links using names, chronology, places, relationships, and contextual descriptions. Include plausible aliases while preserving hard incompatibilities, and audit records excluded by blocking so unusual spellings do not disappear from consideration. Gate: Candidate generation is bounded and recall is independently assessed.
-- **judgeIdentity** — Compare evidence for identity versus kinship, institutional succession, or coincidence. Weigh source reliability only within its actual scope, preserve competing candidates, and avoid treating a plausible story as proof of identity. Gate: Established links require discriminating evidence and compatible chronology.
-- **reconcileNetworks** — Check proposed identity and relationship links globally for impossible dates, incompatible simultaneous identities, and circular assumptions. Prevent one uncertain link from becoming evidence that confirms itself through a derived family or institutional network. Gate: No self-supporting evidence cycle or established chronological contradiction.
-- **prepareResearchView** — Publish a reviewable linkage view with source-level explanations and explicit alternatives. Support corrections and reversible splits, preserve stable source identifiers, and expose uncertainty to downstream researchers instead of exporting only a deceptively clean graph. Gate: Accepted and provisional relationships remain distinguishable in every export.
-
-## Action boundary
-
-The natural-language program produces a proposal for accountable review. Authorization, persistence, and external effects are exact host responsibilities. Evidence gaps and conflicts stay visible; no action is inferred from fluent completion.
+The network retains same, different, related and uncertain findings as edge states. If an archivist prematurely merged entities, a split operation traces affected links and edition statements, reverses only the dependent assumptions, and records the downstream impact. Corrections to transcriptions similarly invalidate only links depending on the changed source. The research view carries search scope, candidate explanations, unresolved edges and historical geography so researchers can inspect rather than inherit a false certainty.

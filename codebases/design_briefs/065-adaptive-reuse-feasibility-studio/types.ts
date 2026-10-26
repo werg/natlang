@@ -79,3 +79,19 @@ export type StageResultReuseOptionReview = { accepted: ReuseOptionReview[]; unre
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; recoverSiteFacts: StageResultReuseSiteFact; interpretGoals: StageResultReuseGoal; generateConcepts: StageResultReuseConcept; planInvestigations: StageResultReuseInvestigation; compareFeasibility: StageResultReuseOptionReview; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { recoverSiteFacts: StageResultReuseSiteFact; interpretGoals: StageResultReuseGoal; generateConcepts: StageResultReuseConcept; planInvestigations: StageResultReuseInvestigation; compareFeasibility: StageResultReuseOptionReview; };
+
+export type ReuseFeasibilityDossier = { caseId: ID; siteFacts: ReuseSiteFact[]; historicDrawings: HistoricPlan[]; surveys: CurrentSurvey[]; intendedUses: AdaptiveReuseGoal[]; constraints: ReuseConstraint[]; concepts: ReuseConceptOption[]; structuralAssumptions: StructuralAssumption[]; investigations: InvestigationProposal[]; costScopes: CostScope[]; phases: ReusePhase[]; circulationRoutes: TemporaryRoute[]; evidence: Evidence[] };
+export type HistoricPlan = { drawingId: ID; revision: string; areaId: ID; feature: string; sourceDate: string; evidenceRef: Ref };
+export type CurrentSurvey = { surveyId: ID; areaId: ID; feature: string; measuredValue: string; method: string; qualified: boolean; observedAt: string; evidenceRef: Ref };
+export type AdaptiveReuseGoal = { goalId: ID; intendedUse: string; capacity: string; operatingHours: string; changedAt: string; authorityRef: Ref };
+export type ReuseConstraint = { constraintId: ID; areaId: ID; kind: string; limit: string; evidenceRef: Ref };
+export type ReuseConceptOption = { optionId: ID; affectedAreas: ID[]; enablingWorks: ID[]; assumedCapacity: string; requiredInvestigations: ID[]; phaseIds: ID[] };
+export type StructuralAssumption = { assumptionId: ID; areaId: ID; claim: string; dependsOn: string[]; qualifiedReviewRequired: boolean; evidenceRef: Ref | null };
+export type InvestigationProposal = { investigationId: ID; areaId: ID; question: string; qualification: string; dependencyOptionIds: ID[]; status: string };
+export type CostScope = { costId: ID; optionId: ID; workType: string; included: boolean; amountBasis: string; evidenceRef: Ref };
+export type ReusePhase = { phaseId: ID; areaIds: ID[]; openToPublic: boolean; activeConstructionAreas: ID[]; temporaryRoutes: ID[] };
+export type TemporaryRoute = { routeId: ID; fromArea: ID; toArea: ID; accessible: boolean; conflictsWith: ID[]; evidenceRef: Ref };
+export type SiteEvidenceReconciliation = { preferredCurrentFacts: ID[]; historicalConflicts: string[]; unverifiedAreas: ID[] };
+export type ReuseFeasibilityReview = { caseId: ID; evidence: SiteEvidenceReconciliation; affectedConstraints: ID[]; contingentOptions: ID[]; investigationGates: string[]; missingEnablingWorks: ID[]; phaseAccessConflicts: ID[]; optionDisposition: string; commitAllowed: boolean };
+export type ConstraintReassessment = { affectedIds: ID[]; blockers: string[]; missingEvidence: string[] };
+export type StructuralReviewGate = { contingentOptionIds: ID[]; reviewTasks: string[] };

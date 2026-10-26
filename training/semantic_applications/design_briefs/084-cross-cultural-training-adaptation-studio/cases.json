@@ -1,7 +1,7 @@
 [
   {
     "id": "084-first-gate-pass",
-    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "root": "adaptTrainingScenario/verifyTrainingMechanism.nl",
     "split_group": "world-084-first-gate",
     "inputs": {
       "evidence": {
@@ -63,7 +63,7 @@
   },
   {
     "id": "084-first-gate-fail",
-    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "root": "adaptTrainingScenario/verifyTrainingMechanism.nl",
     "split_group": "world-084-first-gate",
     "inputs": {
       "evidence": {
@@ -125,7 +125,7 @@
   },
   {
     "id": "084-first-gate-needs-review",
-    "root": "runCase/recoverLearningMechanism/audit/qualify.nl",
+    "root": "adaptTrainingScenario/verifyTrainingMechanism.nl",
     "split_group": "world-084-first-gate",
     "inputs": {
       "evidence": {
@@ -190,12 +190,11 @@
   },
   {
     "id": "084-workflow-1",
-    "root": "runCase.nl",
+    "root": "adaptTrainingScenario.nl",
     "split_group": "world-084-workflow-1",
     "inputs": {
-      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "program": {
           "id": "084-workflow-1-record",
           "caseId": "084-workflow-1",
           "sourceRefs": [
@@ -219,36 +218,103 @@
           ],
           "reviewerId": "INSTR-4",
           "targetContext": "Shift-change handoff at a community clinic."
+        },
+        "mechanisms": [],
+        "contextFindings": [],
+        "scenarios": [],
+        "tests": [],
+        "releases": [],
+        "evidence": [
+          {
+            "id": "084-wf-1-source",
+            "source": "primary case artifact 084-E1",
+            "version": "v1",
+            "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "084-workflow-1-record",
+          "program": {
+            "id": "084-workflow-1-record",
+            "caseId": "084-workflow-1",
+            "sourceRefs": [
+              "084-wf-1-source"
+            ],
+            "state": "draft",
+            "kind": "TrainingAdaptation",
+            "subject": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "candidate",
+            "evidenceIds": [
+              "084-wf-1-source"
+            ],
+            "fields": {
+              "sourceArtifact": "084-wf-1-source",
+              "sourceVersion": "v1"
+            },
+            "trainingProgramId": "TRN-84",
+            "audienceGuidanceId": "AUD-84",
+            "competencyIds": [
+              "HANDOFF-1"
+            ],
+            "reviewerId": "INSTR-4",
+            "targetContext": "Shift-change handoff at a community clinic."
+          },
+          "kernels": [],
+          "fit": [],
+          "scenarios": [],
+          "tests": [],
+          "releases": [],
+          "invalidatedScenarioIds": [],
+          "reviewerApprovals": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "084-wf-1-source",
-          "source": "primary case artifact 084-E1",
-          "version": "v1",
-          "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "084-workflow-1-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "084-workflow-1-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "084-wf-1-source",
-          "source": "primary case artifact 084-E1",
-          "version": "v1",
-          "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "audienceEvidence": [
+          {
+            "id": "084-wf-1-source",
+            "source": "primary case artifact 084-E1",
+            "version": "v1",
+            "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "reviewerResponses": [
+          {
+            "id": "084-wf-1-source",
+            "source": "primary case artifact 084-E1",
+            "version": "v1",
+            "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "learnerTestResults": [
+          {
+            "id": "084-wf-1-source",
+            "source": "primary case artifact 084-E1",
+            "version": "v1",
+            "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "curriculumUpdates": [
+          {
+            "id": "084-wf-1-source",
+            "source": "primary case artifact 084-E1",
+            "version": "v1",
+            "text": "Learner group L-84 recognizes shift-change handoff but not the “baton” analogy used in draft scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "reviewer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Cross Cultural Training Adaptation Studio",
@@ -271,12 +337,11 @@
   },
   {
     "id": "084-workflow-2",
-    "root": "runCase.nl",
+    "root": "adaptTrainingScenario.nl",
     "split_group": "world-084-workflow-2",
     "inputs": {
-      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "program": {
           "id": "084-workflow-2-record",
           "caseId": "084-workflow-2",
           "sourceRefs": [
@@ -300,36 +365,103 @@
           ],
           "reviewerId": "INSTR-4",
           "targetContext": "Shift-change handoff at a community clinic."
+        },
+        "mechanisms": [],
+        "contextFindings": [],
+        "scenarios": [],
+        "tests": [],
+        "releases": [],
+        "evidence": [
+          {
+            "id": "084-event-2",
+            "source": "current domain record 084-E2",
+            "version": "v1",
+            "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "084-workflow-2-record",
+          "program": {
+            "id": "084-workflow-2-record",
+            "caseId": "084-workflow-2",
+            "sourceRefs": [
+              "084-event-2"
+            ],
+            "state": "draft",
+            "kind": "TrainingAdaptation",
+            "subject": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "candidate",
+            "evidenceIds": [
+              "084-event-2"
+            ],
+            "fields": {
+              "sourceArtifact": "084-event-2",
+              "sourceVersion": "v1"
+            },
+            "trainingProgramId": "TRN-84",
+            "audienceGuidanceId": "AUD-84",
+            "competencyIds": [
+              "HANDOFF-1"
+            ],
+            "reviewerId": "INSTR-4",
+            "targetContext": "Shift-change handoff at a community clinic."
+          },
+          "kernels": [],
+          "fit": [],
+          "scenarios": [],
+          "tests": [],
+          "releases": [],
+          "invalidatedScenarioIds": [],
+          "reviewerApprovals": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "084-event-2",
-          "source": "current domain record 084-E2",
-          "version": "v1",
-          "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "084-workflow-2-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "084-workflow-2-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "084-event-2",
-          "source": "current domain record 084-E2",
-          "version": "v1",
-          "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "audienceEvidence": [
+          {
+            "id": "084-event-2",
+            "source": "current domain record 084-E2",
+            "version": "v1",
+            "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "reviewerResponses": [
+          {
+            "id": "084-event-2",
+            "source": "current domain record 084-E2",
+            "version": "v1",
+            "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "learnerTestResults": [
+          {
+            "id": "084-event-2",
+            "source": "current domain record 084-E2",
+            "version": "v1",
+            "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "curriculumUpdates": [
+          {
+            "id": "084-event-2",
+            "source": "current domain record 084-E2",
+            "version": "v1",
+            "text": "Reviewer M-84 disputes the assumption that a “baton handoff” analogy is familiar to the rural audience; audience interview A-4 recognizes shift changes but not relay racing. The disagreement is unresolved and applies only to scenario S-4.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "reviewer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Cross Cultural Training Adaptation Studio",
@@ -352,12 +484,11 @@
   },
   {
     "id": "084-workflow-3",
-    "root": "runCase.nl",
+    "root": "adaptTrainingScenario.nl",
     "split_group": "world-084-workflow-3",
     "inputs": {
-      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "program": {
           "id": "084-workflow-3-record",
           "caseId": "084-workflow-3",
           "sourceRefs": [
@@ -381,36 +512,103 @@
           ],
           "reviewerId": "INSTR-4",
           "targetContext": "Shift-change handoff at a community clinic."
+        },
+        "mechanisms": [],
+        "contextFindings": [],
+        "scenarios": [],
+        "tests": [],
+        "releases": [],
+        "evidence": [
+          {
+            "id": "084-wf-3-source",
+            "source": "primary case artifact 084-E3",
+            "version": "v1",
+            "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "084-workflow-3-record",
+          "program": {
+            "id": "084-workflow-3-record",
+            "caseId": "084-workflow-3",
+            "sourceRefs": [
+              "084-wf-3-source"
+            ],
+            "state": "draft",
+            "kind": "TrainingAdaptation",
+            "subject": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "candidate",
+            "evidenceIds": [
+              "084-wf-3-source"
+            ],
+            "fields": {
+              "sourceArtifact": "084-wf-3-source",
+              "sourceVersion": "v1"
+            },
+            "trainingProgramId": "TRN-84",
+            "audienceGuidanceId": "AUD-84",
+            "competencyIds": [
+              "HANDOFF-1"
+            ],
+            "reviewerId": "INSTR-4",
+            "targetContext": "Shift-change handoff at a community clinic."
+          },
+          "kernels": [],
+          "fit": [],
+          "scenarios": [],
+          "tests": [],
+          "releases": [],
+          "invalidatedScenarioIds": [],
+          "reviewerApprovals": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "084-wf-3-source",
-          "source": "primary case artifact 084-E3",
-          "version": "v1",
-          "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "084-workflow-3-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "084-workflow-3-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "084-wf-3-source",
-          "source": "primary case artifact 084-E3",
-          "version": "v1",
-          "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "audienceEvidence": [
+          {
+            "id": "084-wf-3-source",
+            "source": "primary case artifact 084-E3",
+            "version": "v1",
+            "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "reviewerResponses": [
+          {
+            "id": "084-wf-3-source",
+            "source": "primary case artifact 084-E3",
+            "version": "v1",
+            "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "learnerTestResults": [
+          {
+            "id": "084-wf-3-source",
+            "source": "primary case artifact 084-E3",
+            "version": "v1",
+            "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "curriculumUpdates": [
+          {
+            "id": "084-wf-3-source",
+            "source": "primary case artifact 084-E3",
+            "version": "v1",
+            "text": "Translated scenario removes the receiving-team role, so no learner can identify who must confirm the handoff.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "reviewer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Cross Cultural Training Adaptation Studio",
@@ -433,12 +631,11 @@
   },
   {
     "id": "084-workflow-4",
-    "root": "runCase.nl",
+    "root": "adaptTrainingScenario.nl",
     "split_group": "world-084-workflow-4",
     "inputs": {
-      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "program": {
           "id": "084-workflow-4-record",
           "caseId": "084-workflow-4",
           "sourceRefs": [
@@ -462,36 +659,103 @@
           ],
           "reviewerId": "INSTR-4",
           "targetContext": "Shift-change handoff at a community clinic."
+        },
+        "mechanisms": [],
+        "contextFindings": [],
+        "scenarios": [],
+        "tests": [],
+        "releases": [],
+        "evidence": [
+          {
+            "id": "084-event-4",
+            "source": "current domain record 084-E4",
+            "version": "v1",
+            "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "084-workflow-4-record",
+          "program": {
+            "id": "084-workflow-4-record",
+            "caseId": "084-workflow-4",
+            "sourceRefs": [
+              "084-event-4"
+            ],
+            "state": "draft",
+            "kind": "TrainingAdaptation",
+            "subject": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "candidate",
+            "evidenceIds": [
+              "084-event-4"
+            ],
+            "fields": {
+              "sourceArtifact": "084-event-4",
+              "sourceVersion": "v1"
+            },
+            "trainingProgramId": "TRN-84",
+            "audienceGuidanceId": "AUD-84",
+            "competencyIds": [
+              "HANDOFF-1"
+            ],
+            "reviewerId": "INSTR-4",
+            "targetContext": "Shift-change handoff at a community clinic."
+          },
+          "kernels": [],
+          "fit": [],
+          "scenarios": [],
+          "tests": [],
+          "releases": [],
+          "invalidatedScenarioIds": [],
+          "reviewerApprovals": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "084-event-4",
-          "source": "current domain record 084-E4",
-          "version": "v1",
-          "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "084-workflow-4-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "084-workflow-4-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "084-event-4",
-          "source": "current domain record 084-E4",
-          "version": "v1",
-          "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "audienceEvidence": [
+          {
+            "id": "084-event-4",
+            "source": "current domain record 084-E4",
+            "version": "v1",
+            "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "reviewerResponses": [
+          {
+            "id": "084-event-4",
+            "source": "current domain record 084-E4",
+            "version": "v1",
+            "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "learnerTestResults": [
+          {
+            "id": "084-event-4",
+            "source": "current domain record 084-E4",
+            "version": "v1",
+            "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "curriculumUpdates": [
+          {
+            "id": "084-event-4",
+            "source": "current domain record 084-E4",
+            "version": "v1",
+            "text": "Local training example E-84 depicts a single named migrant worker as responsible for a whole neighborhood’s missed appointments. Community reviewer R-4 says this framing may reinforce a stereotype; supplied local case notes identify staffing and transport constraints instead.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "reviewer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Cross Cultural Training Adaptation Studio",
@@ -514,12 +778,11 @@
   },
   {
     "id": "084-workflow-5",
-    "root": "runCase.nl",
+    "root": "adaptTrainingScenario.nl",
     "split_group": "world-084-workflow-5",
     "inputs": {
-      "request": "Prepare a reviewable Cross Cultural Training Adaptation Studio proposal from the supplied case records and evidence.",
-      "records": [
-        {
+      "dossier": {
+        "program": {
           "id": "084-workflow-5-record",
           "caseId": "084-workflow-5",
           "sourceRefs": [
@@ -543,36 +806,103 @@
           ],
           "reviewerId": "INSTR-4",
           "targetContext": "Shift-change handoff at a community clinic."
+        },
+        "mechanisms": [],
+        "contextFindings": [],
+        "scenarios": [],
+        "tests": [],
+        "releases": [],
+        "evidence": [
+          {
+            "id": "084-event-5",
+            "source": "current domain record 084-E5",
+            "version": "v1",
+            "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "checkpoint": {
+          "revision": "084-workflow-5-record",
+          "program": {
+            "id": "084-workflow-5-record",
+            "caseId": "084-workflow-5",
+            "sourceRefs": [
+              "084-event-5"
+            ],
+            "state": "draft",
+            "kind": "TrainingAdaptation",
+            "subject": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "candidate",
+            "evidenceIds": [
+              "084-event-5"
+            ],
+            "fields": {
+              "sourceArtifact": "084-event-5",
+              "sourceVersion": "v1"
+            },
+            "trainingProgramId": "TRN-84",
+            "audienceGuidanceId": "AUD-84",
+            "competencyIds": [
+              "HANDOFF-1"
+            ],
+            "reviewerId": "INSTR-4",
+            "targetContext": "Shift-change handoff at a community clinic."
+          },
+          "kernels": [],
+          "fit": [],
+          "scenarios": [],
+          "tests": [],
+          "releases": [],
+          "invalidatedScenarioIds": [],
+          "reviewerApprovals": []
         }
-      ],
-      "evidence": [
-        {
-          "id": "084-event-5",
-          "source": "current domain record 084-E5",
-          "version": "v1",
-          "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ],
-      "policyCandidates": [],
-      "expectedCoverage": [
-        "084-workflow-5-record"
-      ],
-      "recipient": "accountable reviewer",
-      "committedSnapshot": [
-        "084-workflow-5-record"
-      ],
-      "sourceDelta": [
-        {
-          "id": "084-event-5",
-          "source": "current domain record 084-E5",
-          "version": "v1",
-          "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
-          "status": "current",
-          "authority": "primary domain evidence"
-        }
-      ]
+      },
+      "change": {
+        "audienceEvidence": [
+          {
+            "id": "084-event-5",
+            "source": "current domain record 084-E5",
+            "version": "v1",
+            "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "reviewerResponses": [
+          {
+            "id": "084-event-5",
+            "source": "current domain record 084-E5",
+            "version": "v1",
+            "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "learnerTestResults": [
+          {
+            "id": "084-event-5",
+            "source": "current domain record 084-E5",
+            "version": "v1",
+            "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ],
+        "curriculumUpdates": [
+          {
+            "id": "084-event-5",
+            "source": "current domain record 084-E5",
+            "version": "v1",
+            "text": "Source curriculum CUR-84 v3 adds a decision step for confirming the receiving-team medication list. Adapted scenario S-4 is based on v2 and contains no such step; mechanism M-2 and instructor key K-2 cite v2.",
+            "status": "current",
+            "authority": "primary domain evidence"
+          }
+        ]
+      },
+      "reviewer": {
+        "id": "accountable reviewer"
+      }
     },
     "expected": {
       "application": "Cross Cultural Training Adaptation Studio",

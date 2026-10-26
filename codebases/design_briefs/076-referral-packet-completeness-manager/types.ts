@@ -142,3 +142,13 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type ReferralCoordinator = { id: string };
+export type PacketChange = { checklistUpdates: EvidenceItem[]; identityEvidence: EvidenceItem[]; documents: EvidenceItem[]; clinicianUpdates: EvidenceItem[]; recipientReceipts: EvidenceItem[] };
+export type ReferralDossier = { referral: ReferralCase; requirements: ReferralRequirement[]; matches: ReferralRecordMatch[]; gaps: ReferralGap[]; requests: ReferralRequest[]; packets: ReferralPacket[]; evidence: EvidenceItem[]; checkpoint: ReferralCheckpoint };
+export type IdentityBinding = { patientId: string; documentIds: string[]; verifiedRefs: string[]; mismatches: string[]; status: 'verified'|'uncertain'|'mismatch' };
+export type ChecklistDelta = { version: string; addedRequirementIds: string[]; changedRequirementIds: string[]; unchangedRequirementIds: string[]; missingAuthority: string[] };
+export type DocumentFinding = { documentId: string; requirementId: string; state: 'present-valid'|'unsigned'|'expired'|'wrong-episode'|'identity-uncertain'|'missing'; evidenceIds: string[]; }
+export type TransferLedger = { packetId: string; state: 'prepared'|'authorized'|'dispatched'|'acknowledged'|'unknown'; receiptRefs: string[]; recipientReadback: string[]; resendAllowed: boolean; blockers: string[]; };
+export type ReferralCheckpoint = { revision: string; referral: ReferralCase; identity: IdentityBinding; checklist: ChecklistDelta; documents: DocumentFinding[]; priorityRef: string; episodeScope: string; requests: ReferralRequest[]; transfer: TransferLedger; disclosureRefs: string[]; };
+export type ReferralProposal = { application: 'Referral Packet Completeness Manager'; status: 'ready-for-review'|'blocked'; identity: IdentityBinding; checklist: ChecklistDelta; documents: DocumentFinding[]; gaps: ReferralGap[]; requests: ReferralRequest[]; clinicianPriorityRef: string; transfer: TransferLedger; blockers: string[]; actionBoundary: string; resumeState: ReferralCheckpoint; };

@@ -146,3 +146,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type RightsSteward = { id: string };
+export type RightsChange = { permissions: EvidenceItem[]; useChanges: EvidenceItem[]; expiryUpdates: EvidenceItem[]; attributionCorrections: EvidenceItem[]; assetInventory: EvidenceItem[] };
+export type RightsDossier = { collectionUse: CollectionUse; permissions: CollectionPermission[]; proposedUses: ProposedCollectionUse[]; findings: RightsFinding[]; clearanceTasks: ClearanceTask[]; useRecords: CollectionUseRecord[]; evidence: EvidenceItem[]; checkpoint: RightsCheckpoint };
+export type UseDimension = { itemId: string; rightType: string; permittedUses: string[]; prohibitedUses: string[]; channels: string[]; audiences: string[]; attributionRule: string; validThrough: string; sourceIds: string[]; }
+export type UseCompatibility = { proposedUseId: string; itemId: string; compatible: boolean; missingRights: string[]; expiredRights: string[]; incompatibleDimensions: string[]; evidenceIds: string[]; }
+export type RightsDerivative = { assetId: string; sourceItemIds: string[]; channel: string; attributionVersion: string; permissionIds: string[]; state: 'cleared'|'blocked'|'remove'|'review'; }
+export type RightsCheckpoint = { revision: string; permissions: CollectionPermission[]; uses: ProposedCollectionUse[]; compatibility: UseCompatibility[]; clearanceTasks: ClearanceTask[]; derivatives: RightsDerivative[]; expiryActions: string[]; attributionUpdates: string[]; };
+export type RightsProposal = { application: 'Collection Rights and Consent Steward'; status: 'ready-for-review'|'blocked'; permissions: CollectionPermission[]; compatibility: UseCompatibility[]; clearances: ClearanceTask[]; register: CollectionUseRecord; derivatives: RightsDerivative[]; expiryActions: string[]; blockers: string[]; actionBoundary: string; resumeState: RightsCheckpoint; };

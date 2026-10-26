@@ -1,0 +1,110 @@
+{
+  "schema": "natlang.application/1",
+  "id": "043",
+  "title": "Incident recovery orchestrator",
+  "entrypoint": "recoverIncident.nl",
+  "interfaces": [
+    {
+      "name": "recoverIncident",
+      "path": "recoverIncident.nl",
+      "purpose": "Scope observed user impact, maintain provisional causes, bound diagnostics, sequence authorized runbooks, and verify user outcomes."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "frameImpact",
+        "paths": [
+          "recoverIncident/scopeObservedImpact.nl",
+          "recoverIncident/scopeObservedImpact/identifyTelemetryBlindSpots.nl"
+        ]
+      },
+      {
+        "stage": "maintainHypotheses",
+        "paths": [
+          "recoverIncident/compareCausalExplanations.nl",
+          "recoverIncident/compareCausalExplanations/separateEvidenceByHypothesis.nl"
+        ]
+      },
+      {
+        "stage": "selectDiagnostics",
+        "paths": [
+          "recoverIncident/constrainDiagnosticQueries.nl",
+          "recoverIncident/constrainDiagnosticQueries/enforceDeclaredQueryBudget.nl"
+        ]
+      },
+      {
+        "stage": "planRecovery",
+        "paths": [
+          "recoverIncident/sequenceAuthorizedRunbook.nl",
+          "recoverIncident/sequenceAuthorizedRunbook/verifyCommanderApprovalAtProposalTime.nl"
+        ]
+      },
+      {
+        "stage": "verifyRestoration",
+        "paths": [
+          "recoverIncident/verifyUserOutcomeRecovery.nl",
+          "recoverIncident/verifyUserOutcomeRecovery/identifyUnverifiedUserCohorts.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "recoverIncident/constrainDiagnosticQueries.nl",
+          "recoverIncident/constrainDiagnosticQueries/enforceDeclaredQueryBudget.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "recoverIncident/verifyUserOutcomeRecovery.nl",
+          "recoverIncident/verifyUserOutcomeRecovery/identifyUnverifiedUserCohorts.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "recoverIncident/reconcileAmbiguousActionCompletion.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "recoverIncident/sequenceAuthorizedRunbook.nl",
+          "recoverIncident/sequenceAuthorizedRunbook/verifyCommanderApprovalAtProposalTime.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "recoverIncident/constrainDiagnosticQueries.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "incident": "append-only observed impact, hypothesis evidence, action idempotency, authority changes, and restoration checks"
+  },
+  "effects": {
+    "diagnostics": "allowlisted and budget checked; intrusive checks require commander approval",
+    "recovery": "proposal only; no shell command or production action is dispatched"
+  },
+  "source_files": [
+    "qualification/frameImpact.nl",
+    "recoverIncident.nl",
+    "recoverIncident/compareCausalExplanations.nl",
+    "recoverIncident/compareCausalExplanations/separateEvidenceByHypothesis.nl",
+    "recoverIncident/constrainDiagnosticQueries.nl",
+    "recoverIncident/constrainDiagnosticQueries/enforceDeclaredQueryBudget.nl",
+    "recoverIncident/reconcileAmbiguousActionCompletion.nl",
+    "recoverIncident/scopeObservedImpact.nl",
+    "recoverIncident/scopeObservedImpact/identifyTelemetryBlindSpots.nl",
+    "recoverIncident/sequenceAuthorizedRunbook.nl",
+    "recoverIncident/sequenceAuthorizedRunbook/verifyCommanderApprovalAtProposalTime.nl",
+    "recoverIncident/verifyUserOutcomeRecovery.nl",
+    "recoverIncident/verifyUserOutcomeRecovery/identifyUnverifiedUserCohorts.nl",
+    "types.ts"
+  ]
+}

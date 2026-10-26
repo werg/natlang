@@ -79,3 +79,14 @@ export type StageResultMaintenanceHandover = { accepted: MaintenanceHandover[]; 
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretObservations: StageResultAssetObservation; selectProcedure: StageResultMaintenanceProcedureFit; constructWorkPlan: StageResultMaintenanceWorkOrder; interpretProgress: StageResultMaintenanceProgress; composeHandover: StageResultMaintenanceHandover; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretObservations: StageResultAssetObservation; selectProcedure: StageResultMaintenanceProcedureFit; constructWorkPlan: StageResultMaintenanceWorkOrder; interpretProgress: StageResultMaintenanceProgress; composeHandover: StageResultMaintenanceHandover; };
+
+export type MaintenanceShiftCase = { caseId: ID; priorObservation: AssetObservation; assetIdentity: AssetIdentityEvidence; reportedObservations: MaintenanceObservation[]; plannedTasks: MaintenanceTask[]; completionReports: CompletionReport[]; partChanges: PartRevisionChange[]; isolation: IsolationCheckpoint | null; faultHistory: FaultRecurrence[]; incomingShift: string; outgoingShift: string; procedures: MaintenanceProcedureFit[]; evidence: Evidence[] };
+export type AssetIdentityEvidence = { officialIds: ID[]; aliases: string[]; locationRefs: Ref[]; verifiedRef: Ref | null };
+export type MaintenanceObservation = { assetId: ID; symptom: string; condition: string; observedAt: string; evidenceRef: Ref };
+export type MaintenanceTask = { taskId: ID; assetId: ID; procedureId: ID; prerequisiteIds: ID[]; requiredChecks: string[]; status: string };
+export type CompletionReport = { taskId: ID; reportedDone: boolean; verificationRefs: Ref[]; verifiedChecks: string[]; reportedAt: string };
+export type PartRevisionChange = { taskId: ID; specifiedPart: ID; offeredPart: ID; specifiedRevision: string; offeredRevision: string; compatibilityEvidence: Ref[] };
+export type IsolationCheckpoint = { assetId: ID; isolationState: string; lockRefs: Ref[]; handoverChecks: string[]; verificationOwner: string };
+export type FaultRecurrence = { assetId: ID; symptom: string; priorDisappearance: string; monitoringRule: string; evidenceRefs: Ref[] };
+export type ShiftHandoverProposal = { officialAssetId: ID | null; identityBlockers: string[]; orderedTasks: ID[]; incompleteTaskIds: ID[]; rejectedPartChanges: string[]; isolationState: IsolationCheckpoint | null; monitoringCarryover: string[]; handoverNote: string; dispatchAllowed: boolean };
+export type AssetResolution = { officialAssetId: ID | null; candidates: ID[]; blockers: string[]; evidenceRefs: Ref[] };

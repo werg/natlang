@@ -1,0 +1,94 @@
+{
+  "schema": "natlang.application/1",
+  "id": "084",
+  "title": "Cross Cultural Training Adaptation Studio",
+  "entrypoint": "adaptTrainingScenario.nl",
+  "interfaces": [
+    {
+      "name": "adaptTrainingScenario",
+      "path": "adaptTrainingScenario.nl",
+      "purpose": "Adapt scenario context while preserving competency, decision complexity and versioned learner-test evidence."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "recoverLearningMechanism",
+        "paths": [
+          "adaptTrainingScenario/recoverCompetencyKernel.nl",
+          "adaptTrainingScenario/verifyTrainingMechanism.nl"
+        ]
+      },
+      {
+        "stage": "assessContextFit",
+        "paths": [
+          "adaptTrainingScenario/assessAudienceContext.nl"
+        ]
+      },
+      {
+        "stage": "generateAlternatives",
+        "paths": [
+          "adaptTrainingScenario/generateContextualAlternatives.nl"
+        ]
+      },
+      {
+        "stage": "replayLearning",
+        "paths": [
+          "adaptTrainingScenario/replayLearningDemand.nl",
+          "adaptTrainingScenario/replayLearningDemand/compareRequiredDecisionSteps.nl"
+        ]
+      },
+      {
+        "stage": "releaseTraining",
+        "paths": [
+          "adaptTrainingScenario/versionTrainingRelease.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "adaptTrainingScenario/generateContextualAlternatives.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "adaptTrainingScenario/assessAudienceContext.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "adaptTrainingScenario/replayLearningDemand.nl",
+          "adaptTrainingScenario/replayLearningDemand/compareRequiredDecisionSteps.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "adaptTrainingScenario/assessAudienceContext.nl",
+          "adaptTrainingScenario/generateContextualAlternatives.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "adaptTrainingScenario/versionTrainingRelease.nl"
+        ]
+      }
+    ]
+  },
+  "source_files": [
+    "adaptTrainingScenario.nl",
+    "adaptTrainingScenario/assessAudienceContext.nl",
+    "adaptTrainingScenario/generateContextualAlternatives.nl",
+    "adaptTrainingScenario/recoverCompetencyKernel.nl",
+    "adaptTrainingScenario/replayLearningDemand.nl",
+    "adaptTrainingScenario/replayLearningDemand/compareRequiredDecisionSteps.nl",
+    "adaptTrainingScenario/verifyTrainingMechanism.nl",
+    "adaptTrainingScenario/versionTrainingRelease.nl",
+    "types.ts"
+  ]
+}

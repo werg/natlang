@@ -1,7 +1,7 @@
 [
   {
     "id": "045-technical-debt-campaign-planner-gate-supported",
-    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "root": "qualification/collectSymptoms.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
       "draft": {
@@ -73,7 +73,7 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-gate-contradictory",
-    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "root": "qualification/collectSymptoms.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
       "draft": {
@@ -145,7 +145,7 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-gate-missing",
-    "root": "runCase/collectSymptoms/audit/qualify.nl",
+    "root": "qualification/collectSymptoms.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
       "draft": {
@@ -197,12 +197,11 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-operational-1",
-    "root": "runCase.nl",
+    "root": "planDebtCampaign.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
-      "input": {
-        "caseId": "045-technical-debt-campaign-planner-operational-1",
-        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-1; return a traceable proposal from the supplied records.",
+      "campaign": {
+        "campaignId": "045-technical-debt-campaign-planner-operational-1",
         "evidence": [
           {
             "id": "045-operational-detail-1-source-v2",
@@ -218,30 +217,37 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorSymptom": {
+          "id": "045-prior-debtsymptom-detail-1-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "045-technical-debt-campaign-planner-operational-1",
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ]
+        },
+        "authorityStatus": "authorized",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "045-operational-detail-1-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "045-prior-debtsymptom-detail-1-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "045-technical-debt-campaign-planner-operational-1",
-            "affectedWorkflow": "invoice retry after timeout",
-            "observation": "unsafe retry duplicates invoices when idempotency is absent",
-            "frequencyBasis": "18 retries in one week across three teams",
-            "evidenceRefs": [
-              "retry-ledger-45",
-              "invoice-duplicate-45"
-            ]
-          }
-        }
+        "baseline": {
+          "observedCost": "not supplied",
+          "exposureDenominator": "not supplied",
+          "observationWindow": "not supplied",
+          "workload": "not supplied",
+          "sourceRefs": [
+            "045-operational-detail-1-source-v2"
+          ]
+        },
+        "capacityHorizon": "not supplied",
+        "teamOwners": [],
+        "runbookEvidence": [],
+        "alertEvidence": []
       }
     },
     "expected": {
@@ -266,12 +272,11 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-operational-2",
-    "root": "runCase.nl",
+    "root": "planDebtCampaign.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
-      "input": {
-        "caseId": "045-technical-debt-campaign-planner-operational-2",
-        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-2; return a traceable proposal from the supplied records.",
+      "campaign": {
+        "campaignId": "045-technical-debt-campaign-planner-operational-2",
         "evidence": [
           {
             "id": "045-operational-detail-2-source-v2",
@@ -287,30 +292,37 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorSymptom": {
+          "id": "045-prior-debtsymptom-detail-2-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "045-technical-debt-campaign-planner-operational-2",
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ]
+        },
+        "authorityStatus": "unclear",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "unclear",
-        "changedEvidenceIds": [
-          "045-operational-detail-2-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "045-prior-debtsymptom-detail-2-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "045-technical-debt-campaign-planner-operational-2",
-            "affectedWorkflow": "invoice retry after timeout",
-            "observation": "unsafe retry duplicates invoices when idempotency is absent",
-            "frequencyBasis": "18 retries in one week across three teams",
-            "evidenceRefs": [
-              "retry-ledger-45",
-              "invoice-duplicate-45"
-            ]
-          }
-        }
+        "baseline": {
+          "observedCost": "not supplied",
+          "exposureDenominator": "not supplied",
+          "observationWindow": "not supplied",
+          "workload": "not supplied",
+          "sourceRefs": [
+            "045-operational-detail-2-source-v2"
+          ]
+        },
+        "capacityHorizon": "not supplied",
+        "teamOwners": [],
+        "runbookEvidence": [],
+        "alertEvidence": []
       }
     },
     "expected": {
@@ -335,12 +347,11 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-operational-3",
-    "root": "runCase.nl",
+    "root": "planDebtCampaign.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
-      "input": {
-        "caseId": "045-technical-debt-campaign-planner-operational-3",
-        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-3; return a traceable proposal from the supplied records.",
+      "campaign": {
+        "campaignId": "045-technical-debt-campaign-planner-operational-3",
         "evidence": [
           {
             "id": "045-operational-detail-3-source-v2",
@@ -356,30 +367,37 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorSymptom": {
+          "id": "045-prior-debtsymptom-detail-3-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "045-technical-debt-campaign-planner-operational-3",
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ]
+        },
+        "authorityStatus": "authorized",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "045-operational-detail-3-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "045-prior-debtsymptom-detail-3-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "045-technical-debt-campaign-planner-operational-3",
-            "affectedWorkflow": "invoice retry after timeout",
-            "observation": "unsafe retry duplicates invoices when idempotency is absent",
-            "frequencyBasis": "18 retries in one week across three teams",
-            "evidenceRefs": [
-              "retry-ledger-45",
-              "invoice-duplicate-45"
-            ]
-          }
-        }
+        "baseline": {
+          "observedCost": "not supplied",
+          "exposureDenominator": "not supplied",
+          "observationWindow": "not supplied",
+          "workload": "not supplied",
+          "sourceRefs": [
+            "045-operational-detail-3-source-v2"
+          ]
+        },
+        "capacityHorizon": "not supplied",
+        "teamOwners": [],
+        "runbookEvidence": [],
+        "alertEvidence": []
       }
     },
     "expected": {
@@ -404,12 +422,11 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-operational-4",
-    "root": "runCase.nl",
+    "root": "planDebtCampaign.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
-      "input": {
-        "caseId": "045-technical-debt-campaign-planner-operational-4",
-        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-4; return a traceable proposal from the supplied records.",
+      "campaign": {
+        "campaignId": "045-technical-debt-campaign-planner-operational-4",
         "evidence": [
           {
             "id": "045-operational-detail-4-source-v2",
@@ -425,30 +442,37 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorSymptom": {
+          "id": "045-prior-debtsymptom-detail-4-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "045-technical-debt-campaign-planner-operational-4",
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ]
+        },
+        "authorityStatus": "authorized",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "045-operational-detail-4-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "045-prior-debtsymptom-detail-4-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "045-technical-debt-campaign-planner-operational-4",
-            "affectedWorkflow": "invoice retry after timeout",
-            "observation": "unsafe retry duplicates invoices when idempotency is absent",
-            "frequencyBasis": "18 retries in one week across three teams",
-            "evidenceRefs": [
-              "retry-ledger-45",
-              "invoice-duplicate-45"
-            ]
-          }
-        }
+        "baseline": {
+          "observedCost": "not supplied",
+          "exposureDenominator": "not supplied",
+          "observationWindow": "not supplied",
+          "workload": "not supplied",
+          "sourceRefs": [
+            "045-operational-detail-4-source-v2"
+          ]
+        },
+        "capacityHorizon": "not supplied",
+        "teamOwners": [],
+        "runbookEvidence": [],
+        "alertEvidence": []
       }
     },
     "expected": {
@@ -473,12 +497,11 @@
   },
   {
     "id": "045-technical-debt-campaign-planner-operational-5",
-    "root": "runCase.nl",
+    "root": "planDebtCampaign.nl",
     "split_group": "045-technical-debt-campaign-planner",
     "inputs": {
-      "input": {
-        "caseId": "045-technical-debt-campaign-planner-operational-5",
-        "goal": "Review the Technical debt campaign planner evidence for case 045-technical-debt-campaign-planner-operational-5; return a traceable proposal from the supplied records.",
+      "campaign": {
+        "campaignId": "045-technical-debt-campaign-planner-operational-5",
         "evidence": [
           {
             "id": "045-operational-detail-5-source-v2",
@@ -494,30 +517,37 @@
             "status": "current"
           }
         ],
-        "policy": [
+        "priorSymptom": {
+          "id": "045-prior-debtsymptom-detail-5-v1",
+          "version": "v1",
+          "createdAt": "2026-10-01",
+          "updatedAt": "2026-10-01",
+          "caseId": "045-technical-debt-campaign-planner-operational-5",
+          "affectedWorkflow": "invoice retry after timeout",
+          "observation": "unsafe retry duplicates invoices when idempotency is absent",
+          "frequencyBasis": "18 retries in one week across three teams",
+          "evidenceRefs": [
+            "retry-ledger-45",
+            "invoice-duplicate-45"
+          ]
+        },
+        "authorityStatus": "authorized",
+        "policyClauses": [
           "current named-source authority; applicability must be checked against version and scope"
         ],
-        "authorityStatus": "authorized",
-        "changedEvidenceIds": [
-          "045-operational-detail-5-source-v2"
-        ],
-        "audience": "accountable reviewer",
-        "domainRecords": {
-          "firstStage": {
-            "id": "045-prior-debtsymptom-detail-5-v1",
-            "version": "v1",
-            "createdAt": "2026-10-01",
-            "updatedAt": "2026-10-01",
-            "caseId": "045-technical-debt-campaign-planner-operational-5",
-            "affectedWorkflow": "invoice retry after timeout",
-            "observation": "unsafe retry duplicates invoices when idempotency is absent",
-            "frequencyBasis": "18 retries in one week across three teams",
-            "evidenceRefs": [
-              "retry-ledger-45",
-              "invoice-duplicate-45"
-            ]
-          }
-        }
+        "baseline": {
+          "observedCost": "not supplied",
+          "exposureDenominator": "not supplied",
+          "observationWindow": "not supplied",
+          "workload": "not supplied",
+          "sourceRefs": [
+            "045-operational-detail-5-source-v2"
+          ]
+        },
+        "capacityHorizon": "not supplied",
+        "teamOwners": [],
+        "runbookEvidence": [],
+        "alertEvidence": []
       }
     },
     "expected": {

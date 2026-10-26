@@ -79,3 +79,16 @@ export type StageResultInstructionRelease = { accepted: InstructionRelease[]; un
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; recoverProcedure: StageResultProcedureRequirement; mapLocalContext: StageResultLocalProcedureConstraint; constructVariant: StageResultInstructionVariant; replayProcedure: StageResultProcedureScenario; releaseInstruction: StageResultInstructionRelease; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { recoverProcedure: StageResultProcedureRequirement; mapLocalContext: StageResultLocalProcedureConstraint; constructVariant: StageResultInstructionVariant; replayProcedure: StageResultProcedureScenario; releaseInstruction: StageResultInstructionRelease; };
+
+export type InstructionAdaptationCase = { caseId: ID; baseline: ProcedureRequirement; sourceVersion: string; localTerminology: TerminologyEntry[]; translations: WarningTranslation[]; equipmentReferences: EquipmentAlias[]; interruptionRules: RestartCondition[]; localExceptions: LocalException[]; floorCopies: FloorCopy[]; evidence: Evidence[]; changeNote: string };
+export type TerminologyEntry = { term: string; meaning: string; locale: string; evidenceRef: Ref };
+export type WarningTranslation = { sourceText: string; renderedText: string; locale: string; preservedHazards: string[]; omittedHazards: string[]; evidenceRef: Ref };
+export type EquipmentAlias = { localName: string; assetIds: ID[]; controlIds: ID[]; verifiedRef: Ref | null };
+export type RestartCondition = { stepId: ID; interruptionState: string; requiredIsolationChecks: string[]; repeatChecks: string[]; evidenceRef: Ref };
+export type LocalException = { stepId: ID; waivedConstraint: string; preservedInspections: string[]; authorityRef: Ref };
+export type FloorCopy = { copyId: ID; version: string; location: string; owner: string; withdrawn: boolean };
+export type AmbiguitySet = { ambiguousTerms: string[]; equipmentConflicts: string[]; unresolvedRefs: string[] };
+export type WarningIntegrity = { safe: boolean; missingHazards: string[]; untranslatedConditions: string[]; evidenceRefs: Ref[] };
+export type WorkfloorInstructionDraft = { sourceVersion: string; localSteps: string[]; equipmentIds: ID[]; preservedInspectionGates: string[]; restartText: string[]; warningText: string[]; blockedReason: string[] };
+export type ReplayFinding = { passedSteps: string[]; failedSteps: string[]; interruptionFailures: string[]; requiredRevisions: string[] };
+export type InstructionReleasePacket = { variant: WorkfloorInstructionDraft; replay: ReplayFinding; withdrawalTasks: string[]; applicableCopyIds: ID[]; releasable: boolean; approvalRequired: boolean };

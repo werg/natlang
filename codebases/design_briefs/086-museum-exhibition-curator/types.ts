@@ -143,3 +143,12 @@ export type ReviewPacket = { stageOutputs: StageOutputs; blockers: string[]; app
 export type ViewModel = { title: string; summary: string; sections: string[]; unresolved: string[]; };
 export type RevisionProposal = { target: string; change: string; expectedEffect: string; regressionRisks: string[]; };
 export type InvalidationProposal = { changedRefs: string[]; affectedArtifacts: string[]; unaffectedArtifacts: string[]; unresolvedImpact: string[]; };
+
+export type ExhibitionEditor = { id: string };
+export type ExhibitionChange = { loanUpdates: EvidenceItem[]; conservationUpdates: EvidenceItem[]; communityRestrictions: EvidenceItem[]; visitorPathTests: EvidenceItem[]; labelFeedback: EvidenceItem[]; onlineRenditions: EvidenceItem[] };
+export type ExhibitionDossier = { project: ExhibitionProject; evidence: CuratorialEvidence[]; arguments: ExhibitionArgument[]; zones: ExhibitionZone[]; labels: ExhibitionLabel[]; releases: ExhibitionRelease[]; sources: EvidenceItem[]; checkpoint: ExhibitionCheckpoint };
+export type ObjectConstraint = { artifactId: string; loanState: string; provenanceLimit: string; permittedLux: string; durationLimit: string; communityRestriction: string; displayEvidenceIds: string[]; derivativeRestrictions: string[]; };
+export type NarrativeSupport = { argumentId: string; claim: string; supportingArtifactIds: string[]; withdrawnArtifactIds: string[]; weakenedClaims: string[]; };
+export type VisitorContextEdge = { fromZoneId: string; toZoneId: string; requiredContext: string[]; repeatedInLaterLabel: boolean; evidenceIds: string[]; };
+export type ExhibitionCheckpoint = { revision: string; project: ExhibitionProject; objectConstraints: ObjectConstraint[]; arguments: ExhibitionArgument[]; narrativeSupport: NarrativeSupport[]; zones: ExhibitionZone[]; contextEdges: VisitorContextEdge[]; labels: ExhibitionLabel[]; release: ExhibitionRelease | null; invalidatedPlacements: string[]; derivativeRestrictionRefs: string[]; };
+export type CuratorialProposal = { application: 'Museum Exhibition Curator'; status: 'ready-for-review'|'blocked'; objectConstraints: ObjectConstraint[]; arguments: ExhibitionArgument[]; narrativeSupport: NarrativeSupport[]; zones: ExhibitionZone[]; labels: ExhibitionLabel[]; contextEdges: VisitorContextEdge[]; release: ExhibitionRelease; blockers: string[]; actionBoundary: string; resumeState: ExhibitionCheckpoint; };

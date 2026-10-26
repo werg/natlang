@@ -79,3 +79,15 @@ export type StageResultChangeVerification = { accepted: ChangeVerification[]; un
 export type RunProposal = { caseId: string; goal: GoalContract; policy: PolicySelection; work: WorkGraph; evidencePlan: EvidencePlan; interpretChange: StageResultDesignDelta; resolveApplicability: StageResultChangeApplicability; traceDependencies: StageResultEngineeringImpact; planImplementation: StageResultChangeWorkPackage; verifyConfiguration: StageResultChangeVerification; collection: CollectionFinding; questions: QuestionBatch; invalidation: InvalidationProposal; review: ReviewPacket; view: ViewModel; revisions: RevisionProposal[]; disposition: "proposed" | "blocked" | "needs-review"; rationale: string[] };
 
 export type CaseStageSet = { interpretChange: StageResultDesignDelta; resolveApplicability: StageResultChangeApplicability; traceDependencies: StageResultEngineeringImpact; planImplementation: StageResultChangeWorkPackage; verifyConfiguration: StageResultChangeVerification; };
+
+export type EngineeringChangeDossier = { caseId: ID; change: DesignDelta; baselineConfiguration: ConfigurationState[]; inventory: PartInventory[]; fieldedUnits: FieldedConfiguration[]; supplierShipments: SupplierShipment[]; retrofitProgress: RetrofitProgress[]; dependencyEdges: ConfigurationDependency[]; evidence: Evidence[] };
+export type ConfigurationState = { configurationId: ID; designRevision: string; serialRange: string; approvedRevision: string; grandfathered: boolean; evidenceRefs: Ref[] };
+export type PartInventory = { partId: ID; revision: string; quantity: number; intendedConfigurations: ID[]; disposition: string };
+export type FieldedConfiguration = { unitId: ID; configurationId: ID; installedPartRevision: string; serviceStatus: string; maintenanceRefs: Ref[] };
+export type SupplierShipment = { shipmentId: ID; partRevision: string; quantity: number; received: boolean; ownerDecision: string };
+export type RetrofitProgress = { unitId: ID; fromConfiguration: ID; targetConfiguration: ID; completedSteps: string[]; verifiedSteps: string[] };
+export type ConfigurationDependency = { sourceId: ID; targetId: ID; dependencyKind: string; evidenceRef: Ref };
+export type ApplicabilityPartition = { changedConfigurations: ID[]; preservedGrandfatheredUnits: ID[]; unresolvedConfigurations: ID[]; documentationOnly: boolean; affectedDependencies: ConfigurationDependency[] };
+export type InventoryDisposition = { useByConfiguration: string[]; quarantineShipments: ID[]; fieldedOldRevisionUnits: ID[]; unaffectedStock: string[]; unresolvedItems: string[] };
+export type RetrofitFence = { completeUnitIds: ID[]; partialUnitIds: ID[]; mixedStateConstraints: string[]; nextStepsByUnit: string[] };
+export type EngineeringChangePlan = { changeId: ID; applicability: ApplicabilityPartition; inventory: InventoryDisposition; retrofit: RetrofitFence; affectedDownstream: ID[]; verificationRequirements: string[]; planDisposition: string; commitAllowed: boolean };

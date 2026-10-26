@@ -1,0 +1,97 @@
+{
+  "schema": "natlang.application/1",
+  "id": "064",
+  "title": "Facility complaint-to-work-order system",
+  "entrypoint": "triageFacilityIssue.nl",
+  "interfaces": [
+    {
+      "name": "triageFacilityIssue",
+      "path": "triageFacilityIssue.nl",
+      "purpose": "Preserve official facility location identity, link recurring mechanisms, schedule condition-specific consented visits, and compose privacy-limited occupant updates."
+    }
+  ],
+  "coverage": {
+    "domainGates": [
+      {
+        "stage": "interpretComplaint",
+        "paths": [
+          "triageFacilityIssue/resolveOfficialFacilityLocation.nl"
+        ]
+      },
+      {
+        "stage": "linkRelatedIssues",
+        "paths": [
+          "triageFacilityIssue/groupByRecurringMechanism.nl"
+        ]
+      },
+      {
+        "stage": "formWorkOrders",
+        "paths": [
+          "triageFacilityIssue/formMechanismAwareWorkOrder.nl"
+        ]
+      },
+      {
+        "stage": "coordinateVisits",
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "stage": "verifyResolution",
+        "paths": [
+          "triageFacilityIssue/formMechanismAwareWorkOrder.nl"
+        ]
+      }
+    ],
+    "operationalRules": [
+      {
+        "id": 1,
+        "paths": [
+          "triageFacilityIssue/resolveOfficialFacilityLocation.nl"
+        ]
+      },
+      {
+        "id": 2,
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "id": 3,
+        "paths": [
+          "triageFacilityIssue/negotiateConsentBoundVisit.nl"
+        ]
+      },
+      {
+        "id": 4,
+        "paths": [
+          "triageFacilityIssue/composePrivacyLimitedOccupantUpdates.nl"
+        ]
+      },
+      {
+        "id": 5,
+        "paths": [
+          "triageFacilityIssue/groupByRecurringMechanism.nl"
+        ]
+      }
+    ]
+  },
+  "persistence": {
+    "state": "location aliases, mechanism-linked issues, visit attempts, consent and reporter partitions",
+    "writes": "work-order proposal only"
+  },
+  "effects": [
+    "consented visit request",
+    "private occupant update"
+  ],
+  "source_files": [
+    "qualification/interpretComplaint.nl",
+    "triageFacilityIssue.nl",
+    "triageFacilityIssue/composePrivacyLimitedOccupantUpdates.nl",
+    "triageFacilityIssue/formMechanismAwareWorkOrder.nl",
+    "triageFacilityIssue/groupByRecurringMechanism.nl",
+    "triageFacilityIssue/negotiateConsentBoundVisit.nl",
+    "triageFacilityIssue/resolveOfficialFacilityLocation.nl",
+    "types.ts"
+  ]
+}

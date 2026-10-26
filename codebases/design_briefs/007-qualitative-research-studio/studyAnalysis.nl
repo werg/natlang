@@ -1,0 +1,14 @@
+---
+description: Design a bounded qualitative inquiry, freeze its sample, version its codebook, reconcile independent interpretations, and synthesize findings within the study's inference limits.
+args: { inquiry: ResearchInquiry, corpus: InterviewCorpus }
+returns: QualitativeStudyProposal
+uses: [researchCore/frameResearchQuestion, researchCore/selectResearchPolicy, runCase/frameInquiry/decomposeDecisionQuestion, runCase/frameInquiry/enumerateRivalExplanations, runCase/selectSample/defineInquiryStrata, runCase/selectSample/freezeSamplingManifest, researchCore/constructCodebook, runCase/codeAndReconcile/alignTranslationPassages, runCase/codeAndReconcile/compareIndependentCoders, runCase/synthesizeFindings/searchCounterevidence, researchCore/assessQuotationRisk]
+---
+1. Bind decisionFrame = frameResearchQuestion(inquiry, corpus.projects) and applicableRules = selectResearchPolicy(corpus.investigatorRules). The projects are context records, not proof that a research question is answerable; preserve unresolved authority and design limits.
+2. For each project in the frame, bind decomposition = decomposeDecisionQuestion(project, corpus.interviewsAndFollowups) and rivalSet = enumerateRivalExplanations(decomposition, corpus.interviewsAndFollowups). Keep unsupported claims and rival mechanisms visible before sampling.
+3. Bind strata = defineInquiryStrata(project, corpus.sampleFrame), then sample = freezeSamplingManifest(strata, corpus.sampleFrame) before coding; when a stratum has no eligible cases, report the gap instead of substituting a convenient participant.
+4. Bind codeBoundaries = constructCodebook(sample, corpus.interviewsAndFollowups). Each code must distinguish observable description from inferred mechanism and carry inclusion, exclusion and counterexample passages.
+5. Bind passages = alignTranslationPassages(corpus.interviewsAndFollowups) while retaining original text; bind coderComparisons = compareIndependentCoders(passages, codeBoundaries, corpus.interviewsAndFollowups). Compare only where both coder records exist and preserve disagreement as a minority reading. Do not infer prior coding from an absent ledger.
+6. Bind counterevidence = searchCounterevidence(codeBoundaries, corpus.interviewsAndFollowups) separately for each proposed interpretation. Do not use a lack of observed contradiction as evidence that a claim is true or general.
+7. Bind quotationRisk = assessQuotationRisk(passages, corpus.privacyAndConsentEvents) before constructing any export view. Withhold a quotation when indirect identification risk or permission is unresolved, while retaining its analytical role in the restricted review.
+8. Return the decomposition, rival explanations, frozen sample manifest, code boundaries, independent-coder comparisons, counterevidence searches, privacy review and unresolved stopping conditions as a study proposal. The input contains no external approval, export, or persistence receipt.
