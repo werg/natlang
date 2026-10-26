@@ -2,7 +2,7 @@
 
 `installSelectedSemanticEnvironment` installs the asynchronous executor at both
 the task evaluator and callable-folder module loader. The implementation uses
-the `semantic-trace/4` / `semantic-execution/4` contract supplied by the pinned
+the `semantic-trace/5` / `semantic-execution/5` contract supplied by the pinned
 tracer. The JavaScript source is published before an explicit invocation. Model
 selections drive the guest; declared native bindings run only after a committed
 request, and their actual results become observations.
@@ -251,4 +251,4 @@ origin and are not evidence of learned model success.
 
 ## One canonical execution witness
 
-Natlang's selected environment consumes the source-grounded `semantic-execution/4` / `semantic-trace/4` selected-harness trace from its **pinned tracer commit**, never the old group-shaped diagnostic producer. The model does not choose between explicit, compact or outcome-only alternatives. Its returned work must satisfy the same selected-state checks and external effect authorization. Private interpreter journals and independent reference outcomes are not model inputs. A schema change must update the package pin and lockfile together and pass the actual selected async module/callback tests.
+Natlang's selected environment consumes the source-grounded `semantic-execution/5` / `semantic-trace/5` selected-harness trace from its **pinned tracer commit**, never the old group-shaped diagnostic producer. The model does not choose between explicit, compact or outcome-only alternatives. Its returned work must satisfy the same selected-state checks and external effect authorization. Private interpreter journals and independent reference outcomes are not model inputs. A schema change must update the package pin and lockfile together and pass the actual selected async module/callback tests.
