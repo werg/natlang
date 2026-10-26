@@ -226,10 +226,11 @@ test('every node event of a Neuralese run validates against the graph schema (gr
   const manifest = traces.find(trace => trace.events[0]?.kind === 'manifest').events[0];
   assert.equal(manifest.graph.version, 'natlang.exec-graph/1');
   assert.deepEqual(manifest.graph.model, { id: 'stand-in', revision: 'r1' });
-  // The archived text literal is an external native-state artifact; the inner invocation imports it and retains its caller edge.
+  // The literal was written during this task. Its consumer retains that actual
+  // producer dependency as well as its caller edge, even without a learning recorder.
   const write = nodes.find(event => event.kind === 'block_write');
   const inner = nodes.find(event => event.kind === 'invocation' && event.inputs.some(input => input.block === write.block));
-  assert.ok(inner && inner.inputs.find(input => input.block === write.block).node === 'external');
+  assert.ok(inner && inner.inputs.find(input => input.block === write.block).node === write.node);
   assert.ok(inner.inputs.some(input => input.port === 'caller'));
   // A malformed node is caught.
   assert.ok(validateGraph([{ version: 'x', seq: 0, kind: 'block_write', node: 'n1', inputs: [] }], GRAPH_SCHEMA).length);

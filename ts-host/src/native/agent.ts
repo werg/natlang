@@ -39,7 +39,7 @@ import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
-import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerScopeForTrace } from './graph.js';
+import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
@@ -669,7 +669,7 @@ export class NativeToolAgent {
       const recorded=activeRecorder()?.nativeStateWriters?.(block)??[];
       const writers=[...new Set([...trace.events.filter(event=>event.kind==='block_write'&&event.block===block&&
         typeof event.node==='string')
-        .map(event=>String(event.node)),...recorded])];
+        .map(event=>String(event.node)),...producerOccurrences(block,producerScopeForTrace(trace)),...recorded])];
       if (declared === 'external') {
         if (writers.length) throw new Error(`neuralese-native-grad-invalid: native read ${block} declares external despite an in-episode writer`);
         return 'external';
