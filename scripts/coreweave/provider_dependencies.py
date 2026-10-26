@@ -519,6 +519,18 @@ def verify_assets(assets, *, readonly_input_roots=(), namespace='/work/native-pr
                     or sha256_file_hex_cached(path) != item['sha256']):
                 raise ValueError('provider pre-staged input file content differs: ' + str(path))
             continue
+        if item['kind'] == 'task-source-file':
+            if (type(item.get('bytes')) is not int or item['bytes'] < 0
+                    or not path.is_absolute() or '..' in path.parts):
+                raise ValueError('provider TaskEval source file has no exact safe binding')
+            cursor=path
+            while cursor!=cursor.parent:
+                if cursor.is_symlink():raise ValueError('provider TaskEval source traverses a symlink')
+                cursor=cursor.parent
+            if (not path.is_file() or path.stat().st_size!=item['bytes']
+                    or sha256_file_hex_cached(path)!=item['sha256']):
+                raise ValueError('provider TaskEval source file differs from its exact runtime binding: '+str(path))
+            continue
         if item['kind'] == 'base':
             from natlang_neuralese.model.native_model import base_inventory
             actual = base_inventory(path)

@@ -58,6 +58,13 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     loaded={name:json.loads(Path(binding(ref['path'],ref)['path']).read_text()) for name,ref in plans.items()}
     common=None;owned_rows={};hosts={}
     provider=json.loads(Path(provider_path).read_text())
+    provider_hosts=dict(provider.get('sandboxes')or{})
+    local_host=provider.get('local_source_host')
+    if local_host is not None:
+        if (not isinstance(local_host,dict)or not isinstance(local_host.get('source_host_id'),str)
+                or not local_host['source_host_id']or local_host['source_host_id']in provider_hosts):
+            raise ValueError('local source host must be distinct from every CoreWeave sandbox')
+        provider_hosts[local_host['source_host_id']]=local_host
     for name,plan in loaded.items():
         owned,exchange=roles.ownership(plan)
         if exchange is None or exchange['role']!=name or len(owned)!=1:
@@ -72,7 +79,7 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
                 or row['handoff_requirement'].get('readiness_boundary')!='communication-foundation'):
             raise ValueError('role scheduling requires explicit on-request communication readiness')
         sid=exchange['roles'][name]['source_host_id']
-        if sid not in provider.get('sandboxes',{}):
+        if sid not in provider_hosts:
             raise ValueError('role scheduler cannot allocate or substitute a source host')
         control_path=Path(binding(controls[name]['path'],controls[name])['path'])
         spec=json.loads(control_path.read_text())
@@ -80,9 +87,9 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
             raise ValueError('role scheduling lost its actual publishing controller')
         binding(spec['controller']['path'],spec['controller'])
         package=Path(spec['numerical_package']).resolve(strict=True)
-        if provider['sandboxes'][sid]['runtime']!=str(package.parents[2]):
+        if provider_hosts[sid]['runtime']!=str(package.parents[2]):
             raise ValueError('role provider runtime differs from its actual publishing controls')
-        provider['sandboxes'][sid]['role_controls']={**controls[name],
+        provider_hosts[sid]['role_controls']={**controls[name],
             'bytes':control_path.stat().st_size}
         state=Path(raw_states[name])
         if not state.is_absolute() or '..'in state.parts:
@@ -153,6 +160,17 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     full=out/'joint-curriculum.json';write_json_durable(full,semantic)
     relay=out/'relay.json'
     controller=out/'controller.json'
+    local_cycle_returns=None
+    local_cycle_sources=[bool(plan.get('local_cycle_source'))for plan in loaded.values()]
+    if any(local_cycle_sources):
+        if not all(local_cycle_sources):
+            raise ValueError('shared semantic return requires both actual local-cycle source owners')
+        directories={plan['role_exchange']['directory']for plan in loaded.values()}
+        if len(directories)!=1:
+            raise ValueError('local-cycle owners need one exact shared return exchange namespace')
+        local_cycle_returns={'schema':'natlang.native-local-cycle-return-transport/1',
+            'consumer':consumer,'completion_path':str(out/'semantic'/'joint'/'shared-stage-completion.json'),
+            'directory':next(iter(directories)),'role_plans':source_plans}
     write_json_durable(controller,{'schema':'natlang.native-shared-stage-controller/1',
         'out':str(out/'semantic'),'semantic_out':str(out/'semantic/preparation'),
         'curriculum':str(curriculum),'poll_seconds':60,
@@ -170,7 +188,8 @@ def prepare_role_scheduler(plans, controls, curriculum_path, provider_path, out,
     write_json_durable(relay,{'schema':'natlang.native-role-exchange-service/1',
         'hosts':hosts,'provider':provider,'out':str(out/'relay-state'),'poll_seconds':15,
         'preparation_curriculum':binding(curriculum),
-        'handoff_lease_seconds':handoff_lease_seconds})
+        'handoff_lease_seconds':handoff_lease_seconds,
+        **({'local_cycle_returns':local_cycle_returns}if local_cycle_returns else{})})
     receipt={'schema':'natlang.native-role-scheduler-preparation/1',
         'operational_inputs':[binding(__file__)],
         'controller':binding(controller),'relay':binding(relay),

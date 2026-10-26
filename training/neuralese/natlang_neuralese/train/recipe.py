@@ -247,7 +247,7 @@ def binding_path(value):
     return (path if path.is_absolute() else root('repo') / path).resolve()
 
 
-def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
+def resolve_stage_inputs(recipe, stage, defaults, overrides=None, *, source_route=None):
     """Return hashed, exact inputs for one stage; overrides change location, never identity."""
     selected = stage.get('inputs')
     if selected is None:
@@ -260,7 +260,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         missing = missing_stage_inputs(stage['kind'], result)
         if missing:
             raise ValueError('missing required stage input(s): ' + ', '.join(sorted(missing)))
-        return _bind_native_source_dependencies(result)
+        return _bind_native_source_dependencies(result, source_route=source_route)
     catalog = recipe.get('input_bindings', {})
     overrides = overrides or {}
     unknown = set(overrides) - set(catalog)
@@ -284,7 +284,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         if actual_sha != spec['sha256']:
             raise ValueError('input binding content hash mismatch: ' + name)
         result[role] = {'binding': name, 'path': str(path), 'sha256': actual_sha}
-    return _bind_native_source_dependencies(result)
+    return _bind_native_source_dependencies(result, source_route=source_route)
 
 
 def native_source_dependencies(path, *, parents=(), source_route=None):
@@ -316,7 +316,7 @@ def native_source_dependencies(path, *, parents=(), source_route=None):
     return [{'path': child, 'sha256': digest} for child, digest in dependencies.items()]
 
 
-def _bind_native_source_dependencies(inputs):
+def _bind_native_source_dependencies(inputs, *, source_route=None):
     if 'ce_supervision_policy' in inputs:
         from .native_supervision import ce_policy_dependencies
         reference=inputs['ce_supervision_policy']
@@ -343,7 +343,7 @@ def _bind_native_source_dependencies(inputs):
         inputs['withdrawn_native_graphs']['dependencies']=[{'path':str(path),'sha256':evidence['sha256']}]
     for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'):
         if role in inputs:
-            dependencies = native_source_dependencies(inputs[role]['path'])
+            dependencies = native_source_dependencies(inputs[role]['path'], source_route=source_route)
             if dependencies:
                 inputs[role]['dependencies'] = dependencies
     return inputs

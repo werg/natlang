@@ -2,6 +2,7 @@
 import copy
 import json
 from pathlib import Path
+import sys
 import pytest
 from natlang_neuralese.common.jsonio import write_json_durable as write
 from natlang_neuralese.train.native_deployment import binding, prepare_role_scheduler
@@ -86,6 +87,27 @@ def test_prepares_exact_external_owner_configs_without_claiming_adoption(tmp_pat
     with pytest.raises(FileExistsError):
         prepare_role_scheduler(plans,controls,curriculum,provider,tmp_path/'prepared',raw_states=states,runtime=runtime,
         rl_bootstrap=binding(tmp_path/'rl-bootstrap.json'),handoff_lease_seconds=180)
+
+
+def test_role_scheduler_supports_one_explicit_local_source_and_one_existing_cloud_owner(tmp_path):
+    plans,controls,curriculum,provider,states,runtime=source(tmp_path)
+    provider_value=json.loads(provider.read_text());provider_value['sandboxes'].pop('lfm-existing')
+    provider_value['local_source_host']={'source_host_id':'lfm-local','runtime':str(runtime),
+        'python':sys.executable,'read_roots':[str(tmp_path)],'write_roots':[str(tmp_path)]}
+    provider_value['coordinator_id']='mellum-existing';write(provider,provider_value)
+    for role,reference in list(plans.items()):
+        path=Path(reference['path']);plan=json.loads(path.read_text())
+        plan['role_exchange']['roles']['lfm']['source_host_id']='lfm-local'
+        write(path,plan);plans[role]=binding(path)
+    result=prepare_role_scheduler(plans,controls,curriculum,provider,tmp_path/'mixed-host-prepared',
+        raw_states=states,runtime=runtime,rl_bootstrap=binding(tmp_path/'rl-bootstrap.json'),
+        handoff_lease_seconds=180)
+    relay=json.loads(Path(result['relay']['path']).read_text())
+    assert relay['hosts']['lfm']['source_host_id']=='lfm-local'
+    local_controls=relay['provider']['local_source_host']['role_controls']
+    assert json.loads(Path(local_controls['path']).read_text())['model']=='lfm'
+    cloud_controls=relay['provider']['sandboxes']['mellum-existing']['role_controls']
+    assert json.loads(Path(cloud_controls['path']).read_text())['model']=='mellum'
 
 
 @pytest.mark.parametrize('fault',['peer-authority','cohort','old-readiness','extra-owner','provider-runtime','controls-role'])

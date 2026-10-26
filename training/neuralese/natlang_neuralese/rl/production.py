@@ -10,6 +10,7 @@ from .curriculum import DEFAULT as DEFAULT_TASK_CURRICULUM
 import argparse
 import fcntl
 import json
+import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +20,135 @@ from types import SimpleNamespace
 from ..common.jsonio import read_jsonl, write_json_durable
 from ..common.paths import root
 from .task_rollouts import prepare, score
+
+
+def invalidate_checkpoint_readiness(state, checkpoint, *, reason):
+    """Archive checkpoint-specific proofs before advancing the owner head."""
+    from ..common.hashing import sha256_file_hex_cached
+    reference = checkpoint if isinstance(checkpoint, dict) else {
+        'path': str(Path(checkpoint).resolve(strict=True)),
+        'sha256': sha256_file_hex_cached(Path(checkpoint).resolve(strict=True))}
+    if 'bytes' not in reference:
+        reference = {**reference, 'bytes': Path(reference['path']).stat().st_size}
+    retired = {key: state.pop(key) for key in ('readiness', 'foundation_candidate') if state.get(key) is not None}
+    if retired:
+        history = state.setdefault('checkpoint_readiness_history', [])
+        record = {'schema': 'natlang.rl-checkpoint-readiness-retirement/1',
+            'invalidated_by': reference, 'reason': reason, 'retired': retired}
+        if not history or history[-1] != record:
+            history.append(record)
+        state['last_checkpoint_readiness_retirement'] = record
+    state.pop('foundation_qualified', None)
+    return state
+
+
+def complete_update_audit(state, *, checkpoint):
+    """Move the active round marker to an audit record only at round commit."""
+    from ..common.hashing import sha256_file_hex_cached
+    active = {key: state[key] for key in ('active_update_round', 'update_mode', 'update_rollouts',
+        'update_stages', 'update_coefficient_policy') if key in state}
+    if not active:
+        return state
+    from ..train.native_readiness import _bound
+    progress=state.get('last_learner_progress')or{}
+    report_ref=progress.get('full_report')
+    if not isinstance(report_ref,dict):
+        raise ValueError('completed whole-graph update has no exact native learner report binding')
+    report_path=_bound(report_ref);report=json.loads(report_path.read_text())
+    if (progress.get('completed') is not True or progress.get('checkpoint_sha256')!=checkpoint.get('sha256')
+            or report.get('completed') is not True or report.get('numerics_ok') is not True
+            or report.get('checkpoint_sha256')!=checkpoint.get('sha256')
+            or not (report.get('progress_numerics')or{}).get('passed')):
+        raise ValueError('completed whole-graph update report does not bind its exact published checkpoint')
+    report_binding={'path':str(report_path),'sha256':sha256_file_hex_cached(report_path),
+        'bytes':report_path.stat().st_size}
+    round_directory = Path(str(active.get('active_update_round', '')))
+    rollout_path = Path(str(active.get('update_rollouts', '')))
+    rollouts = None
+    if rollout_path.is_file():
+        rollouts = {'path': str(rollout_path.resolve()), 'sha256': sha256_file_hex_cached(rollout_path),
+            'bytes': rollout_path.stat().st_size}
+    record = {'schema': 'natlang.rl-production-completed-update/1', 'round': max(0, state.get('round', 0)-1),
+        'round_directory': str(round_directory), 'mode': active.get('update_mode'),
+        'rollouts': rollouts, 'stages': active.get('update_stages'),
+        'coefficient_policy': active.get('update_coefficient_policy'), 'checkpoint': checkpoint,
+        'completion_report':report_binding}
+    history = state.setdefault('completed_update_history', [])
+    if not history or history[-1] != record:
+        history.append(record)
+    state['last_completed_update'] = record
+    for key in ('active_update_round', 'update_mode', 'update_rollouts', 'update_stages',
+            'update_coefficient_policy'):
+        state.pop(key, None)
+    return state
+
+
+def normalize_legacy_completed_update(state, state_path):
+    """Clear a legacy active marker only when the current committed result proves completion."""
+    active_keys=('active_update_round','update_mode','update_rollouts','update_stages','update_coefficient_policy')
+    if not any(key in state for key in active_keys):return False
+    if (state.get('phase')!='collect' or type(state.get('round'))is not int or state['round']<1
+            or type(state.get('trained_rounds'))is not int or state['trained_rounds']<1
+            or any(key in state for key in ('pending_native_checkpoint','pending_native_round_dir',
+                'partial_checkpoint','active_update_partial','partial_update_round'))):
+        raise ValueError('stale update marker is not a clean completed collection boundary')
+    from ..common.hashing import sha256_file_hex_cached
+    from ..train.native_readiness import _bound
+    round_dir=Path(state.get('active_update_round','')).resolve(strict=True)
+    match=re.fullmatch(r'round-(\d{6})',round_dir.name)
+    if match is None or int(match.group(1))+1!=state['round'] or not round_dir.is_dir():
+        raise ValueError('stale update marker does not name the immediately completed production round')
+    rollouts=Path(state.get('update_rollouts','')).resolve(strict=True)
+    if round_dir not in rollouts.parents or not rollouts.is_file():
+        raise ValueError('stale update marker lacks its exact completed rollout source')
+    progress=state.get('last_learner_progress')or{}
+    round_report_path=(round_dir/'learner'/'report.json').resolve(strict=True)
+    if round_dir not in round_report_path.parents:
+        raise ValueError('stale update marker report escaped its exact completed round directory')
+    round_report=json.loads(round_report_path.read_text())
+    round_report_ref={'path':str(round_report_path),'sha256':sha256_file_hex_cached(round_report_path),
+        'bytes':round_report_path.stat().st_size}
+    checkpoint=Path(state['checkpoint']).resolve(strict=True)
+    checkpoint_sha=sha256_file_hex_cached(checkpoint)
+    if (round_report.get('completed') is not True or round_report.get('numerics_ok') is not True
+            or not (round_report.get('progress_numerics')or{}).get('passed')):
+        raise ValueError('stale update marker is not proven by its exact completed round report')
+    round_checkpoint_sha=round_report.get('checkpoint_sha256')
+    if checkpoint_sha==round_checkpoint_sha:
+        current_report_ref=progress.get('full_report')
+        if (progress.get('checkpoint_sha256')!=checkpoint_sha
+                or (isinstance(current_report_ref,dict)
+                    and _bound(current_report_ref)!=round_report_path)):
+            raise ValueError('completed round current report differs from the saved production progress')
+    else:
+        current_report_ref=progress.get('full_report')
+        if not isinstance(current_report_ref,dict):
+            raise ValueError('newer current head lacks an exact supervised continuation report')
+        current_report_path=_bound(current_report_ref)
+        current_report=json.loads(current_report_path.read_text())
+        continuation=current_report.get('continuation')or{}
+        if (progress.get('checkpoint_sha256')!=checkpoint_sha
+                or current_report.get('checkpoint_sha256')!=checkpoint_sha
+                or continuation.get('checkpoint_sha256')!=round_checkpoint_sha
+                or current_report.get('numerics_ok') is not True
+                or not (current_report.get('progress_numerics')or{}).get('passed')):
+            raise ValueError('newer current head lacks an exact report proving descent from the completed round checkpoint')
+    before=Path(state_path).resolve(strict=True)
+    source_state={'path':str(before),'sha256':sha256_file_hex_cached(before),'bytes':before.stat().st_size}
+    checkpoint_ref={'path':str(checkpoint),'sha256':checkpoint_sha,'bytes':checkpoint.stat().st_size}
+    record={'schema':'natlang.rl-production-completed-update/1','round':state['round']-1,
+        'round_directory':str(round_dir),'mode':state.get('update_mode'),
+        'rollouts':{'path':str(rollouts),'sha256':sha256_file_hex_cached(rollouts),'bytes':rollouts.stat().st_size},
+        'stages':state.get('update_stages'),'coefficient_policy':state.get('update_coefficient_policy'),
+        'checkpoint':checkpoint_ref,'completion_report':round_report_ref,
+        'current_head_report':current_report_ref if checkpoint_sha!=round_checkpoint_sha else round_report_ref,
+        'source_state':source_state,
+        'legacy_marker_recovery':True}
+    history=state.setdefault('completed_update_history',[])
+    if not history or history[-1]!=record:history.append(record)
+    state['last_completed_update']=record
+    for key in active_keys:state.pop(key,None)
+    return True
 
 
 def native_policy_trainer_args(parameters, expected_native):
@@ -551,6 +681,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         state_path = out / 'state.json'
         state = json.loads(state_path.read_text()) if state_path.exists() else initial_controller_state(initial)
+        if state_path.exists():normalize_legacy_completed_update(state,state_path)
         write_json_durable(state_path, state)
         if initial.get('mandatory_sft_only'):
             if not initial.get('native_state'):
@@ -566,6 +697,18 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             config = resolve_recipe_data(config_path)
             if config.get('native_state') is not True:
                 raise ValueError('RL production hot reload cannot switch away from the native shared-state actor')
+            state_participant=state.get('native_participant')
+            if state_participant is not None:
+                if config.get('native_participant') not in (None,state_participant):
+                    raise ValueError('RL config changed the adopted native participant identity')
+                config={**config,'native_participant':state_participant}
+            refresh_reference=state.get('semantic_refresh_config')
+            if refresh_reference is not None:
+                from ..train.native_readiness import _bound
+                refresh_path=_bound(refresh_reference)
+                if config.get('semantic_refresh_config') not in (None,str(refresh_path)):
+                    raise ValueError('RL config changed the adopted semantic refresh curriculum')
+                config={**config,'semantic_refresh_config':str(refresh_path)}
             if state.get('pending_semantic_source'):
                 if defer_native_refresh:return state
                 from .native_semantic_route import publish_pending
@@ -631,8 +774,11 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['_run_control'] = control
             from ..train.recipe import stage_parameter_args
             expected_native = None
-            if config.get('native_state') and config.get('semantic_adapter'):
-                values['semantic_adapter'] = state.get('semantic_adapter', config['semantic_adapter'])
+            semantic_adapter=state.get('semantic_adapter')or config.get('semantic_adapter')
+            if config.get('native_state') and semantic_adapter:
+                if not config.get('native_participant'):
+                    raise ValueError('semantic RAW actor has no exact participant identity')
+                values['semantic_adapter'] = semantic_adapter
                 values['semantic_adapter_sha256'] = sha256_file_hex(Path(values['semantic_adapter']))
                 export = json.loads(Path(values['semantic_adapter']).read_text())
                 expected_native = expected_native_actor(values['semantic_adapter'], config['native_participant'], policy)
@@ -850,7 +996,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
             if pending:
                 continue
-            if config.get('semantic_adapter') and not (config.get('coefficient_policy') and mode!='seed'):
+            if (state.get('semantic_adapter')or config.get('semantic_adapter')) and not (config.get('coefficient_policy') and mode!='seed'):
                 state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
                              pending_native_round_dir=str(round_dir))
                 write_json_durable(state_path, state)
@@ -862,7 +1008,14 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     config=config['semantic_refresh_config'], out=round_dir/'semantic-refresh',
                     device=config.get('refresh_device', 'cuda'), stop=stop)
                 checkpoint = Path(deployment['checkpoint']['path'])
+                prior_adapter_sha256=sha256_file_hex(values['semantic_adapter'])
                 state['semantic_adapter'] = deployment['semantic_adapter']['path']
+                deployment_path=round_dir/'semantic-refresh'/'deployment.json'
+                if not deployment_path.is_file():
+                    raise ValueError('semantic RL refresh omitted its durable deployment receipt')
+                state['semantic_deployment']={'path':str(deployment_path.resolve()),
+                    'sha256':sha256_file_hex(deployment_path)}
+                state['semantic_deployment_parent_adapter_sha256']=prior_adapter_sha256
                 values.update(semantic_adapter=state['semantic_adapter'],
                     semantic_adapter_sha256=deployment['semantic_adapter']['sha256'],
                     deployment=str(round_dir/'semantic-refresh/deployment.json'))
@@ -883,9 +1036,11 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                          offset=(selection[-1]['row'] + 1) % len(cases),
                          trained_rounds=state['trained_rounds'] + 1, phase='collect',
                          production_complete=False, collection_attempt=0, group_stats=[])
-            write_json_durable(state_path, state)
             state.pop('pending_native_checkpoint', None)
             state.pop('pending_native_round_dir', None)
+            invalidate_checkpoint_readiness(state, checkpoint, reason='completed-whole-graph-RL-round')
+            complete_update_audit(state, checkpoint={'path': str(Path(checkpoint).resolve()),
+                'sha256': sha256_file_hex(checkpoint), 'bytes': Path(checkpoint).stat().st_size})
             write_json_durable(state_path, state)
             completed += 1
         return state

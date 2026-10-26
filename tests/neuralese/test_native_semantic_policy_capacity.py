@@ -24,6 +24,14 @@ def fixture(tmp_path,mode):
     original,channel,_,_=case(tmp_path,'lfm','mellum')
     participants={name:SemanticParticipant(value.model,value.tokenizer,value.config,value.identity,
         make_native_optimizer(value.model,lr=1e-4,in_backward=False)[0]) for name,value in original.items()}
+    for value in participants.values():
+        # Production load_participant binds these from the inherited native
+        # checkpoint. This direct numerical fixture constructs the optimizer
+        # itself, so record its exact known settings rather than relying on a
+        # generic semantic-stage default.
+        value.optimizer_options={'lr':1e-4,'weight_decay':.1,'latent_ns':'quintic',
+            'learned_row_lr':None,'interface_row_lr':None}
+        value.fp8_profile={'kind':'off','recipe':'delayed','amax_history_len':16}
     optimizer=torch.optim.AdamW(channel.vae.parameters(),lr=1e-3)
     parent=tmp_path/'parent'
     export=save_shared(CheckpointPolicy(parent,prune_best=False),participants,channel.vae,optimizer,

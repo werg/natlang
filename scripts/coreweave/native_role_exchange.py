@@ -16,8 +16,8 @@ import time
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training'/'neuralese'))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
-from provider_worker import SDKIO
-from natlang_neuralese.common.hashing import sha256_hex
+from native_role_exchange_io import NativeRoleExchangeIO
+from natlang_neuralese.common.hashing import sha256_hex,canonical_json_sha256_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.rl import native_role_release as roles
 from provider_bridge import checked_binding
@@ -26,11 +26,20 @@ from provider_bridge import checked_binding
 def call(io,sid,expression):
     # The same declared runtime/CPU composition and ENV precede imports.
     code=io.dependency_code(sid)
-    controls=io.config['sandboxes'][sid].get('role_controls')
+    controls=(io.source_host_controls(sid)if hasattr(io,'source_host_controls')
+        else io.config['sandboxes'][sid].get('role_controls'))
     if controls is not None:
         # Reuse the actual source-host controller loader. Imported role proofs
         # must never be published under a retired CPU-helper composition.
-        controls=checked_binding(controls)
+        if getattr(io,'local',None)is not None and sid==io.local['source_host_id']:
+            path=io._local_path(controls['path']);raw=io._local_file(path)
+            actual={'path':str(path),'sha256':__import__('hashlib').sha256(raw).hexdigest(),
+                'bytes':len(raw)}
+            if (actual['sha256']!=controls.get('sha256')
+                    or('bytes'in controls and actual['bytes']!=controls['bytes'])):
+                raise ValueError('local source-host controls changed their exact binding')
+            controls=actual
+        else:controls=checked_binding(controls)
         code+=('import pathlib,hashlib,runpy;'
             'p=pathlib.Path('+repr(controls['path'])+');raw=p.read_bytes();'
             'assert len(raw)=='+str(controls['bytes'])+' and hashlib.sha256(raw).hexdigest()=='+repr(controls['sha256'])+';'
@@ -60,12 +69,92 @@ def _arm_preparation(config,io,sid,plan,request):
     call(io,sid,'roles.arm_preparation_handoff('+repr(plan)+','+repr(request)+','+repr(curriculum)+')')
 
 
+def _return_local_cycle_descendants(config,io,plans):
+    """Transfer completed participant bundles back to the released local owners."""
+    declaration=config.get('local_cycle_returns')
+    if not declaration:return None
+    if declaration.get('schema')!='natlang.native-local-cycle-return-transport/1':
+        raise ValueError('unsupported local-cycle return transport declaration')
+    consumer=declaration['consumer'];host=config['hosts'][consumer];sid=host['source_host_id']
+    completion_path=declaration['completion_path']
+    if io.read_optional(sid,completion_path)is None:return None
+    completion=call(io,sid,'roles.binding('+repr(completion_path)+')')
+    role_plans=declaration['role_plans']
+    exported=call(io,sid,'roles.export_local_cycle_returns('+repr(host['plan']['path'])+','+
+        repr(completion)+','+repr(role_plans)+',directory='+repr(declaration['directory'])+')')
+    if not isinstance(exported,list):raise ValueError('local-cycle return exporter omitted its package inventory')
+    if not exported:return None
+    already=[]
+    for item in exported:
+        role=item.get('role');target=config['hosts'][role]['source_host_id']
+        exchange=plans[role]['role_exchange'];participant=item.get('participant')
+        pointer_path=exchange['directory']+'/'+participant+'-return-current.json'
+        raw=io.read_optional(target,pointer_path)
+        current=json.loads(raw)if raw is not None else None
+        if (current and current.get('receipt')==item['receipt']
+                and current.get('checkpoint',{}).get('sha256')==item['checkpoint']['sha256']):
+            already.append(role)
+    if len(already)==len(exported):return None
+    completed=[]
+    for item in exported:
+        role=item.get('role');target=config['hosts'][role]['source_host_id']
+        if item.get('role_plan')!=role_plans[role] or item.get('source_release') is None:
+            raise ValueError('local-cycle return package changed its source role authority')
+        mirrored=io.mirror_many(sid,target,item['files'])
+        if mirrored is False:return {'status':'return-transfer-paused'}
+        call(io,target,'roles.publish_local_cycle_return_pointer('+repr(role_plans[role]['path'])+','+
+            repr(item['receipt']['path'])+')')
+        completed.append({'role':role,'participant':item['participant'],'receipt':item['receipt'],
+            'checkpoint':item['bundle']})
+    return {'status':'local-cycle-descendants-returned','participants':completed}
+
+
+def stage_preparation_files(config,io):
+    staged=config.get('preparation_stage_files')
+    if staged is None:return None
+    if (staged.get('schema')!='natlang.native-role-preparation-files/1'
+            or not hasattr(io,'stage_prepared_files')):
+        raise ValueError('shared-stage file preparation needs the bound local/cloud source-host adapter')
+    source_host=staged.get('source_host_id')
+    if source_host!=(getattr(io,'local',None)or{}).get('source_host_id'):
+        raise ValueError('prepared source inventory differs from the current local source owner')
+    owner_hosts={host['source_host_id']for host in config.get('hosts',{}).values()}
+    if any(row.get('target_host_id')not in owner_hosts for row in staged.get('files',[])):
+        raise ValueError('prepared file inventory targets an owner outside this two-model exchange')
+    consumer=config.get('local_cycle_returns',{}).get('consumer')
+    if consumer not in config.get('hosts',{}):
+        raise ValueError('prepared file receipt has no declared semantic consumer host')
+    sid=config['hosts'][consumer]['source_host_id']
+    inventory=canonical_json_sha256_hex({'schema':staged['schema'],'source_host_id':source_host,
+        'files':staged['files']})
+    if inventory!=staged.get('inventory_sha256')or not isinstance(staged.get('receipt_path'),str):
+        raise ValueError('prepared file inventory differs from its frozen exact digest')
+    raw=io.read_optional(sid,staged['receipt_path'])
+    if raw is not None:
+        if isinstance(raw,str):raw=raw.encode()
+        receipt=json.loads(raw)
+        if (receipt.get('schema')!='natlang.native-role-preparation-files-receipt/1'
+                or receipt.get('inventory_sha256')!=inventory
+                or receipt.get('files')!=staged['files']):
+            raise ValueError('existing prepared-file receipt is for another source inventory')
+        return receipt
+    copied=io.stage_prepared_files(staged['files'],source_host_id=source_host)
+    receipt={'schema':'natlang.native-role-preparation-files-receipt/1',
+        'inventory_sha256':inventory,'files':staged['files'],'verified_copies':copied}
+    io.write_atomic(sid,staged['receipt_path'],
+        json.dumps(receipt,sort_keys=True,separators=(',',':')).encode())
+    return receipt
+
+
 def tick(config,io):
     if config.get('schema')!='natlang.native-role-exchange-service/1':
         raise ValueError('unsupported source-host role exchange service')
+    stage_preparation_files(config,io)
     hosts=config['hosts'];plans={};contract=None
     for role,host in hosts.items():
-        if host['source_host_id']not in io.config['sandboxes']:
+        allowed=(io.has_host(host['source_host_id'])if hasattr(io,'has_host')
+            else host['source_host_id']in io.config['sandboxes'])
+        if not allowed:
             raise ValueError('source host is outside the existing provider allowlist')
         raw=_read_bound(io,host['source_host_id'],host['plan']);plan=json.loads(raw)
         _,exchange=roles.ownership(plan)
@@ -76,6 +165,18 @@ def tick(config,io):
         actual=roles.contract(plan)
         if contract is not None and actual!=contract:raise ValueError('source hosts disagree on the joint contract')
         contract=actual;plans[role]=plan
+    runtime_assets=config.get('task_eval_collector_assets')
+    if (not isinstance(runtime_assets,dict) or set(runtime_assets)!=set(hosts)):
+        raise ValueError('role relay requires each current owner TaskEval Python collector binding')
+    for role,host in hosts.items():
+        asset=runtime_assets[role]
+        runtime=io.config['sandboxes'][host['source_host_id']]['runtime'] if host['source_host_id'] in io.config['sandboxes'] else io.local['runtime']
+        expected_path=str(Path(runtime)/'scripts/run_bonsai_queue.py')
+        if (asset.get('kind')!='task-source-file' or asset.get('path')!=expected_path
+                or type(asset.get('bytes'))is not int or asset['bytes']<=0
+                or not isinstance(asset.get('sha256'),str)):
+            raise ValueError('TaskEval collector binding differs from the actual frozen host runtime')
+        io.verify_assets(host['source_host_id'],[asset])
     if len({plan.get('snapshot_preparation',False) for plan in plans.values()})!=1:
         raise ValueError('source hosts disagree on snapshot preparation ownership')
     snapshots={};qualified_snapshots={}
@@ -99,10 +200,47 @@ def tick(config,io):
     for target,host in hosts.items():
         for source,raw in snapshots.items():
             if source==target:continue
+            dependency_inventory=roles.proof_dependencies(json.loads(raw))
+            if dependency_inventory:
+                transferred=io.mirror_many(hosts[source]['source_host_id'],host['source_host_id'],
+                    dependency_inventory)
+                if transferred is False:return {'status':'semantic-proof-transfer-paused','source':source,'target':target}
             call(io,host['source_host_id'],'roles.receive('+repr(raw)+','+repr(host['plan']['path'])+')')
         for source,raw in qualified_snapshots.items():
             if source!=target:
+                dependency_inventory=roles.proof_dependencies(json.loads(raw))
+                if dependency_inventory:
+                    transferred=io.mirror_many(hosts[source]['source_host_id'],host['source_host_id'],
+                        dependency_inventory)
+                    if transferred is False:return {'status':'semantic-proof-transfer-paused','source':source,'target':target}
                 call(io,host['source_host_id'],'roles.receive('+repr(raw)+','+repr(host['plan']['path'])+',snapshot_only=True)')
+    # Exposure candidates are not readiness. Once both owners have published
+    # their actual current candidates, seal a checkpoint-specific full-check
+    # request and install the same immutable bytes on both source hosts.
+    consumer=contract['semantic_consumer'];consumer_host=hosts[consumer]
+    generation={}
+    for role,role_plan in plans.items():
+        declaration=roles.plan_model(role_plan,role)
+        generation[declaration['handoff_requirement']['model_id']]=declaration.get(
+            'foundation_qualification_generation')
+    if len(generation)==2 and all(isinstance(value,str) and value for value in generation.values()):
+        generation_id=canonical_json_sha256_hex({'schema':'natlang.local-cycle-foundation-generation/1',
+            'roles':generation})
+        request_ref=call(io,consumer_host['source_host_id'],'roles.foundation_request('+repr(plans[consumer])+','+
+            repr(plans[consumer]['role_exchange']['directory']+'/foundation-qualification-requests')+
+            ',generation='+repr(generation_id)+')')
+        if request_ref is not None:
+            raw=io.read(consumer_host['source_host_id'],request_ref['path'])
+            if isinstance(raw,str):raw=raw.encode()
+            checked=checked_binding({**request_ref,'bytes':request_ref.get('bytes',len(raw))})
+            if len(raw)!=checked['bytes'] or sha256_hex(raw)!=checked['sha256']:
+                raise ValueError('foundation qualification request changed during relay')
+            request=json.loads(raw)
+            for role,host in hosts.items():
+                call(io,host['source_host_id'],'roles.publish_foundation_request('+repr(host['plan']['path'])+
+                    ','+repr(request)+')')
+    returned=_return_local_cycle_descendants(config,io,plans)
+    if returned is not None:return returned
     consumer=contract['semantic_consumer'];host=hosts[consumer];sid=host['source_host_id']
     handoff_pointer=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/post-vae-handoff.json')
     if handoff_pointer is not None:
@@ -132,7 +270,9 @@ def tick(config,io):
                 'roles.cancel_handoff('+repr(plans[name])+','+repr(handoff)+')')
             call(io,row['source_host_id'],expression)
     request_raw=io.read_optional(sid,plans[consumer]['role_exchange']['directory']+'/semantic-assets-request.json')
-    if request_raw is None:return {'status':'waiting-for-semantic-consumption','roles':sorted(snapshots)}
+    if request_raw is None:
+        returned=_return_local_cycle_descendants(config,io,plans)
+        return returned or {'status':'waiting-for-semantic-consumption','roles':sorted(snapshots)}
     request=json.loads(request_raw)
     mode=request.get('snapshot_preparation',False)
     if mode and plans[consumer].get('consumer_preparation_handoff'):
@@ -193,7 +333,7 @@ def main():
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     with (out/'service.lock').open('a')as lease:
         fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        io=SDKIO(config['provider'])
+        io=NativeRoleExchangeIO(config['provider'])
         while not stopped:
             try:result=tick(config,io)
             except Exception as error:result={'status':'repair-required','error_type':type(error).__name__}

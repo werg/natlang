@@ -20,7 +20,9 @@ from .native_raw_handoff import binding as _binding
 SCHEMA='natlang.native-source-host-role-proof/1'
 EXCHANGE='natlang.native-source-host-exchange/1'
 MECHANISM_FILES=('rl/native_role_release.py','rl/native_raw_rounds.py','train/native_readiness.py',
-                 'eval/native_gradients.py','rl/native_raw_policy.py','rl/native_raw_handoff.py')
+                 'eval/native_gradients.py','rl/native_raw_policy.py','rl/native_raw_handoff.py',
+                 'rl/local_cycles.py','rl/local_cycle_semantic_return.py')
+_LOCAL_CYCLE_CHECKPOINT_PROOFS={}
 
 
 def binding(path):
@@ -110,6 +112,8 @@ def _expected_mechanism(plan,role):
     if exchange is None or role not in exchange['roles']:
         raise ValueError('mechanism authority requires its declared source-host role')
     declared=exchange['roles'][role].get('verification_mechanism')
+    if declared is not None and set(declared)!=set(MECHANISM_FILES):
+        raise ValueError('source-host mechanism authority needs every exact local-cycle-aware file hash')
     return dict(declared) if declared is not None else mechanism()
 
 
@@ -157,12 +161,443 @@ def _immutable(path,value):
     return binding(path)
 
 
+def _local_cycle_source(plan):
+    source=plan.get('local_cycle_source')
+    if not isinstance(source,dict) or source.get('schema')!='natlang.native-local-cycle-source/1':
+        raise ValueError('local-cycle source owner needs its explicit current-state adapter')
+    required=('cycles_plan','rl_config','readiness','state_path','cursor_path','optimizer_owner_lock',
+              'owner_identity_path','return_directory')
+    if any(key not in source for key in required):
+        raise ValueError('local-cycle source descriptor omitted its real controller/state/qualification paths')
+    cycles_plan=Path(source['cycles_plan'])
+    if not cycles_plan.is_absolute()or '..'in cycles_plan.parts:
+        raise ValueError('local-cycle source plan path must be absolute and traversal-free')
+    reference=source['rl_config']
+    if not isinstance(reference,dict)or set(reference)!={'path','sha256'}:
+        raise ValueError('local-cycle source config needs an exact immutable file binding')
+    _bound(reference)
+    for key in ('readiness','state_path','cursor_path','optimizer_owner_lock','owner_identity_path','return_directory'):
+        path=Path(source[key])
+        if not path.is_absolute()or '..'in path.parts:
+            raise ValueError('local-cycle source path must be absolute and traversal-free')
+    return source
+
+
+def _local_cycle_checkpoint_proof(reference):
+    """Decode a full checkpoint once per exact path/content identity."""
+    key=(reference['path'],reference['sha256'],reference.get('bytes'))
+    cached=_LOCAL_CYCLE_CHECKPOINT_PROOFS.get(key)
+    if cached is not None:return cached
+    from ..train.native_readiness import _bound
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..model.native_model import CHECKPOINT_SCHEMA
+    from ..model.native_shared_checkpoint import SHARED_SCHEMA
+    saved=CheckpointPolicy.load(_bound(reference))
+    training=saved.get('training')or{}
+    model_config=saved.get('model_config')or{}
+    options=training.get('options')or{}
+    proof={'schema':saved.get('schema'),'model_config':{
+            'architecture':model_config.get('architecture'),
+            'base_inventory_sha256':model_config.get('base_inventory_sha256')},
+        'training_fields':{name:bool(training.get(name))for name in ('optimizer','rng','source_receipts')},
+        'native_snapshot_ancestors':list(options.get('native_snapshot_ancestors')or[])}
+    if proof['schema']not in(CHECKPOINT_SCHEMA,SHARED_SCHEMA):
+        raise ValueError('local-cycle source checkpoint has an unsupported full-state schema')
+    _LOCAL_CYCLE_CHECKPOINT_PROOFS[key]=proof
+    while len(_LOCAL_CYCLE_CHECKPOINT_PROOFS)>32:
+        _LOCAL_CYCLE_CHECKPOINT_PROOFS.pop(next(iter(_LOCAL_CYCLE_CHECKPOINT_PROOFS)))
+    return proof
+
+
+def _local_cycle_role_plan_predecessor(cycle_plan,source,current_path):
+    """Return the cycle's pinned role plan, accepting only the scheduler's two-flag successor."""
+    from ..train.native_readiness import _bound
+    reference=cycle_plan.get('local_cycle_role_plan')or{}
+    if not reference:return None
+    prior_path=_bound(reference);prior=json.loads(prior_path.read_text())
+    current_path=Path(current_path).resolve(strict=True);current=json.loads(current_path.read_text())
+    if binding(current_path)['sha256']==reference.get('sha256'):
+        return reference
+    expected=dict(prior)
+    expected['snapshot_preparation']=current.get('snapshot_preparation')
+    expected['consumer_preparation_handoff']=current.get('consumer_preparation_handoff')
+    if (expected!=current or current.get('snapshot_preparation')is not True
+            or current.get('consumer_preparation_handoff')is not True):
+        raise ValueError('local-cycle role plan is neither its exact pinned plan nor the frozen-preparation successor')
+    return reference
+
+
+def _validate_current_deployment_participant(deployment,participant,checkpoint):
+    """Require the current shared deployment to name this exact RL/SFT child."""
+    from ..train.native_readiness import _bound
+    updated=(deployment.get('updated_participants')or{}).get(participant)
+    if not isinstance(updated,dict):
+        raise ValueError('local-cycle semantic deployment omitted its current participant descendant')
+    _bound(checkpoint)
+    if any(updated.get(key)!=checkpoint.get(key) for key in ('path','sha256')):
+        raise ValueError('local-cycle semantic deployment participant is not the current checkpoint descendant')
+    return updated
+
+
+def _local_cycle_shared_ready(plan,source,config,state,checkpoint,requirement,participant):
+    """Qualify a participant whose current resumable state is in the shared checkpoint format."""
+    from ..train.native_readiness import _bound,validate_completion
+    from ..model.native_shared_checkpoint import SHARED_SCHEMA
+    from .local_cycle_semantic_return import _checkpoint_state,validate_return
+    from ..common.hashing import canonical_json_sha256_hex
+
+    adapter_ref=None;completion_ref=None;deployment_ref=None;return_ref=None
+    returned=state.get('semantic_return')or{}
+    if returned.get('receipt'):
+        receipt_path=_bound(returned['receipt']);receipt=json.loads(receipt_path.read_text())
+        if receipt.get('participant')!=participant:
+            raise ValueError('local-cycle semantic return names another participant')
+        checked=validate_return(receipt_path,participant=participant,
+            parent_checkpoint=receipt['parent_checkpoint']['path'],role_plan=receipt['role_plan']['path'],
+            role_release=receipt['role_release'])
+        if (checked['checkpoint']['sha256']!=returned.get('checkpoint',{}).get('sha256')
+                or checked['semantic_adapter']['sha256']!=returned.get('semantic_adapter',{}).get('sha256')):
+            raise ValueError('local-cycle source state changed its actually qualified return lineage')
+        return_ref=returned['receipt']
+    if state.get('semantic_deployment'):
+        deployment_ref=state['semantic_deployment'];deployment_path=_bound(deployment_ref)
+        deployment=json.loads(deployment_path.read_text())
+        if deployment.get('schema')!='natlang.native-rl-deployment/1':
+            raise ValueError('local-cycle shared descendant has an unknown deployment receipt')
+        adapter_ref=deployment.get('semantic_adapter');completion_ref=deployment.get('shared_stage_completion')
+        if (state.get('semantic_deployment_parent_adapter_sha256')
+                !=deployment.get('parent_adapter_sha256')):
+            raise ValueError('local-cycle shared deployment changed its previous semantic route binding')
+        if (not isinstance(adapter_ref,dict)or not isinstance(completion_ref,dict)
+                or not deployment.get('checkpoint')):
+            raise ValueError('local-cycle shared deployment omitted its exact checkpoint/adapter/completion')
+        if (deployment['checkpoint'].get('path')!=checkpoint['path']
+                or deployment['checkpoint'].get('sha256')!=checkpoint['sha256']
+                or state.get('semantic_adapter')!=adapter_ref.get('path')):
+            raise ValueError('local-cycle production state is not the deployment current checkpoint/adapter')
+        _validate_current_deployment_participant(deployment,participant,checkpoint)
+    elif completion_ref is None:
+        completion_ref=returned.get('completion')
+        adapter_ref=returned.get('semantic_adapter')
+    if not isinstance(completion_ref,dict)or not isinstance(adapter_ref,dict):
+        return None,None
+    completion_path=_bound(completion_ref);completion=json.loads(completion_path.read_text())
+    adapter_path=_bound(adapter_ref);adapter=json.loads(adapter_path.read_text())
+    completion_ref=binding(completion_path);adapter_ref=binding(adapter_path)
+    expected={row['handoff_requirement']['model_id']for row in plan['models']}
+    models=adapter.get('models')or{}
+    if set(models)!=expected or participant not in models:
+        raise ValueError('local-cycle shared completion changed the exact source-host participant cohort')
+    key=(completion.get('participants_signature'),completion.get('curriculum_signature'))
+    validate_completion(completion_path,{key:{'models':sorted(expected),
+        'execution_signature':canonical_json_sha256_hex({'completion':completion_ref['sha256']})}})
+    if (completion.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']
+            or completion.get('adapter',{}).get('sha256')!=adapter_ref['sha256']
+            or adapter.get('checkpoint',{}).get('sha256')!=checkpoint['sha256']):
+        raise ValueError('local-cycle shared qualification is not bound to its actual current checkpoint')
+    participant_state,training=_checkpoint_state(checkpoint['path'],participant)
+    if participant_state.get('optimizer') is None or not participant_state.get('source_rng'):
+        raise ValueError('local-cycle shared checkpoint omitted the participant optimizer or source RNG')
+    if not isinstance(training.get('global_training',{}).get('rng'),dict):
+        raise ValueError('local-cycle shared checkpoint omitted its actual shared trainer RNG')
+    identity=models[participant].get('native_identity')or{}
+    if (identity.get('checkpoint_sha256')!=checkpoint['sha256']
+            or participant_state.get('model_config',{}).get('architecture')!=identity.get('architecture')
+            or participant_state.get('model_config',{}).get('base_inventory_sha256')!=identity.get('base_inventory_sha256')):
+        raise ValueError('local-cycle shared checkpoint and semantic participant identity differ')
+    model_config=participant_state.get('model_config')or{}
+    model_id=str(model_config.get('architecture'))+':'+str(model_config.get('base_inventory_sha256'))
+    if model_id!=requirement['model_id']:
+        raise ValueError('local-cycle shared checkpoint geometry differs from its declared participant')
+    progress=participant_state.get('sft_progress')
+    if not isinstance(progress,dict):raise ValueError('local-cycle shared participant omitted full SFT/DPO progress')
+    from ..train.native_continuation import progress_obligations
+    obligations=progress_obligations(progress)
+    if models[participant].get('mandatory_sft')!=obligations:
+        raise ValueError('local-cycle semantic adapter lost or fabricated remaining SFT/DPO debts')
+    if requirement.get('readiness_boundary')!='communication-foundation' and obligations.get('complete') is not True:
+        raise ValueError('local-cycle shared participant has unfinished mandatory SFT/DPO debt')
+    options=participant_state.get('training_options')or{}
+    ancestors=options.get('native_snapshot_ancestors')or[]
+    if any(not isinstance(value,str)or re.fullmatch(r'[0-9a-f]{64}',value)is None for value in ancestors):
+        raise ValueError('local-cycle shared participant has malformed native snapshot ancestry')
+    ready={'qualification_kind':'shared-semantic-completion','model_id':requirement['model_id'],
+        'readiness':completion_ref,'checkpoint':checkpoint,'native_identity':identity,
+        'stage_id':(requirement.get('stage_ids')or['shared-semantic'])[-1],
+        'recipe':models[participant].get('recipe_binding')or requirement.get('recipe_binding')or
+            {'sha256':requirement.get('recipe_sha256')},
+        'mandatory_sft':obligations,'readiness_requirement':requirement,
+        'semantic_adapter':adapter_ref,'semantic_deployment':deployment_ref,
+        'native_snapshot_ancestors':ancestors}
+    evidence={'completion':binding(completion_path),'adapter':binding(adapter_path),
+        'runtime':completion['runtime_certificates'][participant],
+        'task':completion['task_execution_receipts'][participant]}
+    if deployment_ref:evidence['deployment']=deployment_ref
+    if return_ref:evidence['return_receipt']=return_ref
+    files=_semantic_completion_dependencies(completion_path,completion)
+    evidence['files']={item['path']:item for item in files}
+    ready['semantic_evidence']=evidence
+    return ready,evidence
+
+
+def proof_dependencies(proof):
+    """File closure needed to validate transported shared-semantic role evidence."""
+    raw=_evidence(proof['raw_state'])
+    result={}
+    for model in (raw.get('models')or{}).values():
+        evidence=model.get('semantic_evidence')or{}
+        for item in (evidence.get('files')or{}).values():
+            if not isinstance(item,dict)or set(item)-{'path','sha256','bytes'} or not {'path','sha256'}<=set(item):
+                raise ValueError('shared-semantic role closure contains a malformed source binding')
+            previous=result.get(item['path'])
+            if previous is not None and previous!=item:raise ValueError('shared-semantic role closure conflicts by path')
+            result[item['path']]=item
+    for item in (proof.get('models')or{}).values():
+        snapshot=item.get('snapshot_checkpoint')
+        if snapshot:
+            previous=result.get(snapshot['path'])
+            if previous is not None and previous!=snapshot:raise ValueError('role snapshot pin has conflicting bindings')
+            result[snapshot['path']]=snapshot
+    return [result[name]for name in sorted(result)]
+
+
+def _local_cycle_state(plan_path,*,kind):
+    """Validate current local-cycle checkpoint and build the ordinary role-proof envelope."""
+    from ..train.native_readiness import validate_ready,_bound
+    from ..model.native_shared_checkpoint import SHARED_SCHEMA
+
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    source=_local_cycle_source(plan);owned,exchange=ownership(plan)
+    if exchange is None or len(owned)!=1:
+        raise ValueError('local-cycle role source must own its exact one-participant role')
+    cycle_plan_path=Path(source['cycles_plan']).resolve(strict=True);cycle_plan=json.loads(cycle_plan_path.read_text())
+    config_path=_bound(source['rl_config']);config=json.loads(config_path.read_text())
+    role_plan_declared=cycle_plan.get('local_cycle_role_plan')or{}
+    actual_role_plan=binding(plan_path)
+    predecessor_ref=_local_cycle_role_plan_predecessor({**cycle_plan,'_path':str(cycle_plan_path)},source,plan_path)
+    if ((predecessor_ref is None or any(role_plan_declared.get(key)!=predecessor_ref.get(key)
+            for key in ('path','sha256'))
+            or('bytes'in predecessor_ref and predecessor_ref['bytes']!=role_plan_declared.get('bytes')))
+            or Path(cycle_plan['rl_config']).resolve()!=config_path
+            or Path(cycle_plan['optimizer_owner_lock']).resolve()!=Path(source['optimizer_owner_lock']).resolve()
+            or Path(config['out']).resolve()/'state.json'!=Path(source['state_path']).resolve()
+            or Path(cycle_plan['out']).resolve()/'cursor.json'!=Path(source['cursor_path']).resolve()
+            or config.get('native_actor_mode')!='raw-state'):
+        raise ValueError('local-cycle source adapter differs from its actual controller paths')
+    role=exchange['role'];declaration=plan_model(plan,next(iter(owned)))
+    if Path(source['return_directory']).resolve()!=Path(exchange['directory']).resolve():
+        raise ValueError('local-cycle semantic return directory differs from its role exchange authority')
+    requirement=declaration['handoff_requirement'];participant=declaration.get('native_participant')
+    if not isinstance(participant,str)or not participant:
+        raise ValueError('local-cycle role declaration omitted its exact native participant')
+    if config.get('native_participant') not in (None,participant):
+        raise ValueError('local-cycle actor participant differs from its declared source role')
+    state_path=Path(source['state_path']);cursor_path=Path(source['cursor_path'])
+    state=json.loads(state_path.read_text());cursor=json.loads(cursor_path.read_text())
+    if state.get('native_participant') not in (None,participant):
+        raise ValueError('local-cycle state changed its established native participant identity')
+    if (state.get('schema')!='natlang.rl-production-state/1'
+            or any(key.startswith(('active_update_','partial_update_'))for key in state)
+            or cursor.get('phase') not in ('rl','supervised')):
+        raise ValueError('local-cycle role may publish only at an actual complete round/stage boundary')
+    checkpoint=_binding(state['checkpoint'])
+    semantic_state=bool(state.get('semantic_deployment') or (state.get('semantic_return')or{}).get('receipt'))
+    if semantic_state:
+        # Avoid deserializing a large checkpoint for a stale deployment. The
+        # full participant/optimizer/RNG ancestry checks remain below once the
+        # exact current completion and checkpoint agree.
+        deployment_ref=state.get('semantic_deployment')
+        if deployment_ref:
+            deployment=json.loads(_bound(deployment_ref).read_text())
+            deployed=deployment.get('checkpoint')or{}
+            if any(deployed.get(key)!=checkpoint.get(key)for key in ('path','sha256')):
+                return plan,source,owned,exchange,None,{},{}
+        saved=_local_cycle_checkpoint_proof(checkpoint)
+        if saved.get('schema')!=SHARED_SCHEMA:
+            raise ValueError('semantic local-cycle state does not point to a shared native checkpoint')
+        ready,semantic_evidence=_local_cycle_shared_ready(plan,source,config,state,checkpoint,
+            requirement,participant)
+        if ready is None:return plan,source,owned,exchange,None,{},{}
+        snapshot_ancestors=ready['native_snapshot_ancestors']
+    else:
+        readiness_ref=state.get('readiness') or source['readiness']
+        ready=validate_ready(_bound(readiness_ref) if isinstance(readiness_ref,dict) else Path(readiness_ref),requirement)
+        if ready is None:return plan,source,owned,exchange,None,{},{}
+        if any(ready['checkpoint'].get(key)!=checkpoint.get(key)for key in ('path','sha256')):
+            return plan,source,owned,exchange,None,{},{}
+        saved=_local_cycle_checkpoint_proof(checkpoint)
+        if ready['model_id']!=requirement['model_id']:
+            raise ValueError('local-cycle readiness model differs from its declared source role')
+        if saved.get('schema')!=CHECKPOINT_SCHEMA:
+            raise ValueError('local-cycle role requires a full native resumable checkpoint')
+        if not all(saved['training_fields'].get(key)for key in ('optimizer','rng','source_receipts')):
+            raise ValueError('local-cycle source checkpoint omitted optimizer/RNG/exposure state')
+        model_config=saved['model_config']
+        snapshot_ancestors=saved.get('native_snapshot_ancestors')or[]
+        if any(not isinstance(value,str)or re.fullmatch(r'[0-9a-f]{64}',value)is None for value in snapshot_ancestors):
+            raise ValueError('local-cycle checkpoint has malformed native snapshot ancestry')
+        model_id=(str(model_config.get('architecture'))+':'+str(model_config.get('base_inventory_sha256')))
+        if (model_id!=requirement['model_id']
+                or ready['native_identity'].get('checkpoint_sha256')!=checkpoint['sha256']):
+            raise ValueError('local-cycle checkpoint identity differs from its native readiness')
+        semantic_evidence=None
+    owner_path=Path(source['owner_identity_path'])
+    if not owner_path.is_file():raise ValueError('local-cycle source has no recorded optimizer-owner identity')
+    owner=json.loads(owner_path.read_text())
+    from ..train.native_resident import owner_alive
+    if kind=='eligible' and not owner_alive(owner):
+        raise ValueError('local-cycle eligibility proof owner is no longer alive')
+    if kind=='released' and owner_alive(owner):
+        raise ValueError('local-cycle release requires its recorded optimizer owner to exit')
+    value={'checkpoint':checkpoint,'readiness':ready['readiness'],'config':binding(config_path),
+        'production_state':binding(state_path),'cursor':binding(cursor_path),
+        'runtime_binding':config.get('native_actor_python_runtime'),
+        'native_snapshot_ancestors':snapshot_ancestors,
+        'production_recipe':declaration['production_recipe'],'cases':declaration['cases'],
+        'seed_native_graphs':declaration['seed_native_graphs'],'held_native_graphs':declaration['held_native_graphs'],
+        **({'foundation_qualification_attempt':state['foundation_qualification_attempt']}
+           if state.get('foundation_qualification_attempt')else{})}
+    if semantic_evidence is not None:
+        value.update(semantic_evidence=semantic_evidence,semantic_adapter=ready['semantic_adapter'],
+            semantic_deployment=ready.get('semantic_deployment'),native_snapshot_ancestors=snapshot_ancestors,
+            semantic_adapter_parent_sha256=state.get('semantic_deployment_parent_adapter_sha256'))
+    state_value={'schema':'natlang.native-local-cycle-source-state/1','owner':owner,
+        'plan_sha256':predecessor_ref['sha256'],'released':kind=='released',
+        'role_plan_predecessor':_inline(predecessor_ref),
+        'owned_models':sorted(owned),'models':{next(iter(owned)):value},
+        'cycle_cursor':cursor,'source_host_id':exchange['roles'][role]['source_host_id']}
+    return plan,source,owned,exchange,state_value,{requirement['model_id']:ready},value
+
+
+def publish_local_cycle(plan_path,*,kind):
+    """Publish eligibility under the live local owner or release after its lock drains."""
+    if kind not in ('eligible','released'):raise ValueError('unknown local-cycle role proof kind')
+    plan,source,owned,exchange,state,ready_by_id,value=_local_cycle_state(plan_path,kind=kind)
+    if state is None:return None
+    lock_path=Path(source['optimizer_owner_lock'])
+    if kind=='eligible':
+        # The caller is the local-cycle owner and owns the canonical lock. A
+        # third-party relay cannot manufacture current eligibility.
+        from ..train.native_resident import process_owner
+        from .native_raw_handoff import same_process
+        if not same_process(state['owner'],process_owner())or not owner_lock_held(lock_path):
+            raise ValueError('local-cycle eligibility may only be published by its live optimizer owner')
+    else:
+        with lock_path.open('a')as lease:
+            try:fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:return None
+            else:fcntl.flock(lease,fcntl.LOCK_UN)
+    evidence={}
+    for name in sorted(owned):
+        ready=ready_by_id[plan_model(plan,name)['handoff_requirement']['model_id']]
+        if ready.get('qualification_kind')=='shared-semantic-completion':
+            semantic=ready['semantic_evidence']
+            evidence[name]={'ready':ready,'semantic_evidence':{
+                key:_inline(semantic[key]) for key in ('completion','adapter','runtime','task')},
+                **({'deployment':_inline(semantic['deployment'])} if semantic.get('deployment') else {}),
+                **({'return_receipt':_inline(semantic['return_receipt'])} if semantic.get('return_receipt') else {})}
+            task=_evidence(evidence[name]['semantic_evidence']['task'])
+        else:
+            receipt_item=_inline(ready['readiness']);receipt=_evidence(receipt_item)
+            evidence[name]={'ready':ready,'readiness':receipt_item,
+                'report':_inline(receipt['training_receipt']),'runtime':_inline(receipt['runtime_certificate']),
+                'task':_inline(receipt['task_execution_receipt'])}
+            task=_evidence(evidence[name]['task'])
+        if plan.get('snapshot_preparation'):
+            snapshot_source=ready['checkpoint']
+            if ready.get('qualification_kind')=='shared-semantic-completion':
+                snapshot_source={**snapshot_source,'participant':ready['model_id']}
+            evidence[name]['snapshot_checkpoint']=pin_checkpoint(snapshot_source,
+                Path(exchange['directory'])/'qualified-checkpoints')
+        if task.get('schema')=='natlang.native-task-execution-receipt/2':
+            evidence[name]['task_score']=_inline({'path':task['score_path'],'sha256':task['score_sha256']})
+    state_path=Path(exchange['directory'])/('local-cycle-state-'+canonical_json_sha256_hex(state)+'.json')
+    state_reference=_immutable(state_path,state)
+    proof={'schema':SCHEMA,'kind':kind,'role':exchange['role'],
+        'source_host_id':exchange['roles'][exchange['role']]['source_host_id'],
+        'source_host':{'hostname':socket.gethostname(),'validator':process_owner()},
+        'contract':contract(plan),'mechanism':_publishing_mechanism(plan),'owned_models':sorted(owned),
+        'plan':_inline(binding(plan_path)),'raw_state':_inline(state_reference),
+        'controller':state['owner'],'models':evidence,'optimizer_released':kind=='released','production_complete':False,
+        'foundation_candidates':{},'foundation_attempts':{}}
+    for name in sorted(owned):
+        item=ready_by_id[plan_model(plan,name)['handoff_requirement']['model_id']]
+        requirement=item['readiness_requirement']
+        if (item.get('qualification_kind')!='shared-semantic-completion'
+                and requirement.get('readiness_boundary')=='communication-foundation'):
+            proof['foundation_candidates'][name]=__import__(
+                'natlang_neuralese.train.native_readiness',fromlist=['validate_foundation_candidate']).validate_foundation_candidate(
+                    _bound(ready_by_id[requirement['model_id']]['readiness']),requirement)
+    return _commit(exchange,proof)
+
+
+def publish_local_cycle_candidate(plan_path):
+    """Publish earned communication exposure while keeping the optimizer active."""
+    from ..train.native_readiness import _bound,validate_foundation_candidate
+    from .native_raw_rounds import _release_requirement
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    source=_local_cycle_source(plan);owned,exchange=ownership(plan)
+    if exchange is None or len(owned)!=1:raise ValueError('foundation candidate needs its exact single source owner')
+    if not owner_lock_held(source['optimizer_owner_lock']):
+        raise ValueError('foundation candidate publication requires the live local optimizer owner')
+    from ..train.native_resident import process_owner
+    from .native_raw_handoff import same_process
+    owner=json.loads(Path(source['owner_identity_path']).read_text())
+    if not same_process(owner,process_owner()):
+        raise ValueError('foundation candidate publisher is not the recorded optimizer owner')
+    state_path=Path(source['state_path']).resolve(strict=True);state=json.loads(state_path.read_text())
+    cursor_path=Path(source['cursor_path']).resolve(strict=True);cursor=json.loads(cursor_path.read_text())
+    if (state.get('schema')!='natlang.rl-production-state/1'
+            or state.get('phase') not in ('collect','updating_mandatory_sft')
+            or any(key.startswith(('active_update_','partial_update_'))for key in state)
+            or state.get('pending_native_checkpoint') or state.get('partial_checkpoint')
+            or cursor.get('phase') not in ('rl','supervised')):
+        raise ValueError('foundation exposure is publishable only at a complete current optimizer boundary')
+    name=next(iter(owned));declaration=plan_model(plan,name)
+    requirement=_release_requirement(declaration,{'foundation_candidate':state.get('foundation_candidate')})
+    if requirement.get('readiness_boundary')!='communication-foundation':
+        raise ValueError('unqualified exposure publication requires the declared communication foundation')
+    candidate_ref=state.get('foundation_candidate')
+    candidate=(validate_foundation_candidate(_bound(candidate_ref),requirement)
+        if isinstance(candidate_ref,dict) else None)
+    checkpoint=_binding(state['checkpoint'])
+    if candidate is not None and candidate['checkpoint'].get('sha256')!=checkpoint['sha256']:
+        candidate=None
+    raw_state={'schema':'natlang.native-local-cycle-source-state/1','owner':owner,
+        'plan_sha256':binding(plan_path)['sha256'],'released':False,'owned_models':sorted(owned),
+        'models':{name:{'checkpoint':checkpoint,**({'foundation_candidate':candidate_ref}if candidate_ref else{}),
+            'config':binding(source['rl_config']),'production_state':binding(state_path),
+            'cursor':binding(cursor_path)}},'cycle_cursor':cursor,
+        'source_host_id':exchange['roles'][exchange['role']]['source_host_id']}
+    state_ref=_immutable(Path(exchange['directory'])/('local-cycle-candidate-'+
+        canonical_json_sha256_hex(raw_state)+'.json'),raw_state)
+    proof={'schema':SCHEMA,'kind':'pending','role':exchange['role'],
+        'source_host_id':exchange['roles'][exchange['role']]['source_host_id'],
+        'source_host':{'hostname':socket.gethostname(),'validator':process_owner()},
+        'contract':contract(plan),'mechanism':_publishing_mechanism(plan),
+        'owned_models':sorted(owned),'plan':_inline(binding(plan_path)),'raw_state':_inline(state_ref),
+        'controller':owner,'optimizer_released':False,'production_complete':False,
+        'foundation_candidates':({name:candidate}if candidate is not None else{}),'foundation_attempts':{}}
+    return _commit(exchange,proof)
+
+
+def owner_lock_held(path):
+    with Path(path).open('a')as lease:
+        try:fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:return True
+        else:
+            fcntl.flock(lease,fcntl.LOCK_UN);return False
+
+
 def publish(plan_path,state_path,*,kind):
     """Run FULL local validation; final releases require a dead raw owner."""
     if kind not in ('eligible','released'):raise ValueError('unknown source-host role proof kind')
+    plan=json.loads(Path(plan_path).read_text())
+    if plan.get('local_cycle_source'):
+        return publish_local_cycle(plan_path,kind=kind)
     from .native_raw_rounds import validate_release
     from ..train.native_resident import process_owner
-    plan=json.loads(Path(plan_path).read_text());owned,exchange=ownership(plan)
+    owned,exchange=ownership(plan)
     if exchange is None:raise ValueError('role publication requires explicit ownership')
     state=json.loads(Path(state_path).read_text())
     ready=validate_release(state_path,plan_path,allow_live=kind=='eligible',eligibility=kind=='eligible')
@@ -220,16 +655,112 @@ def validate(reference,plan,*,kind):
             or set(proof.get('models')or{})!=set(proof['owned_models'])):
         raise ValueError('source-host role proof changed ownership, cohort, mechanism or release scope')
     source_plan=_evidence(proof['plan']);source_state=_evidence(proof['raw_state']);source_owned,source_exchange=ownership(source_plan)
+    predecessor=source_state.get('role_plan_predecessor')
+    expected_state_plan_sha=(predecessor or {}).get('source',{}).get('sha256',proof['plan']['source']['sha256'])
+    if (source_plan.get('local_cycle_source')and predecessor
+            and predecessor.get('source',{}).get('sha256')!=proof['plan']['source']['sha256']):
+        prior=json.loads(_evidence(predecessor)['text'])
+        expected=dict(prior)
+        expected['snapshot_preparation']=source_plan.get('snapshot_preparation')
+        expected['consumer_preparation_handoff']=source_plan.get('consumer_preparation_handoff')
+        if (expected!=source_plan or source_plan.get('snapshot_preparation')is not True
+                or source_plan.get('consumer_preparation_handoff')is not True):
+            raise ValueError('source role plan is not the exact declared frozen-preparation successor')
     if (contract(source_plan)!=expected or source_exchange['role']!=role or source_owned!=set(proof['owned_models'])
             or source_state.get('owner')!=proof['controller']
-            or source_state.get('plan_sha256')!=proof['plan']['source']['sha256']
+            or source_state.get('plan_sha256')!=expected_state_plan_sha
             or set(source_state.get('models')or{})!=set(proof['owned_models'])
             or (kind=='released'and source_state.get('released')is not True)):
         raise ValueError('role proof omitted its actual controller/drained source state')
     from ..eval.native_gradients import validate_complete_proof
+    def same_binding(left,right):
+        return isinstance(left,dict)and isinstance(right,dict)and all(
+            left.get(key)==right.get(key)for key in ('path','sha256'))
     result={}
     for name,item in proof['models'].items():
-        checked=item['ready'];receipt=_evidence(item['readiness']);report=_evidence(item['report'])
+        checked=item['ready']
+        if checked.get('qualification_kind')=='shared-semantic-completion':
+            requirement=checked['readiness_requirement'];cohort=expected['models'][name]
+            semantic=item.get('semantic_evidence')or{}
+            completion=_evidence(semantic.get('completion')or{})
+            adapter=_evidence(semantic.get('adapter')or{})
+            runtime=_evidence(semantic.get('runtime')or{})
+            task=_evidence(semantic.get('task')or{})
+            source_value=source_state['models'][name]
+            adapter_model=(adapter.get('models')or{}).get(checked.get('model_id'),{})
+            if (checked.get('model_id')!=cohort['model_id']
+                    or requirement.get('model_id')!=cohort['model_id']
+                    or any(requirement.get(key)!=cohort[key]for key in
+                        ('model_id','stage_ids','foundation_epochs','readiness_boundary','forward_atol','gradient_atol'))
+                    or (requirement.get('foundation_sources')or{}).get('sha256')!=cohort['foundation_sources_sha256']
+                    or checked.get('checkpoint')!=source_value.get('checkpoint')
+                    or not same_binding(checked.get('readiness'),semantic['completion']['source'])
+                    or not same_binding(checked.get('semantic_adapter'),semantic['adapter']['source'])
+                    or checked.get('native_snapshot_ancestors')!=source_value.get('native_snapshot_ancestors')
+                    or completion.get('checkpoint',{}).get('sha256')!=checked['checkpoint']['sha256']
+                    or completion.get('adapter',{}).get('sha256')!=checked['semantic_adapter']['sha256']
+                    or adapter.get('checkpoint',{}).get('sha256')!=checked['checkpoint']['sha256']
+                    or adapter_model.get('native_identity')!=checked['native_identity']
+                    or adapter_model.get('mandatory_sft')!=checked.get('mandatory_sft')
+                    or adapter_model.get('recipe_binding')!=checked.get('recipe')
+                    or completion.get('runtime_certificates',{}).get(checked['model_id'])!=semantic['runtime']['source']
+                    or completion.get('task_execution_receipts',{}).get(checked['model_id'])!=semantic['task']['source']
+                    or runtime.get('native_identity')!=checked['native_identity']
+                    or task.get('native_identity')!=checked['native_identity']
+                    or checked.get('recipe',{}).get('sha256')!=requirement.get('recipe_sha256')):
+                raise ValueError('shared semantic role evidence changed its current participant identity or authority')
+            from ..train.native_readiness import _bound,validate_completion
+            completion_path=_bound(semantic['completion']['source'])
+            curriculum_signature=completion.get('curriculum_signature')
+            participants_signature=completion.get('participants_signature')
+            validate_completion(completion_path,{(participants_signature,curriculum_signature):{
+                'models':sorted({row['handoff_requirement']['model_id']for row in source_plan['models']}),
+                'execution_signature':canonical_json_sha256_hex({'completion':semantic['completion']['source']['sha256']})}})
+            if (runtime.get('passed')is not True or task.get('passed')is not True
+                    or task.get('complete')is not True or task.get('eligible')is not True):
+                raise ValueError('shared semantic role lacks actual complete runtime/task qualification')
+            if 'deployment'in semantic:
+                deployment=_evidence(semantic['deployment'])
+                if (source_value.get('semantic_evidence',{}).get('deployment')!=semantic['deployment']['source']
+                        or deployment.get('schema')!='natlang.native-rl-deployment/1'
+                        or not same_binding(deployment.get('checkpoint'),checked['checkpoint'])
+                        or not same_binding(deployment.get('semantic_adapter'),checked['semantic_adapter'])
+                        or not same_binding(deployment.get('shared_stage_completion'),semantic['completion']['source'])
+                        or deployment.get('parent_adapter_sha256')!=source_value.get('semantic_adapter_parent_sha256')):
+                    raise ValueError('shared semantic deployment changed its exact source-host descendant lineage')
+            if 'return_receipt'in semantic:
+                returned=_evidence(semantic['return_receipt'])
+                if (source_value.get('semantic_evidence',{}).get('return_receipt')!=semantic['return_receipt']['source']
+                        or returned.get('schema')!='natlang.native-local-cycle-semantic-return/1'
+                        or returned.get('participant')!=checked['model_id']
+                        or returned.get('checkpoint',{}).get('sha256')!=checked['checkpoint']['sha256']
+                        or not same_binding(returned.get('semantic_adapter'),checked['semantic_adapter'])):
+                    raise ValueError('shared semantic role omitted its exact optimizer-owner return receipt')
+                for key in ('role_plan','role_release','parent_checkpoint','completion','bundle'):
+                    value=returned.get(key)
+                    if not isinstance(value,dict)or not isinstance(value.get('sha256'),str):
+                        raise ValueError('shared semantic role return receipt lost its exact historical custody binding')
+            if task.get('schema')=='natlang.native-task-execution-receipt/2':
+                score=_evidence(item['task_score'])
+                if item['task_score']['source']!={'path':task['score_path'],'sha256':task['score_sha256']}:
+                    raise ValueError('shared semantic role task score binding changed')
+                from ..eval.native_state import _execution_receipt
+                summary={key:value for key,value in score.items()if key!='cases_detail'}
+                expected_task=_execution_receipt(summary,checked['native_identity'],
+                    checkpoint_sha256=checked['checkpoint']['sha256'],score=score,path=None,digest=task['score_sha256'])
+                if not expected_task['passed']:
+                    raise ValueError('shared semantic role task score did not qualify its actual checkpoint')
+            if item.get('snapshot_checkpoint'):
+                snapshot=item['snapshot_checkpoint']
+                if (snapshot.get('sha256')!=checked['checkpoint']['sha256']
+                        or not snapshot.get('path')or type(snapshot.get('bytes'))is not int or snapshot['bytes']<=0
+                        or ('bytes'in checked['checkpoint']and checked['checkpoint']['bytes']!=snapshot['bytes'])):
+                    raise ValueError('shared semantic snapshot pin changed the actual resumable participant state')
+                checked={**checked,'snapshot_checkpoint':snapshot}
+            result[checked['model_id']]={**checked,'source_role_release':reference,
+                'source_host_id':proof['source_host_id']}
+            continue
+        receipt=_evidence(item['readiness']);report=_evidence(item['report'])
         runtime=_evidence(item['runtime']);task=_evidence(item['task']);requirement=checked['readiness_requirement']
         cohort=expected['models'][name]
         if (checked['model_id']!=cohort['model_id']or receipt['model_id']!=checked['model_id']
@@ -324,6 +855,31 @@ def _status(exchange,role):
     return reference,json.loads(_bound(reference).read_text())
 
 
+def validate_local_cycle_release(plan_path,*,snapshot=False):
+    """Consume only the local-cycle owner's current eligible/released proof."""
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    if not plan.get('local_cycle_source'):
+        raise ValueError('local-cycle proof requested for another source-owner mechanism')
+    _,exchange=ownership(plan)
+    reference,proof=_status(exchange,exchange['role'])
+    if proof is None:return None
+    kind=proof.get('kind')
+    if kind not in (('eligible','released')if snapshot else ('released',)):
+        return None
+    role,ready=validate(reference,plan,kind=kind)
+    _,_,_,_,current,_,_=_local_cycle_state(plan_path,kind=kind)
+    if current!=_evidence(proof['raw_state']):return None
+    if kind=='released':
+        source=_local_cycle_source(plan);lock=Path(source['optimizer_owner_lock'])
+        with lock.open('a')as lease:
+            try:fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:return None
+            finally:
+                try:fcntl.flock(lease,fcntl.LOCK_UN)
+                except OSError:pass
+    return ready
+
+
 def _commit(exchange,proof):
     root=Path(exchange['directory']);root.mkdir(parents=True,exist_ok=True);role=exchange['role']
     with (root/(role+'.lock')).open('a')as lease:
@@ -383,8 +939,13 @@ def foundation_candidates(plan):
         rows=proof.get('foundation_candidates',{})
         if set(rows)-set(assignment['owned_models']):
             raise ValueError('foundation candidate came from another optimizer owner')
+        raw_state=_evidence(proof['raw_state'])
         for name,candidate in rows.items():
             validate_foundation_candidate_document(candidate,expected['models'][name])
+            source_model=(raw_state.get('models')or{}).get(name)or{}
+            if (not isinstance(source_model.get('checkpoint'),dict)
+                    or source_model['checkpoint'].get('sha256')!=candidate['checkpoint'].get('sha256')):
+                raise ValueError('foundation exposure candidate is not bound to its published current owner head')
             candidates[candidate['model_id']]=candidate
         for name,attempt in proof.get('foundation_attempts',{}).items():
             if name not in assignment['owned_models']:
@@ -405,20 +966,59 @@ def foundation_request(plan,out,*,generation):
     elif (preparation:=preparation_handoff(plan)):
         generation=canonical_json_sha256_hex({'foundation_generation':generation,
             'preparation':preparation['source']['sha256']})
-    signature=canonical_json_sha256_hex({'contract':expected,'generation':generation})
+    candidates,_=foundation_candidates(plan)
+    if len(candidates)<2:return None
+    signature=canonical_json_sha256_hex({'contract':expected,'generation':generation,
+        'candidates':candidates})
     path=Path(out)/(signature+'.json')
     if path.exists():
         request=json.loads(path.read_text())
-        if request.get('contract')!=expected or request.get('generation')!=generation:
+        if (request.get('contract')!=expected or request.get('generation')!=generation
+                or request.get('candidates')!=candidates):
             raise ValueError('sealed foundation rendezvous changed its contract')
         return binding(path)
-    candidates,_=foundation_candidates(plan)
-    if len(candidates)<2:return None
     return _immutable(path,{'schema':'natlang.native-foundation-qualification-request/1',
         'contract':expected,'generation':generation,'candidates':candidates,'readiness_granted':False,
         **({'foundation_generation':foundation_generation,
             'handoff_request_sha256':handoff['request_sha256'],
             'rendezvous_attempt_sha256':handoff['attempt_sha256']}if handoff else{})})
+
+
+def publish_foundation_request(plan_path, request):
+    """Publish the exact shared candidate request at this source owner's current pointer."""
+    from ..train.native_readiness import validate_foundation_candidate_document
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    _,exchange=ownership(plan)
+    expected=contract(plan)
+    models={row['model_id']:row for row in expected['models'].values()}
+    candidates=request.get('candidates') or {}
+    if (request.get('schema')!='natlang.native-foundation-qualification-request/1'
+            or request.get('contract')!=expected or request.get('readiness_granted') is not False
+            or len(candidates)<2 or not set(candidates)<=set(models)):
+        raise ValueError('shared foundation request changed its exact cohort or grant semantics')
+    for model_id,candidate in candidates.items():
+        validate_foundation_candidate_document(candidate,models[model_id])
+    current,_=foundation_candidates(plan)
+    if current!=candidates:
+        raise ValueError('shared foundation request is not bound to both current source-host candidates')
+    root=Path(exchange['directory'])/'foundation-qualification-requests'
+    reference=_immutable(root/(canonical_json_sha256_hex(request)+'.json'),request)
+    write_json_durable(Path(exchange['directory'])/'foundation-qualification-current.json',reference)
+    return reference
+
+
+def current_foundation_request(plan_path):
+    """Return a request only while it still names both current exposure candidates."""
+    from ..train.native_readiness import _bound
+    plan=json.loads(Path(plan_path).resolve(strict=True).read_text())
+    _,exchange=ownership(plan)
+    pointer=Path(exchange['directory'])/'foundation-qualification-current.json'
+    if not pointer.is_file():return None
+    reference=json.loads(pointer.read_text());request=json.loads(_bound(reference).read_text())
+    if request.get('contract')!=contract(plan):raise ValueError('current foundation request changed its role contract')
+    candidates,_=foundation_candidates(plan)
+    if request.get('candidates')!=candidates:return None
+    return reference
 
 
 def import_proof(reference,plan,*,snapshot_only=False):
@@ -608,6 +1208,14 @@ def seal_local(config):
 def finalize(plan_path,state_path):
     """Source-host finalizer for a naturally exited raw owner, never a stop API."""
     plan=json.loads(Path(plan_path).read_text());_,exchange=ownership(plan)
+    if plan.get('local_cycle_source'):
+        if not handoff_active(plan):return None
+        reference,proof=_status(exchange,exchange['role'])
+        if (proof is None or proof.get('kind')!='eligible'
+                or not _handoff_proof_matches(plan,proof,reference)):
+            return None
+        validate(reference,plan,kind='eligible')
+        return publish_local_cycle(plan_path,kind='released')
     path=Path(state_path)
     if not path.exists():return None
     state=json.loads(path.read_text())
@@ -626,6 +1234,17 @@ def local_released(config):
     from .native_raw_rounds import raw_out,validate_release
     plan_path=_bound(config['raw_rl_bootstrap']);plan=json.loads(plan_path.read_text())
     if ownership(plan)[1]is None:return False
+    if plan.get('local_cycle_source'):
+        source=_local_cycle_source(plan);exchange=ownership(plan)[1]
+        if validate_local_cycle_release(plan_path,snapshot=False)is None:return False
+        lock=Path(source['optimizer_owner_lock'])
+        with lock.open('a')as lease:
+            try:fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:return False
+            finally:
+                try:fcntl.flock(lease,fcntl.LOCK_UN)
+                except OSError:pass
+        return True
     path=raw_out(config)/'state.json'
     if not path.exists()or json.loads(path.read_text()).get('released')is not True:return False
     # Existing proof was created only by full local validation after owner exit.
@@ -650,6 +1269,191 @@ def pin_checkpoint(reference,directory):
     checkpoint=binding(bundle['checkpoint']['resolved'])
     if checkpoint['sha256']!=reference['sha256']:raise ValueError('semantic bundle changed checkpoint identity')
     return checkpoint
+
+
+def export_local_cycle_returns(plan_path,completion_reference,role_plan_references,*,directory):
+    """Export one verified full-state participant return package per local owner."""
+    from ..train.native_readiness import _bound
+    from ..model.native_bundle import export_bundle
+    from ..train.checkpoint_policy import CheckpointPolicy
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    _,exchange=ownership(plan)
+    if exchange is None or set(role_plan_references)!=set(exchange['roles']):
+        raise ValueError('semantic return must name every actual source-host role plan')
+    completion_path=_bound(completion_reference);completion=json.loads(completion_path.read_text())
+    if (completion.get('schema')!='natlang.native-shared-stage-completion/1'
+            or completion.get('completed')is not True or completion.get('production_ready')is not True
+            or completion.get('preparation_complete')is True):
+        return []
+    expected_models={row['handoff_requirement']['model_id']for row in plan['models']}
+    key=(completion.get('participants_signature'),completion.get('curriculum_signature'))
+    from ..train.native_readiness import validate_completion
+    validate_completion(completion_path,{key:{'models':sorted(expected_models),
+        'execution_signature':canonical_json_sha256_hex({'completion':completion_reference['sha256']})}})
+    curriculum=json.loads(_bound(completion['curriculum']).read_text())
+    adoption=curriculum.get('snapshot_adoption')or{}
+    if (adoption.get('schema')!='natlang.native-snapshot-adoption/1'
+            or adoption.get('plan')!=binding(plan_path)):
+        raise ValueError('shared completion does not descend from this exact role plan')
+    releases={}
+    for reference in adoption.get('releases',[]):
+        role,models=validate(reference,plan,kind='released')
+        if role in releases:raise ValueError('semantic snapshot adoption repeated a source role release')
+        releases[role]=(reference,models)
+    if set(releases)!=set(exchange['roles']):
+        raise ValueError('semantic snapshot adoption omitted a current optimizer owner')
+    checkpoint=_bound(completion['checkpoint']);adapter=_bound(completion['adapter'])
+    models_by_id={row['handoff_requirement']['model_id']:(row['model'],row)for row in plan['models']}
+    if set(models_by_id)!=set(json.loads(adapter.read_text()).get('models',{})):
+        raise ValueError('semantic completion adapter differs from its declared source-owner cohort')
+    root=Path(directory).resolve();result=[]
+    for model_id,(name,declaration)in sorted(models_by_id.items()):
+        role=next(role for role,row in exchange['roles'].items()if name in row['owned_models'])
+        role_plan=role_plan_references[role]
+        release_reference,released=releases[role]
+        ready=released[model_id]
+        selected=CheckpointPolicy.load(checkpoint,shared_participant=model_id)
+        participant=(selected.get('participants')or{}).get(model_id)
+        if (not isinstance(participant,dict)
+                or (participant.get('source_identity')or{}).get('checkpoint_sha256')!=ready['checkpoint']['sha256']
+                or not participant.get('optimizer')or not participant.get('source_rng')
+                or (participant.get('training_options')or{}).get('native_snapshot_ancestors') is None):
+            raise ValueError('shared stage did not retain actual full-state lineage/optimizer/RNG ancestry')
+        bundle_directory=root/'semantic-return-bundles'/model_id/completion['checkpoint']['sha256']
+        bundle=export_bundle(checkpoint,bundle_directory,semantic_adapter=adapter,participant=model_id)
+        checkpoint_binding=binding(bundle['checkpoint']['resolved'])
+        receipt={'schema':'natlang.native-local-cycle-semantic-return/1','participant':model_id,
+            'role':role,'role_plan':role_plan,'role_release':release_reference,
+            'parent_checkpoint':ready['checkpoint'],'completion':completion_reference,
+            'completion_sha256':completion_reference['sha256'],'bundle':binding(bundle_directory/'bundle.json'),
+            'checkpoint':checkpoint_binding,'semantic_adapter':completion['adapter'],
+            'training_credit':0}
+        receipt_path=Path(exchange['directory'])/(model_id+'-'+completion['checkpoint']['sha256']+'-return.json')
+        receipt_reference=_immutable(receipt_path,receipt)
+        files=[binding(bundle_directory/'bundle.json'),*[
+            binding(bundle_directory/item['path'])for item in
+            [*bundle.get('files',[]),*bundle.get('semantic_files',[]),bundle['semantic_adapter']]]]
+        files.extend(_semantic_completion_dependencies(completion_path,completion))
+        files.extend([role_plan,release_reference])
+        files.append(receipt_reference)
+        result.append({'role':role,'participant':model_id,'role_plan':role_plan,
+            'source_release':release_reference,'receipt':receipt_reference,'files':files,
+            'bundle':binding(bundle_directory/'bundle.json')})
+    return result
+
+
+def _semantic_completion_dependencies(completion_path,completion):
+    """Enumerate the actual file closure consumed by shared completion validation."""
+    from ..train.native_readiness import _bound
+    paths={}
+    def add(reference):
+        if not isinstance(reference,dict)or not isinstance(reference.get('path'),str):
+            raise ValueError('shared completion dependency is not an exact file reference')
+        path=_bound(reference)
+        if 'bytes'in reference and (type(reference['bytes'])is not int or path.stat().st_size!=reference['bytes']):
+            raise ValueError('shared completion dependency byte count changed')
+        value=binding(path);prior=paths.get(value['path'])
+        if prior is not None and prior!=value:raise ValueError('shared completion dependency has conflicting bindings')
+        paths[value['path']]=value
+        return path
+    add(binding(completion_path))
+    for key in ('checkpoint','adapter','curriculum','semantic_runtime_certificate'):
+        add(completion[key])
+    if completion.get('policy_training_progress') is not None:
+        checkpoint_path=_bound(completion['checkpoint'])
+        from ..model.native_shared_checkpoint import shared_manifest,shared_dependencies
+        manifest=shared_manifest(checkpoint_path)
+        if manifest is None:raise ValueError('semantic policy completion lacks its shared checkpoint manifest')
+        for reference in shared_dependencies(manifest,checkpoint_path,semantic_only=True).values():
+            add(binding(reference))
+    for key in ('runtime_certificates','task_execution_receipts'):
+        rows=completion.get(key)
+        if not isinstance(rows,dict)or not rows:raise ValueError('shared completion omitted its participant qualification dependencies')
+        for reference in rows.values():
+            path=add(reference)
+            if key=='task_execution_receipts':
+                task=json.loads(path.read_text())
+                if task.get('score_path'):
+                    add({'path':task['score_path'],'sha256':task['score_sha256']})
+    curriculum=json.loads(_bound(completion['curriculum']).read_text())
+    for key in ('pairs','held_pairs'):
+        if key not in curriculum:raise ValueError('shared completion curriculum omitted its paired source')
+        add(curriculum[key])
+    def add_bundle(reference):
+        path=add(reference);bundle=json.loads(path.read_text())
+        if bundle.get('schema')!='natlang.rl-block-bundle/1':
+            raise ValueError('shared semantic external state source changed schema')
+        for entry in (bundle.get('blocks')or{}).values():
+            if (not isinstance(entry,dict)or not isinstance(entry.get('path'),str)
+                    or type(entry.get('bytes'))is not int or entry['bytes']<=0):
+                raise ValueError('shared semantic external state entry omitted its exact binding')
+            add({'path':str(path.parent/entry['path']),'sha256':entry['sha256'],'bytes':entry['bytes']})
+    for reference in (curriculum.get('external_bundles')or{}).values():add_bundle(reference)
+    for source in (curriculum.get('policy_training')or{}).get('sources',[]):
+        for key in ('rollouts','adapter'):
+            add(source[key])
+        add_bundle(source['block_bundle'])
+    return [paths[name]for name in sorted(paths)]
+
+
+def validate_local_cycle_return(plan_path,receipt_path):
+    """Verify a transported return against the exact locally released owner."""
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    source=_local_cycle_source(plan);owned,exchange=ownership(plan)
+    if len(owned)!=1:raise ValueError('one local-cycle return must name one exact participant')
+    name=next(iter(owned));participant=plan_model(plan,name)['handoff_requirement']['model_id']
+    reference,proof=_status(exchange,exchange['role'])
+    if proof is None or proof.get('kind')!='released':
+        raise ValueError('semantic return cannot adopt before the exact released owner proof exists')
+    state=json.loads(Path(source['state_path']).read_text())
+    result=validate_return(receipt_path,participant=participant,parent_checkpoint=state['checkpoint'],
+        role_plan=plan_path,role_release=reference)
+    current=validate_local_cycle_release(plan_path,snapshot=False)
+    if current is None or current[participant]['checkpoint']['sha256']!=binding(state['checkpoint'])['sha256']:
+        raise ValueError('semantic return source owner is no longer at its exact released checkpoint')
+    return result
+
+
+def publish_local_cycle_return_pointer(plan_path,receipt_path):
+    """CAS-publish the newest exact returned participant; prior receipts stay immutable."""
+    from ..common.jsonio import write_json_durable
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    source=_local_cycle_source(plan);_,exchange=ownership(plan)
+    receipt_path=Path(receipt_path).resolve(strict=True)
+    receipt_reference=binding(receipt_path)
+    existing=json.loads(receipt_path.read_text())
+    participant=existing.get('participant')
+    pointer_path=Path(exchange['directory'])/(participant+'-return-current.json')
+    if pointer_path.is_file():
+        current=json.loads(pointer_path.read_text())
+        if current.get('receipt')==receipt_reference:
+            result=validate_return(receipt_path,participant=participant,
+                parent_checkpoint=existing['parent_checkpoint']['path'],role_plan=plan_path,
+                role_release=existing['role_release'])
+            if current.get('checkpoint')!=result['checkpoint']:
+                raise ValueError('replayed local-cycle return pointer changed its exact child')
+            return binding(pointer_path)
+    result=validate_local_cycle_return(plan_path,receipt_path)
+    previous=None
+    if pointer_path.is_file():
+        previous=json.loads(pointer_path.read_text())
+        if previous.get('schema')!='natlang.native-local-cycle-return-pointer/1' or previous.get('participant')!=participant:
+            raise ValueError('local-cycle return pointer changed participant or schema')
+        prior=json.loads(_bound(previous['receipt']).read_text())
+        if prior.get('checkpoint')!=result['parent']:
+            _,proof=_status(exchange,exchange['role'])
+            source_state=_evidence(proof['raw_state'])if proof is not None else {}
+            name=next(iter(ownership(plan)[0]))
+            ancestors=(source_state.get('models',{}).get(name,{})
+                .get('native_snapshot_ancestors')or[])
+            if prior.get('checkpoint',{}).get('sha256')not in ancestors:
+                raise ValueError('local-cycle return pointer cannot skip an unauthenticated participant descendant')
+    value={'schema':'natlang.native-local-cycle-return-pointer/1','participant':participant,
+        'receipt':receipt_reference,'checkpoint':result['checkpoint'],
+        'previous':previous.get('receipt')if previous else None,
+        'ordinal':(previous.get('ordinal',0)+1)if previous else 1,'training_credit':0}
+    write_json_durable(pointer_path,value)
+    return binding(pointer_path)
 
 
 def consumed_metadata(ready):
@@ -831,7 +1635,14 @@ def handoff_offer(plan,state_path,request):
     """Probe the actual owner on its own host before arming a pause."""
     from ..train.native_resident import owner_alive
     validate_handoff_request(plan,request);owned,exchange=ownership(plan)
-    state=json.loads(Path(state_path).read_text())
+    if plan.get('local_cycle_source'):
+        source=_local_cycle_source(plan)
+        reference,proof=_status(exchange,exchange['role'])
+        if proof is None or proof.get('kind') not in ('eligible','released'):return None
+        _,_,_,_,state,_,_=_local_cycle_state(proof['plan']['source']['path'],kind=proof['kind'])
+        if state is None or state!=_evidence(proof['raw_state']):return None
+    else:
+        state=json.loads(Path(state_path).read_text())
     reference,proof=_status(exchange,exchange['role'])
     if state.get('released') is True:
         if proof is None or proof.get('kind')!='released':return None
