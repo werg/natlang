@@ -11,6 +11,7 @@
  *   natlang tune <program> --placement     measured removals/refits on development roots; activates the cheapest
  *                                          candidate within the declared success envelope
  *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
+ *   natlang tune <program> --rounds        SFT then RL rounds (tune.rounds), best development release activates (§5.1a)
  *   natlang tune <program> --calibrate     measure the configured teachers on development roots and route one (§4.2)
  *   natlang tune <program> --export-cases <dir> [--include-confirmation]
  *                                          case list of roots needing data, for the reviewed generation pool (pool.ts)
@@ -39,6 +40,7 @@ import { protectedExamples, readRootExamples } from '../tune/collect.js';
 import { runPlacement } from '../tune/placement.js';
 import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
+import { roundsSelector } from '../tune/schedule.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
@@ -74,7 +76,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
   const words = argv.filter((arg, index) => !arg.startsWith('--') && !valued.has(index));
-  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation']);
+  const known = new Set(['--incremental', '--watch', '--report', '--rollback', '--families', '--json', '--placement', '--with-teacher', '--calibrate', '--include-confirmation', '--rounds']);
   for (const flag of flags) if (!known.has(flag)) throw new Error(`natlang tune: unknown option ${flag}`);
   if (flags.has('--families'))
     throw new Error('natlang tune --families: cross-program family training is not implemented yet (plans/HIERARCHICAL_LORA_TUNING.md §5.5); program tunes run with no family level');
@@ -105,12 +107,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     try {
       return await fn({ root, program, settings, student, teacher: driverOf(teacherSession),
         teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
-        serve: async ({ manifest, directory }) => {
+        serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
             const serving = loadModelConfiguration(undefined);
             if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
               throw new Error('natlang tune: the native backend needs a default profile with neuraleseServer: true');
-            const session = createResolvedModelSession(serving.choice, process.env, process.stderr);
+            const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { rlCapture: !!capture });
             await session.prepare();
             const loaded = await uploadRelease(session.nativeArtifacts!()!, directory);
             return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
@@ -134,7 +136,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         } });
     } finally { await teacherSession.close(); }
   };
-  const once = () => withOptions(options => tuneProgram(options));
+  const once = () => withOptions(options => tuneProgram(options, flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined));
   const partition = value('--evaluate');
   if (partition !== undefined) {
     if (!['development', 'confirmation', 'protected'].includes(partition)) throw new Error('--evaluate takes development, confirmation or protected');

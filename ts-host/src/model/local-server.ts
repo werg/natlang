@@ -1,4 +1,5 @@
 import { activeNativeAdapters } from '../native/model-recording.js';
+import { perRequestLora } from './lora-scales.js';
 import { stackServingName } from '../adaptation/weights/binding.js';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -46,7 +47,9 @@ export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
   /** Tuned weight adapters (GGUF LoRA exports of the active release) to load at server start, keyed by artifact ID.
    * Each request then applies only its own call's stack through per-request `lora` scales. */
-  loraAdapters?: () => readonly { readonly id: string; readonly path: string }[] };
+  loraAdapters?: () => readonly { readonly id: string; readonly path: string }[];
+  /** Native reference server: request exact sampling receipts (`x_natlang_rl_capture`) on every turn, for RL rollouts. */
+  rlCapture?: boolean };
 
 export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
   const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
@@ -197,25 +200,12 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   let plan: SlotPlan | null = null;
   // Loaded tuned adapters: artifact ID -> llama-server adapter index (fixed for the server's lifetime).
   const loraIndex = new Map<string, number>();
-  const tunedRequest = () => {
-    const active = activeNativeAdapters();
-    if (!loraIndex.size) {
-      if (active.length) throw new Error(`weights-unavailable: the managed model server loaded no tuned adapters, but this call requests ${active.map(item => item.id).join(', ')}`);
-      return undefined;
-    }
-    const scales = new Map<number, number>();
-    for (const { id, scale } of active) {
-      const index = loraIndex.get(id);
-      if (index === undefined) throw new Error(`weights-unavailable: adapter ${id} is not loaded by the managed model server; rerun natlang tune or restart`);
-      scales.set(index, (scales.get(index) ?? 0) + scale);
-    }
-    // Every loaded adapter is listed, so an adapter outside this call's stack is explicitly off.
-    return { lora: [...loraIndex.values()].map(index => ({ id: index, scale: scales.get(index) ?? 0 })) };
-  };
+  const tunedRequest = () => perRequestLora(loraIndex, 'the managed model server');
   // A native reference server: one driver whose requests carry the exact native adapter stack and state parts.
   let native: ReturnType<typeof neuraleseServerModelTurn> | undefined;
   const nativeDriver = () => native ??= neuraleseServerModelTurn({ endpoint: external!.endpoint, model: external!.model,
-    headers: external!.headers, apiKey: environment[external!.apiKeyEnv], request: external!.request, owner: randomUUID() });
+    headers: external!.headers, apiKey: environment[external!.apiKeyEnv], owner: randomUUID(),
+    request: runtimeOptions.rlCapture ? { ...external!.request, x_natlang_rl_capture: true } : external!.request });
   // vLLM: a call's whole stack is one loaded LoRA, selected by name; the base model name serves untuned calls.
   const vllmLoaded = new Set<string>();
   const vllmTunedRequest = () => {

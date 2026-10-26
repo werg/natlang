@@ -36,7 +36,8 @@ export type TuneOptions = {
   /** The authorized teacher's driver and identity. */
   teacher: ModelDriver; teacherId: string;
   /** Serves a release for validation: returns a driver that applies the release's adapters, and its loaded set. */
-  serve: (release: { manifest: WeightManifest; directory: string }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>;
+  /** `capture` asks the backend for exact sampling receipts on every turn (RL rollouts; native backend only). */
+  serve: (release: { manifest: WeightManifest; directory: string; capture?: boolean }) => Promise<{ driver: ModelDriver; loaded: ReadonlySet<string>;
     /** Whether the backend imports stored native state (soft instruction/skill states). */
     nativeState?: boolean; close(): Promise<void> }>;
   examplesPath?: string; log?: (line: string) => void;
@@ -172,17 +173,22 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
 
 /** One training variant: a scaffold (scales, tree roots), a recipe and optionally a row subset. */
 export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?: Readonly<Record<string, unknown>>;
-  readonly rows?: readonly CollectedTurn[]; readonly label?: string };
+  readonly rows?: readonly CollectedTurn[]; readonly label?: string;
+  /** Continue this earlier build (a trainer output directory): its node, gate and soft-state lineage and moments. */
+  readonly parent?: string;
+  /** Scored student rollouts (natlang.tune-rollout/v1 JSONL): the RL rows of this fit (§5.1a). */
+  readonly rollouts?: string };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
-  log: (line: string) => void = () => {}): Promise<{ manifest: WeightManifest; reused: boolean }> {
+  log: (line: string) => void = () => {}): Promise<{ manifest: WeightManifest; reused: boolean; build: string }> {
   const { root, student } = options;
   const rows = variant.rows ?? data.trainRows;
   if (!rows.length) throw new Error('the teacher produced no verified training trajectories; check the examples and teacher profile');
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
   const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
-    variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null]).slice(0, 24);
+    variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null, variant.parent ?? null,
+    variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null]).slice(0, 24);
   const jobDir = join(tuneDirectory(root), 'jobs', trainKey), out = join(jobDir, 'out');
   const reused = existsSync(join(out, 'result.json'));
   const result = await timed(timings, 'train', log, async () => {
@@ -196,7 +202,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
           ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
         exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
-        softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}) }, null, 2));
+        softStates: options.settings.backend === 'native', recipe, ...(variant.label ? { label: variant.label } : {}),
+        ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}) }, null, 2));
       await runTrainer(student, plan, out, log);
     }
     return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
@@ -222,7 +229,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
     return sealed;
   });
   if (options.settings.backend === 'vllm') await timed(timings, 'export-stacks', log, () => exportVllmStacks(options, manifest));
-  return { manifest, reused };
+  return { manifest, reused, build: out };
 }
 
 /** One whole-stack PEFT LoRA per distinct effective stack (vLLM applies one adapter per request), named canonically. */
@@ -268,7 +275,10 @@ export async function evaluateRelease(options: TuneOptions, data: TuneData, mani
   } finally { await served.close(); }
 }
 
-export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
+/** How a tune chooses the release it validates and activates: one joint fit by default, or SFT/RL rounds. */
+export type ReleaseSelector = (data: TuneData, timings: StageTiming[], log: (line: string) => void) => Promise<WeightManifest>;
+
+export async function tuneProgram(options: TuneOptions, select?: ReleaseSelector): Promise<TuneReport> {
   const started = Date.now(), timings: StageTiming[] = [], log = options.log ?? (() => {});
   const { root, program, student } = options;
   const report: TuneReport = { schema: 'natlang.tune-report/v1', program: program.id, student: student.name, backend: options.settings.backend,
@@ -286,7 +296,7 @@ export async function tuneProgram(options: TuneOptions): Promise<TuneReport> {
     report.data.turns = data.turns.length; report.data.trainTurns = data.trainRows.length;
     const examples = data.examples;
     // 3-4. One joint run over all bindings against one input snapshot, then the content-addressed release.
-    const { manifest } = await trainRelease(options, data, { manifest: data.scaffold }, timings, log);
+    const manifest = select ? await select(data, timings, log) : (await trainRelease(options, data, { manifest: data.scaffold }, timings, log)).manifest;
     report.release = manifest.digest;
     // 5. Load on the backend and validate through the normal engine, strict: nothing may silently fall back.
     const directory = dirname(releaseFile(root, manifest.digest));

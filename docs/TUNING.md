@@ -116,6 +116,13 @@ identity. Teachers below `tune.teacherRouting.minSuccess` (default 0.5) are neve
 cheapest teacher within 0.05 of the best success rate collects the data. A changed teacher identity requires a new
 `--calibrate`; `--teacher <profile>` overrides the choice.
 
+`natlang tune ./my-program --rounds` runs SFT and then RL rounds (`tune.rounds`: `schedule`, default
+`["sft","rl","rl","rl"]`; `patience`; `samples` per training root, default 4; `temperature`, default 0.8;
+`rlRecipe`). Each round continues the best build so far; an RL round samples the training roots from that release
+with exact sampling receipts and fits on those rollouts together with the teacher rows. Rounds are compared on
+development roots only, and the best release is validated and activated as usual. RL rounds need the native
+reference server (`tune.backend: "native"`); an SFT-only schedule works on every backend.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 
@@ -139,7 +146,14 @@ reference server applies the stack through its exact native adapter path.
 | llama.cpp fork (`--lora-per-sequence`) | Same | Through its Neuralese server (not yet wired here) | Yes, per-sequence scales, verified bitwise isolation |
 | Native reference server (`neuraleseServer: true` profile) | Exact native coefficient artifacts | Yes | Per request |
 | vLLM (`vllm: true` profile) | One whole-stack PEFT LoRA per distinct effective stack, loaded at activation | No: soft-state bindings run degraded | Yes (multi-LoRA batching) |
-| wllama | Not yet implemented | Not yet implemented | Not yet implemented |
+| wllama in the page (vendored build, `loadBrowserRelease`) | Per-node GGUF LoRA, per-request scales | No: soft-state bindings run degraded | No (serialized per stack) |
+
+In a page, `loadBrowserRelease(releaseUrl, { baseGgufSha256 })` fetches `natlang.adapters.json` and its GGUF exports,
+checks each file's sha256, and returns the adapters for `loadBrowserLocalModel(source, { loraAdapters })` and the
+binding for `createNatlangRuntime({ weights })`. Adapters load at scale 0; each request lists every adapter with its
+own call's scales. A release exported for another base GGUF runs untuned. This needs the patched wllama vendored in
+`ts-host/vendor/wllama` (LoRA blobs, and a server that never reuses a prompt computed with other adapters; see its
+`provenance.json`); a stock wllama build refuses the adapters with `weights-unavailable`.
 
 The managed runtime accepts the fork's server only once the fork is rebased onto a build the runtime check accepts
 (currently `>= b10964`).
@@ -155,10 +169,10 @@ explicit `withNativeAdapters` scopes. Programs without a release are unaffected.
 
 Implemented: scope compilation, per-call resolution with requested/effective identities and coherent fallback,
 release store with compare-before-activate and rollback, `natlang tune` (collect, split, train, export, validate,
-activate, report, watch), managed llama.cpp serving with per-request stacks, the joint trainer with nested shared
+activate, report, watch), managed llama.cpp and in-page wllama serving with per-request stacks, the joint trainer with nested shared
 bases and free LoRA factors, per-node GGUF export, whole-stack PEFT export for vLLM, and soft instruction/skill states. Placement, sweeps and paired evaluation reports are implemented; large sweeps are run by operations. SFT/RL rounds are implemented as library stages: student rollouts on training roots scored by the root
 oracle (`tune/rollouts.ts`, `natlang.tune-rollout/v1`), the trainer's whole-graph policy objective over them, and a
 resumable round scheduler that keeps the best release by development success (`tune/rounds.ts`); the CLI does not run
 them yet. Not yet
-implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, wllama serving, a CLI
+implemented: cross-program families (`tune --families`), full per-lambda fine-tuning arm, base distillation, a CLI
 command for the RL rounds and refitting only dirty nodes (data and training receipts are reused; a semantic change still refits the whole tree). These remain required work in the plan.

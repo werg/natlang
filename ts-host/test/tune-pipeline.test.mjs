@@ -169,3 +169,22 @@ test('an edit invalidates exactly its dependency closure and recollects only aff
     assert.ok(!asked.some(opening => opening.includes('uppercase too')), 'roots that only reached unchanged lambdas reused their data');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('rounds continue the best build on development roots and activate it through ordinary validation', async () => {
+  const { roundsSelector } = await import('../dist/tune/schedule.js');
+  const root = project();
+  try {
+    const seen = [], plans = [];
+    const teacher = scriptedModel(respond);
+    const options = { root, program: program(root), settings, student: student(root), teacher: teacher.driver, teacherId: 'teacher:test', serve: serve(seen) };
+    assert.throws(() => roundsSelector(options, { schedule: ['sft', 'rl'] }), /backend to "native"/);
+    const report = await tuneProgram(options, roundsSelector(options, { schedule: ['sft', 'sft', 'sft'], patience: 1 }));
+    assert.equal(report.activated, true, report.reason);
+    const journal = JSON.parse(readFileSync(join(root, '.natlang/tune/rounds', readdirSync(join(root, '.natlang/tune/rounds'))[0], 'journal.json'), 'utf8'));
+    assert.equal(journal.rounds[0].parent, null);
+    assert.ok(journal.rounds.length >= 2 && journal.rounds[1].parent.build, 'a later round continues an earlier build');
+    for (const job of readdirSync(join(root, '.natlang/tune/jobs'))) plans.push(JSON.parse(readFileSync(join(root, '.natlang/tune/jobs', job, 'plan.json'), 'utf8')));
+    assert.ok(plans.some(plan => plan.parent && plan.label?.startsWith('round-1')), 'the trainer receives the parent build');
+    assert.equal(JSON.parse(readFileSync(join(root, '.natlang/tune/active.json'), 'utf8')).release, journal.best.release);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
