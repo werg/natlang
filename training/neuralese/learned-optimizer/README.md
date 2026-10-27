@@ -17,7 +17,7 @@ exported. Use that exact checkpoint for everything below (tune plans prepared fo
 
 ## Steps
 
-1. **Supplied programs** (program-tuning lane owns the six-worker Luna authority): for each program in
+1. **Supplied programs** (program-tuning lane owns the one-worker Luna authority): for each program in
    `/home/werg/data/program-supply-20261027/programs` (51 programs, 18 families; grouped splits already persisted,
    `splits-persisted.json`), export train/development cases against the final student (`natlang tune <program>
    --export-cases <dir>`; case lists bind the student base), run the reviewed campaign, import. Family variants
@@ -32,7 +32,10 @@ exported. Use that exact checkpoint for everything below (tune plans prepared fo
      program, Neuralese keys from their descriptions;
    - `corpus`: each tune plan refit on the bank basis with update boundaries, then free-tune and in-bank targets
      (`natlang.joint-target/1`), resumable;
-   - `train`: outer training of the optimizer on those targets;
+   - `train`: outer training of the writer/head/keys **and shared component factors and LoRA bases**
+     (`train_bank: true`, `train_basis: true` are explicit in the prepared recipe). Publish actual bank snapshots
+     with coordinate-correct component factors; refit mixture labels against each adopted new bank. Preserve
+     the live parameter/optimizer coordinates when continuing; no saved-moment reinterpretation through QR;
    - `outer-rl-round.sh`: one outer meta-RL round with real task outcomes (`proposals`, then
      `natlang tune ROOT --score-proposals` per program, `collect` with those outcomes, the policy update);
    - `meta-examples`: exact labels for the optimizer's own stages (below).

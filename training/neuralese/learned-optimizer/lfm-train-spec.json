@@ -14,6 +14,9 @@
    "rank": 16,
    "alpha": 16.0
   },
-  "batch_targets": 4
+  "batch_targets": 4,
+  "train_basis": true,
+  "train_bank": true,
+  "train_keys": true
  }
 }

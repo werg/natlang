@@ -758,7 +758,7 @@ mixture fits, shared LoRA bases and component-bank learning belong in the
 operational stage. The integration request is assigned through coordination to
 `dgx-learned-optimizer`: enable `train_basis` and `train_bank`, fit actual mixture
 labels on a named bank, execute the composed adaptations, and rebind/refit
-labels when the bank changes. The separate 51-program hold remains in force.
+labels when the bank changes. The learned-optimizer operation hold remains in force until LFM main recipe completion and its final independently exported checkpoint; it includes the 51 supplied programs.
 
 The bounded joint archive loader (`14f5192dc`) is integrated for review, not
 injected into the live frozen runtime. Its isolated small-fixture checks passed;
