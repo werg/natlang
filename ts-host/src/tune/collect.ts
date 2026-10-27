@@ -69,7 +69,23 @@ const componentOf = (example: RootExample) => example.group ?? digest([example.f
 // Identical arguments in distinct captured worlds are distinct invocations. Their
 // records, teacher custody and evaluation caches must not share a root key.
 const rootExampleId = (example: RootExample) => digest(['natlang.tune-root/v2', componentOf(example),
-  example.function, example.input, example.expected ?? null]).slice(0, 16);
+  example.function, example.input, 'expected' in example, example.expected ?? null]).slice(0, 16);
+
+function uniqueRoots(rows: readonly SplitExample[]): SplitExample[] {
+  const roots = new Map<string, SplitExample>();
+  for (const row of rows) {
+    const previous = roots.get(row.id);
+    if (previous) {
+      const binding = (example: SplitExample) => JSON.stringify([example.component, example.function,
+        example.input, 'expected' in example, example.expected ?? null, example.group ?? null,
+        example.source ?? 'real', example.partition]);
+      if (binding(previous) !== binding(row)) throw new Error(`conflicting tune root identity: ${row.id}`);
+      continue; // Repeated identical invocations in one world are one root, not extra evidence.
+    }
+    roots.set(row.id, row);
+  }
+  return [...roots.values()];
+}
 
 /**
  * Partition by connected component before expansion: the component is the declared group, else the example itself.
@@ -91,13 +107,13 @@ export function splitExamples(examples: readonly RootExample[], receipt?: SplitR
   }
   const split = usable.map(example => ({ ...example, id: rootExampleId(example),
     component: componentOf(example), partition: assigned[componentOf(example)]! }));
-  return Object.assign(split, { receipt: { schema: 'natlang.tune-split/v1' as const, components: assigned } });
+  return Object.assign(uniqueRoots(split), { receipt: { schema: 'natlang.tune-split/v1' as const, components: assigned } });
 }
 
 /** Protected roots for final reporting only (never collected, trained on or used for selection). */
 export function protectedExamples(examples: readonly RootExample[]): SplitExample[] {
-  return examples.filter(example => example.protected).map(example => ({ ...example, partition: 'confirmation' as const,
-    component: componentOf(example), id: rootExampleId(example) }));
+  return uniqueRoots(examples.filter(example => example.protected).map(example => ({ ...example, partition: 'confirmation' as const,
+    component: componentOf(example), id: rootExampleId(example) })));
 }
 
 /** A manifest with the program's bindings and no artifacts: every call resolves its binding, all run the base. */

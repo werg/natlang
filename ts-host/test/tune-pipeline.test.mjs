@@ -76,6 +76,12 @@ test('identical inputs in distinct worlds keep separate root records and protect
   assert.deepEqual(extended.slice(0, 2).map(row => row.id), split.map(row => row.id), 'adding a sibling world keeps existing IDs');
   assert.equal(protectedExamples([{ ...examples[1], protected: true }])[0].id, split[1].id);
   assert.notEqual(protectedExamples([{ ...shared, group: 'protected-world', protected: true }])[0].id, split[0].id);
+  assert.equal(splitExamples([...examples, examples[0]], receipt).length, 2, 'an identical repeated world invocation is not extra evidence');
+  assert.equal(protectedExamples([{ ...examples[1], protected: true }, { ...examples[1], protected: true }]).length, 1);
+  assert.throws(() => splitExamples([examples[0], { ...examples[0], source: 'synthetic' }], receipt), /conflicting tune root identity/);
+  assert.notEqual(splitExamples([{ function: 'f.nl', input: 1, group: 'w' },
+    { function: 'f.nl', input: 1, group: 'w', expected: null }]).map(row => row.id)[0],
+    splitExamples([{ function: 'f.nl', input: 1, group: 'w', expected: null }])[0].id, 'an absent oracle differs from an expected null');
 });
 
 test('natlang tune collects per-binding trajectories, trains, validates through the engine and activates', async () => {
