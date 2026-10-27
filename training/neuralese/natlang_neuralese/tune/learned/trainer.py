@@ -482,23 +482,35 @@ class OuterTrainer:
         from dataclasses import replace
         from .bank import SharedBasis, component_id
         leaves = self.bank_leaves
-        components = []
-        for k, component in enumerate(self.bank.components):
-            factors = {name: (P.detach().clone(), Q.detach().clone()) for name, (P, Q) in leaves['factors_by_component'][k].items()}
-            components.append(replace(component, factors=factors, key=self.state['keys'].get(component.id, component.key),
-                                      id=component_id(component.source, factors)))
         bank = self.bank
+        basis = None
+        transforms = {}
         if self.recipe.train_basis:
             from .bank import orthonormalize
             left, right = {}, {}
             for name in bank.basis.names:
-                left[name], _ = orthonormalize(leaves['basis']['left.' + name].detach())
-                right[name], _ = orthonormalize(leaves['basis']['right.' + name].detach())
+                left[name], r_left = orthonormalize(leaves['basis']['left.' + name].detach())
+                right[name], r_right = orthonormalize(leaves['basis']['right.' + name].detach())
+                transforms[name] = (r_left, r_right)
             basis = SharedBasis(bank.basis.native_identity, bank.basis.rank, left, right,
                                 {**bank.basis.method, 'refined_from': bank.basis_artifact})
-            record = basis.to_artifact(self.engine, self.owner)
-            bank = replace(bank, basis=basis, basis_artifact=record.id)
+        components = []
+        for k, component in enumerate(bank.components):
+            factors = {}
+            for name, (P, Q) in leaves['factors_by_component'][k].items():
+                P, Q = P.detach().clone(), Q.detach().clone()
+                if name in transforms:
+                    # U P Q^T V^T = Q_u (R_u P) (R_v Q)^T Q_v^T.
+                    # Publication changes coordinates, never the learned update.
+                    r_left, r_right = transforms[name]
+                    P, Q = r_left @ P, r_right @ Q
+                factors[name] = (P, Q)
+            components.append(replace(component, factors=factors, key=self.state['keys'].get(component.id, component.key),
+                                      id=component_id(component.source, factors)))
         published = bank.with_components(components, reason='outer-training publication')
+        if basis is not None:
+            record = basis.to_artifact(self.engine, self.owner)
+            published = replace(published, basis=basis, basis_artifact=record.id)
         self.state['published'] = self.state.get('published', []) + [published.snapshot]
         self.state['labels_stale'] = True
         return published
