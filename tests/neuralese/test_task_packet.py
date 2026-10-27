@@ -4,6 +4,26 @@ import json
 import pytest
 
 
+@pytest.mark.parametrize("history", [
+    {"action_ledger": [{"outcome": "invalid", "diagnostics": ["Expression expected"]}]},
+    {"scope_failures": [{"message": "TypeError: earlier invalid eval"}]},
+])
+def test_completed_wrong_answer_does_not_inherit_recovered_action_failure(history):
+    result = {"outcome": {"status": "done", "accepted": False,
+                          "checks": {"expected_status": True, "answer": False},
+                          "value": {"verdict": "entailed", "exception": None}, **history}}
+    assert classify_case(result, {"status": "complete"}) == "semantic_mismatch"
+    result["outcome"]["accepted"] = True
+    assert classify_case(result, {"status": "complete"}) == "task_success"
+
+
+def test_actual_terminal_invalid_action_remains_invalid():
+    result = {"outcome": {"status": "failed", "accepted": False,
+                          "checks": {"answer": False},
+                          "action_ledger": [{"outcome": "invalid"}]}}
+    assert classify_case(result, {"status": "complete"}) == "invalid_action"
+
+
 def native_open_finish(termination):
     return {"status": "incomplete", "output_accounting": {
         "manifest_valid": True, "source_sha256": "c"*64, "expected_jobs": 1, "job_states": [{

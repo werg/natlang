@@ -145,6 +145,14 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     })
     if re.search(r"(econnrefused|econnreset|connection refused|connection reset|provider request retry exhausted|http 5\d\d|server unavailable)", details):
         return "infrastructure_error"
+    # Recoverable action errors are history, not the terminal failure. An
+    # observed completed result rejected by the task oracle is a wrong answer
+    # even if the model previously needed to repair a malformed eval.
+    if (outcome.get("status") == "done" and outcome.get("accepted") is False
+            and (finish or {}).get("status") in {"complete", "complete_with_skips"}
+            and isinstance(outcome.get("checks"), dict)
+            and any(value is False for value in outcome["checks"].values())):
+        return "semantic_mismatch"
     scope_failures = outcome.get("scope_failures")
     if isinstance(scope_failures, list):
         for failure in scope_failures:
