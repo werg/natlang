@@ -87,3 +87,66 @@ def test_cued_sampling_parses_and_gradients_reach_writer_adapter_and_live_keys(t
     adapter_grads, key_grads = grads[:len(leaves)], grads[len(leaves):]
     assert any(g is not None and float(g.abs().sum()) > 0 for g in adapter_grads)
     assert any(g is not None and float(g.abs().sum()) > 0 for g in key_grads)
+
+
+def test_cotangent_replay_equals_the_single_graph_gradient(tmp_path):
+    """Two-phase replay (detached writer outputs -> executor backward -> writer replay with cotangents) gives the
+    same key and writer-adapter gradients as differentiating one connected computation."""
+    from natlang_neuralese.model.shared_state import native_step, splice_block
+    engine = engine_fixture(tmp_path, 'lfm')
+    keys = [engine.native_write_text(f't{30 + i} t{40 + i}')['id'] for i in range(2)]
+    names = sorted(target_parameters(engine.shared_model))[:4]
+    adapter = create_adapter(engine, {'kind': 'free-lora', 'rank': 2, 'seed': 1, 'parameter_names': names})
+    writer = Writer(engine, GRID, cue=True)
+    array = ArrayWrite('s', (True, True), tuple(keys), targets=(2, -1))
+    writes = [StateWrite('bx', 'instruction', 't8 t9')]
+    model = engine.shared_model
+
+    def consumer_loss(block, hidden):
+        cache = native_step(model, torch.tensor([[4, 5]]))['cache']
+        source = {k: getattr(block, k) for k in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256')}
+        cache = splice_block(model, cache, block, **source)
+        out = native_step(model, torch.tensor([[6, 7]]), cache)
+        return model.logits(out['h_final'][0]).float().logsumexp(-1).sum() + hidden.float().pow(2).sum() * 1e-3
+
+    def fresh():
+        leaves = {k: (v + .01 if k.startswith('lora_B.') else v).clone().requires_grad_(True) for k, v in adapter.artifact.tensors.items()}
+        live = {key: _leaf_block(engine.store.get_native_state(key).block) for key in keys}
+        return leaves, live
+
+    entries = [{'id': adapter.id, 'scale': 1.}]
+    # Reference: one connected computation, backward inside the native execution (the run_native contract). Here the
+    # consumer runs under the same actor, so both sides include its dependence on the adapter.
+    leaves, live = fresh()
+    def connected():
+        out = writer.run(MESSAGES, writes, [array], state_overrides={k: b for k, (b, _) in live.items()})
+        consumer_loss(out.states['bx'], out.decision_hidden['s']).backward()
+    run_native(engine, connected, entries, leaves={adapter.id: leaves}, gradient_precision='fp32')
+    reference = [*(v.grad.clone() for v in leaves.values()), *(v.grad.clone() for _, values in live.values() for v in values.values())]
+
+    # Two phases: detached writer outputs; the consumer backward (inside its own execution) gives their cotangents.
+    leaves, live = fresh()
+    with torch.no_grad():
+        out = run_native(engine, lambda: writer.run(MESSAGES, writes, [array], state_overrides={k: b for k, (b, _) in live.items()}),
+                         entries, leaves={adapter.id: leaves})
+    state_block, state_values = _leaf_block(out.states['bx'])
+    hidden = out.decision_hidden['s'].detach().clone().requires_grad_(True)
+    run_native(engine, lambda: consumer_loss(state_block, hidden).backward(), entries, leaves={adapter.id: leaves},
+               gradient_precision='fp32')
+    def replay():
+        again = writer.run(MESSAGES, writes, [array], state_overrides={k: b for k, (b, _) in live.items()})
+        outputs, grads = [again.decision_hidden['s']], [hidden.grad]
+        for name, leaf in state_values.items():
+            layer, field_name = name.split('.')[1:]
+            outputs.append(again.states['bx'].layers[int(layer)][field_name]); grads.append(leaf.grad)
+        torch.autograd.backward(outputs, grads)
+    run_native(engine, replay, entries, leaves={adapter.id: leaves}, gradient_precision='fp32')
+    replayed = [*(v.grad for v in leaves.values()), *(v.grad for _, values in live.values() for v in values.values())]
+    errors = []
+    for ours, theirs in zip(replayed, reference):
+        if theirs is None:
+            assert ours is None or float(ours.abs().max()) == 0
+        else:
+            scale = float(theirs.abs().max())
+            errors.append(float((ours - theirs).abs().max()) / max(scale, 1e-30))
+    assert max(errors) < 1e-4, errors
