@@ -113,6 +113,7 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     plan, manifest, rows, rollouts = load_plan(args.plan)
+    recipe = Recipe.from_json(plan.get('recipe', {}))
     # A continued round names the previous round's build directory: its state, versions and soft initialization.
     parent_dir = Path(args.plan).parent / plan['parent'] if plan.get('parent') else None
     from ..serve import load_native_engine
@@ -150,12 +151,12 @@ def main(argv=None):
             persist_artifacts(engine, [record['state'] for record in soft.values()], out / 'artifacts', out / 'states')
             _write(init_path, soft)
     from .rows import lower_rows
-    rows = lower_rows(engine, rows, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1),
+    rows = lower_rows(engine, rows, prompt_weight=recipe.prompt_weight,
                       soft={key: record['state'] for key, record in soft.items()}) if rows else []
     parent = json.loads((parent_dir / 'state.json').read_text()) if parent_dir is not None and state is None else None
     # Plan §8 incremental builds: `pinned` nodes stay frozen at earlier artifacts, `warm` nodes start from them (both
     # imported from the plan's `artifacts` directories, e.g. the active release's).
-    trainer = JointTrainer(engine, manifest, rows + rollouts, Recipe.from_json(plan.get('recipe', {})), state=state,
+    trainer = JointTrainer(engine, manifest, rows + rollouts, recipe, state=state,
                            workdir=out / 'rl', parent=parent, pinned=plan.get('pinned'), warm=plan.get('warm'))
     save()
     while trainer.state['step'] < trainer.total_steps:

@@ -119,11 +119,12 @@ def test_build_trains_from_collected_turns(tmp_path):
     rows.write_text('\n'.join(json.dumps(turn(root=f'r{index}', turn=1)) for index in range(2)) + '\n')
     plan = tmp_path / 'plan.json'
     plan.write_text(json.dumps({'manifest': manifest, 'rows': str(rows), 'student': {'name': 'lfm', 'checkpoint': str(checkpoint)},
-                                'recipe': {'steps': 1, 'batch_rows': 2}}))
+                                'recipe': {'steps': 1, 'batch_rows': 2, 'prompt_weight': 0}}))
     assert main(['--plan', str(plan), '--out', str(tmp_path / 'out')]) == 0
     result = json.loads((tmp_path / 'out' / 'result.json').read_text())
     assert {item['node'] for item in result['artifacts']} == {'tree:', 'lambda:outer'}
     assert result['receipt']['exposure']['rows_seen'] == 2
+    assert result['receipt']['recipe']['prompt_weight'] == 0
 
 
 @real_lfm

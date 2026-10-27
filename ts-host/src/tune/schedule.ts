@@ -9,10 +9,12 @@ import { executionKey } from './execution.js';
  * development release is what `tuneProgram` then validates and activates, as for a single joint fit.
  */
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { canonicalJson } from '../package/archive.js';
 import { readRelease, tuneDirectory } from '../adaptation/weights/release.js';
 import { WeightBinding } from '../adaptation/weights/binding.js';
 import { rootSuccess } from './evaluate.js';
-import { evaluateRelease, trainRelease, type ReleaseSelector, type TuneOptions } from './pipeline.js';
+import { evaluateRelease, softStatesServed, trainRelease, type ReleaseSelector, type TuneOptions } from './pipeline.js';
 import { runRollouts } from './rollouts.js';
 import { readRepairRows, runRepairs } from './repairs.js';
 import { DEFAULT_ROUNDS, runRounds, type RoundKind } from './rounds.js';
@@ -35,7 +37,12 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
   if (schedule.includes('rl') && options.settings.backend !== 'native')
     throw new Error('RL rounds sample the student with exact sampling receipts: set tune.backend to "native" (a neuraleseServer profile), or use an SFT-only schedule');
   return async (data, _timings, log) => {
-    const directory = join(tuneDirectory(options.root), 'rounds', `native-runtime-v2-${options.settings.execution ? `${data.dataKey}-execution-${executionKey(options.settings.execution)}` : data.dataKey}`);
+    // A completed round belongs to its actual recipe and parent. Reusing a data-only journal silently skips
+    // requested recipe improvements (or serves a release fitted against a different student base).
+    const runKey = createHash('sha256').update(canonicalJson(JSON.parse(JSON.stringify([
+      options.student.base, options.settings.recipe ?? {}, settings, softStatesServed(options.settings)
+    ])))).digest('hex').slice(0, 24);
+    const directory = join(tuneDirectory(options.root), 'rounds', `native-runtime-v3-${data.dataKey}-${runKey}-execution-${executionKey(options.settings.execution)}`);
     const development = data.examples.filter(example => example.partition === 'development');
     if (!development.length) throw new Error('rounds are selected on development roots; this program has none');
     const journal = await runRounds({ journal: join(directory, 'journal.json'), schedule, patience: settings.patience, minDelta: settings.minDelta, log,

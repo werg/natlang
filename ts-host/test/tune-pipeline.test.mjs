@@ -217,6 +217,16 @@ test('rounds continue the best build on development roots and activate it throug
     assert.equal(plans.find(plan => plan.label?.startsWith('round-0')).parent, '/saved-interrupted-fit/out');
     assert.ok(plans.some(plan => plan.parent && plan.parent !== '/saved-interrupted-fit/out' && plan.label?.startsWith('round-1')), 'the trainer receives the parent build');
     assert.equal(JSON.parse(readFileSync(join(root, '.natlang/tune/active.json'), 'utf8')).release, journal.best.release);
+    const continuation = { ...options, settings: { ...settings, recipe: { prompt_weight: 0 } } };
+    const schedule = { schedule: ['sft', 'sft', 'sft'], patience: 1, initialFitParent: '/saved-interrupted-fit/out' };
+    await tuneProgram(continuation, roundsSelector(continuation, schedule));
+    assert.equal(readdirSync(join(root, '.natlang/tune/rounds')).length, 2, 'a recipe change must train in a fresh journal');
+    await tuneProgram(continuation, roundsSelector(continuation, schedule));
+    assert.equal(readdirSync(join(root, '.natlang/tune/rounds')).length, 2, 'the same continuation resumes its journal');
+    assert.ok(readdirSync(join(root, '.natlang/tune/jobs')).some(job => {
+      const plan = JSON.parse(readFileSync(join(root, '.natlang/tune/jobs', job, 'plan.json'), 'utf8'));
+      return plan.recipe.prompt_weight === 0;
+    }), 'the requested reply-only recipe reaches the trainer');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

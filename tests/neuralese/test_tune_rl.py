@@ -38,6 +38,10 @@ def test_schedule_math():
         Recipe.from_json({'objectives': ['dpo']})
     # Recipes written before these fields stay valid.
     assert Recipe.from_json({'steps': 3, 'batch_rows': 2, 'optimizer': {'name': 'adam', 'learning_rate': 1e-3}}).steps == 3
+    assert Recipe.from_json({'prompt_weight': 0}).prompt_weight == 0
+    for weight in (-1, 1.01, float('nan'), float('inf'), True):
+        with pytest.raises(TuneMathError, match='prompt_weight'):
+            Recipe.from_json({'prompt_weight': weight})
 
 
 def test_epochs_derive_the_step_budget_and_the_schedule_resumes_from_the_persisted_step(tmp_path):

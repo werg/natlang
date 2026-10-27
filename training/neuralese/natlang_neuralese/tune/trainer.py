@@ -59,6 +59,8 @@ class Recipe:
     steps: int = 1
     epochs: float | None = None
     batch_rows: int = 8
+    # Auxiliary prompt supervision is adjustable independently of the reply target.
+    prompt_weight: float = .1
     seed: int = 0
     parameterization: str = 'native-subspace'
     ranks: dict = field(default_factory=lambda: {'tree': 8, 'folder': 4, 'lambda': 2})
@@ -81,6 +83,9 @@ class Recipe:
         if unknown:
             raise TuneMathError(f'unknown recipe fields {sorted(unknown)}')
         recipe = cls(**value)
+        if (type(recipe.prompt_weight) not in (int, float) or not math.isfinite(recipe.prompt_weight)
+                or not 0 <= recipe.prompt_weight <= 1):
+            raise TuneMathError('prompt_weight must be a finite number in [0, 1]')
         if recipe.parameterization not in ('native-subspace', 'free-lora'):
             raise TuneMathError('parameterization must be native-subspace or free-lora')
         if set(recipe.ranks) - set(LEVELS) or any(type(rank) is not int or rank < 0 for rank in recipe.ranks.values()):

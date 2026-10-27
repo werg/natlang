@@ -22,6 +22,11 @@ natlang run ./my-program      # ordinary execution uses the result
 
 No adapter manifest, adapter IDs, export, conversion or server-loading step is part of the author's work.
 
+For long prompts with short action replies, set `tune.recipe.prompt_weight` to `0` to train only the reply.
+The default `0.1` also supervises prompt tokens at one-tenth weight; repeated instructions and schemas can then
+dominate the objective. Adjust this on development outcomes. Recipe changes in `--rounds` create a fresh journal;
+set `tune.rounds.initialFitParent` to the saved build directory to continue its adapters and optimizer histories.
+
 ## What a tune does
 
 1. Discovers the program's bound definitions and compiles the lexical scope tree: program root, one folder node per

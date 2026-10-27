@@ -58,6 +58,26 @@ establish task capability. Measure task outcomes on distinct development and
 confirmation invocations and retain the exact serving actor and checkpoint
 provenance.
 
+## Individual-program adaptation lane
+
+The [tuning operations handoff](../TUNING_OPERATIONS_HANDOFF_20261026.md) is an
+active companion to production training. Follow the actual workloads and
+receipts in [program tuning operations](../PROGRAM_TUNING_RUNS_20261026.md):
+grouped-world splits, teacher SFT of program adapters and native soft states,
+whole-graph RL from the actual served release, development selection and an
+untouched confirmation set. Keep program exposure separate from production
+lineage exposure. Continue saved adapter and optimizer histories when adjusting
+the recipe; use reply-only supervision when long repeated prompts overwhelm the
+action targets. A recipe adjustment must not reuse a completed data-only rounds
+journal and silently skip the new training.
+
+Use the existing distillation export for verified training-world executions,
+then ordinary source admission to feed both production recipes. Exported rows
+are initially not admitted; development and confirmation worlds stay protected.
+Neither saved adapters nor launched RL sampling establish capability lift.
+Repeat useful program mechanisms on Mellum with its own exact checkpoint and
+reader identity; incompatible LFM state is not a Mellum adapter.
+
 ## Precision and runtime choices
 
 Native training owns its parameter masters and optimizer state. Backend and
