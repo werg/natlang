@@ -232,7 +232,7 @@ export class BrowserLocalModel {
     if (!this.engine.createNatlangScore || !this.engine.capabilities?.natlangScore)
       throw new Error('decision-unsupported: this wllama build cannot score replies; use the vendored build (ts-host/vendor/wllama)');
     const body = { items: items.map(item => ({ ...item.tuned, continuations: item.options,
-      messages: chatMessages(this.nativeStates.size ? nativeStateMessages(item.messages, this.nativeStates) : item.messages) })) };
+      messages: chatMessages(nativeStateMessages(item.messages, this.nativeStates)) })) };
     const response = await this.queued(async () => { signal?.throwIfAborted(); return this.engine.createNatlangScore!(body); });
     return items.map((item, index): PromiseSettledResult<DecisionScores> => {
       const result = response.results[index];

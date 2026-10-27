@@ -391,11 +391,15 @@ test('an in-page model without loaded states refuses native sentinels before inf
   const { BrowserLocalModel } = await browserApi();
   const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
   let calls = 0;
-  const model = new BrowserLocalModel({ engine: { isModelLoaded: () => true,
+  const model = new BrowserLocalModel({ engine: { isModelLoaded: () => true, capabilities: { natlangScore: true },
+    async createNatlangScore() { calls++; throw new Error('must not call scoring'); },
     async createChatCompletion() { calls++; throw new Error('must not call inference'); }, async exit() {} } });
   try {
     await assert.rejects(model.turn({ messages: [{ role: 'user', content: nativeStateSentinel('nzs1_' + 'a'.repeat(52)) }],
       tools: [], temperature: 0, seed: null, max_tokens: 4 }), /weights-unavailable: native state/);
+    const item = { messages: [{ role: 'user', content: nativeStateSentinel('nzs1_' + 'a'.repeat(52)) }], options: ['yes', 'no'] };
+    await assert.rejects(model.decide(item), /weights-unavailable: native state/);
+    await assert.rejects(model.decide.scoreMany([item]), /weights-unavailable: native state/);
     assert.equal(calls, 0);
   } finally { await model.close(); }
 });
