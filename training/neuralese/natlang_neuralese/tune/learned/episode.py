@@ -73,7 +73,9 @@ def propose(trainer, context, *, sample=True, seed=0, temperature=None, owner=No
     all_mixtures = {**(parent or {}).get('loraMixtures', {}), **mixtures}
     behavior = {'schema': BEHAVIOR_SCHEMA, 'writer': trainer.state['writer'], 'head': trainer.head.identity(),
                 'keys': {c: trainer.state['keys'][c] for v in views.values() for c in v['componentIds']},
-                'bank': bank.snapshot, 'seed': seed, 'sampled': sample, 'temperature': trainer.writer.temperature,
+                # The proposal's adapters execute this published snapshot; when the trainer has since updated its
+                # live bank/basis, those saved parameters differ and the executor ratio of `policy_step` covers it.
+                'bank': bank.snapshot, 'liveBankParameters': trainer.state.get('bank_tensors'), 'seed': seed, 'sampled': sample, 'temperature': trainer.writer.temperature,
                 'arrays': behavior_arrays, 'writerReceipt': out.receipt,
                 'optimizerLogprob': float(sum(sum(float.fromhex(x) for x in a['logprobs']) for a in behavior_arrays.values())).hex()}
     bundle = make_bundle(program=context['program'], base=engine.native_identity, bank=bank,

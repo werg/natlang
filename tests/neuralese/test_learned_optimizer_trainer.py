@@ -140,6 +140,25 @@ def test_proposal_replays_at_ratio_one_and_joint_ratio_updates(tmp_path):
     assert not policy['clipped'] and result['updated'].get('writer')
 
 
+def test_policy_update_executes_and_trains_the_live_basis(tmp_path):
+    from natlang_neuralese.tune.learned.episode import action_logprobs, propose
+    engine, bank, target = setup(tmp_path)
+    recipe = OuterRecipe(steps=1, batch_targets=1, train_keys=False, train_bank=True, train_basis=True, publish_every=99,
+                         writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}, bank_optimizer={'learning_rate': .01, 'weight_decay': 0.})
+    trainer = OuterTrainer(engine, bank, GRID, recipe, [target])
+    context = {key: target[key] for key in ('messages', 'writes', 'arrays', 'manifest', 'rows', 'placeholders')}
+    context['program'] = {'id': 'p', 'buildHash': 'b'}
+    bundle, _, behavior = propose(trainer, context, sample=True, seed=5)
+    old = sum(action_logprobs(engine, bundle, target['manifest'], target['rows']))
+    basis = {k: v.detach().clone() for k, v in trainer.bank_leaves['basis'].items()}
+    result = trainer.policy_step([{'context': context, 'behavior': behavior, 'old_executor_logprob': old, 'advantage': 1.}])
+    policy = result['targets'][0]['policy']
+    # Live leaves equal the proposal's bank snapshot: the executor ratio starts at one.
+    assert abs(policy['executorLogRatio']) < 1e-3 and not policy['clipped']
+    assert any(not torch.equal(basis[k], v) for k, v in trainer.bank_leaves['basis'].items())
+    engine.store.close()
+
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_bank_and_optimizer_resume_matches_uninterrupted_updates(tmp_path, family):
     from natlang_neuralese.tune.learned.trainer import _bank_tensor_map

@@ -457,6 +457,10 @@ class OuterTrainer:
                     labels = _labels(example)
                     cores = cores_for()
                     leaves = {context['placeholders'][s]: bank.adapter_tensors(cores[s]) for s in scopes if s in cores}
+                    # Execute with the same live basis as the supervised step: the ratio compares the live
+                    # parameters against the behavior, and the basis receives its policy gradient.
+                    if self.bank_leaves is not None and recipe.train_basis:
+                        leaves[bank.basis_artifact] = self.bank_leaves['basis']
                     def execute():
                         logp, w = O.supervised_logprobs(engine.shared_model, example, external_blocks=blocks or None,
                                                         external_identity=_identities(engine, blocks))
