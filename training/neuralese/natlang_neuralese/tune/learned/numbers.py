@@ -215,3 +215,14 @@ def quantize(value, fmt):
         return 0, 0., False
     rho = max(-.5, min(scaled - magnitude, .5 - 1e-9))
     return (magnitude if value > 0 else -magnitude), rho, saturated
+
+
+def grid_step_for(coefficients, max_int=9, quantile=.95):
+    """A grid step covering fitted coefficients with rare saturation: the ``quantile`` of their magnitudes maps to
+    ``max_int``. Recorded as a new number-format contract; returns ``(step, saturation rate at that step)``."""
+    values = sorted(abs(float(value)) for value in coefficients if float(value) != 0)
+    if not values:
+        raise LearnedOptimizerError('no nonzero fitted coefficients to size the grid step')
+    step = values[min(len(values) - 1, int(quantile * len(values)))] / max_int
+    saturated = sum(1 for value in values if value / step > max_int + .5) / len(values)
+    return step, saturated
