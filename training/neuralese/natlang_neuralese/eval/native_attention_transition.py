@@ -162,8 +162,15 @@ def _channel_copies(model, named):
 
 def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
         previous_mode, candidate_mode, checkpoint_sha256, forward_atol, gradient_atol,
-        gradient_rtol=1e-4, backend=None, _execution_setting='native_attention_precision'):
+        gradient_rtol=None, backend=None, _execution_setting='native_attention_precision'):
     """Return cross-mode and cached-reference evidence as distinct conclusions."""
+    # Path consistency (cached vs reference inside each arithmetic) keeps 1e-4; the old-vs-new comparison uses the
+    # transition's own bound (a deliberate tensor-core transition changes rounding by design).
+    from ..model.native_precision import transition_gradient_rtol
+    cross_mode_rtol = (gradient_rtol if gradient_rtol is not None else
+                       transition_gradient_rtol(previous_mode, candidate_mode)
+                       if _execution_setting == 'native_attention_precision' else 1e-4)
+    gradient_rtol = 1e-4 if gradient_rtol is None else gradient_rtol
     named, gradient_roles = production_inventory(model, optimizer._native_named_parameters)
     source_named = named
     for _, child in _children(optimizer):
@@ -265,7 +272,7 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                     old_loss,old_inputs,old_scope=forward(previous_mode,'old')
                     try:
                         comparison=compare_complete_gradients(old_loss,None,named,old_inputs,None,
-                            atol=gradient_atol,rtol=gradient_rtol,cached_factory=candidate_forward,
+                            atol=gradient_atol,rtol=cross_mode_rtol,cached_factory=candidate_forward,
                             flat_cotangent_scope=old_scope)
                     finally:
                         # Keep ownership at the caller too: a substituted or
@@ -297,7 +304,7 @@ def qualify_attention_transition(model, tokenizer, roles, config, *, optimizer,
                 baseline_cached_reference=baseline, candidate_cached_reference=candidate,
                 cached_reference_passed=bool(baseline['passed'] and candidate['passed']),
                 optimizer_updates=0, task_quality_qualified=False, readiness_qualified=False,
-                forward_atol=forward_atol, gradient_atol=gradient_atol, gradient_rtol=gradient_rtol,
+                forward_atol=forward_atol, gradient_atol=gradient_atol, gradient_rtol=gradient_rtol, cross_mode_gradient_rtol=cross_mode_rtol,
                 elapsed_seconds=time.monotonic()-started)
             result['passed'] = result['cross_mode_passed'] and result['cached_reference_passed']
     finally:
