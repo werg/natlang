@@ -37,6 +37,24 @@ cold fixture preparation and cache offload from starving an earned checkpoint
 write; reuse verified current sealed test fixtures and use internal disposable
 scratch when its measured headroom permits.
 
+## Learned LoRA mixtures and bases (owner, 2026-10-27)
+
+Make direct component-mixture and native soft-state fitting an operational part
+of program adaptation. Free hierarchical LoRA fits can supply bank growth and
+behavior targets, but they do not establish that mixture training or execution
+has occurred. Mixture labels must come from an actual fit in the named bank,
+with task outcomes measured through the composed adaptation.
+
+Train the shared LoRA bases and component bank alongside the mixture writer,
+coefficient head and native guidance in the shared learning stage. Explicitly
+enable `train_basis` and `train_bank` in its operational recipe rather than
+inheriting their disabled code defaults. Individual program label fits may pin a
+bank snapshot; after a shared bank update, publish its actual new snapshot and
+refit/rebind affected coefficient labels. Verify actual basis/component changes
+and downstream behavior, preserve optimizer history, and keep both production
+backbone learners moving. Do not describe target extraction alone as training
+the learned mixture system.
+
 ## Luna teacher concurrency (owner, 2026-10-27)
 
 Limit Luna training-data generation to **one worker**. This supersedes the earlier
