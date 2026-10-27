@@ -165,14 +165,14 @@ def normalized_family(trainer, *, rho=None, absent_below=1e-12):
 def fit(plan, out):
     """One family fit from a plan: ``{family, members, rows, student|engine, recipe, rho?, exports?}``."""
     from ..serve import load_native_engine
-    from .build import persist_artifacts, export_nodes
+    from .build import persist_artifacts, export_nodes, fit_store
     from .rows import lower_rows
     from .trainer import JointTrainer, Recipe
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
-                                dtype=getattr(torch, config.get('dtype', 'float32')))
+                                dtype=getattr(torch, config.get('dtype', 'float32')), store=fit_store(config))
     members = sorted(set(plan['members']))
     turns = [json.loads(line) for line in Path(plan['rows']).read_text().splitlines() if line.strip()]
     if {turn['binding'] for turn in turns} - set(members):

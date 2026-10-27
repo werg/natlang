@@ -10,6 +10,7 @@ import os
 import sqlite3
 import struct
 import threading
+import tempfile
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -343,9 +344,111 @@ class TensorStore:
                 yield native_tensor_artifact_id(artifact), encode_native_tensor_artifact(artifact)
         return self._put_native_archive_payloads(payloads(), owner)
 
-    def put_native_archive_payloads(self, payloads, owner: str | None = None):
+    def put_native_archive_payloads(self, payloads, owner: str | None = None, *, bounded: bool = False):
         """Decode named immutable archive bodies once, owning every decoded tensor."""
+        if bounded:
+            return self._put_native_archive_bounded(payloads, owner)
         return self._put_native_archive_payloads(payloads, owner)
+
+    def _put_native_archive_bounded(self, payloads, owner):
+        """Stage and verify a complete archive without retaining its tensor inventory."""
+        from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
+        from ..model.state_block import native_state_dependencies
+        from ..model.native_derivative_contract import verify_derivative_gradient_origin
+        from ..model.native_state_derivation import verify_state_derivation
+        if self.directory is None or self.resident_bytes is None:
+            raise ValueError('bounded archive import requires a disk-backed bounded store')
+        with tempfile.TemporaryDirectory(prefix='archive-', dir=self.directory) as directory:
+            stage = TensorStore(directory, self.resident_bytes)
+            try:
+                ids, kinds, dependencies, parents = [], {}, {}, set()
+                for expected, body in payloads:
+                    if not isinstance(body, bytes) or not isinstance(expected, str):
+                        raise TypeError('native archive payload requires immutable bytes and a content ID')
+                    if expected.startswith('nzs1_'):
+                        block, ident = decode_native_state(body)
+                        record = NativeStateRecord(ident, block)
+                        deps = native_state_dependencies(block)
+                        if block.derivation is not None:
+                            parents.add(block.derivation['parent_state_id'])
+                        kind = 'state'
+                    elif expected.startswith('nnt1_'):
+                        artifact, ident = decode_native_tensor_artifact(body)
+                        record = NativeTensorRecord(ident, artifact)
+                        deps = native_tensor_dependencies(artifact)
+                        kind = 'tensor'
+                    else:
+                        raise ValueError('archive file does not hold its named content: unsupported native ID')
+                    if ident != expected:
+                        raise ValueError(f'archive file {expected} does not hold its named content')
+                    if ident not in kinds:
+                        ids.append(ident)
+                    kinds[ident], dependencies[ident] = kind, deps
+                    (stage._put_verified_native_state if kind == 'state' else stage._put_verified_native_tensor)(record, None)
+                class Overlay:
+                    def get_native_state(_, ident):
+                        return stage.get_native_state(ident) if ident in kinds else self.get_native_state(ident)
+                    def get_native_tensor_artifact(_, ident):
+                        return stage.get_native_tensor_artifact(ident) if ident in kinds else self.get_native_tensor_artifact(ident)
+                overlay = Overlay()
+                done, active, order = set(), set(), []
+                for root in ids:
+                    stack = [(root, False)]
+                    while stack:
+                        ident, exiting = stack.pop()
+                        if exiting:
+                            active.remove(ident)
+                            done.add(ident)
+                            order.append(ident)
+                            continue
+                        if ident in done:
+                            continue
+                        if ident in active:
+                            raise ValueError('archived native artifacts have a cyclic dependency')
+                        active.add(ident)
+                        stack.append((ident, True))
+                        for dep in dependencies[ident]:
+                            if dep in kinds:
+                                stack.append((dep, False))
+                            elif dep.startswith('nzs1_'):
+                                if overlay.get_native_state(dep) is None:
+                                    raise ValueError(f'missing native dependency {dep}')
+                            elif dep.startswith('nnt1_'):
+                                if overlay.get_native_tensor_artifact(dep) is None:
+                                    raise ValueError(f'missing native dependency {dep}')
+                            else:
+                                raise ValueError(f'invalid native dependency {dep}')
+                for ident in ids:
+                    if kinds[ident] == 'tensor':
+                        verify_derivative_gradient_origin(overlay, overlay.get_native_tensor_artifact(ident).artifact)
+                    elif ident not in parents:
+                        verify_state_derivation(overlay, overlay.get_native_state(ident).block)
+                # Check all collisions before admitting any of the batch.
+                for ident in ids:
+                    existing = self.get_native_state(ident) if kinds[ident] == 'state' else self.get_native_tensor_artifact(ident)
+                    if existing is not None and self._path(ident).read_bytes() != stage._path(ident).read_bytes():
+                        raise ValueError('native archive content ID collision')
+                for ident in order:
+                    record = overlay.get_native_state(ident) if kinds[ident] == 'state' else overlay.get_native_tensor_artifact(ident)
+                    # The stage is on the same filesystem. Move the verified immutable
+                    # payload into the store instead of serializing a second copy.
+                    with self._lock:
+                        if not self._known(ident):
+                            path = self._path(ident)
+                            path.parent.mkdir(exist_ok=True)
+                            os.replace(stage._path(ident), path)
+                            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+                            try:
+                                os.fsync(directory_fd)
+                            finally:
+                                os.close(directory_fd)
+                            self._db.execute('INSERT INTO blocks (id, bytes) VALUES (?, ?)', (ident, self._size(record)))
+                            self._keep(record)
+                        if owner is not None:
+                            self._db.execute('INSERT OR IGNORE INTO holds (id, owner) VALUES (?, ?)', (ident, owner))
+                return ids
+            finally:
+                stage.close()
 
     def _put_native_archive_payloads(self, payloads, owner):
         from ..model.native_artifact import decode_native_tensor_artifact

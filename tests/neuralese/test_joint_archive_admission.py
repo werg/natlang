@@ -147,3 +147,63 @@ def test_object_admission_copies_inputs_and_rejects_mutable_payload(tmp_path):
     finally:
         target.close()
         engine.store.close()
+
+
+def test_bounded_archive_preserves_history_and_rejects_missing_before_publication(tmp_path):
+    from test_native_state_batch_import import _history
+    from natlang_neuralese.model.native_state_derivation import verify_state_derivation
+    engine, records = _history(tmp_path, 'lfm', 'adam')
+    target = SimpleNamespace(store=TensorStore(tmp_path / 'bounded', resident_bytes=1))
+    try:
+        persist_artifacts(engine, [records[-1].id], tmp_path / 'artifacts', tmp_path / 'states')
+        import_archive(target, [tmp_path / 'artifacts'], [tmp_path / 'states'])
+        verify_state_derivation(target.store, target.store.get_native_state(records[-1].id).block)
+        assert target.store.resident <= 1
+        count = len(target.store)
+        import_archive(target, [tmp_path / 'artifacts'], [tmp_path / 'states'])
+        assert len(target.store) == count
+        assert not list((tmp_path / 'bounded').glob('archive-*'))
+        target.store.close()
+        empty = SimpleNamespace(store=TensorStore(tmp_path / 'empty', resident_bytes=1))
+        try:
+            (tmp_path / 'states' / f'{records[0].id}.nzs').unlink()
+            with pytest.raises(ValueError):
+                import_archive(empty, [tmp_path / 'artifacts'], [tmp_path / 'states'])
+            assert len(empty.store) == 0
+        finally:
+            empty.store.close()
+    finally:
+        engine.store.close()
+
+
+def test_bounded_cycle_rejected_before_admission(tmp_path, monkeypatch):
+    from test_native_state_batch_import import _history
+    import natlang_neuralese.model.state_block as state_block
+    from natlang_neuralese.serve.store import native_state_id, encode_native_state
+    engine, records = _history(tmp_path, 'lfm', 'adam')
+    target = TensorStore(tmp_path / 'cycle', resident_bytes=1)
+    try:
+        blocks = [records[0].block, records[-1].block]
+        first, last = [native_state_id(block) for block in blocks]
+        monkeypatch.setattr(state_block, 'native_state_dependencies',
+                            lambda block: [last if native_state_id(block) == first else first])
+        with pytest.raises(ValueError, match='cyclic'):
+            target.put_native_archive_payloads(((native_state_id(b), encode_native_state(b)) for b in blocks), bounded=True)
+        assert len(target) == 0
+    finally:
+        target.close()
+        engine.store.close()
+
+
+def test_fit_store_owns_disposable_scratch(tmp_path):
+    import gc
+    from natlang_neuralese.tune.build import fit_store
+    store = fit_store({'store_scratch': str(tmp_path), 'store_resident_bytes': 1})
+    directory = store.directory
+    assert directory.exists() and store.resident_bytes == 1
+    store.close()
+    del store
+    gc.collect()
+    assert not directory.exists()
+    with pytest.raises(ValueError):
+        fit_store({'store_resident_bytes': -1})

@@ -15,6 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
+import weakref
 from pathlib import Path
 
 import torch
@@ -28,6 +30,36 @@ def _write(path, value):
     os.replace(temporary, path)
 
 
+def _cleanup_store(db, lockfile, temporary):
+    try:
+        db.close()
+    finally:
+        lockfile.close()
+        temporary.cleanup()
+
+
+def fit_store(config):
+    """Disposable spill store; durable archives remain in the fit output directories.
+
+    engine.store_scratch names an existing filesystem directory; store_resident_bytes
+    defaults to 256 MiB. Set scratch on internal storage with enough free space for
+    both the archive and its temporary verification stage.
+    """
+    from ..serve.store import TensorStore
+    limit = config.get('store_resident_bytes', 256 * 2**20)
+    if type(limit) is not int or limit < 0:
+        raise ValueError('engine.store_resident_bytes must be a nonnegative integer')
+    temporary = tempfile.TemporaryDirectory(prefix='natlang-fit-store-', dir=config.get('store_scratch'))
+    try:
+        store = TensorStore(temporary.name, limit)
+    except BaseException:
+        temporary.cleanup()
+        raise
+    # The store is owned by its engine. Finalization closes SQLite before removing scratch.
+    weakref.finalize(store, _cleanup_store, store._db, store._lockfile, temporary)
+    return store
+
+
 def import_archive(engine, artifact_directories=(), state_directories=()):
     """Admit all archive directories as one verified mixed dependency closure."""
     from .archive_links import read_archive, remember
@@ -39,7 +71,10 @@ def import_archive(engine, artifact_directories=(), state_directories=()):
                     body, reference = read_archive(path)
                     references[path.stem] = reference
                     yield path.stem, body
-    engine.store.put_native_archive_payloads(payloads())
+    if engine.store.directory is not None and engine.store.resident_bytes is not None:
+        engine.store.put_native_archive_payloads(payloads(), bounded=True)
+    else:
+        engine.store.put_native_archive_payloads(payloads())
     for ident, reference in references.items(): remember(engine, ident, reference)
 
 
@@ -112,7 +147,7 @@ def main(argv=None):
     from ..serve import load_native_engine
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
     engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
-                                dtype=getattr(torch, config.get('dtype', 'float32')))
+                                dtype=getattr(torch, config.get('dtype', 'float32')), store=fit_store(config))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     import_archive(engine,
