@@ -344,7 +344,8 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
     config.profiles[ggufName] = { ...previousGguf,
       local: { contextTokens: 16384, ...previousGguf.local, modelPath: gguf.modelPath, template: gguf.template,
         modelId: `native-gguf-${pin.sha256.slice(0, 12)}-${outtype}` },
-      request: { ...previousGguf.request, chat_template_kwargs: gguf.templateKwargs, logit_bias: gguf.logitBias } };
+      // The native server decodes greedily unless asked otherwise; llama-server would sample at 0.8.
+      request: { temperature: 0, ...previousGguf.request, chat_template_kwargs: gguf.templateKwargs, logit_bias: gguf.logitBias } };
   }
   if (parsed.options.has('--default')) config.defaultProfile = gguf ? ggufName : name;
   mkdirSync(dirname(configPath), { recursive: true });

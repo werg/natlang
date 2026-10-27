@@ -43,7 +43,9 @@ export type ModelProfile = {
     memoryBudgetMiB?: number; kvBytesPerToken?: number;
     /** A GGUF to serve instead of the pinned default, its chat template and model ID (`natlang setup --native SOURCE
      * --gguf TYPE` writes these); NATLANG_MODEL_PATH and NATLANG_TEMPLATE still override them. */
-    modelPath?: string; template?: string; modelId?: string };
+    modelPath?: string; template?: string; modelId?: string;
+    /** llama-server executable for this profile (e.g. a CUDA build); NATLANG_LLAMA_SERVER still overrides it. */
+    server?: string };
   /** Model requests in flight at once from this process (turns and decision scoring together). A managed local server
    * defaults to its slot count, other backends to unlimited. `batching.maxConcurrent` takes precedence. */
   concurrency?: number;
@@ -109,7 +111,7 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
       if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum))
         throw new Error(`local.${key} must be an integer >= ${minimum}`);
     }
-    for (const key of ['modelPath', 'template', 'modelId'] as const)
+    for (const key of ['modelPath', 'template', 'modelId', 'server'] as const)
       if (profile.local[key] !== undefined && (typeof profile.local[key] !== 'string' || !profile.local[key]))
         throw new Error(`local.${key} must be a nonempty string`);
     if ((profile.local.template || profile.local.modelId) && !profile.local.modelPath)

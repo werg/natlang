@@ -300,7 +300,9 @@ export async function exportNativeGguf(native: Pick<NativeModelSettings, 'checkp
   if (!file) {
     reused = false;
     error.write(`natlang: exporting ${native.sha256.slice(0, 12)} as ${outtype} GGUF\n`);
-    const { command, env } = nativeServerCommand({ ...native, port: 1 }, environment);
+    // The exporter runs here, with the profile's interpreter: never through the server's launcher.
+    const { command, env } = nativeServerCommand({ checkpoint: native.checkpoint, sha256: native.sha256,
+      ...(native.python ? { python: native.python } : {}), ...(native.pythonPath ? { pythonPath: native.pythonPath } : {}) }, environment);
     const result = spawnSync(command[0]!, ['-m', 'natlang_neuralese.export.native_gguf', native.checkpoint, directory, '--outtype', outtype],
       { env: { ...env, CUDA_VISIBLE_DEVICES: env.CUDA_VISIBLE_DEVICES ?? '' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 << 20 });
     if (result.status !== 0) throw new Error(`GGUF export failed\n${String(result.stderr).slice(-4000).trim()}`);

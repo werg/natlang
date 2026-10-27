@@ -193,6 +193,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   const profileModel = choice.kind === 'managed-local' ? choice.local : undefined;
   if (profileModel?.modelPath && !environment.NATLANG_MODEL_PATH) environment = { ...environment, NATLANG_MODEL_PATH: profileModel.modelPath,
     ...(profileModel.template && !environment.NATLANG_TEMPLATE ? { NATLANG_TEMPLATE: profileModel.template } : {}) };
+  if (profileModel?.server && !environment.NATLANG_LLAMA_SERVER) environment = { ...environment, NATLANG_LLAMA_SERVER: profileModel.server };
   const external = choice.kind === 'external' ? choice : null;
   const localSettings = choice.kind === 'managed-local' ? choice.local : undefined;
   type PiBackend = ReturnType<(typeof import('./pi-provider.js'))['createPiModelBackend']>;

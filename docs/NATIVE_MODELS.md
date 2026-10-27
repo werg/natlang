@@ -63,6 +63,9 @@ into the backbone's embedding and readout, which is exact for ordinary tokens, a
 template with the backbone's pinned history-reasoning arguments. The low-rank producer adapter only acts inside
 producing spans, which llama.cpp does not run, so the profile bans the producer's opening marker (`logit_bias`) and
 stays in ordinary tokens. Its `manifest.json` records the checkpoint, the merged rows and what is not represented.
+The profile also sets `temperature: 0`: the native server decodes greedily by default, llama-server samples at 0.8.
+`local.server` selects the llama-server executable (for example a CUDA build; the managed default may be a CPU
+build, which takes about 16 s per 4.5k-token natlang turn on the DGX).
 
 Measured on LFM step 40128, 16 recorded ticket-routing requests (median 5,586 prompt tokens), greedy:
 
