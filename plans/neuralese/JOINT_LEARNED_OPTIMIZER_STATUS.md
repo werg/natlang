@@ -66,16 +66,20 @@ outcome, ladder gap or lift has been measured. Saved artifacts and passing tests
 
 ## Not yet done (next work, in rough priority)
 
-1. **Run it.** Started 2026-10-27 under `/mnt/external/natlang-learned-optimizer-20261027`: `bank-init` (rank 16,
-   three program sources) on the pinned LFM step-39,495 parent, then `corpus` over the ticket, invoice and inventory
-   plans. Still to come: outer training, `natlang tune --learned` on development roots, the first ladder, and choosing
-   the grid step from fitted coefficients (`numbers.grid_step_for`; 0.05 is a starting value).
+1. **Run it — on hold until LFM main training is done (owner, 2026-10-27).** Prepared, not running: specs and
+   `run-after-lfm-main.sh <final checkpoint>` under `/mnt/external/natlang-learned-optimizer-20261027` (bank-init
+   rank 16 from the ticket, invoice and inventory plans, then `corpus` with `rebase` onto the final checkpoint). A first
+   bank-init on the step-39,495 parent was stopped unfinished; nothing was produced. The 51 supplied programs have
+   persisted grouped splits (`/home/werg/data/program-supply-20261027/splits-persisted.json`: 4,416 train, 1,416
+   development, 696 confirmation roots); case export binds the student checkpoint, so export, teacher collection and
+   import also wait for the final LFM model. Afterwards: outer training, `natlang tune --learned` on development
+   roots, the first ladder, and the grid step from fitted coefficients (`numbers.grid_step_for`; 0.05 is a start).
 2. **Oracle outcomes in collection.** `collect` uses the shaping reward; per-proposal oracle task outcomes are accepted
    (`outcomes`) but not yet produced by a TS rollout worker that executes proposals on query worlds. The release path
    already executes development roots through `evaluateRelease`.
 3. **Planted controls run continuously** as a scheduled worker (`controls` command exists; no scheduled job).
-4. **Teacher collection for the supplied programs** (split, case export, reviewed Luna campaign, import), then tune
-   rounds and `corpus` over them; requested from the program-tuning lane.
+4. **Teacher collection for the supplied programs** (case export against the final student, reviewed Luna campaign,
+   import), then tune rounds and `corpus` over them; held with item 1, owned by the program-tuning lane.
 5. **Mellum**: the code is shared and generic over expert axes, but shared hidden-side expert bases are not tied
    (expert bases are per expert); no Mellum run.
 6. **Reachability measurement** of directly tuned state targets (per-target writer context fit) is not implemented.

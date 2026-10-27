@@ -194,24 +194,35 @@ def corpus(spec):
     rows, manifest and student), run the same `tune.build` fit on the bank basis with update boundaries, then label
     its free-tune and in-bank targets. Resumable: a finished fit resumes as complete and labeled episodes are skipped.
 
-    Spec: ``{checkpoint, store, bank, work, out, recipe?, fit?, subsets?, programs: [{name, plan, recipe?}]}``;
-    ``recipe`` overrides the source plan's recipe (``basis`` is always the bank's basis)."""
+    Spec: ``{checkpoint, store, bank, work, out, recipe?, fit?, subsets?, rebase?, programs: [{name, plan, recipe?}]}``;
+    ``recipe`` overrides the source plan's recipe (``basis`` is always the bank's basis). ``rebase`` rebinds plans
+    prepared for an earlier student to the spec's checkpoint (teacher turns are model-independent and are lowered
+    again with this student; the earlier base is recorded as ``rebasedFrom``)."""
     from ..build import load_plan, main as build, persist_artifacts
     work = Path(spec['work'])
     bank_manifest = json.loads(Path(spec['bank']).read_text())['bank']
     exported = work / 'bank-artifacts'
-    if not exported.is_dir():
+    identity = None
+    if not exported.is_dir() or spec.get('rebase'):
         engine = _engine(spec)
-        persist_artifacts(engine, [bank_manifest['basis']], exported)
+        identity = dict(engine.native_identity)
+        if not exported.is_dir():
+            persist_artifacts(engine, [bank_manifest['basis']], exported)
         engine.store.close()
         _OPEN.remove(engine)
     programs = []
     for program in spec['programs']:
-        source, _, _, _ = load_plan(program['plan'])
+        source, manifest, _, _ = load_plan(program['plan'])
         base = Path(program['plan']).parent
         directory = work / program['name']
         directory.mkdir(parents=True, exist_ok=True)
         plan = {key: value for key, value in source.items() if key not in ('parent', 'learned', 'exports')}
+        plan['manifest'] = manifest
+        if spec.get('rebase') and manifest['base'] != {key: identity[key] for key in manifest['base']}:
+            plan['rebasedFrom'] = manifest['base']
+            plan['manifest'] = {**manifest, 'base': {key: identity[key] for key in manifest['base']}}
+            if 'base' in plan:
+                plan['base'] = {key: identity[key] for key in plan['base']}
         plan['rows'] = str((base / source['rows']).resolve())
         plan['artifacts'] = [str(exported.resolve())]
         plan['emitBoundaries'], plan['label'], plan['exports'] = True, f"corpus:{program['name']}", []

@@ -159,3 +159,24 @@ def test_planted_controls_compare_the_optimizer_with_the_in_bank_reference(tmp_p
         assert sum(1 for value in trial['planted'] if value) == 2
         assert len(trial['optimizer']) == len(trial['planted']) == len(trial['inBankFit'])
         assert 0 <= trial['optimizerRecovery']['supportRecall'] <= 1
+
+
+def test_corpus_rebinds_an_earlier_students_plan_and_labels_targets(tmp_path):
+    _, store, _ = operation(tmp_path)
+    source = json.loads((tmp_path / 'plan.json').read_text())
+    earlier = {**source['manifest']['base'], 'checkpoint_sha256': '0' * 64}
+    source['manifest'] = {**source['manifest'], 'base': earlier}
+    for key in ('learned', 'emitBoundaries'):
+        source.pop(key)
+    old = write(tmp_path / 'earlier-plan.json', source)
+    spec = write(tmp_path / 'corpus-spec.json', {
+        'checkpoint': str(tmp_path / 'native.pt'), 'store': str(store), 'bank': str(tmp_path / 'bank.json'),
+        'work': str(tmp_path / 'corpus'), 'out': str(tmp_path / 'corpus' / 'targets.jsonl'), 'rebase': True,
+        'recipe': {'steps': 2, 'ranks': {'tree': 4, 'folder': 2, 'lambda': 2}}, 'fit': {'steps': 1, 'refine_steps': 1}, 'subsets': 1,
+        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}, 'programs': [{'name': 'p', 'plan': old}]})
+    assert learned(['corpus', '--spec', spec]) == 0
+    plan = json.loads((tmp_path / 'corpus' / 'p' / 'plan.json').read_text())
+    assert plan['rebasedFrom'] == earlier and plan['manifest']['base']['checkpoint_sha256'] != '0' * 64
+    assert plan['recipe']['basis'] and plan['emitBoundaries'] is True
+    tiers = {json.loads(line)['tier'] for line in (tmp_path / 'corpus' / 'targets.jsonl').read_text().splitlines()}
+    assert tiers == {'free-tune', 'in-bank-fit'}
