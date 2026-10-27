@@ -104,3 +104,29 @@ def test_token_expectation_route_trains_the_sign_and_digit_logits(tmp_path):
     assert record['updated'].get('writer')
     routes = record['targets'][0]['cotangents']
     assert routes['sign'] > 0 and routes['digit'] > 0 and routes['other'] > 0 and routes['states'] > 0
+
+
+def test_proposal_replays_at_ratio_one_and_joint_ratio_updates(tmp_path):
+    from natlang_neuralese.tune.learned.episode import action_logprobs, propose, validate_proposal
+    from natlang_neuralese.tune.learned.bundle import verify_bundle
+    from natlang_neuralese.tune.learned.views import BankView
+    engine, bank, target = setup(tmp_path)
+    recipe = OuterRecipe(steps=1, batch_targets=1, writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.},
+                         writer_optimizer={'name': 'adam', 'learning_rate': 1e-2})
+    trainer = OuterTrainer(engine, bank, GRID, recipe, [target])
+    trainer.step()  # a nonzero head, so the regenerated mixture depends on live parameters
+    context = {key: target[key] for key in ('messages', 'writes', 'arrays', 'manifest', 'rows', 'placeholders')}
+    context['program'] = {'id': 'p', 'buildHash': 'b'}
+    bundle, proposal, behavior = propose(trainer, context, sample=True, seed=5)
+    verify_bundle(engine, bundle, bank)
+    view = target['arrays'][0]['view']
+    validate_proposal(bank, bundle, {'lambda:x': BankView(view['snapshot'], view['scope'], view['level'], tuple(view['slots']),
+                                     tuple(view['componentIds']), tuple(view['eligible']), tuple(view['dropoutMask']), None,
+                                     view['selection'], view['mask'])})
+    assert proposal['next'] == bundle['id'] and behavior['arrays']['lambda:x']['tokens'][0] == GRID.open
+    old = sum(action_logprobs(engine, bundle, target['manifest'], target['rows']))
+    record = {'context': context, 'behavior': behavior, 'old_executor_logprob': old, 'advantage': 1.}
+    result = trainer.policy_step([record])
+    policy = result['targets'][0]['policy']
+    assert abs(policy['optimizerLogRatio']) < 1e-4 and abs(policy['executorLogRatio']) < 1e-3
+    assert not policy['clipped'] and result['updated'].get('writer')

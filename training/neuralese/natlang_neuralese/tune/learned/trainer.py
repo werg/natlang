@@ -368,6 +368,107 @@ class OuterTrainer:
         self.state['losses'].append(record)
         return record
 
+    def policy_step(self, records, *, clip_low=.2, clip_high=.28):
+        """`joint-ratio-v1` on recorded proposals. Each record: ``context`` (assembled, with the executed query action
+        rows as ``rows``), ``behavior`` (from `episode.propose`), ``old_executor_logprob`` and a context-only
+        ``advantage``. The surrogate depends on theta only through ``log r = (log pi - log pi_old) + (log p_exec -
+        log p_exec_old)``, so its gradient is ``g * grad log r`` with the scalar ``g = d loss / d log r``: the executor
+        factor is regenerated from the same recorded tokens under current parameters (head, keys, writer, bank)."""
+        from ...model.native_adapters import run_native
+        from ...serve.native_grad import _leaf_block
+        from ...data.native_graph_schema import parse_graph
+        from .episode import _labels
+        from .meta_rl import check_replay
+        engine, recipe, store, bank = self.engine, self.recipe, self.engine.store, self.bank
+        writer_values = {k: v.detach().clone().requires_grad_(True)
+                         for k, v in store.get_native_tensor_artifact(self.state['writer']).artifact.tensors.items()}
+        writer_entries = [{'id': self.state['writer'], 'scale': 1.}]
+        live_keys = {}
+        if recipe.train_keys and recipe.cue:
+            for state in sorted(set(self.state['keys'].values()) - {None}):
+                live_keys[state] = _leaf_block(store.get_native_state(state).block)
+        shares_all = shares_from_norms(bank.group_norms())
+        summary = []
+        for record in records:
+            context, behavior = record['context'], record['behavior']
+            if behavior['bank'] != bank.snapshot:
+                raise LearnedOptimizerError('the recorded proposal used another bank snapshot; collect fresh rollouts')
+            for item in context['arrays']:
+                check_replay({'view': behavior['arrays'][item['view']['scope']]['view']}, {'view': item['view']})
+            writes = [StateWrite(w['key'], w['kind'], w['text'], w.get('extra_slots', 0)) for w in context['writes']]
+            arrays = [ArrayWrite(item['view']['scope'], tuple(item['view']['available']),
+                                 tuple(self.state['keys'][c] for c in item['view']['componentIds']) if recipe.cue else (None,) * len(item['view']['componentIds']),
+                                 tuple(behavior['arrays'][item['view']['scope']]['integers'])) for item in context['arrays']]
+            with torch.no_grad():
+                out = run_native(engine, lambda: self.writer.run(context['messages'], writes, arrays,
+                                 state_overrides=self._key_overrides(live_keys) or None, branch=False), writer_entries)
+            for scope, tokens in out.tokens.items():
+                if tokens != behavior['arrays'][scope]['tokens']:
+                    raise LearnedOptimizerError('replayed optimizer tokens differ from the recorded spelling')
+            old_pi = sum(float.fromhex(x) for a in behavior['arrays'].values() for x in a['logprobs'])
+            new_pi = float(sum(out.logprobs[scope].sum() for scope in out.logprobs))
+            state_leaves = {key: _leaf_block(block) for key, block in out.states.items()}
+            hidden = {scope: out.decision_hidden[scope].detach().float().clone().requires_grad_(True) for scope in out.integers}
+            def cores_for():
+                cores = {}
+                for item in context['arrays']:
+                    scope = item['view']['scope']
+                    slots = [bank.index(c) for c in item['view']['componentIds']]
+                    u, v = self.head(hidden[scope])
+                    coefficient = executed(behavior['arrays'][scope]['integers'], u, v, shares_all[slots],
+                                           step=bank.number_format.step, beta=recipe.beta, head=recipe.head_mode == 'head')
+                    factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots} if self.bank_leaves is not None else None
+                    cores[scope] = bank.composed_cores(slots, coefficient, factors=factors)
+                return cores
+            def run_rows(weight):
+                total = 0.
+                for row in context['rows']:
+                    example = parse_graph(row['graph'], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
+                    scales = context['manifest'].get('scales', {})
+                    ancestry = next(b['ancestry'] for b in context['manifest']['bindings'] if b['id'] == row['binding'])
+                    scopes = [s for s in ancestry if s in context['placeholders'] and scales.get(s, 1) != 0]
+                    entries = [{'id': context['placeholders'][s], 'scale': float(scales.get(s, 1))} for s in scopes]
+                    soft = row.get('soft') or {}
+                    blocks = {name: state_leaves[key][0] for name, key in soft.items() if key in state_leaves}
+                    labels = _labels(example)
+                    cores = cores_for()
+                    leaves = {context['placeholders'][s]: bank.adapter_tensors(cores[s]) for s in scopes if s in cores}
+                    def execute():
+                        logp, w = O.supervised_logprobs(engine.shared_model, example, external_blocks=blocks or None,
+                                                        external_identity=_identities(engine, blocks))
+                        return logp.gather(-1, labels.to(logp.device)[:, None])[:, 0].sum()
+                    total += float(_backward_inside(engine, execute, entries, leaves, weight))
+                return total
+            new_exec = run_rows(0.)
+            log_ratio = (new_pi - old_pi) + (new_exec - record['old_executor_logprob'])
+            ratio = math.exp(max(min(log_ratio, 20.), -20.))
+            advantage = float(record['advantage'])
+            clipped = (advantage > 0 and ratio > 1 + clip_high) or (advantage < 0 and ratio < 1 - clip_low)
+            g = 0. if clipped else -advantage * ratio / len(records)
+            if g:
+                run_rows(g)
+                def replay():
+                    live = self.writer.run(context['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None,
+                                           branch=False)
+                    outputs, grads = [], []
+                    for scope in live.logprobs:
+                        outputs.append(live.logprobs[scope].sum()); grads.append(torch.tensor(g))
+                        if hidden[scope].grad is not None:
+                            outputs.append(live.decision_hidden[scope].float()); grads.append(hidden[scope].grad)
+                    for key, (_, values) in state_leaves.items():
+                        for name, leaf in values.items():
+                            if leaf.grad is not None:
+                                layer, field_name = name.split('.')[1:]
+                                outputs.append(live.states[key].layers[int(layer)][field_name]); grads.append(leaf.grad)
+                    torch.autograd.backward(outputs, grads)
+                run_native(engine, replay, writer_entries, leaves={self.state['writer']: writer_values}, gradient_precision='fp32')
+            summary.append({'logRatio': log_ratio, 'ratio': ratio, 'clipped': clipped, 'advantage': advantage,
+                            'optimizerLogRatio': new_pi - old_pi, 'executorLogRatio': new_exec - record['old_executor_logprob']})
+        result = self._apply([], self.state['epoch'], self.state['position'], writer_values, live_keys,
+                             [{'policy': item} for item in summary])
+        result['estimator'] = 'joint-ratio-v1'
+        return result
+
     def publish_bank(self):
         """Publish the trained bank/basis as a new snapshot at an update boundary; labels become stale."""
         from dataclasses import replace

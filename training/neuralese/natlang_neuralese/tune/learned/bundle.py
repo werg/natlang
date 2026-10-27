@@ -116,3 +116,14 @@ def soft_states_for(bundle, binding_id):
 
 def skill_key(binding, target):
     return f'{binding}#{target}'
+
+
+def bundle_slot(soft):
+    """``(field, key)`` of a `tune.soft.soft_key` in a bundle: instructions by binding, skills by ``binding#target``."""
+    import json
+    binding, kind, target = json.loads(soft)
+    if kind == 'instructions':
+        return 'instructions', binding
+    if kind == 'skill':
+        return 'skills', skill_key(binding, target)
+    raise LearnedOptimizerError(f'unknown soft-state kind {kind}')
