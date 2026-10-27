@@ -199,7 +199,7 @@ test('vLLM serving loads whole-stack exports and routes each call to its own sta
   const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
-  const { loadVllmStacks } = await import('../dist/cli/weights.js');
+  const { loadVllmStacks } = await import('../dist/tuned-serving.js');
   const { createResolvedModelSession } = await import('../dist/model/index.js');
   const app = compile(files), program = app.manifest.adaptation, manifest = release(program, { memberships: false });
   const binding0 = new host.WeightBinding(manifest, { executor: base });

@@ -4,18 +4,18 @@
  * A release the backend cannot serve runs the base model, marked degraded with the reason; never as tuned execution.
  */
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
-import { HttpNeuraleseStore, restoreNativeArtifacts } from '../model/neuralese-server.js';
-import { decodeNativeState, decodeNativeTensorArtifact } from '../native/neuralese-store.js';
+import { HttpNeuraleseStore, restoreNativeArtifacts } from './model/neuralese-server.js';
+import { decodeNativeState, decodeNativeTensorArtifact } from './native/neuralese-store.js';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import type { ProgramDescriptor } from '../adaptation/types.js';
-import { WeightBinding } from '../adaptation/weights/binding.js';
-import { currentRelease } from '../adaptation/weights/release.js';
-import { managedModelSha256, supportsNativeStates } from '../model/local-server.js';
-import { discoverLlamaRuntime } from '../model/llama-runtime.js';
-import type { ResolvedModelChoice } from '../model/config.js';
-import { nativeReleaseObjectClosure, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from '../native/release-artifact-closure.js';
-import { materializeExistingInferenceRelease } from '../tune/pipeline.js';
+import type { ProgramDescriptor } from './adaptation/types.js';
+import { WeightBinding } from './adaptation/weights/binding.js';
+import { currentRelease } from './adaptation/weights/release.js';
+import { managedModelSha256, supportsNativeStates } from './model/local-server.js';
+import { discoverLlamaRuntime } from './model/llama-runtime.js';
+import type { ResolvedModelChoice } from './model/config.js';
+import { nativeReleaseObjectClosure, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from './native/release-artifact-closure.js';
+import { materializeExistingInferenceRelease } from './adaptation/weights/inference-release.js';
 
 export type TunedServing = {
   /** For `createNatlangRuntime({ weights })`. */

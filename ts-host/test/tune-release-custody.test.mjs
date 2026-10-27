@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { uploadRelease } from '../dist/cli/weights.js';
+import { uploadRelease } from '../dist/tuned-serving.js';
 import { MemoryNeuraleseStore, nativeStateContentId, encodeNativeState } from '../dist/native/neuralese-store.js';
 import { nativeStateFixture } from './fixtures/native-state.mjs';
 import { copyNativeReleaseClosure, installNativeReleaseObject, materializeNativeInferenceState, materializeNativeStateGguf, verifyNativeInferenceMaterialization,

@@ -40,7 +40,6 @@
     "model -> (root)",
     "model -> adaptation",
     "model -> native",
-    "model -> neuralese",
     "model -> package",
     "model -> runtime",
     "native -> (root)",

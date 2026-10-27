@@ -7,36 +7,30 @@ import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
-import { defaultNativePython, ensureNativeServer, newerNativeCheckpoint, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
+import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
-import { createResolvedModelSession, loadModelConfiguration, resolveModelChoice, describeLlamaRuntime, discoverLlamaRuntime,
+import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
-  type ModelSelectionOverrides, type ResolvedModelChoice } from '../model/index.js';
+  type ResolvedModelChoice } from '../model/index.js';
 import type { AuthPrompt } from '@earendil-works/pi-ai';
 import { openFolder, saveFolder } from '../native/node-files.js';
 import { executeNatlangAsk, executeNatlangCall } from '../native/natlang-command.js';
 import { inferValueType } from '../native/runtime.js';
-import type { DecisionRequest, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { buildProject } from '../compiler/node-project.js';
-import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
-  type NatlangRuntimeOptions } from '../runtime/runtime.js';
+import { type NatlangRuntime } from '../runtime/runtime.js';
 import { fileTraceSink, applicationContextRecords, loadCallables, loadNatlang } from '../runtime/node-files.js';
-import { bindAdaptation } from '../adaptation/compatibility.js';
 import { analyzeFusion, prepareFusion } from '../fusion/prepare.js';
 import { formatFusionReport } from '../fusion/report.js';
 import { parseFusionSettings, type FusionSettings } from '../fusion/settings.js';
 import { parseAdaptation } from '../adaptation/schema.js';
 import { currentRelease } from '../adaptation/weights/release.js';
-import { tunedServing, type TunedServing } from './weights.js';
-import type { ProgramDescriptor } from '../adaptation/types.js';
-import { executorIdentityForChoice } from '../model/config.js';
 import { invokeDefinition } from '../runtime/kernel.js';
-import { TierEngine } from '../calls/tiers.js';
+import { natlangRuntime, selectModel } from '../configured-runtime.js';
 import { resolveFrame } from '../runtime/runtime.js';
 import '../runtime/node.js';
 
@@ -306,57 +300,16 @@ function outputRuntime(discovery: LlamaRuntimeDiscovery, json: boolean): void {
   output(`llama.cpp runtime unavailable\n${describeLlamaRuntime(discovery)}`, false);
 }
 
-function modelSelection(parsed: Parsed): LoadedModelConfiguration {
-  const overrides: ModelSelectionOverrides = { provider: option(parsed, '--provider'), model: option(parsed, '--model') };
-  const loaded = loadModelConfiguration(option(parsed, '--profile'), overrides);
-  const native = loaded.choice.kind === 'external' ? loaded.choice.managedNative : undefined;
-  const newer = native && newerNativeCheckpoint(native, loaded.nativeSources);
-  if (newer) process.stderr.write(`natlang: ${native!.source} has a newer checkpoint${newer.step !== undefined ? ` (step ${newer.step}` +
-    `${native!.step !== undefined ? `; profile ${loaded.name} pins ${native!.step}` : ''})` : ''}; run natlang setup --native ${native!.source}` +
-    `${loaded.name === native!.source ? '' : ` --profile ${loaded.name}`} to use it\n`);
-  return loaded;
-}
+const selectionOptions = (parsed: Parsed) => ({ profile: option(parsed, '--profile'), provider: option(parsed, '--provider'),
+  model: option(parsed, '--model') });
+function modelSelection(parsed: Parsed): LoadedModelConfiguration { return selectModel(selectionOptions(parsed)); }
+/** `--escalate PROFILE`, or `none` to turn a profile's escalation off. */
+const escalateOption = (parsed: Parsed) => { const value = option(parsed, '--escalate'); return value === 'none' ? false as const : value; };
 
 const readConfigFile = (): NatlangConfigFile => {
   const path = join(defaultNatlangConfigDirectory(), 'config.json');
   return (existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {}) as NatlangConfigFile;
 };
-
-/**
- * A tuned program runs on the exact checkpoint its active release was tuned on (the release's `base`): the adapters and
- * soft states are only valid there. A native profile on another checkpoint, or the default profile, is rebound to that
- * base, pinned and served natively with the launch settings of the selected (or first configured) native profile.
- * An explicitly selected non-native backend is kept and runs untuned with the usual notice; --no-weights runs the
- * selected model untuned.
- */
-async function bindTunedModel(parsed: Parsed, selected: LoadedModelConfiguration, root: string | undefined): Promise<LoadedModelConfiguration> {
-  const release = root && !parsed.options.has('--no-weights') ? currentRelease(root) : undefined;
-  if (!release) return selected;
-  const sha256 = release.manifest.base.checkpoint_sha256, choice = selected.choice;
-  const native = choice.kind === 'external' ? choice.managedNative : undefined;
-  if (native?.sha256 === sha256) return selected;
-  const explicit = option(parsed, '--profile') || option(parsed, '--provider') || process.env.NATLANG_SERVER || process.env.NATLANG_PROVIDER || process.env.NATLANG_PROFILE;
-  // An unmanaged native server checks its own identity in weight binding; an explicit other backend is the user's call.
-  if (!native && (explicit || (choice.kind === 'external' && choice.neuraleseServer))) return selected;
-  const program = basename(root!);
-  const found = findNativeCheckpoint(sha256, { programRoot: root, sources: selected.nativeSources });
-  if (!found) {
-    process.stderr.write(`natlang: ${program} was tuned on checkpoint ${sha256.slice(0, 12)}, which is not available here; ` +
-      `natlang setup --native CHECKPOINT pins it. Running ${selected.name} untuned.\n`);
-    return selected;
-  }
-  const config = readConfigFile();
-  const launch = native ?? Object.values(config.profiles ?? {}).find(profile => profile.native)?.native;
-  const { checkpoint: _c, sha256: _s, sourceSha256: _o, source: _r, step: _t, port: _p, ...settings } = launch ?? {} as NativeModelSettings;
-  const pin = found.pinned ? { checkpoint: found.pinned, step: found.step } :
-    await pinNativeCheckpoint(found.pointer!, { ...defaultNativePython(), ...(settings.python ? { python: settings.python, pythonPath: settings.pythonPath } : {}) });
-  const step = pin.step ?? found.step;
-  const profile = { ...(native ? selected.profile : {}), native: { ...defaultNativePython(), ...settings, checkpoint: pin.checkpoint, sha256,
-    sourceSha256: sha256, ...(step !== undefined ? { step } : {}) }, ...(selected.profile.escalate ? { escalate: selected.profile.escalate } : {}) };
-  process.stderr.write(`natlang: ${program} runs its tuned release ${release.manifest.digest.slice(0, 12)} on the checkpoint it was tuned on ` +
-    `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned\n`);
-  return { ...selected, name: `${program}-tuned`, profile, choice: resolveModelChoice(profile) };
-}
 
 /** `natlang setup --program DIR`: pin the checkpoint a tuned program's active release was tuned on, ahead of its first run. */
 async function setupProgram(parsed: Parsed, root: string): Promise<number> {
@@ -448,55 +401,6 @@ function modelSession(choice: ResolvedModelChoice, assumeYes = false, loraAdapte
   return createResolvedModelSession(choice, process.env, process.stderr,
   { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes), ...(loraAdapters ? { loraAdapters } : {}), ...(nativeStates ? { nativeStates } : {}) });
 }
-
-/** A tuned program root's release, unless --no-weights. Prints why tuned weights are not served, when they are not. */
-async function discoverWeights(parsed: Parsed, root: string, program: ProgramDescriptor | undefined, choice: ResolvedModelChoice): Promise<TunedServing> {
-  if (parsed.options.has('--no-weights')) return {};
-  // Tuned artifacts are uploaded to the native server before the first turn, so it must be serving by then.
-  if (choice.kind === 'external' && choice.managedNative && currentRelease(root)) await ensureNativeServer(choice.managedNative);
-  const serving = await tunedServing(root, program, choice);
-  if (serving.notice) process.stderr.write(serving.notice + '\n');
-  return serving;
-}
-
-async function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Promise<Pick<NatlangRuntimeOptions, 'model' | 'seed' | 'neuralese'>> {
-  const { seed, ...settings } = choice.runtime ?? {};
-  const neuralese = await driver.neuraleseRuntime?.();
-  return { ...(neuralese ? { neuralese } : {}), model: { ...settings, promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
-}
-
-/**
- * A profile's `escalate` teacher (or `--escalate PROFILE`; `none` turns it off): every function runs on the profile's
- * model as the student tier, and a call the student fails (an error, or a budget or turn limit) runs again on the
- * teacher (calls/tiers.ts tiers 1 and 0). Each escalation is announced on stderr and recorded with the call.
- */
-async function escalation(parsed: Parsed, selected: LoadedModelConfiguration, student: NatlangRuntimeOptions['model']):
-  Promise<{ options: Pick<NatlangRuntimeOptions, 'models' | 'tiers'>; notice: (trace: import('../runtime/runtime.js').InvocationTrace) => void;
-    close(): Promise<void> } | undefined> {
-  const name = option(parsed, '--escalate') ?? selected.profile.escalate;
-  if (!name || name === 'none' || !student) return undefined;
-  if (name === selected.name) throw new Error(`profile ${name} cannot escalate to itself`);
-  const teacher = loadModelConfiguration(name);
-  const session = modelSession(teacher.choice, parsed.options.has('--yes'));
-  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow() });
-  const { model } = await runtimeModel(teacher.choice, driver);
-  const notice = (trace: import('../runtime/runtime.js').InvocationTrace) => {
-    const deopt = trace.events.find(event => event.kind === 'tier_deopt' && event.tier === 'tier1' && event.reason_kind !== 'guard');
-    if (!deopt) return;
-    const served = trace.events.some(event => event.kind === 'tier_served' && event.tier === 'tier0');
-    process.stderr.write(`natlang: ${String(deopt.function)} failed on ${selected.name} (${String(deopt.reason ?? deopt.reason_kind).split('\n')[0]!.slice(0, 160)}); ` +
-      `${served ? `answered by ${name}` : `${name} failed too`}. Record the right answer with natlang traces good|fix\n`);
-  };
-  return { options: { models: { student, teacher: model! },
-    tiers: new TierEngine({ functions: { '*': { tier1: { model: 'student' }, tier0: { model: 'teacher' } } } }) },
-    notice, close: () => session.close() };
-}
-
-const traceSinks = (...sinks: (import('../runtime/runtime.js').TraceSink | undefined)[]) => {
-  const present = sinks.filter((sink): sink is import('../runtime/runtime.js').TraceSink => !!sink);
-  return present.length ? { trace: (trace: import('../runtime/runtime.js').InvocationTrace) => { for (const sink of present) sink(trace); } } : {};
-};
 
 function selectTarget(manifest: { name: string; targets?: Record<string, unknown> }, requested?: string): string {
   const targets = Object.keys(manifest.targets ?? {});
@@ -645,27 +549,16 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
     option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
   const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
     join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
-  const selected = await bindTunedModel(parsed, modelSelection(parsed), spec.root), { choice } = selected;
-  const executorIdentity = executorIdentityForChoice(choice);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-  const program = inventory.manifest.adaptation!;
-  const tuned = await discoverWeights(parsed, spec.root, program, choice);
-  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters, tuned.nativeStates);
-  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
-  const driver: ModelDriver = Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
-      ...(model.neuralese ? { neuralese: true as const, neuraleseRuntime: () => model.neuraleseRuntime!() } : {}) });
-  const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
   const manifest = spec.package ? readManifestSettings(spec.root) : {};
   // Crisp checkers of refined predicates come from the program's `refinements.ts`, which its compiled `.nl` modules load.
   const refinements = manifest.refinements;
-  const studentModel = await runtimeModel(choice, driver);
-  const escalating = await escalation(parsed, selected, studentModel.model);
-  const runtime = createNatlangRuntime({ ...studentModel, program, adaptation, executorIdentity,
-    ...traceSinks(fileTraceSink(traceDirectory), escalating?.notice), ...escalating?.options,
-    ...(tuned.weights ? { weights: tuned.weights } : {}),
-    programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) });
+  const natlang = await natlangRuntime({ ...selectionOptions(parsed), programRoot: spec.root, program: inventory.manifest.adaptation!,
+    weights: !parsed.options.has('--no-weights'), escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
+    ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
+    runtime: { trace: fileTraceSink(traceDirectory), programRoot: spec.root, ...manifest, ...(refinements ? { refinements } : {}) } });
+  const { runtime, driver, executorIdentity, adaptation } = natlang, program = natlang.program!, choice = natlang.selection.choice;
   try {
     // Fused hand-offs (plans/FUSED_PIPELINES.md): off unless natlang.json says otherwise.
     const fusionSetting = spec.package ? fusionSettings(parsed, spec.root) : undefined;
@@ -688,7 +581,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
       try { return Number(await executable.run() ?? 0); } finally { await executable.close?.(); }
     }
     return Number(value ?? 0);
-  } finally { runtime.close(); await model.close(); await escalating?.close(); }
+  } finally { await natlang.close(); }
 }
 
 async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
@@ -747,31 +640,20 @@ async function fusionForCheck(parsed: Parsed, project: string) {
 }
 
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
-  const tunedHere = !parsed.options.has('--no-weights') && currentRelease(process.cwd()) ? process.cwd() : undefined;
-  const selected = await bindTunedModel(parsed, modelSelection(parsed), tunedHere), { choice } = selected;
-  const trace = option(parsed, '--trace');
+  const trace = option(parsed, '--trace'), weights = !parsed.options.has('--no-weights');
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = option(parsed, '--adaptation') ? parseAdaptation(readFileSync(resolve(option(parsed, '--adaptation')!), 'utf8')) : null;
   // A tuned project is identified from the working directory, without flags.
-  const tunedRoot = !parsed.options.has('--no-weights') && currentRelease(process.cwd()) ? process.cwd() : undefined;
-  const inventory = artifact || tunedRoot ? buildProject({ project: process.cwd(), programId: artifact?.program.id ?? currentRelease(process.cwd())?.manifest.program.id,
+  const release = weights ? currentRelease(process.cwd()) : undefined;
+  const inventory = artifact || release ? buildProject({ project: process.cwd(), programId: artifact?.program.id ?? release?.manifest.program.id,
     emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
   if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-  const program = inventory?.manifest.adaptation;
-  const tuned = tunedRoot ? await discoverWeights(parsed, tunedRoot, program, choice) : {};
-  const model = modelSession(choice, parsed.options.has('--yes'), tuned.loraAdapters, tuned.nativeStates);
-  if (tuned.vllmStacks) model.vllmStacks?.(tuned.vllmStacks);
-  const executorIdentity = executorIdentityForChoice(choice);
-  const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
-  const studentModel = await runtimeModel(choice, Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => model.turn(request, signal, options),
-    { decide: (request: DecisionRequest, signal?: AbortSignal) => model.decide(request, signal), contextWindow: () => model.contextWindow(),
-      ...(model.neuralese ? { neuralese: true as const, neuraleseRuntime: () => model.neuraleseRuntime!() } : {}) }));
-  const escalating = await escalation(parsed, selected, studentModel.model);
-  const runtime = createNatlangRuntime({ ...studentModel, program, adaptation, executorIdentity,
-    ...(tuned.weights ? { weights: tuned.weights } : {}), ...traceSinks(trace ? fileTraceSink(resolve(trace)) : undefined, escalating?.notice),
-    ...escalating?.options });
-  try { await model.prepare(); return await fn(runtime); }
-  finally { runtime.close(); await model.close(); await escalating?.close(); }
+  const natlang = await natlangRuntime({ ...selectionOptions(parsed), ...(inventory ? { programRoot: process.cwd(), program: inventory.manifest.adaptation } : {}),
+    weights, escalate: escalateOption(parsed), ...(artifact ? { adaptation: artifact } : {}),
+    ensureRuntime: discovery => ensureRuntime(discovery, parsed.options.has('--yes')),
+    runtime: trace ? { trace: fileTraceSink(resolve(trace)) } : {} });
+  try { await natlang.prepare(); return await fn(natlang.runtime); }
+  finally { await natlang.close(); }
 }
 
 const tunedProject = (parsed: Parsed) => !parsed.options.has('--no-weights') && !!currentRelease(process.cwd());

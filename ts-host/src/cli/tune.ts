@@ -35,7 +35,7 @@ import { activateRelease, currentManifest, currentRelease, readActive, readRelea
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
 import { loadTuneSettings } from '../tune/settings.js';
-import { loadVllmStacks, uploadRelease } from './weights.js';
+import { loadVllmStacks, uploadRelease } from '../tuned-serving.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
 import { programSites } from '../tune/sites.js';

@@ -59,6 +59,9 @@ export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVir
 export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
 
 export * from './adaptation/index.js';
+// A runtime configured like `natlang run`: profile, tuned release on its own checkpoint, managed servers, escalation.
+export { natlangRuntime, selectModel, bindTunedModel, sessionDriver, type NatlangRuntimeConfiguration,
+  type ConfiguredNatlangRuntime } from './configured-runtime.js';
 export { storeRelease, readRelease, readActive, activateRelease, rollbackRelease, currentManifest, currentRelease, tuneStatus, activeWeights,
   tuneDirectory, tuneJobLock, ACTIVE_SCHEMA, type ActiveRecord, type TuneStatus } from './adaptation/weights/release.js';
 
