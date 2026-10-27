@@ -204,6 +204,18 @@ Each correction row records the student checkpoint and release, the boundary cal
 boundary, the round, the teacher and the verification evidence; the whole repaired trajectory is kept in
 `.natlang/tune/rounds/<data>/round-<n>.repairs.jsonl`. Repair rounds work on every backend.
 
+`natlang tune ./my-program --learned spec.json` lets the trained joint learned optimizer propose the program's native
+soft instruction states, soft skill states and LoRA mixtures together (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).
+The spec names the optimizer's component bank (`bank`), its trained state (`state`), the operation's artifact store
+(`store`) and the bank-view size per scope level (`scopes`, e.g. `{"folder": 24, "lambda": 32}`), with optional
+`steps` (default 4), `patience` (default 2) and `seed`. The optimizer first decodes deterministically, then samples;
+each candidate is scored exactly on the training roots' support evidence, and the best one becomes the release, which
+is validated and activated as usual. The job key binds the bank and optimizer-state contents. Every proposal,
+including rejected ones, stays in the build receipt. Composed adapters slice the bank's learned basis
+(`bank-basis-slice-v1`) and run on the native reference server; managed llama.cpp receives exact per-node GGUF
+exports. The optimizer itself is built and trained with `python -m natlang_neuralese.tune.learned` and the Natlang
+program in `applications/learned-optimizer`.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 

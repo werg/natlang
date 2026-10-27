@@ -1,5 +1,25 @@
 # Model-facing changes and their measurement
 
+### 2026-10-27 — joint learned optimizer request, writer template and Natlang stages
+
+New model-facing surfaces of the joint learned optimizer (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md), all on the
+LFM2.5-350M executor base with the optimizer's adapters:
+
+- the optimizer request (`training/neuralese/natlang_neuralese/tune/learned/request.py`): program contract, current
+  adaptation lines, current states and evidence digests as native parts, `Revise:` focus line and compact evidence
+  rows (`evidence.compact_rows`);
+- the writer template (`writer.py`): ` <key>=` before each contextual re-encoding, ` <scope>=` before each weight
+  array, and the cued grid template (each slot's component key re-imported before its sign token; the plain
+  positional arm is `cue: false`);
+- the Natlang stages in `applications/learned-optimizer/` (`interpretEvidence`, `chooseRevision`, `chooseOperator`,
+  `shouldStop`, `scheduleTraining`).
+
+Status: **unmeasured; engineering tests only.** Tests establish exact template/parse alignment, gradient routes and
+service behavior on tiny fixtures; no live sample has measured these texts. Measure on the live 350M executor (about
+48 samples per variant): alignment accuracy of cued vs plain positional arrays on the planted controls (the plan's
+standing rule for choosing between them), and stage outputs against hindsight focus labels. The NL stages were written
+without negative examples; teach wrong forms through service errors.
+
 ### 2026-10-26 — design-brief root effect completeness (PR #4 review)
 
 The documentary, live-event and persistent-world root result types now require

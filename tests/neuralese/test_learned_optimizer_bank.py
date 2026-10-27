@@ -2,6 +2,7 @@
 (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md) on the real native engine."""
 import glob
 import math
+from pathlib import Path
 
 import pytest
 import torch
@@ -40,7 +41,7 @@ TOKENS = N.GridTokens.from_encoder(ToyEncoder())
 
 
 def test_real_student_tokenizer_spells_the_grid_as_sign_then_digit():
-    paths = glob.glob('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/*/tokenizer.json')
+    paths = glob.glob(str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/*/tokenizer.json'))
     if not paths:
         pytest.skip('LFM2.5-350M tokenizer is not cached here')
     from tokenizers import Tokenizer
