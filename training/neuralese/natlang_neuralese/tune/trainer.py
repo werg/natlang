@@ -566,7 +566,10 @@ class JointTrainer:
             batch, epoch, position = self._next_rl_batch()
             records = [self.rl.rollout(self.rl.graphs[index]) for index in batch]
             active_soft = sorted({key for record in records for key, ident in record['behavior'].get('soft_states', {}).items()})
-            bindings_used = sorted({binding for record in records for binding in record['bindings'].values()})
+            # Unbound invocations execute the frozen base. They stay in the
+            # complete policy graph; only adapter-parameter routing omits them.
+            bindings_used = sorted({binding for record in records for binding in record['bindings'].values()
+                                    if binding is not None})
         soft_leaves = {}
         for key in active_soft:
             block = engine.store.get_native_state(self.state['soft_states'][key]).block

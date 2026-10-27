@@ -34,7 +34,15 @@ def test_actual_rl_external_optimized_state_archive_restore_and_objective(tmp_pa
             else encode_native_tensor_artifact(engine.store.get_native_tensor_artifact(key).artifact))
     # Only the latest state ID is supplied: its earlier history is discovered
     # from the shared state/tensor dependency inventories, not episode copying.
-    manifest=save_bundle([{'native_input':ident}],tmp_path/'bundle',policy_id=engine.checkpoint_sha256,fetch=fetch)
+    from natlang_neuralese.model import native_state_derivation as derivation
+    calls=[];verify=derivation.verify_state_derivation
+    with monkeypatch.context() as patch:
+        def verify_head(*args,**kwargs):
+            calls.append(True)
+            return verify(*args,**kwargs)
+        patch.setattr(derivation,'verify_state_derivation',verify_head)
+        manifest=save_bundle([{'native_input':ident}],tmp_path/'bundle',policy_id=engine.checkpoint_sha256,fetch=fetch)
+    assert len(calls)==1,'one complete numeric ancestry walk covers every intermediate state'
     bundle=tmp_path/'bundle/manifest.json'
     assert original in manifest['blocks'] and result['update_artifact_id'] in manifest['blocks']
     prior=engine.store.get_native_state(ident).block.derivation['optimizer_state_parent_id']
@@ -42,6 +50,36 @@ def test_actual_rl_external_optimized_state_archive_restore_and_objective(tmp_pa
     reader=NativeBundleStore(bundle,policy_id=engine.checkpoint_sha256)
     assert torch.equal(reader.state(ident).tensors()[name],engine.store.get_native_state(ident).block.tensors()[name])
     assert reader._records.get() is None,'decoded episode KV must not accumulate across objective calls'
+    from natlang_neuralese.model import native_state_derivation as derivation
+    import os
+    original_verify=derivation.verify_state_derivation
+    verified=[]
+    def counted_verify(*args,**kwargs):
+        verified.append(True)
+        return original_verify(*args,**kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(derivation,'verify_state_derivation',counted_verify)
+        first=reader.state(ident);reader.state(ident)
+        assert len(verified)==1,'immutable ancestry is numerically checked once, not for every prompt occurrence'
+        recreated=NativeBundleStore(bundle,policy_id=engine.checkpoint_sha256)
+        recreated.state(ident)
+        assert len(verified)==1,'fresh policy objectives reuse authenticated ancestry proofs too'
+        first.tensors()[name].add_(100)
+        assert torch.equal(reader.state(ident).tensors()[name],engine.store.get_native_state(ident).block.tensors()[name])
+        assert reader._records.get() is None
+        assert reader._verification_bytes<=reader._verification_budget
+        dependency=tmp_path/'bundle'/manifest['blocks'][prior]['path']
+        before=dependency.stat();raw=dependency.read_bytes();changed=bytearray(raw);changed[-1]^=1
+        dependency.write_bytes(changed);os.utime(dependency,ns=(before.st_atime_ns,before.st_mtime_ns))
+        with pytest.raises(ValueError,match='hash changed'):
+            reader.state(ident)
+        dependency.write_bytes(raw);os.utime(dependency,ns=(before.st_atime_ns,before.st_mtime_ns))
+        reader.state(ident)
+        assert len(verified)==1,'exact restored bytes retain the same numerical proof'
+        uncached=NativeBundleStore(bundle,policy_id=engine.checkpoint_sha256,verification_cache_bytes=0)
+        uncached.state(ident);uncached.state(ident)
+        assert len(verified)==3 and uncached._verification_bytes==0
+
     # A new content ID authenticates bytes, not their claimed optimizer history.
     # Reject invalid derived state before replacing the prior usable manifest.
     previous_manifest=bundle.read_bytes()

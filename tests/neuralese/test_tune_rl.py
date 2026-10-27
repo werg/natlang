@@ -111,23 +111,42 @@ def rollout(engine, trainer, turns, bindings, sample_index, reward, soft_states=
             'bindings': bindings, 'episode': episode}
 
 
-def two_invocation_rollouts(engine, trainer, monkeypatch):
+def two_invocation_rollouts(engine, trainer, monkeypatch, *, writer_binding='bx'):
     """Writer (binding bx) exports a Neuralese block that the reader (binding by) imports; two samples, rewards 1/0."""
     roles, records = engine.role_tokens, []
     for index, (written, read) in enumerate((((5, 6), 7), ((9, 10), 11))):
-        writer = sample(engine, monkeypatch, [roles.produce_open, *written, roles.produce_close, 2], stack(trainer, 'bx'),
+        writer = sample(engine, monkeypatch, [roles.produce_open, *written, roles.produce_close, 2],
+                        stack(trainer, writer_binding) if writer_binding is not None else None,
                         [{'role': 'user', 'content': 't4 t5'}], 21 + index)
         block = writer['native_state']['blocks'][0]['id']
         reader = sample(engine, monkeypatch, [read, 2], stack(trainer, 'by'),
                         [{'role': 'user', 'content': [{'type': 'text', 'text': 't6 '}, {'type': 'native_state', 'id': block}]}],
                         31 + index, native_state_modes={block: 'same-base-adapter-state'})
         records.append(rollout(engine, trainer, [('writer', writer['x_natlang_rl_capture']), ('reader', reader['x_natlang_rl_capture'])],
-                               {'writer': 'bx', 'reader': 'by'}, index, 1 - index))
+                               {'writer': writer_binding, 'reader': 'by'}, index, 1 - index))
     return records
 
 
 def parent_fit(engine):
     return JointTrainer(engine, manifest_for(engine), rows_for(engine, 'bx', 2) + rows_for(engine, 'by', 1), Recipe(steps=0))
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_rl_base_producer_stays_in_whole_graph_with_tuned_consumer(tmp_path, monkeypatch, family):
+    engine = engine_fixture(tmp_path, family, service_template=True)
+    parent = parent_fit(engine)
+    records = two_invocation_rollouts(engine, parent, monkeypatch, writer_binding=None)
+    trainer = JointTrainer(engine, manifest_for(engine), records,
+        Recipe(objectives=['rl'], batch_rows=2, optimizer={'name':'sgd', 'learning_rate':.5}, **NEUTRAL),
+        workdir=tmp_path/'rl', parent=copy.deepcopy(parent.state))
+    assert all(len(graph['nodes']) == 2 for graph in trainer.rl.graphs)
+    before = dict(trainer.state['node_artifacts'])
+    update = trainer.step()
+    assert update['objective'] == 'rl' and len(update['row_losses']) == 2
+    assert update['updated_nodes'] == ['folder:b', 'lambda:y', 'tree:']
+    assert trainer.state['node_artifacts']['folder:a'] == before['folder:a']
+    assert trainer.state['node_artifacts']['lambda:x'] == before['lambda:x']
+    assert any(trainer.state['node_artifacts'][node] != before[node] for node in update['updated_nodes'])
 
 
 def ratios(trainer):

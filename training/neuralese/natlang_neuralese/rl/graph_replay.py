@@ -4,8 +4,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from ..common.jsonio import write_bytes_durable, write_json_durable
+
+# Objectives are recreated for individual policy-gradient requests. Share only
+# bounded proof metadata, never decoded state or episode tensors, across them.
+_VERIFIED_STATE_PROOFS = OrderedDict()
+_VERIFIED_STATE_PROOFS_LOCK = threading.RLock()
 
 
 def block_ids(value):
@@ -44,7 +51,7 @@ def verified_bundle_path(manifest_path, block_id, *, policy_id, manifest=None):
     from ..data.native_source_tree import _staged_path
     path = _staged_path(manifest_path, path).resolve(strict=True)
     if (path.parent != manifest_path.parent.resolve() or path.stat().st_size != entry['bytes']
-            or sha256_file_hex_cached(path) != entry['sha256']):
+            or sha256_file_hex_cached(path, trust_archive_receipt=False) != entry['sha256']):
         raise ValueError('RL archived block path/size/hash changed')
     return path
 
@@ -57,7 +64,7 @@ def verified_bundle_bytes(manifest_path, block_id, *, policy_id, manifest=None):
 
 class NativeBundleStore:
     """Read-only exact artifact view for the shared native provenance verifier."""
-    def __init__(self,path,*,policy_id,manifest=None):
+    def __init__(self,path,*,policy_id,manifest=None,verification_cache_bytes=4 << 20):
         import copy,contextvars
         self.path=Path(path).resolve(strict=manifest is None);self.policy_id=policy_id
         self.manifest=copy.deepcopy(json.loads(self.path.read_text()) if manifest is None else manifest)
@@ -69,6 +76,46 @@ class NativeBundleStore:
             if expected is None or not isinstance(entry, dict) or entry.get('format') != expected:
                 raise ValueError('native RL archive contains a non-native artifact entry')
         self._records=contextvars.ContextVar('native_bundle_records',default=None)
+        if type(verification_cache_bytes) is not int or verification_cache_bytes < 0:
+            raise ValueError('native verification cache needs a nonnegative byte budget')
+        self._verification_budget=verification_cache_bytes
+        shared = verification_cache_bytes == 4 << 20
+        self._verified_states=_VERIFIED_STATE_PROOFS if shared else OrderedDict()
+        self._verification_lock=_VERIFIED_STATE_PROOFS_LOCK if shared else threading.RLock()
+
+    @property
+    def _verification_bytes(self):
+        with self._verification_lock:
+            return sum(entry[2] for entry in self._verified_states.values())
+
+    def _verification_law(self):
+        from ..model import native_state_derivation as state
+        from ..model import native_derivative_contract as contract
+        from ..common.hashing import canonical_json_sha256_hex
+        return (self.policy_id, canonical_json_sha256_hex(self.manifest),
+                canonical_json_sha256_hex(contract.state_optimizer_arithmetic()),
+                *(value for value in (state.verify_state_derivation,
+                  state._verify_optimizer_derivation,state._verify_semantic_derivation,
+                  contract.validate_derivation,contract.verify_derivative_gradient_origin)))
+
+    def _verified_dependency_paths(self, dependencies):
+        # Strict content-cache keys bind device/inode/size/mtime/ctime. Every
+        # transitive member is still authenticated on every proof reuse.
+        for ident in dependencies:
+            if verified_bundle_path(self.path,ident,policy_id=self.policy_id,manifest=self.manifest) is None:
+                raise ValueError('native archive omitted a verified ancestry dependency')
+
+    def _remember_verification(self, ident, law, dependencies):
+        # Only content IDs and a proof descriptor survive; decoded KV/tensors
+        # remain scoped to one call. Reserve conservatively for Python metadata.
+        cost=512+256*len(dependencies)
+        with self._verification_lock:
+            self._verified_states.pop(ident,None)
+            if cost>self._verification_budget:return
+            while self._verified_states and self._verification_bytes+cost>self._verification_budget:
+                self._verified_states.popitem(last=False)
+            self._verified_states[ident]=(law,dependencies,cost)
+
 
     def _record(self,ident):
         records=self._records.get()
@@ -100,14 +147,30 @@ class NativeBundleStore:
         return self._record(ident)
 
     def state(self,ident):
-        # Share decoded ancestors within this verification, never retain every
-        # episode's potentially huge KV payload across a production epoch.
+        law=self._verification_law()
+        with self._verification_lock:
+            proof=self._verified_states.get(ident)
+            if proof is not None:self._verified_states.move_to_end(ident)
+        if proof is not None and proof[0]==law:
+            self._verified_dependency_paths(proof[1])
+            # Return a fresh authenticated observation; callers cannot mutate
+            # a cached root and thereby change later executions.
+            token=self._records.set(None)
+            try:record=self.get_native_state(ident)
+            finally:self._records.reset(token)
+            if record is None:raise ValueError('native archive omitted its exact state observation')
+            if self._verification_law()!=law:raise ValueError('native ancestry verification contract changed during reuse')
+            return record.block
         token=self._records.set({}) if self._records.get() is None else None
         try:
             record=self.get_native_state(ident)
             if record is None:raise ValueError('native archive omitted its exact state observation')
             from ..model.native_state_derivation import verify_state_derivation
             verify_state_derivation(self,record.block)
+            dependencies=tuple(sorted(self._records.get()))
+            self._verified_dependency_paths(dependencies)
+            if self._verification_law()!=law:raise ValueError('native ancestry verification contract changed during validation')
+            self._remember_verification(ident,law,dependencies)
             return record.block
         finally:
             if token is not None:self._records.reset(token)
@@ -125,6 +188,7 @@ def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
     out.mkdir(parents=True, exist_ok=True)
     pending = set(block_ids(rollouts))
     entries = {}
+    state_parents = {}
     while pending:
         block_id = pending.pop()
         if block_id in entries:
@@ -151,6 +215,7 @@ def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
         else:
             entries[block_id].update(length=len(block.token_ids), width=block.embeddings.shape[1])
         if native:
+            state_parents[block_id] = (block.derivation or {}).get('parent_state_id')
             entries[block_id]['native_identity'] = {name: getattr(block, name) for name in (
                 'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
             pending.update(set(native_state_dependencies(block))-entries.keys())
@@ -158,8 +223,23 @@ def save_bundle(rollouts, out, *, policy_id, fetch, manifest_fields=None):
     manifest.update(manifest_fields or {})
     destination = out / 'manifest.json'
     reader=NativeBundleStore(destination,policy_id=policy_id,manifest=manifest)
-    for ident,record in entries.items():
-        if record['format']=='native-state':reader.state(ident)
+    # One head verifies its complete parent chain, including every intermediate
+    # numeric update and optimizer-history join. Rechecking each ancestor as a
+    # fresh root makes a length-N history quadratic in decoding and arithmetic.
+    # Include heads reached only through tensor/program dependencies as well.
+    heads=set(state_parents)-set(state_parents.values())
+    covered=set()
+    for ident in sorted(heads):
+        current=ident;chain=set()
+        while current is not None:
+            if current in chain or current not in state_parents:
+                raise ValueError('native archive has cyclic or missing state ancestry')
+            chain.add(current)
+            current=state_parents[current]
+        covered.update(chain)
+    if covered!=set(state_parents):
+        raise ValueError('native archive has cyclic or unreachable state ancestry')
+    for ident in sorted(heads):reader.state(ident)
     # A self-consistent content ID is not proof of a valid derived state. Keep
     # the previous published manifest intact until all derivations validate.
     write_json_durable(destination, manifest)
