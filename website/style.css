@@ -552,3 +552,5 @@ footer { margin-top: 80px; border-top: 3px solid var(--rule); padding: 22px 0 60
 /* Show code as typed: no programming ligatures anywhere. */
 body * { font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
 h1, h2, h3, h1 *, h2 *, h3 * { font-variant-ligatures: normal; font-feature-settings: normal; }
+
+code.plate-inline { background: #33426a; }

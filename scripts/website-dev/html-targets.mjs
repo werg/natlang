@@ -115,18 +115,38 @@ export function annotate(html, targets) {
  * contain scripts, styles, frames or event-handler attributes.
  */
 export function fragmentProblem(fragment) {
-  if (/<\s*(script|style|iframe|object|embed|link|meta)\b/i.test(fragment)) return 'contains a script, style or embedded document';
   if (/<[^>]*\son\w+\s*=/i.test(fragment)) return 'contains an event-handler attribute';
+  const inline = new Set(['a', 'abbr', 'b', 'br', 'code', 'del', 'em', 'i', 'kbd', 'mark', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'wbr']);
+  const attributes = new Set(['class', 'title', 'href', 'target', 'rel', 'aria-label', 'datetime']);
   const stack = [];
   TOKEN.lastIndex = 0;
-  let m;
+  let m, end = 0;
   while ((m = TOKEN.exec(fragment))) {
-    if (m[0].startsWith('<!')) continue;
+    if (fragment.slice(end, m.index).includes('<')) return 'contains malformed markup';
+    end = TOKEN.lastIndex;
+    if (m[0].startsWith('<!')) return 'contains a comment or document declaration';
+    const name = (m[1] || m[2]).toLowerCase();
     if (m[1]) {
-      const name = m[1].toLowerCase();
       if (stack.pop() !== name) return `has an unmatched </${name}>`;
-    } else if (!VOID.has(m[2].toLowerCase()) && m[4] !== '/') stack.push(m[2].toLowerCase());
+    } else {
+      if (!inline.has(name)) return `contains unsupported <${name}> markup`;
+      for (const attribute of m[3].matchAll(ATTR)) {
+        const key = attribute[1].toLowerCase();
+        if (key.startsWith('on')) return 'contains an event-handler attribute';
+        if (!attributes.has(key)) return `contains unsupported ${key} attribute`;
+        const value = attribute[2] ?? attribute[3] ?? attribute[4] ?? '';
+        // Keep URL entities out of the scheme/path prefix. Browsers decode them
+        // before recognizing javascript:, including numeric character escapes.
+        if (key === 'href' && !/^(?:https?:\/\/|mailto:|[^:&<>\s]*([/#?]|$))/i.test(value))
+          return 'contains an unsafe link URL';
+      }
+      if (!VOID.has(name)) {
+        if (m[4] === '/') return 'contains a self-closing non-void element';
+        stack.push(name);
+      }
+    }
   }
+  if (fragment.slice(end).includes('<')) return 'contains malformed or unterminated markup';
   return stack.length ? `leaves <${stack[stack.length - 1]}> open` : null;
 }
 

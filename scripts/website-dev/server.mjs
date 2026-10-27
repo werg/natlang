@@ -124,13 +124,15 @@ export async function startServer(options) {
     if (req.headers['x-natlang-dev'] !== '1' || (origin && origin !== `http://${req.headers.host}`)) {
       return sendJSON(res, 403, { error: 'Saving is only allowed from the page this server serves.' });
     }
-    let body = '';
+    const chunks = [];
+    let bytes = 0;
     for await (const chunk of req) {
-      body += chunk;
-      if (body.length > 2_000_000) return sendJSON(res, 413, { error: 'The request is too large.' });
+      bytes += chunk.length;
+      if (bytes > 2_000_000) return sendJSON(res, 413, { error: 'The request is too large.' });
+      chunks.push(chunk);
     }
     let parsed;
-    try { parsed = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'The request is not valid JSON.' }); }
+    try { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); } catch { return sendJSON(res, 400, { error: 'The request is not valid JSON.' }); }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return sendJSON(res, 400, { error: 'The request must be an object.' });
     const { version, edits } = parsed;
     if (!Array.isArray(edits) || !edits.length) return sendJSON(res, 400, { error: 'There are no edits to save.' });
@@ -151,6 +153,17 @@ export async function startServer(options) {
   let pendingSave = Promise.resolve();
   const server = createServer(async (req, res) => {
     try {
+      // Check authority against the bound interface, before serving pages or accepting edits.
+      // An attacker's DNS name can resolve to loopback without becoming a trusted Host.
+      const hosts = new Set([opts.host, req.socket.localAddress]);
+      if (['127.0.0.1', '::1', '0.0.0.0', '::'].includes(opts.host)) hosts.add('localhost');
+      let trusted = false;
+      try {
+        const authority = new URL('http://' + req.headers.host);
+        trusted = !authority.username && !authority.password && hosts.has(authority.hostname.replace(/^\[|\]$/g, ''))
+          && Number(authority.port || 80) === server.address().port;
+      } catch { /* invalid authority */ }
+      if (!trusted) return sendJSON(res, 403, { error: 'Untrusted Host header.' });
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/__dev/events') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });

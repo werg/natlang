@@ -1,5 +1,7 @@
 // Tests for the website dev server: node --test tests/test_website_dev.mjs
 import { test } from 'node:test';
+import { request as httpRequest } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -145,5 +147,45 @@ test('concurrent saves from one version cannot overwrite each other', async () =
     const malformed = await fetch(new URL('/__dev/save', url), { method: 'POST',
       headers: { 'x-natlang-dev': '1' }, body: 'null' });
     assert.equal(malformed.status, 400);
+  } finally { await close(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('editable fragments reject executable and structural markup, including escaped URL schemes', async () => {
+  for (const text of ['<svg/onload=alert(1)>', '<a href="javascript:alert(1)">x</a>',
+    '<a href="jav&#97;script:alert(1)">x</a>', '<a href="&#106;avascript:alert(1)">x</a>',
+    '<a href="java&#x09;script:alert(1)">x</a>', '<a href="data:text/html,test">x</a>',
+    '<span style="color:red">x</span>', 'a <!-- b', '<span/>', '<svg><a>x</a></svg>'])
+    assert.notEqual(fragmentProblem(text), null, text);
+  for (const text of ['<a href="https://example.test/?x=1&amp;y=2">link</a>', '<a href="#here">local</a>',
+    '<span class="note">text</span>', '<a href="../spec/SPEC.md">spec</a>']) assert.equal(fragmentProblem(text), null, text);
+  const html = await readFile(join(REPO, 'website', 'index.html'), 'utf8');
+  for (const target of findEditableTargets(html)) {
+    const inner = html.slice(target.innerStart, target.innerEnd);
+    assert.equal(fragmentProblem(inner), null, inner);
+  }
+});
+
+test('save rejects rebinding hosts and preserves UTF-8 across request chunks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'website-dev-'));
+  await writeFile(join(root, 'index.html'), SAMPLE);
+  const { url, close } = await startServer({ root, page: 'index.html', port: 0, host: '127.0.0.1', readOnly: false });
+  const send = (headers, chunks) => new Promise((resolve, reject) => {
+    const req = httpRequest(new URL('/__dev/save', url), { method: 'POST', headers }, res => {
+      res.resume(); res.on('end', () => resolve(res.statusCode));
+    });
+    req.on('error', reject);
+    (async () => { for (const chunk of chunks) { req.write(chunk); await delay(10); } req.end(); })().catch(reject);
+  });
+  try {
+    const page = await (await fetch(url)).text();
+    const version = page.match(/"version":"([0-9a-f]+)"/)[1];
+    const body = Buffer.from(JSON.stringify({ version, edits: [{ id: 0, html: 'Price € — 世界' }] }));
+    const headers = { 'content-type': 'application/json', 'x-natlang-dev': '1' };
+    assert.equal(await send({ ...headers, host: `evil.example:${new URL(url).port}`, origin: `http://evil.example:${new URL(url).port}` }, [body]), 403);
+    assert.equal(await readFile(join(root, 'index.html'), 'utf8'), SAMPLE);
+    const split = body.indexOf(Buffer.from('€')) + 1;
+    assert.equal(await send(headers, [body.subarray(0, split), body.subarray(split)]), 200);
+    assert.match(await readFile(join(root, 'index.html'), 'utf8'), /Price € — 世界/);
   } finally { await close(); await rm(root, { recursive: true, force: true }); }
 });

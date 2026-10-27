@@ -197,7 +197,7 @@ export async function triage(
 const flags = await Promise.all(
   tickets.map(t =&gt; isUrgent(t)));
 <span class="c1">// boolean[], whichever body runs</span></pre>
-      <p style="margin: 0; font-size: 16px">The body can be swapped without touching callers because both versions have the same signature. natlang provides this as <code style="background: #33426a">pluggable({ crisp, nl }, mode)</code>, described in chapter IX.</p>
+      <p style="margin: 0; font-size: 16px">The body can be swapped without touching callers because both versions have the same signature. natlang provides this as <code class="plate-inline">pluggable({ crisp, nl }, mode)</code>, described in chapter IX.</p>
     </div>
   </div>
 </section>

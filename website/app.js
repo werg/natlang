@@ -706,7 +706,10 @@ await rank(tickets)   // → string[] (40), checked against the declared type
     if (i < 0) return; drag = i; svg.setPointerCapture(ev.pointerId); setP(i, toV(ev)); render();
   });
   svg.addEventListener('pointermove', ev => { if (drag < 0) return; setP(drag, toV(ev)); render(); });
-  svg.addEventListener('pointerup', () => { drag = -1; });
+  const endDrag = () => { drag = -1; };
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+  svg.addEventListener('lostpointercapture', endDrag);
   let sel = 1;
   svg.addEventListener('keydown', ev => {
     const k = ev.key;

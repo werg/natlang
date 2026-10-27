@@ -134,8 +134,8 @@ In the browser:
 - The executor is the page's natlang runtime. The agent model is reached through natlang's model transport (default
   here; `transport: 'pi-ai'` uses pi-ai's OpenAI-compatible provider) at an HTTP endpoint: an OpenAI-compatible or
   Neuralese server. A page can instead give pi-ai models it composes (`AgentModels`). A Neuralese reader
-  (`reader: DIALECT`) is checked against the server as on the CLI, and its native artifacts are archived in the OPFS
-  store (ts-host `OpfsNeuraleseStore`). The page's in-browser wllama model (ts-host `loadBrowserLocalModel`) is not
+  (`reader: DIALECT`) is checked against the server as on the CLI, and its native artifacts are archived in the
+  configured native-artifact store (ts-host `OpfsNeuraleseStore` by default). The page's in-browser wllama model (ts-host `loadBrowserLocalModel`) is not
   connected to pi's agent transport.
 - The companion (`companion: true`, or `{ shaping, hints, offers }` to choose its policies) reads, lists and searches
   the workspace through the conversation's environment, so it sees the folder; its search is the environment's grep.

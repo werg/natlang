@@ -33,6 +33,7 @@ you were; **Discard** restores the text you started with.
 
 - Only the inner text of existing elements is written back; the rest of the file is left byte for byte as it was.
   The changes show up as an ordinary diff (`git diff website/index.html`).
+- Saved fragments accept prose and safe inline markup; scripts, styles, embedded documents and executable links are refused.
 - New paragraphs, list items, links and exhibits are added in `index.html` itself. Enter does nothing while editing.
 - Elements with an `id`, code blocks, buttons and everything inside an exhibit are not editable, because the page's
   script fills or rewrites them. Add `data-no-edit` to an element to exclude it, or `data-edit` to include one the
@@ -57,5 +58,6 @@ A typical round: run the dev server, edit and save, review `git diff website/`, 
 changing the headline or the example at the top of the page, render the preview image again with
 `node scripts/website-dev/social-card.mjs`.
 
-The deployment binds `og:url`, `og:image` and `rel="canonical"` to the actual address reported by `configure-pages`, including an inherited account domain. The source page uses the default GitHub address. If the site moves, for example to a custom
-domain, change those three to the new address.
+The deployment binds `og:url`, `og:image` and `rel="canonical"` to the actual address reported by `configure-pages`,
+including an inherited account domain. The source page uses the default GitHub address. A Pages domain change is
+applied on the next deployment; other hosting should update those three source values.
