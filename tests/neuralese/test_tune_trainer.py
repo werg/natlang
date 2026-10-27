@@ -242,3 +242,25 @@ def test_student_target_tables_cover_the_real_port_inventories(tmp_path):
                 gate, up = (parts[template.format(expert=expert)] for template in targets[name].hf_module)
                 assert torch.equal(torch.cat([gate[1] @ gate[0], up[1] @ up[0]]), B[expert] @ A[expert])
         engine.store.close()
+
+
+def test_supervised_row_loss_reaches_the_producer_through_its_neuralese_edge(tmp_path):
+    """Program SFT is whole-graph: a row whose consumer (binding by) imports the Neuralese span its producer (binding
+    bx) exported trains the producer's own path from the consumer's loss alone."""
+    engine = engine_fixture(tmp_path, 'lfm')
+    fingerprint = engine.native_identity['tokenizer_fingerprint']
+    graph = {'schema': 'natlang.neuralese-native-graph/1', 'id': 'chain', 'split': 'train', 'source_groups': ['chain'],
+             'tokenizer_fingerprint': fingerprint,
+             'nodes': [{'name': 'producer', 'token_ids': [4, 5, 6], 'producing': [[1, 3]], 'target_weights': [0, 0, 0]},
+                       {'name': 'consumer', 'token_ids': [7, 8, 9], 'target_weights': [0, 0, 1],
+                        'imports': [{'at': 1, 'source': 'producer', 'start': 1, 'stop': 3}]}]}
+    row = {'binding': 'by', 'bindings': {'producer': 'bx', 'consumer': 'by'}, 'graph': graph, 'occurrence': 'chain'}
+    trainer = JointTrainer(engine, manifest_for(engine), [row], Recipe(steps=1, optimizer={'name': 'sgd', 'learning_rate': 1.},
+                           depth_penalty={'tree': 0., 'folder': 0., 'lambda': 0.}))
+    start = dict(trainer.state['node_artifacts'])
+    record = trainer.step()
+    # The producer's private nodes receive gradient only through the imported span.
+    assert {'folder:a', 'lambda:x'} <= set(record['updated_nodes'])
+    for node in ('folder:a', 'lambda:x'):
+        old, new = tensors(engine, start[node]), tensors(engine, trainer.state['node_artifacts'][node])
+        assert any(not torch.equal(old[key], new[key]) for key in new), node

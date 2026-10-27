@@ -1,9 +1,11 @@
 """Joint path-routed program adapter training (plans/HIERARCHICAL_LORA_TUNING.md §5.1, §5.3, §5.4).
 
 One logical update trains every tree/folder/lambda node of a program and its per-binding family gates together.
-Each row runs the existing native graph objective (`data.native_graph.graph_loss`: one graph forward, positive-weight
-normalized CE over its own complete trajectory) under its binding's own stack through `run_native`, with the current
-node coefficients substituted as differentiable leaves. All rows of a batch accumulate gradients against one
+Every objective -- supervised rows, RL episodes and RFT episodes -- runs one whole graph through the production native
+gradient service (`serve.native_grad.native_graph_gradient`, the same one-forward graph objective production training
+uses): each invocation under its binding's own stack, the current node coefficients, gates and soft states substituted
+as differentiable leaves, and gradients through every producer/consumer dependency of the graph, Neuralese included.
+A supervised row may hold several invocations (``bindings``: node name -> binding). All rows of a batch accumulate gradients against one
 immutable snapshot; only then does each active node take one optimizer step through `optimize_adapter`, which keeps
 the immutable coefficient lineage and optimizer continuation contract. Published family tensors stay frozen: a gate
 scales its family's frozen tensors, so the gate alone receives the gradient.
@@ -15,15 +17,15 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import torch
 
 from ..common.hashing import canonical_json_sha256_hex
-from ..data.native_graph import graph_loss
 from ..data.native_graph_schema import parse_graph
 from ..model.native_adapters import (create_adapter, create_canonical_basis, optimize_adapter, resolve_adapters,
-                                     run_native, target_parameters)
+                                     target_parameters)
 from ..model.native_artifact import NativeTensorArtifact
 from . import TuneMathError
 from .rl import call_of
@@ -54,7 +56,12 @@ class Recipe:
       changes the remaining curve.
     - `epochs` (passes over the admitted rows of all objectives) can replace `steps`.
     - `objectives`: logical step k trains objective objectives[k % n] (each with its own cursor), so ["sft", "rl"]
-      alternates supervised and policy updates of the same state; one step never mixes objectives.
+      alternates supervised and policy updates of the same state; one step never mixes objectives. "sft" supervises
+      the teacher's turns; "rl" is the clipped group-relative policy objective over whole recorded episodes; "rft" is
+      global supervision of whole successful episodes (quality >= `rft_min_quality`): teacher-forced loss on every
+      action of the episode's complete graph, backpropagated through every producer/consumer dependency (Neuralese
+      spans and soft states included) into every node and state that ran. An objective without admitted rows or
+      episodes is left out of the cycle and reported.
     - `basis`: a learned optimizer bank basis artifact (tune/learned/bank.py) for native-subspace nodes instead of the
       weight-SVD canonical basis. Nodes then slice that shared basis, so a fit's residuals are directly coordinates of
       the learned optimizer's bank: its free tunes are exact targets and its releases are exact warm starts.
@@ -80,6 +87,7 @@ class Recipe:
     schedule: dict = field(default_factory=lambda: {'kind': 'warmup-cosine', 'warmup_ratio': .05, 'min_ratio': .1})
     objectives: list = field(default_factory=lambda: ['sft'])
     basis: str | None = None
+    rft_min_quality: float = 1.
 
     @classmethod
     def from_json(cls, value):
@@ -108,8 +116,10 @@ class Recipe:
             raise TuneMathError('level_lr_scale maps tree, folder and lambda to finite nonnegative scales')
         lr_factor(recipe.schedule, 0, 1)  # validates the schedule
         if (not isinstance(recipe.objectives, list) or not recipe.objectives
-                or any(item not in ('sft', 'rl') for item in recipe.objectives)):
-            raise TuneMathError('objectives is a nonempty list of sft and rl')
+                or any(item not in ('sft', 'rl', 'rft') for item in recipe.objectives)):
+            raise TuneMathError('objectives is a nonempty list of sft, rl and rft')
+        if type(recipe.rft_min_quality) not in (int, float) or not 0 < recipe.rft_min_quality <= 1:
+            raise TuneMathError('rft_min_quality is a quality in (0, 1]')
         return recipe
 
     def as_json(self):
@@ -224,15 +234,19 @@ class JointTrainer:
         from .rl import ROLLOUT_SCHEMA
         rollouts = [row for row in rows if isinstance(row, dict) and row.get('schema') == ROLLOUT_SCHEMA]
         sft = [row for row in rows if not (isinstance(row, dict) and row.get('schema') == ROLLOUT_SCHEMA)]
-        if bool(rollouts) != ('rl' in recipe.objectives) or bool(sft) != ('sft' in recipe.objectives):
-            raise TuneMathError('the recipe objectives must match the admitted row kinds (sft rows, rl rollouts)')
+        episodic = {'rl', 'rft'} & set(recipe.objectives)
+        if bool(rollouts) != bool(episodic) or bool(sft) != ('sft' in recipe.objectives):
+            raise TuneMathError('the recipe objectives must match the admitted row kinds (sft rows; rollouts for rl/rft)')
         self.rows = self._admit(sft) if sft else []
-        self.rl = None
+        self.episodes = {}
         if rollouts:
             if workdir is None:
                 raise TuneMathError('RL admission needs a work directory for its behavior bundle and objective')
             from .rl import RLEpisodes
-            self.rl = RLEpisodes(engine, rollouts, workdir)
+            for kind in sorted(episodic):
+                # Each objective archives its own behavior bundle and registered objective.
+                self.episodes[kind] = RLEpisodes(engine, rollouts, Path(workdir) / kind if kind == 'rft' else workdir,
+                                                 mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality)
             self._admit_rl()
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
@@ -246,9 +260,10 @@ class JointTrainer:
         # States written before lineage/RL cursors existed resume with their current versions as history.
         self.state.setdefault('node_history', {node: [artifact] for node, artifact in self.state['node_artifacts'].items()})
         self.state.setdefault('soft_history', {key: [ident] for key, ident in self.state.get('soft_states', {}).items()})
-        self.state.setdefault('rl_epoch', 0)
-        self.state.setdefault('rl_position', 0)
-        if self.rl is not None:
+        for kind in ('rl', 'rft'):
+            self.state.setdefault(f'{kind}_epoch', 0)
+            self.state.setdefault(f'{kind}_position', 0)
+        if self.episodes:
             self._check_behavior()
         self.gates = {key: torch.tensor(float.fromhex(value), dtype=torch.float32, requires_grad=True)
                       for key, value in self.state['gates'].items()}
@@ -279,12 +294,17 @@ class JointTrainer:
             occurrences.add(occurrence)
             example = parse_graph(graph, tokenizer_fingerprint=self.engine.model_config['tokenizer_fingerprint'])
             soft = row.get('soft') or {}
+            node_bindings = row.get('bindings') or {}
+            names = {node.name for node in example.plan.invocations}
+            if (not isinstance(node_bindings, dict) or set(node_bindings) - names
+                    or any(value is not None and value not in self.bindings for value in node_bindings.values())):
+                raise TuneMathError(f'row {index} binds invocations it does not hold or unknown bindings')
             if example.external_states:
                 # Only soft parameters of the row's own binding are imported here; any other stored state would be
                 # an external input this trainer does not own.
                 if set(soft) != set(example.external_states):
-                    raise NotImplementedError('rows importing stored external native state other than their binding\'s '
-                                              'soft states need per-occurrence state receipts; train them through native_grad')
+                    raise TuneMathError(f'row {index} imports stored state that is not one of its soft states; Neuralese '
+                                        'between invocations belongs inside the row\'s graph, as producer and consumer nodes')
                 for name, key in soft.items():
                     owner_binding, kind, target = json.loads(key)
                     if owner_binding != binding or kind not in ('instructions', 'skill'):
@@ -295,7 +315,7 @@ class JointTrainer:
             elif soft:
                 raise TuneMathError(f'row {index} declares soft states it does not import')
             admitted.append({'binding': binding, 'graph': graph, 'example': example, 'evidence_weight': float(weight),
-                             'occurrence': occurrence, 'soft': soft})
+                             'occurrence': occurrence, 'soft': soft, **({'bindings': node_bindings} if node_bindings else {})})
         if not admitted:
             raise TuneMathError('no admitted training rows')
         return admitted
@@ -303,21 +323,22 @@ class JointTrainer:
     @property
     def input_sha256(self):
         # The step budget is where to stop, not what a step does: extending it continues the same run.
-        # An undeclared bank basis leaves the recipe identity of existing fits unchanged.
-        recipe = {key: value for key, value in self.recipe.as_json().items()
-                  if key not in ('steps', 'epochs') and not (key == 'basis' and value is None)}
+        recipe = {key: value for key, value in self.recipe.as_json().items() if key not in ('steps', 'epochs')}
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,
-            'rows': [[row['binding'], row['occurrence'], row['evidence_weight'], canonical_json_sha256_hex(row['graph'])]
-                     for row in self.rows], 'targets': self.target_names,
+            'rows': [[row['binding'], row['occurrence'], row['evidence_weight'], canonical_json_sha256_hex(row['graph']),
+                      *([row['bindings']] if 'bindings' in row else [])] for row in self.rows], 'targets': self.target_names,
             **({'pinned': self.pinned} if self.pinned else {}), **({'warm': self.warm} if self.warm else {}),
-            **({'rl': self.rl.digest()} if self.rl is not None else {})})
+            **{kind: episodes.digest() for kind, episodes in self.episodes.items()}})
 
     @property
     def total_steps(self):
-        """The step budget: `steps`, or `epochs` passes over every objective's admitted rows."""
+        """The step budget: `steps`, or `epochs` passes over every objective's admitted rows. Without any objective
+        that has admitted work, the fit makes no step (its receipt says why)."""
+        if not self.cycle:
+            return 0
         if self.recipe.epochs is None:
             return self.recipe.steps
-        rows = len(self.rows) + (len(self.rl.graphs) if self.rl is not None else 0)
+        rows = len(self.rows) + sum(len(episodes.graphs) for episodes in self.episodes.values())
         return math.ceil(self.recipe.epochs * rows / min(self.recipe.batch_rows, max(rows, 1)))
 
     def _stack_nodes(self):
@@ -471,8 +492,24 @@ class JointTrainer:
         return effective_factors(spec, values, bases)
 
     # -- RL admission -------------------------------------------------------------------------------------------
+    @property
+    def rl(self):
+        """The group-relative policy episodes (None without an "rl" objective)."""
+        return self.episodes.get('rl')
+
+    @property
+    def _rollouts(self):
+        return next(iter(self.episodes.values())).rollouts
+
+    @property
+    def cycle(self):
+        """The recipe's objectives that have admitted work: an RL set without reward spread or an RFT set without a
+        successful episode contributes no step (reported in the receipt)."""
+        return [kind for kind in self.recipe.objectives
+                if kind == 'sft' or (kind in self.episodes and self.episodes[kind].graphs)]
+
     def _admit_rl(self):
-        for record in self.rl.rollouts:
+        for record in self._rollouts:
             unknown = set(record['bindings'].values()) - set(self.bindings) - {None}
             if unknown:
                 raise TuneMathError(f'RL rollout names unknown bindings {sorted(unknown)}')
@@ -509,7 +546,7 @@ class JointTrainer:
 
     def _check_behavior(self):
         """Every invocation's recorded actor is exactly its binding's stack at recorded versions of this run."""
-        for record in self.rl.rollouts:
+        for record in self._rollouts:
             behavior = record['behavior']
             for node, artifact in behavior['node_artifacts'].items():
                 if artifact not in self.state['node_history'].get(node, []):
@@ -524,75 +561,119 @@ class JointTrainer:
                 if recorded != [(entry['id'], float(entry['scale']).hex()) for entry in expected]:
                     raise TuneMathError('an RL turn was sampled by another actor than its binding\'s recorded stack')
 
-    def _next_rl_batch(self):
-        graphs = self.rl.graphs
-        batch, epoch, position = [], self.state['rl_epoch'], self.state['rl_position']
-        order = self._order(epoch, len(graphs), salt=1)
+    def _next_rl_batch(self, kind='rl'):
+        graphs = self.episodes[kind].graphs
+        batch, epoch, position = [], self.state[f'{kind}_epoch'], self.state[f'{kind}_position']
+        salt = 1 if kind == 'rl' else 2
+        order = self._order(epoch, len(graphs), salt=salt)
         while len(batch) < min(self.recipe.batch_rows, len(graphs)):
             if position == len(order):
                 epoch, position = epoch + 1, 0
-                order = self._order(epoch, len(graphs), salt=1)
+                order = self._order(epoch, len(graphs), salt=salt)
             batch.append(order[position])
             position += 1
         return batch, epoch, position
 
-    def _episode_request(self, graph, leaves, soft_blocks):
-        """The production native-policy request of one admitted episode's whole graph, with the current node versions
-        (`leaves`), gates and soft states (`soft_blocks`) substituted for its behavior versions on the same bases."""
-        engine, record = self.engine, self.rl.rollout(graph)
+    def _graph_request(self, graph, binding_of, leaves, state_of, *, objective=None, behavior_gates=None):
+        """The native gradient request of one whole graph -- an SFT row, an RL episode or an RFT episode alike: each
+        invocation runs its binding's current stack (`binding_of(node name)`; None runs the base), nodes and family
+        gates are live leaves, and every imported stored state is the current leaf of the soft state it is
+        (`state_of(state id)`). One graph forward, gradients through every producer/consumer dependency.
+
+        ``behavior_gates`` (RL/RFT) declares each family at its sampled gate: the leaf carries current/behavior, so the
+        gate trains while the request matches the recorded actor. Without them a family is declared at scale 1 and
+        its leaf carries the current gate."""
+        engine = self.engine
         declarations, override, nodes = {}, {}, set()
         for node in graph['nodes']:
-            entries = self._behavior_entries(record, record['bindings'][call_of(node['name'])], current=True)
-            for entry in entries:
-                if 'family_key' in entry:
-                    # The behavior gate is the request scale; the leaf carries current/behavior, so the gate trains.
-                    frozen = engine.store.get_native_tensor_artifact(entry['id']).artifact.tensors
-                    ratio = self.gates[entry['family_key']] / entry['scale']
-                    override[entry['id']] = {key: value * ratio if not key.startswith('lora_A.') else value
-                                             for key, value in frozen.items()}
+            entries = []
+            binding = binding_of(node['name'])
+            for kind, item in ([] if binding is None else self._stack(binding)):
+                if kind == 'family':
+                    key = json.dumps([item['binding'], item['family'], item['version']])
+                    artifact = self.families[(item['family'], item['version'])]['artifact']
+                    scale = 1.
+                    if behavior_gates is not None:
+                        if key not in behavior_gates:
+                            raise TuneMathError(f'RL rollout omits the behavior gate of {key}')
+                        raw = behavior_gates[key]
+                        scale = float.fromhex(raw) if isinstance(raw, str) else float(raw)
+                        if scale <= 0:
+                            continue  # the runtime served no family at a zero gate
+                    frozen = engine.store.get_native_tensor_artifact(artifact).artifact.tensors
+                    ratio = self.gates[key] / scale
+                    # A gate multiplies the whole frozen delta: the core, or the B factor of free LoRA.
+                    override[artifact] = {name: value * ratio if not name.startswith('lora_A.') else value
+                                          for name, value in frozen.items()}
+                    entries.append({'id': artifact, 'scale': scale})
                 else:
-                    override[entry['id']] = leaves[entry['node']]
-                    nodes.add(entry['node'])
-            declarations[node['name']] = [{'id': entry['id'], 'scale': entry['scale']} for entry in entries]
-        behavior_soft = record['behavior'].get('soft_states', {})
-        imported = {binding['id'] for binding in graph.get('external_states', {}).values()}
-        if imported - set(behavior_soft.values()):
-            raise TuneMathError('an RL episode imports stored state this run does not own')
-        states = {ident: soft_blocks[key] for key, ident in behavior_soft.items() if ident in imported}
+                    artifact = self.state['node_artifacts'][item]
+                    override[artifact] = leaves[item]
+                    nodes.add(item)
+                    entries.append({'id': artifact, 'scale': float(self.manifest.get('scales', {}).get(item, 1))})
+            declarations[node['name']] = entries
+        imported = sorted({binding['id'] for binding in graph.get('external_states', {}).values()})
+        states = {ident: state_of(ident) for ident in imported}
         node_ids = {self.state['node_artifacts'][node] for node in nodes}
         specs = {f'node:{node}': {'kind': 'adapter', 'id': self.state['node_artifacts'][node]} for node in sorted(nodes)}
         specs.update({f'family:{ident}': {'kind': 'adapter', 'id': ident, 'tensors': tensors}
                       for ident, tensors in override.items() if ident not in node_ids})
         specs.update({f'soft:{ident}': {'kind': 'native-state', 'id': ident} for ident in states})
         body = {'schema': 'natlang.native-gradient-request/1', 'native_identity': engine.native_identity, 'graph': graph,
-                'invocation_adapters': declarations, 'adapter_gradient_precision': 'fp32', 'objective': self.rl.objective,
+                'invocation_adapters': declarations, 'adapter_gradient_precision': 'fp32',
+                **({'objective': objective} if objective is not None else {}),
                 **({'native_state_modes': {ident: 'same-base-adapter-state' for ident in states}} if states else {})}
         return body, {'adapter_leaves_override': override, 'native_state_overrides': states or None,
                       'evaluation_target_specs': specs}
 
-    def _rl_backward(self, batch, leaves, soft_leaves):
-        """Accumulate the batch-mean native-policy loss of each episode's whole graph into the snapshot leaves."""
+    def _episode_request(self, graph, leaves, soft_blocks, kind='rl'):
+        """An admitted episode's whole graph with the current node versions, gates and soft states substituted for its
+        behavior versions on the same bases."""
+        record = self.episodes[kind].rollout(graph)
+        behavior_soft = record['behavior'].get('soft_states', {})
+        owned = {ident: key for key, ident in behavior_soft.items()}
+        def state_of(ident):
+            if ident not in owned:
+                raise TuneMathError('an RL episode imports stored state this run does not own')
+            return soft_blocks[owned[ident]]
+        return self._graph_request(graph, lambda name: record['bindings'][call_of(name)], leaves, state_of,
+                                   objective=self.episodes[kind].objective, behavior_gates=record['behavior'].get('gates', {}))
+
+    def _row_request(self, row, leaves, soft_blocks):
+        """A supervised row's graph (one turn, or several invocations with their own bindings) through the same request."""
+        imported = {binding['id']: row['soft'][name] for name, binding in row['graph'].get('external_states', {}).items()}
+        bindings = row.get('bindings') or {}
+        return self._graph_request(row['graph'], lambda name: bindings.get(name, row['binding']), leaves,
+                                   lambda ident: soft_blocks[imported[ident]])
+
+    def _backward(self, requests, weights):
+        """Accumulate ``sum_i weight_i * loss_i`` over whole-graph requests into the snapshot leaves; returns the losses.
+        A graph whose whole stack is pinned has no gradient path and trains nothing (incremental fits)."""
         from ..serve.native_grad import native_graph_gradient
         losses = []
-        for index in batch:
-            body, overrides = self._episode_request(self.rl.graphs[index], leaves,
-                                                    {key: value[1] for key, value in soft_leaves.items()})
-            def evaluate(loss, groups, meta, weight=1. / len(batch)):
-                (loss * weight).backward()
+        for (body, overrides), weight in zip(requests, weights):
+            def evaluate(loss, groups, meta, weight=weight):
+                if loss.requires_grad:
+                    (loss * weight).backward()
                 return float(loss.detach())
             losses.append(native_graph_gradient(self.engine, body, self.owner, evaluation_callback=evaluate, **overrides))
         return losses
 
-    def rl_losses(self):
-        """Current per-episode policy losses without an update, for diagnostics and tests."""
+    def _rl_backward(self, batch, leaves, soft_leaves, kind='rl'):
+        soft = {key: value[1] for key, value in soft_leaves.items()}
+        return self._backward([self._episode_request(self.episodes[kind].graphs[index], leaves, soft, kind) for index in batch],
+                              [1. / len(batch)] * len(batch))
+
+    def rl_losses(self, kind='rl'):
+        """Current per-episode losses of one episodic objective without an update, for diagnostics and tests."""
         from ..serve.native_grad import _leaf_block, native_graph_gradient
         store = self.engine.store
         leaves = {node: store.get_native_tensor_artifact(artifact).artifact.tensors
                   for node, artifact in self.state['node_artifacts'].items()}
         soft = {key: _leaf_block(store.get_native_state(ident).block)[0] for key, ident in self.state['soft_states'].items()}
         losses = {}
-        for graph in self.rl.graphs:
-            body, overrides = self._episode_request(graph, leaves, soft)
+        for graph in self.episodes[kind].graphs:
+            body, overrides = self._episode_request(graph, leaves, soft, kind)
             losses[graph['id']] = native_graph_gradient(self.engine, body, self.owner,
                 evaluation_callback=lambda loss, groups, meta: float(loss.detach()), **overrides)
         return losses
@@ -600,21 +681,24 @@ class JointTrainer:
     # -- one logical update --------------------------------------------------------------------------------------
     def step(self):
         engine, recipe = self.engine, self.recipe
-        objective = recipe.objectives[self.state['step'] % len(recipe.objectives)]
+        cycle = self.cycle
+        if not cycle:
+            raise TuneMathError('no objective of the recipe has admitted work (no rows, no reward spread, no success)')
+        objective = cycle[self.state['step'] % len(cycle)]
         factor = lr_factor(recipe.schedule, self.state['step'], max(self.total_steps, 1))
         # One immutable snapshot of every node for the whole batch.
         leaves = {node: {key: value.detach().clone().requires_grad_(node not in self.pinned)
                          for key, value in engine.store.get_native_tensor_artifact(artifact).artifact.tensors.items()}
                   for node, artifact in self.state['node_artifacts'].items()}
         from ..serve.native_grad import _leaf_block
-        from ..model.native_adapters import adapter_state_input_receipt
         if objective == 'sft':
             batch, epoch, position = self._next_batch()
             active_soft = sorted({key for index in batch for key in self.rows[index]['soft'].values()})
             bindings_used = [self.rows[index]['binding'] for index in batch]
         else:
-            batch, epoch, position = self._next_rl_batch()
-            records = [self.rl.rollout(self.rl.graphs[index]) for index in batch]
+            batch, epoch, position = self._next_rl_batch(objective)
+            episodes = self.episodes[objective]
+            records = [episodes.rollout(episodes.graphs[index]) for index in batch]
             active_soft = sorted({key for record in records for key, ident in record['behavior'].get('soft_states', {}).items()})
             # Unbound invocations execute the frozen base. They stay in the
             # complete policy graph; only adapter-parameter routing omits them.
@@ -629,49 +713,27 @@ class JointTrainer:
         for binding in bindings_used:
             per_binding[binding] = per_binding.get(binding, 0) + 1
         row_losses = []
-        if objective == 'rl':
-            row_losses = [float(result) for result in self._rl_backward(batch, leaves, soft_leaves)]
-        for index in (batch if objective == 'sft' else []):
-            row = self.rows[index]
-            entries, row_leaves = [], {}
-            for kind, item in self._stack(row['binding']):
-                if kind == 'family':
-                    family = self.families[(item['family'], item['version'])]
-                    gate = self.gates[json.dumps([item['binding'], item['family'], item['version']])]
-                    frozen = engine.store.get_native_tensor_artifact(family['artifact']).artifact.tensors
-                    # A gate multiplies the whole frozen delta: the core, or the B factor of free LoRA.
-                    row_leaves[family['artifact']] = {key: value * gate if not key.startswith('lora_A.') else value
-                                                      for key, value in frozen.items()}
-                    entries.append({'id': family['artifact'], 'scale': 1.})
-                else:
-                    artifact = self.state['node_artifacts'][item]
-                    row_leaves[artifact] = leaves[item]
-                    entries.append({'id': artifact, 'scale': float(self.manifest.get('scales', {}).get(item, 1))})
+        if objective != 'sft':
+            row_losses = [float(result) for result in self._rl_backward(batch, leaves, soft_leaves, objective)]
+        if objective == 'sft':
             # §5.1: mean over lambdas of the mean evidence-weighted row loss, as an exact per-row coefficient.
-            coefficient = row['evidence_weight'] / (len(per_binding) * per_binding[row['binding']])
-            def execute(example=row['example'], soft=row['soft']):
-                blocks = {name: soft_leaves[key][1] for name, key in soft.items()}
-                identities = {}
-                for name, key in soft.items():
-                    source = soft_leaves[key][0]
-                    # Same-base adapter-state exchange: the base-written soft state read by this binding's actor.
-                    identities[name] = adapter_state_input_receipt(engine, source, self.state['soft_states'][key],
-                                                                   target_position_start=0)['source_native_identity']
-                loss, _ = graph_loss(engine.shared_model, example, external_blocks=blocks or None,
-                                     external_identity=identities or None)
-                if loss.requires_grad:  # a row whose whole stack is pinned trains nothing (incremental fits)
-                    (loss * coefficient).backward()
-                return loss.detach()
-            row_losses.append(float(run_native(engine, execute, entries, leaves=row_leaves, gradient_precision='fp32')))
+            soft = {key: value[1] for key, value in soft_leaves.items()}
+            rows = [self.rows[index] for index in batch]
+            row_losses = [float(loss) for loss in self._backward(
+                [self._row_request(row, leaves, soft) for row in rows],
+                [row['evidence_weight'] / (len(per_binding) * per_binding[row['binding']]) for row in rows])]
         # Pinned nodes run in the stacks but are neither penalized nor updated.
-        active_nodes = sorted({node for binding in per_binding for kind, node in self._stack(binding)
+        # Every binding that ran in a batch graph trains, whether its loss is its own or reached it through an edge.
+        ran = set(per_binding) | ({binding for index in batch for binding in (self.rows[index].get('bindings') or {}).values()
+                                   if binding is not None} if objective == 'sft' else set())
+        active_nodes = sorted({node for binding in ran for kind, node in self._stack(binding)
                                if kind == 'node' and node not in self.pinned})
         penalty = torch.zeros(())
         for node in active_nodes:
             level = self.nodes[node]['level']
             factors = self._node_factors(self.state['node_artifacts'][node], leaves[node])
             penalty = penalty + recipe.depth_penalty[level] * sum(self.q[name] * factor_sq_norm(B, A) for name, (B, A) in factors.items())
-        active_gates = {key: value for key, value in self.gates.items() if json.loads(key)[0] in per_binding}
+        active_gates = {key: value for key, value in self.gates.items() if json.loads(key)[0] in ran}
         by_binding = {}
         for key, value in active_gates.items():
             by_binding.setdefault(json.loads(key)[0], []).append(value)
@@ -734,9 +796,9 @@ class JointTrainer:
             self.state.update(epoch=epoch, position=position)
         else:
             for index in batch:
-                occurrence = 'rl:' + self.rl.graphs[index]['id']
+                occurrence = f'{objective}:' + self.episodes[objective].graphs[index]['id']
                 self.state['exposure'][occurrence] = self.state['exposure'].get(occurrence, 0) + 1
-            self.state.update(rl_epoch=epoch, rl_position=position)
+            self.state.update({f'{objective}_epoch': epoch, f'{objective}_position': position})
         self.state['step'] += 1
         self.state['gates'] = {key: float(value.detach()).hex() for key, value in self.gates.items()}
         if self.gate_optimizer is not None:
@@ -812,8 +874,9 @@ class JointTrainer:
 
     def receipt(self):
         exposure = self.state['exposure']
-        sft = {key: count for key, count in exposure.items() if not key.startswith('rl:')}
+        sft = {key: count for key, count in exposure.items() if not key.startswith(('rl:', 'rft:'))}
         rl = {key: count for key, count in exposure.items() if key.startswith('rl:')}
+        rft = {key: count for key, count in exposure.items() if key.startswith('rft:')}
         return {'schema': 'natlang.tune.training-receipt/1', 'input_sha256': self.input_sha256,
                 'base_native_identity': dict(self.engine.native_identity), 'recipe': self.recipe.as_json(),
                 'schedule': {**self.recipe.schedule, 'total_steps': self.total_steps,
@@ -824,10 +887,15 @@ class JointTrainer:
                              'by_binding': {binding: sum(count for occurrence, count in sft.items()
                                                          if any(row['occurrence'] == occurrence and row['binding'] == binding for row in self.rows))
                                             for binding in sorted({row['binding'] for row in self.rows})},
-                             'rl_episodes_seen': sum(rl.values()), 'rl_distinct_episodes': len(rl)},
+                             'rl_episodes_seen': sum(rl.values()), 'rl_distinct_episodes': len(rl),
+                             **({'rft_episodes_seen': sum(rft.values()), 'rft_distinct_episodes': len(rft)} if 'rft' in self.episodes else {})},
                 **({'rl': {'rollouts': len(self.rl.rollouts), 'admitted_episodes': len(self.rl.graphs),
                            'skipped_without_reward_spread': self.rl.skipped, 'objective': self.rl.objective}}
                    if self.rl is not None else {}),
+                **({'rft': {'rollouts': len(self.episodes['rft'].rollouts), 'admitted_episodes': len(self.episodes['rft'].graphs),
+                            'skipped_below_min_quality': self.episodes['rft'].skipped, 'min_quality': self.recipe.rft_min_quality,
+                            'objective': self.episodes['rft'].objective}} if 'rft' in self.episodes else {}),
+                'objectiveCycle': self.cycle,
                 'losses': self.state['losses'], **self.manifest_fragment(),
                 'soft_states': dict(self.state.get('soft_states', {})),
                 'optimizer_states': self.state['optimizer_states'],

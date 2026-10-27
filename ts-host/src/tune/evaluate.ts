@@ -11,13 +11,15 @@ import { createNatlangRuntime, type ModelDriver, type Services } from '../runtim
 import { loadNatlang } from '../runtime/node-files.js';
 import type { ModelTurn } from '../contracts.js';
 import type { Partition, SplitExample } from './collect.js';
+import { scorable, scoreRoot } from './reward.js';
 
 export type RootOutcome = {
   readonly id: string; readonly component: string; readonly partition: Partition | 'protected'; readonly function: string;
   readonly source: 'real' | 'synthetic';
-  /** Whether the root has a direct oracle (`expected`); without one only completion is measured. */
+  /** Whether the root is scored (`expected` or the program's verifier, tune/reward.ts); without a score only completion
+   * is measured. `score` is the graded root score in [0, 1]; `correct` is a full score. */
   readonly oracle: boolean;
-  readonly ok: boolean; readonly correct: boolean | null; readonly ms: number;
+  readonly ok: boolean; readonly correct: boolean | null; readonly score?: number | null; readonly ms: number;
   readonly promptTokens: number; readonly completionTokens: number; readonly turns: number;
   /** Every call's recorded stack: identity, status and how many adapters it really ran. */
   readonly stacks: readonly { readonly identity: string; readonly status: string; readonly requested: number; readonly effective: number }[];
@@ -32,8 +34,6 @@ export function exampleArguments(fn: unknown, input: unknown): unknown[] {
   return input && typeof input === 'object' && !Array.isArray(input) ? params.map(p => (input as Record<string, unknown>)[p.name])
     : Array.isArray(input) ? input : [input];
 }
-
-const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
 /** Run one arm over the examples, one fresh task per root. */
 export async function evaluateRoots(options: { root: string; program: ProgramDescriptor; driver: ModelDriver;
@@ -57,19 +57,19 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
       if (recorded) stacks.push({ identity: recorded.identity, status: recorded.status, requested: recorded.requested.length, effective: recorded.effective.length });
     } });
     const started = Date.now();
-    let ok = false, correct: boolean | null = null, error: string | undefined;
+    let ok = false, value: unknown, error: string | undefined;
     try {
       const fn = loadNatlang(resolve(options.root, example.function), options.root);
-      const value = await runtime.run(() => fn(...exampleArguments(fn, example.input)));
+      value = await runtime.run(() => fn(...exampleArguments(fn, example.input)));
       ok = true;
-      if ('expected' in example) correct = equal(value, example.expected);
     } catch (failure) {
       rethrowInfrastructureFailure(failure);
       error = failure instanceof Error ? failure.message : String(failure);
-      if ('expected' in example) correct = false;
     } finally { runtime.close(); }
+    const scored = await scoreRoot(options.root, example as unknown as Record<string, unknown>, value, !ok);
+    const score = scored ? scored.quality : null, correct = scored ? scored.quality === 1 : null;
     roots.push({ id: example.id, component: example.component, partition: example.protected ? 'protected' : example.partition,
-      function: example.function, source: example.source ?? 'real', oracle: 'expected' in example, ok, correct, ms: Date.now() - started,
+      function: example.function, source: example.source ?? 'real', oracle: await scorable(options.root, example), ok, correct, score, ms: Date.now() - started,
       promptTokens, completionTokens, turns, stacks, ...(error ? { error: error.slice(0, 500) } : {}) });
     options.log?.(`evaluation ${options.arm}: root ${example.id} ${roots.length}/${options.examples.length}, correct=${correct}, completed=${ok}${error ? ` (${error})` : ''}`);
   }
@@ -82,7 +82,9 @@ export const rootSuccess = (outcome: RootOutcome): number => (outcome.oracle ? o
 export function armSummary(arm: ArmResult) {
   const roots = arm.roots, n = roots.length || 1;
   const calls = roots.flatMap(root => root.stacks);
+  const scored = roots.filter(root => typeof root.score === 'number');
   return { arm: arm.arm, release: arm.release, roots: roots.length, success: roots.reduce((sum, root) => sum + rootSuccess(root), 0) / n,
+    meanScore: scored.length ? scored.reduce((sum, root) => sum + (root.score as number), 0) / scored.length : null,
     completed: roots.filter(root => root.ok).length, meanMs: roots.reduce((sum, root) => sum + root.ms, 0) / n,
     tokens: roots.reduce((sum, root) => sum + root.promptTokens + root.completionTokens, 0),
     calls: calls.length, degradedCalls: calls.filter(call => call.status === 'degraded').length,

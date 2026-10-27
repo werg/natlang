@@ -4,7 +4,7 @@ A `natlang.tune-rollout/v1` record is one student execution of one training root
 
     {"schema": "natlang.tune-rollout/v1", "root": str, "component": str, "partition": "train",
      "group": str,            # rollouts of one root in one round share a group (group-relative advantages)
-     "sample": int, "reward": {"quality": 0 | 1, "source": "root-oracle"},
+     "sample": int, "reward": {"quality": float in [0, 1], "source": "root-oracle" | "root-verifier"},
      "behavior": {"release": str | null, "node_artifacts": {node: nnt1 id},
                   "gates": {json.dumps([binding, family, version]): float | float.hex()},
                   "soft_states": {json.dumps([binding, kind, target]): nzs1 id}, "temperature": float, "seed": int | null},
@@ -36,8 +36,10 @@ def validate_rollout(record):
     if record.get('partition') != 'train':
         raise TuneMathError('only training roots produce RL rewards')
     reward = record.get('reward')
-    if not isinstance(reward, dict) or reward.get('quality') not in (0, 1) or reward.get('source') != 'root-oracle':
-        raise TuneMathError('an RL reward is the root oracle verdict (quality 0 or 1)')
+    quality = reward.get('quality') if isinstance(reward, dict) else None
+    if (type(quality) not in (int, float) or not 0 <= quality <= 1
+            or reward.get('source') not in ('root-oracle', 'root-verifier')):
+        raise TuneMathError('an RL reward is the root oracle verdict (0 or 1) or the program verifier\'s score in [0, 1]')
     behavior = record.get('behavior')
     if not isinstance(behavior, dict) or not isinstance(behavior.get('node_artifacts'), dict):
         raise TuneMathError('an RL rollout records its exact behavior node versions')
@@ -62,7 +64,10 @@ def call_of(node_name):
 class RLEpisodes:
     """Admitted RL episodes for one trainer input: graphs, the registered objective and their rollouts."""
 
-    def __init__(self, engine, rollouts, workdir):
+    def __init__(self, engine, rollouts, workdir, *, mode='grpo', min_quality=1.):
+        """``mode`` 'grpo': the clipped group-relative policy objective (groups whose rewards differ); 'rft': global
+        supervision of whole successful episodes (quality >= ``min_quality``) through every producer/consumer
+        dependency, Neuralese included, whatever the group's spread."""
         from ..rl.native_replay import invocation_behavior_policy, prepare_objective
         from ..rl.graph_replay import save_bundle
         from ..model.native_artifact import encode_native_tensor_artifact
@@ -84,11 +89,12 @@ class RLEpisodes:
                                if ident.startswith('nnt1_') else encode_native_state(fetch_block(ident)))
         save_bundle(episodes, workdir / 'bundle', policy_id=owner, fetch=fetch)
         graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=fetch_block,
-                                         block_bundle=workdir / 'bundle' / 'manifest.json', behavior_policy=policy)
+                                         block_bundle=workdir / 'bundle' / 'manifest.json', behavior_policy=policy,
+                                         mode=mode, min_quality=min_quality)
         path = workdir / 'objective.json'
         path.write_text(json.dumps(spec, sort_keys=True))
         self.objective = {'kind': 'native-policy', 'path': str(path), 'sha256': sha256_file_hex_cached(path)}
-        # GRPO admits only groups whose rewards differ; the rest contribute nothing and are recorded as such.
+        # GRPO admits only groups whose rewards differ, RFT only successful episodes; the rest are recorded as skipped.
         self.graphs = graphs
         self.advantages = {graph['id']: spec['rows'][graph['id']]['advantage'] for graph in graphs}
         self.skipped = len(self.rollouts) - len(graphs)

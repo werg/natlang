@@ -81,6 +81,31 @@ training).
 
 Lane declaration and runbook: `training/neuralese/learned-optimizer/README.md`, held until LFM main training is done.
 
+## Tuning is whole-graph, graded and includes RL everywhere (2026-10-27)
+
+- **One training path.** Program tuning's supervised rows, RL episodes and RFT episodes all run through one request
+  builder (`tune.trainer.JointTrainer._graph_request`) and the production native gradient service: one forward over
+  the whole graph, each invocation under its own binding's stack, gradients through every producer/consumer
+  dependency (Neuralese included) into every adapter node, gate and soft state that ran. The earlier hand-written
+  per-turn SFT loop is gone; a supervised row may hold several invocations (`bindings`), and a consumer's loss trains
+  its producer's path (`test_supervised_row_loss_reaches_the_producer_through_its_neuralese_edge`). Production SFT
+  already trained whole graphs this way; program tuning's separate loop was the exception.
+- **RFT.** A third objective, `rft`: global supervision of whole successful episodes through all their dependencies,
+  also from groups where every sample succeeded. RL rounds now alternate `sft`, `rl` and `rft` by default.
+- **Graded scores.** One root score (`ts-host/src/tune/reward.ts`) for collection, evaluation and rollouts: an exact
+  oracle, or a program verifier `tune.reward.mjs` in [0, 1]. The production replay and the tuner accept graded
+  qualities; GRPO uses their spread, RFT a threshold.
+- **Meta-learner.** `applications/learned-optimizer/tune.reward.mjs` grades its stages by the global target --
+  support-loss improvement: an operator's share of the best measured improvement, the share of an episode's gain an
+  early stop loses, focus F1 -- from the `reference` measurements that `meta-examples` records.
+- Recipe identities are the full recipe: earlier fits continue through `parent` (weights, soft states, optimizer
+  histories), not through identity exemptions.
+
+Still open in this area: RL over whole `adapt` episodes needs the optimizer services available to tune rollouts
+(the CLI passes none) and a persistent Python service so episodes are affordable; `chooseRevision` needs services
+that honor per-binding operations before it can be graded; the outer trainer's meta-RL still uses the shaping reward
+because proposals have no task outcomes yet.
+
 ## Not yet done (next work, in rough priority)
 
 1. **Run it — on hold until LFM main training is done (owner, 2026-10-27).** Prepared, not running: specs and

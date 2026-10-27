@@ -14,6 +14,11 @@ them, because each decision can be scored exactly against the services after the
   the program with that binding's own scope and soft states held at their incoming value loses a material share of
   the full fit's gain.
 
+Each example also carries its exact ``reference`` measurements, which the program's verifier
+(`applications/learned-optimizer/tune.reward.mjs`) turns into graded rewards toward the global target -- the
+adaptation's support-loss improvement: the share of the best improvement an operator achieves, the share of the
+episode's gain an early stop loses, and the F1 of a focus. Teacher demonstrations still need a full score.
+
 The episode follows the counterfactual best operator, so its states are those of a good policy. Every example of one
 program carries the program's group: a program's episodes stay on one side of the meta-tuning split, and programs
 on the optimizer's evaluation side never supply meta-tuning examples. Support evidence only: no query or
@@ -89,7 +94,7 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
     chosen, focus_receipt = focus_label(context, fit=fit) if focus else (None, None)
     if focus:
         examples.append({'function': 'adapt/chooseFocus.nl', 'input': {'view': view, 'history': []}, 'expected': chosen,
-                         'group': group})
+                         'reference': {'focus': chosen}, 'group': group})
         receipt['focus'] = focus_receipt
     plan = {'operations': {binding['id']: ('weights' if chosen and binding['id'] in chosen else 'keep')
                            for binding in context.manifest['bindings']}, 'reason': 'hindsight focus'}
@@ -100,7 +105,8 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
         outcomes = operator_outcomes(context, current, step=step, refine_steps=refine_steps)
         operator = best_operator(outcomes, current_loss)
         examples.append({'function': 'adapt/chooseOperator.nl', 'expected': operator, 'group': group,
-                         'input': {'history': list(history), 'plan': plan, 'remainingSteps': remaining}})
+                         'input': {'history': list(history), 'plan': plan, 'remainingSteps': remaining},
+                         'reference': {'losses': {name: loss for name, (_, loss) in outcomes.items()}, 'incumbentLoss': current_loss}})
         receipt['steps'].append({'step': step, 'losses': {name: loss for name, (_, loss) in outcomes.items()},
                                  'incumbentLoss': current_loss, 'operator': operator})
         candidate, loss = outcomes[operator] if operator != 'keep' else (None, None)
@@ -113,8 +119,11 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
         states.append({'current': summary(current, current_loss, current['provenance'].get('actor', '') if current else ''),
                        'incomingLoss': incoming_loss, 'remainingSteps': remaining - 1, 'history': list(history),
                        'stopped': False, 'stopReason': ''})
-    for state, stop in zip(states, stop_labels(best_losses)):
-        examples.append({'function': 'adapt/shouldStop.nl', 'input': {'state': state}, 'expected': stop, 'group': group})
+    total = incoming_loss - best_losses[-1]
+    for state, stop, best in zip(states, stop_labels(best_losses), best_losses):
+        remaining = (best - best_losses[-1]) / total if total > 0 else 0.
+        examples.append({'function': 'adapt/shouldStop.nl', 'input': {'state': state}, 'expected': stop, 'group': group,
+                         'reference': {'stop': stop, 'remainingShare': remaining}})
     receipt['bestLosses'] = best_losses
     return examples, receipt
 

@@ -240,3 +240,45 @@ def test_rl_rejects_episodes_of_other_actors(tmp_path, monkeypatch):
     # Objectives must match the admitted row kinds.
     with pytest.raises(TuneMathError, match='objectives'):
         JointTrainer(engine, manifest_for(engine), records, Recipe(**NEUTRAL), workdir=tmp_path / 'c', parent=parent.state)
+
+
+def test_rft_supervises_whole_successful_episodes_through_their_neuralese_edges(tmp_path, monkeypatch):
+    """Global SFT: teacher-forced loss on every action of the successful episode's whole graph, so the writer that
+    exported the Neuralese block and the reader that imported it both learn; the failed episode is not supervised."""
+    torch.manual_seed(2)
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    parent = parent_fit(engine)
+    records = two_invocation_rollouts(engine, parent, monkeypatch)
+    trainer = JointTrainer(engine, manifest_for(engine), records,
+                           Recipe(objectives=['rft'], batch_rows=2, optimizer={'name': 'sgd', 'learning_rate': .5}, **NEUTRAL),
+                           workdir=tmp_path / 'rl', parent=copy.deepcopy(parent.state))
+    episodes = trainer.episodes['rft']
+    assert len(episodes.graphs) == 1 and episodes.skipped == 1 and trainer.rl is None
+    assert len(episodes.graphs[0]['nodes']) == 2
+    before = trainer.rl_losses('rft')
+    start = dict(trainer.state['node_artifacts'])
+    record = trainer.step()
+    assert record['objective'] == 'rft' and record['updated_nodes'] == sorted(start)
+    after = trainer.rl_losses('rft')
+    assert all(after[key] < before[key] for key in before), 'the supervised episode becomes more likely'
+    receipt = trainer.receipt()
+    assert receipt['exposure']['rft_episodes_seen'] == 1 and receipt['rft']['admitted_episodes'] == 1
+    assert receipt['objectiveCycle'] == ['rft']
+
+
+def test_graded_rewards_and_objective_cycle(tmp_path, monkeypatch):
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    parent = parent_fit(engine)
+    records = two_invocation_rollouts(engine, parent, monkeypatch)
+    for record, quality in zip(records, (.75, .25)):
+        record['reward'] = {'quality': quality, 'source': 'root-verifier'}
+        record['episode']['reward'] = {'quality': quality}
+    trainer = JointTrainer(engine, manifest_for(engine), records,
+                           Recipe(objectives=['rl', 'rft'], batch_rows=2, rft_min_quality=.5, **NEUTRAL),
+                           workdir=tmp_path / 'rl', parent=copy.deepcopy(parent.state))
+    assert len(trainer.rl.graphs) == 2 and len(trainer.episodes['rft'].graphs) == 1
+    assert [trainer.step()['objective'] for _ in range(2)] == ['rl', 'rft']
+    # Without a successful episode at the threshold, RFT has no work and leaves the cycle.
+    strict = JointTrainer(engine, manifest_for(engine), records, Recipe(objectives=['rl', 'rft'], batch_rows=2, **NEUTRAL),
+                          workdir=tmp_path / 'rl2', parent=copy.deepcopy(parent.state))
+    assert strict.cycle == ['rl'] and strict.receipt()['rft']['admitted_episodes'] == 0

@@ -8,6 +8,7 @@ import { executionKey } from './execution.js';
  * release on the backend with exact sampling receipts, and rounds are compared on development roots only. The best
  * development release is what `tuneProgram` then validates and activates, as for a single joint fit.
  */
+import { verifierDigest } from './reward.js';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../package/archive.js';
@@ -40,7 +41,7 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
     // A completed round belongs to its actual recipe and parent. Reusing a data-only journal silently skips
     // requested recipe improvements (or serves a release fitted against a different student base).
     const runKey = createHash('sha256').update(canonicalJson(JSON.parse(JSON.stringify([
-      options.student.base, options.settings.recipe ?? {}, settings, softStatesServed(options.settings)
+      options.student.base, options.settings.recipe ?? {}, settings, softStatesServed(options.settings), verifierDigest(options.root)
     ])))).digest('hex').slice(0, 24);
     const directory = join(tuneDirectory(options.root), 'rounds', `native-runtime-v3-${data.dataKey}-${runKey}-execution-${executionKey(options.settings.execution)}`);
     const development = data.examples.filter(example => example.partition === 'development');
@@ -50,7 +51,9 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
         const { manifest, build } = await trainRelease(options, data, { manifest: data.scaffold, label: `round-${index}-${kind}`,
           // Corrections join the earlier usable rows; their prompts (the student's prefix) carry no target weight.
           ...(repairs ? { rows: [...data.trainRows, ...readRepairRows(repairs)] } : {}),
-          ...(kind === 'rl' ? { recipe: { objectives: ['sft', 'rl'], ...settings.rlRecipe } } : {}),
+          // Teacher rows (sft), the group-relative policy (rl) and global supervision of whole successful episodes
+          // through their Neuralese dependencies (rft); objectives without admitted work leave the cycle.
+          ...(kind === 'rl' ? { recipe: { objectives: ['sft', 'rl', 'rft'], ...settings.rlRecipe } } : {}),
           ...(parent ? { parent: parent.build } : index === 0 && settings.initialFitParent ? { parent: settings.initialFitParent } : {}), ...(rollouts ? { rollouts } : {}) }, [], log);
         return { release: manifest.digest, build };
       },

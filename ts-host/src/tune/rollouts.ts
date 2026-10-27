@@ -2,11 +2,11 @@ import { tuneRuntime, rethrowInfrastructureFailure, executionKey, type TuneExecu
 /**
  * Student rollouts for program RL (plans/HIERARCHICAL_LORA_TUNING.md §5.1a).
  *
- * Each TRAINING root with an oracle (`expected`) runs k times with the student serving a release, through the
+ * Each TRAINING root with a score (`expected`, or the program's verifier, tune/reward.ts) runs k times with the student serving a release, through the
  * ordinary runtime and the release's own per-call stacks. Every model turn keeps the server's exact sampling receipt
  * (`x_natlang_rl_capture`: prompt, sampled tokens with behavior log-probabilities, adapter binding, native writes and
  * imports) under its invocation identity; the runtime's execution graph (model_turn, block_write and block_read nodes)
- * binds the producer/consumer occurrences. The reward is the root oracle only. Roots without an oracle, other
+ * binds the producer/consumer occurrences. The reward is the root score only (exact 0/1, or graded in [0, 1]). Roots without an oracle, other
  * partitions, a call that did not run its release's ready stack, a decision readout (not captured as a sampled turn)
  * and transport failures produce no rollout; they are counted in the summary with their reason.
  *
@@ -26,13 +26,14 @@ import { loadNatlang } from '../runtime/node-files.js';
 import { createNatlangRuntime, type ModelDriver, type Services } from '../runtime/runtime.js';
 import type { SplitExample } from './collect.js';
 import { exampleArguments } from './evaluate.js';
+import { scorable, scoreRoot, verifierDigest, type RootScore } from './reward.js';
 
 export const ROLLOUT_SCHEMA = 'natlang.tune-rollout/v1';
 
 type Json = Record<string, unknown>;
 export type TuneRollout = {
   readonly schema: typeof ROLLOUT_SCHEMA; readonly root: string; readonly component: string; readonly partition: 'train';
-  readonly group: string; readonly sample: number; readonly reward: { readonly quality: 0 | 1; readonly source: 'root-oracle' };
+  readonly group: string; readonly sample: number; readonly reward: RootScore;
   readonly behavior: { readonly release: string; readonly node_artifacts: Readonly<Record<string, string>>;
     readonly gates: Readonly<Record<string, number>>; readonly soft_states: Readonly<Record<string, string>>;
     readonly temperature: number; readonly seed: number };
@@ -45,7 +46,6 @@ export type RolloutSummary = { readonly path: string; readonly written: number; 
 
 /** Python's `json.dumps` of a list of strings/null (the trainer's gate and soft-state keys). */
 const pythonKey = (items: readonly (string | null)[]) => '[' + items.map(item => JSON.stringify(item)).join(', ') + ']';
-const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 const hash = (...parts: unknown[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 /** A 31-bit seed derived from its named parts. */
 export const derivedSeed = (...parts: unknown[]) => Number.parseInt(hash('natlang.tune-rollout-seed/1', ...parts).slice(0, 8), 16) & 0x7fffffff;
@@ -86,8 +86,10 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
   let written = 0, reused = 0, successes = 0;
   for (const example of options.examples) {
     if (example.partition !== 'train') { skipped.push({ root: example.id, sample: null, reason: `${example.partition} root` }); continue; }
-    if (!('expected' in example)) { skipped.push({ root: example.id, sample: null, reason: 'no root oracle' }); continue; }
-    const group = `${example.id}/${options.release.digest}/round-${options.round}/execution-${executionKey(options.execution)}`;
+    if (!await scorable(options.root, example)) { skipped.push({ root: example.id, sample: null, reason: 'no root oracle or verifier' }); continue; }
+    const verifier = verifierDigest(options.root);
+    const group = `${example.id}/${options.release.digest}/round-${options.round}/execution-${executionKey(options.execution)}` +
+      (verifier ? `/verifier-${verifier.slice(0, 16)}` : '');
     for (let sample = 0; sample < options.samples; sample++) {
       if (existing.has(`${group}\0${sample}`)) { reused++; continue; }
       const seed = derivedSeed(options.release.digest, options.round, example.id, sample);
@@ -158,9 +160,10 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   if (!turns.length) throw new Skip('the root made no model turn');
   const degraded = stacks.find(stack => stack.status !== 'ready' && stack.status !== 'untuned' || stack.effective.length < stack.requested.length);
   if (degraded) throw new Skip(`a call did not run its release stack (${degraded.status}${degraded.reason ? `: ${degraded.reason}` : ''})`);
-  const quality = !failed && equal(value, example.expected) ? 1 : 0;
+  const reward = (await scoreRoot(options.root, example as unknown as Record<string, unknown>, value, failed))!;
+  const quality = reward.quality;
   return { schema: ROLLOUT_SCHEMA, root: example.id, component: example.component, partition: 'train', group, sample,
-    ...(options.execution ? { execution: options.execution } : {}), reward: { quality, source: 'root-oracle' }, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
+    ...(options.execution ? { execution: options.execution } : {}), reward, behavior: { ...behavior, temperature: options.temperature, seed }, bindings,
     episode: { task_id: example.id, split: 'train', sample, group, reward: { quality },
       policy: { checkpoint_sha256: options.policyCheckpointSha256, release: options.release.digest, temperature: options.temperature },
       turns, execution_graph: events, ...(executionFailure ? { execution_failure: executionFailure.slice(0, 1000) } : {}) } };

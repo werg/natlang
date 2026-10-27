@@ -203,5 +203,9 @@ def test_meta_examples_label_the_optimizers_own_stages_exactly(tmp_path):
         best = min(losses, key=losses.get)
         assert row['expected'] == (best if losses[best] < step['incumbentLoss'] else 'keep')
     assert rows[-1]['expected'] is True and rows[-1]['input']['state']['remainingSteps'] == 0
+    # Graded rewards (applications/learned-optimizer/tune.reward.mjs) read these exact measurements.
+    assert rows[0]['reference'] == {'focus': rows[0]['expected']}
+    assert set(rows[1]['reference']['losses']) == {'learned-proposal', 'local-refinement', 'retrieval'}
+    assert rows[-1]['reference'] == {'stop': True, 'remainingShare': 0.}
     assert learned(['meta-examples', '--spec', spec]) == 0  # finished programs are skipped
     assert len((tmp_path / 'meta' / 'tune.examples.jsonl').read_text().splitlines()) == len(rows)

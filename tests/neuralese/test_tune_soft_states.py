@@ -146,7 +146,7 @@ def test_rows_importing_foreign_state_are_still_refused(tmp_path):
     records = initialize_soft_states(engine, [turn()], skills=False)
     rows = soft_rows(engine, records)
     foreign = copy.deepcopy(rows[0]); foreign.pop('soft')
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(TuneMathError, match="not one of its soft states"):
         JointTrainer(engine, manifest_for(engine), [foreign], Recipe(steps=0))
     other = copy.deepcopy(rows[0]); other['binding'] = 'by'
     with pytest.raises(TuneMathError, match='another binding'):

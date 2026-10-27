@@ -19,6 +19,12 @@ natlang run ./my-program      # ordinary execution uses the result
   `expected` is optional; with it the root has a direct oracle. `group` names the source/world component: examples
   that share a world stay on one side of every split. `"protected": true` keeps an example out of all tuning; it is
   for final reporting only.
+- Optionally a verifier, `tune.reward.mjs` beside `natlang.json`: its default export `(value, example) => number |
+  boolean` grades a root's result in [0, 1] and may read the example's `expected` and `reference` data. Without it a
+  root scores 1 when its result equals `expected` and 0 otherwise. Collection, evaluation and RL all use this one
+  score (`ts-host/src/tune/reward.ts`): a full score is a success (a usable teacher demonstration, a correct
+  evaluation root); graded scores are RL rewards, so tuning optimizes every part of the program toward the root's
+  measured quality rather than only an exact answer.
 
 No adapter manifest, adapter IDs, export, conversion or server-loading step is part of the author's work.
 
@@ -189,7 +195,13 @@ cheapest teacher within 0.05 of the best success rate collects the data. A chang
 `natlang tune ./my-program --rounds` runs SFT and then RL rounds (`tune.rounds`: `schedule`, default
 `["sft","rl","rl","rl"]`; `patience`; `samples` per training root, default 4; `temperature`, default 0.8;
 `rlRecipe`). Each round continues the best build so far; an RL round samples the training roots from that release
-with exact sampling receipts and fits on those rollouts together with the teacher rows. Rounds are compared on
+with exact sampling receipts and fits on those rollouts together with the teacher rows: its recipe alternates the
+objectives `sft` (the teacher's rows), `rl` (the clipped group-relative policy objective over whole episodes) and
+`rft` (global supervision of whole successful episodes, quality >= `rft_min_quality`, default 1). Every objective is
+one whole-graph forward through the production native gradient service: each invocation runs its own binding's
+stack, and the loss reaches every adapter node and soft state that ran through every producer/consumer dependency,
+Neuralese spans included. RFT also learns from groups where every sample succeeded, which carry no policy gradient.
+An objective without admitted work leaves the round's cycle and the receipt says so. Rounds are compared on
 development roots only, and the best release is validated and activated as usual. RL rounds need the native
 reference server (`tune.backend: "native"`); an SFT-only schedule works on every backend.
 

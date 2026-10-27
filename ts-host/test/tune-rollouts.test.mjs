@@ -67,7 +67,7 @@ test('rollouts record every turn with its invocation, binding, seed and the root
     policyCheckpointSha256: base.checkpoint_sha256 };
   const summary = await runRollouts(options);
   assert.equal(summary.written, 4);
-  assert.deepEqual(summary.skipped.map(item => [item.root, item.reason]).sort(), [['r3', 'no root oracle'], ['r4', 'development root']]);
+  assert.deepEqual(summary.skipped.map(item => [item.root, item.reason]).sort(), [['r3', 'no root oracle or verifier'], ['r4', 'development root']]);
   const rows = readFileSync(out, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert.ok(requests.every(request => request.temperature === .7 && Number.isInteger(request.seed)));
   assert.deepEqual(new Set(rows.map(row => row.reward.quality)), new Set([0, 1]), 'the oracle scores both outcomes');

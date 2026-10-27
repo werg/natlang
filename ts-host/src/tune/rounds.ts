@@ -12,9 +12,9 @@
  * protected roots are never used here.
  *
  * How SFT and RL mix: they never mix within one optimizer step. An RL round's fit alternates objectives step by step
- * when its recipe says `objectives: ["sft", "rl"]` (the recommended default for the injected trainer: the teacher's
- * rows keep anchoring the specialization while the policy objective moves it toward the oracle), or trains the policy
- * objective alone with `["rl"]`.
+ * when its recipe says `objectives: ["sft", "rl", "rft"]` (the default: the teacher's rows keep anchoring the
+ * specialization, the policy objective moves it toward the root score, and RFT supervises whole successful episodes
+ * through every Neuralese dependency, including groups where every sample succeeded), or any subset of them.
  *
  * The journal (`natlang.tune-rounds/v1`) is rewritten after every stage, so a rerun resumes inside a round: sampled
  * rollouts, a trained release and an evaluation are each reused, and the train stage itself resumes from its build.

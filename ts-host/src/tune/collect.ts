@@ -16,6 +16,7 @@ import { compileScopeTree, type ScopeOptions } from '../adaptation/weights/scope
 import { WeightBinding } from '../adaptation/weights/binding.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { scoreRoot } from './reward.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import { createNatlangRuntime, type Services } from '../runtime/runtime.js';
 import { journaledServices, type World } from './world.js';
@@ -25,6 +26,8 @@ import { canonicalJson } from '../package/archive.js';
 
 export type Partition = 'train' | 'development' | 'confirmation';
 export type RootExample = { readonly function: string; readonly input: unknown; readonly expected?: unknown;
+  /** Reference data for the program's verifier (`tune.reward.mjs`, tune/reward.ts); part of the root's identity. */
+  readonly reference?: unknown;
   /** Source/world component: related examples share one, so they land on one side of every split. */
   readonly group?: string; readonly protected?: boolean; readonly source?: 'real' | 'synthetic' };
 export type SplitExample = RootExample & { readonly id: string; readonly component: string; readonly partition: Partition };
@@ -69,7 +72,8 @@ const componentOf = (example: RootExample) => example.group ?? digest([example.f
 // Identical arguments in distinct captured worlds are distinct invocations. Their
 // records, teacher custody and evaluation caches must not share a root key.
 const rootExampleId = (example: RootExample) => digest(['natlang.tune-root/v2', componentOf(example),
-  example.function, example.input, 'expected' in example, example.expected ?? null]).slice(0, 16);
+  example.function, example.input, 'expected' in example, example.expected ?? null,
+  ...('reference' in example ? [example.reference] : [])]).slice(0, 16);
 
 function uniqueRoots(rows: readonly SplitExample[]): SplitExample[] {
   const roots = new Map<string, SplitExample>();
@@ -123,7 +127,6 @@ export function scaffoldManifest(program: ProgramDescriptor, base: NativeModelId
     artifacts: [], families: [], memberships: [], softStates: [], scales: {}, validatedReductions: [], fallback: 'base', receipts: {} });
 }
 
-const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 const canonicalActionArgs = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 function hasFailedAssistantHistory(messages: unknown[], failedIds: ReadonlySet<string>): boolean {
   return messages.some(message => {
@@ -183,7 +186,9 @@ export async function collect(options: { root: string; program: ProgramDescripto
         : Array.isArray(input) ? input : [input];
       const value = await runtime.run(() => fn(...args));
       ok = true;
-      if ('expected' in example) oracle = equal(value, example.expected);
+      // The teacher's root counts as verified only at a full score (exact oracle or the program's verifier).
+      const scored = await scoreRoot(options.root, example as unknown as Record<string, unknown>, value, false);
+      if (scored) oracle = scored.quality === 1;
     } catch (failure) { rethrowInfrastructureFailure(failure); error = failure instanceof Error ? failure.message : String(failure); }
     finally { runtime.close(); }
     roots.push({ id: example.id, ok, oracle, ...(error ? { error } : {}), ...(services ? { world } : {}) });

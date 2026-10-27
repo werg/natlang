@@ -867,8 +867,9 @@ from ..model.native_actor_graph import validate_invocation_behavior_policy
 
 
 def _require_scored_training_episode(rollout, identity,*,semantic=False):
+    quality = rollout.get('reward', {}).get('quality') if isinstance(rollout.get('reward'), dict) else None
     if (rollout.get('split') != 'train' or rollout.get('training_admission') not in (None, 'grpo')
-            or not isinstance(rollout.get('reward'), dict) or rollout['reward'].get('quality') not in (0, 1)
+            or type(quality) not in (int, float) or not 0 <= quality <= 1
             or (rollout.get('policy') or {}).get('checkpoint_sha256') != identity['checkpoint_sha256']):
         raise ValueError('native RL requires exact scored train-only actor episodes')
     if not rollout.get('task_id') or not rollout.get('turns') or any(
@@ -895,8 +896,11 @@ def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
         'base_native_identity':dict(identity),'collector_policy_role':'base-runtime-metadata','episodes':episodes},identity)
 
 
-def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None):
-    """Admit whole training episodes and retain real graph/action provenance."""
+def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None,semantic_channel=None,
+                      min_quality=1.):
+    """Admit whole training episodes and retain real graph/action provenance. Rewards are graded qualities in
+    [0, 1] (an exact oracle gives 0 or 1). ``grpo`` keeps groups whose qualities differ; ``rft`` (teacher-forced
+    whole-graph supervision through every producer/consumer dependency) keeps episodes with quality >= ``min_quality``."""
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
@@ -927,7 +931,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         if mode == 'grpo' and not stats['spread']:
             continue
         for rollout, advantage in zip(members, advantages):
-            if mode == 'rft' and rollout['reward']['quality'] != 1:
+            if mode == 'rft' and rollout['reward']['quality'] < min_quality:
                 continue
             episode_key=canonical_json_sha256_hex(rollout)
             actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
