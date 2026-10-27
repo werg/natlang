@@ -356,7 +356,10 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         config.pop('token_override_dtype', None)  # exact pre-master-row configuration contract
     if 'sparse_row_dtype' not in saved and str(requested_dtype) == saved['dtype']:
         config.pop('sparse_row_dtype', None)
-    for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256', 'precision'):
+    # `precision` is the process's stock arithmetic policy (configure_native_precision), not a property of the saved
+    # state: a checkpoint saved under strict IEEE restores under tensor-core arithmetic and the reverse (owner,
+    # 2026-10-28). config records the policy the restored model actually runs.
+    for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256'):
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')
     if config.get('token_override_ids', []) != saved.get('token_override_ids', []):

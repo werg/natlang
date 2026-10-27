@@ -40,6 +40,8 @@ def test_precision_is_per_model_restorable_and_preserves_parameters():
     assert not hasattr(layer, '_native_original_forward')
     assert same_source_precision_identity({'base': 'same'}, {'base': 'same', 'native_linear_precision': 'tf32'})
     assert not same_source_precision_identity({'base': 'same'}, {'base': 'other', 'native_linear_precision': 'tf32'})
+    assert same_source_precision_identity({'base': 'same', 'precision': {'cuda_matmul_tf32': False}},
+                                          {'base': 'same', 'precision': {'cuda_matmul_tf32': True}})
 
 
 def test_precision_checkpoint_exact_restore_and_identity(tmp_path):

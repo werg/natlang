@@ -70,7 +70,8 @@ def base_location_transition(previous, current):
 
 def same_source_precision_identity(previous, current):
     """Only declared native arithmetic may change in an ordinary continuation."""
-    arithmetic = {'native_linear_precision', 'native_attention_precision', 'native_shared_execution'}
+    # `precision` is the process's stock arithmetic policy (configure_native_precision), also declared arithmetic.
+    arithmetic = {'native_linear_precision', 'native_attention_precision', 'native_shared_execution', 'precision'}
     if previous.get('base') != current.get('base'):
         try:
             base_location_transition(previous, current)
