@@ -4,6 +4,7 @@ import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { fingerprint } from '../adaptation/identity.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
+import { nativeEndpoint, validateNativeSettings, type NativeModelSettings } from './native-managed.js';
 
 export type BatchingSettings = {
   /** server-continuous (default), explicit-batch or serial. */
@@ -24,6 +25,11 @@ export type ModelProfile = {
   /** The endpoint is a native Neuralese reference server: tuned weights, native state and soft instruction/skill
    * states run through its exact native path (docs/TUNING.md). */
   neuraleseServer?: boolean;
+  /** A natlang-owned native reference server for a pinned native checkpoint (model/native-managed.ts): started on the
+   * first turn, or reused when one already serves that checkpoint. Written by `natlang setup --native SOURCE`. */
+  native?: NativeModelSettings;
+  /** Profile that answers a call this profile's model fails (`natlang run|call|ask`; calls/tiers.ts tier 0). */
+  escalate?: string;
   /** The endpoint is a vLLM server with LoRA enabled: each tuned call is routed to its whole-stack LoRA by name. */
   vllm?: boolean;
   headers?: Record<string, string>; request?: Record<string, unknown>;
@@ -34,7 +40,10 @@ export type ModelProfile = {
    * (model/server-slots.ts), using `memoryBudgetMiB` (default half of available memory) and `kvBytesPerToken`.
    */
   local?: { contextTokens?: number; gpuLayers?: number; parallel?: number; cacheRamMiB?: number; args?: string[];
-    memoryBudgetMiB?: number; kvBytesPerToken?: number };
+    memoryBudgetMiB?: number; kvBytesPerToken?: number;
+    /** A GGUF to serve instead of the pinned default, its chat template and model ID (`natlang setup --native SOURCE
+     * --gguf TYPE` writes these); NATLANG_MODEL_PATH and NATLANG_TEMPLATE still override them. */
+    modelPath?: string; template?: string; modelId?: string };
   /** Model requests in flight at once from this process (turns and decision scoring together). A managed local server
    * defaults to its slot count, other backends to unlimited. `batching.maxConcurrent` takes precedence. */
   concurrency?: number;
@@ -47,13 +56,15 @@ type Common = { promptRendering?: ModelProfile['promptRendering']; headers?: Rec
 export type ResolvedModelChoice =
   | (Common & { kind: 'managed-local'; model: string; request?: Record<string, unknown>; local?: ModelProfile['local'] })
   | (Common & { kind: 'external'; endpoint: string; chatCompletionsUrl?: string; model: string; apiKeyEnv: string; request?: Record<string, unknown>;
-    neuraleseServer?: true; vllm?: true })
+    neuraleseServer?: true; vllm?: true; managedNative?: NativeModelSettings })
   | (Common & { kind: 'pi-provider'; provider: string; model: string; apiKeyEnv?: string;
     piOptions?: Record<string, unknown>; piPayload?: Record<string, unknown>;
     piMode: 'native' | 'simple'; modelOptions?: Record<string, unknown> });
 
 export type ModelSelectionOverrides = { provider?: string; model?: string };
-export type LoadedModelConfiguration = { name: string; configPath: string; profile: ModelProfile; choice: ResolvedModelChoice };
+export type LoadedModelConfiguration = { name: string; configPath: string; profile: ModelProfile; choice: ResolvedModelChoice;
+  /** Named checkpoint pointers for `natlang setup --native NAME` (config `nativeSources`). */
+  nativeSources: Record<string, string> };
 
 export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.promptRendering !== undefined && !['full', 'program-header'].includes(profile.promptRendering))
@@ -63,6 +74,13 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.runtime?.review && 'driver' in profile.runtime.review)
     throw new Error('profile.runtime.review.driver is programmatic only');
   if (profile.provider && profile.endpoint) throw new Error('model profile cannot set both provider and endpoint');
+  if (profile.escalate !== undefined && (typeof profile.escalate !== 'string' || !profile.escalate))
+    throw new Error('escalate must name another model profile');
+  if (profile.native) {
+    if (profile.provider || profile.endpoint || profile.chatCompletionsUrl || profile.local || profile.vllm)
+      throw new Error('a native profile cannot also set provider, endpoint, chatCompletionsUrl, local or vllm');
+    validateNativeSettings(profile.native);
+  }
   if (profile.chatCompletionsUrl !== undefined && !profile.endpoint)
     throw new Error('chatCompletionsUrl requires an external endpoint metadata root');
   if (profile.chatCompletionsUrl !== undefined) {
@@ -91,6 +109,11 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
       if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum))
         throw new Error(`local.${key} must be an integer >= ${minimum}`);
     }
+    for (const key of ['modelPath', 'template', 'modelId'] as const)
+      if (profile.local[key] !== undefined && (typeof profile.local[key] !== 'string' || !profile.local[key]))
+        throw new Error(`local.${key} must be a nonempty string`);
+    if ((profile.local.template || profile.local.modelId) && !profile.local.modelPath)
+      throw new Error('local.template and local.modelId describe local.modelPath; set it too');
     if (profile.local.args && (!Array.isArray(profile.local.args) ||
       profile.local.args.some(value => typeof value !== 'string')))
       throw new Error('local.args must be an array of strings');
@@ -119,32 +142,34 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
   if (profile.provider) return { ...common, kind: 'pi-provider', provider: profile.provider, model: profile.model!,
     apiKeyEnv: profile.apiKeyEnv, piOptions: profile.piOptions, piPayload: profile.piPayload,
     piMode: profile.piMode ?? 'native', modelOptions: profile.modelOptions };
+  if (profile.native) return { ...common, kind: 'external', endpoint: nativeEndpoint(profile.native), model: profile.model ?? 'native',
+    apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY', request: profile.request, neuraleseServer: true, managedNative: profile.native };
   if (profile.endpoint) return { ...common, kind: 'external', endpoint: profile.endpoint,
     ...(profile.chatCompletionsUrl ? { chatCompletionsUrl: profile.chatCompletionsUrl } : {}),
     model: profile.model ?? DEFAULT_MODEL_RELEASE.id, apiKeyEnv: profile.apiKeyEnv ?? 'NATLANG_API_KEY',
     request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}),
     ...(profile.vllm ? { vllm: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
-  return { ...common, kind: 'managed-local', model: DEFAULT_MODEL_RELEASE.id,
+  return { ...common, kind: 'managed-local', model: profile.local?.modelId ?? (profile.local?.modelPath ? 'local-gguf' : DEFAULT_MODEL_RELEASE.id),
     request: profile.request, local: profile.local };
 }
 
 export function loadModelConfiguration(name?: string, overrides: ModelSelectionOverrides = {},
   environment: NodeJS.ProcessEnv = process.env): LoadedModelConfiguration {
   const configPath = join(defaultNatlangConfigDirectory(environment), 'config.json');
-  let config: { defaultProfile?: string; profiles?: Record<string, ModelProfile> } = {};
+  let config: { defaultProfile?: string; profiles?: Record<string, ModelProfile>; nativeSources?: Record<string, string> } = {};
   if (existsSync(configPath)) config = JSON.parse(readFileSync(configPath, 'utf8')) as typeof config;
   const selected = name ?? environment.NATLANG_PROFILE ?? config.defaultProfile ?? 'default';
   const configured = config.profiles?.[selected] ?? {};
   const provider = overrides.provider ?? environment.NATLANG_PROVIDER;
   const endpoint = environment.NATLANG_SERVER;
   const profile: ModelProfile = { ...configured,
-    ...(provider ? { provider, endpoint: undefined, chatCompletionsUrl: undefined, local: undefined, request: undefined } : {}),
-    ...(endpoint && !provider ? { endpoint, provider: undefined, piOptions: undefined,
+    ...(provider ? { provider, endpoint: undefined, chatCompletionsUrl: undefined, local: undefined, request: undefined, native: undefined } : {}),
+    ...(endpoint && !provider ? { endpoint, provider: undefined, piOptions: undefined, native: undefined,
       chatCompletionsUrl: undefined, piPayload: undefined, piMode: undefined, modelOptions: undefined, local: undefined } : {}),
     ...(overrides.model ?? environment.NATLANG_MODEL ? { model: overrides.model ?? environment.NATLANG_MODEL } : {}),
     ...(environment.NATLANG_CONCURRENCY ? { concurrency: Number(environment.NATLANG_CONCURRENCY) } : {}) };
-  return { name: selected, configPath, profile, choice: resolveModelChoice(profile) };
+  return { name: selected, configPath, profile, choice: resolveModelChoice(profile), nativeSources: config.nativeSources ?? {} };
 }
 
 /** Explicit compatibility identity without authentication material. Profiles are caller-declared metadata. */
@@ -162,7 +187,9 @@ export function executorIdentityForChoice(choice: ResolvedModelChoice): import('
     return input;
   };
   const configuration = sanitize(choice) as Record<string, unknown>;
-  delete configuration.concurrency; delete configuration.batching;   // how many requests run at once does not change what the model does
+  delete configuration.concurrency; delete configuration.batching;
+  // A managed native server is identified by the checkpoint it serves, not by how it is launched.
+  if (choice.kind === 'external' && choice.managedNative) configuration.managedNative = { sha256: choice.managedNative.sha256 };   // how many requests run at once does not change what the model does
   const behaviorHeaders = Object.fromEntries(Object.entries(choice.headers ?? {}).filter(([key]) => !credential.test(key)));
   if (Object.keys(behaviorHeaders).length) configuration.headersHash = fingerprint(behaviorHeaders, 'natlang.model-headers/v1');
   if (choice.kind === 'external') {

@@ -386,16 +386,30 @@ function tieredCall(frame: Frame, definition: CallableDefinition, positional: un
   const args = Object.fromEntries(definition.params.map((parameter, index) => [parameter.name, positional[index]]).filter(([, value]) => value !== undefined));
   let recorded = 0;
   const store = task.runtime.callStore();
+  // A failed call aborts its frame's controller (runDefinitionBody), which is the caller's: each attempt gets its own,
+  // following the caller's, so a deoptimized attempt stops only what it started and the next tier can still run.
+  const parent = frame.signal ?? task.signal;
+  const attempt = async (plan: TierAttempt) => {
+    const controller = new AbortController(), follow = () => controller.abort(parent.reason);
+    if (parent.aborted) follow(); else parent.addEventListener('abort', follow, { once: true });
+    try { return await runDefinition({ ...frame, signal: controller.signal, abort: controller },
+      plan.model ? { ...definition, model: plan.model } : definition, positional, { ...options, tierAttempt: plan }); }
+    finally { parent.removeEventListener('abort', follow); }
+  };
   return runTiered(engine, settings, { name: definition.name, args, store,
     ...(store ? { specialized: () => specializerOutput(store, definitionKey({ ...definition, body: options.instructions ?? definition.body }),
       interfaceHash(definition.codebase)) } : {}),
     hasModel: name => !!task.runtime.options.models?.[name],
-    run: plan => runDefinition(frame, plan.model ? { ...definition, model: plan.model } : definition, positional, { ...options, tierAttempt: plan }),
+    run: attempt,
     emit: events => {
       const id = `${task.id}/tiers-${definition.name}-${++recorded}`;
       task.record({ callId: id, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: `tiers:${definition.name}`,
         name: `tiers ${definition.name}`, outcome: 'done', detail: '', events: events.map(event => ({ call_id: null, ...event })) } as never);
-    } });
+    } }).catch(error => {
+    // The ladder failed as a whole: as for any failed call, the calls its caller started stop too.
+    frame.abort?.abort(new Error(`${definition.name} ended without a result`));
+    throw error;
+  });
 }
 
 async function runDefinitionBody(frame: Frame, definition: CallableDefinition, positional: unknown[],

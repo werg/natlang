@@ -82,6 +82,14 @@ Tool-call JSON text is decoded exactly once while building model history. Preser
 
 Hosts pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](../../docs/TUNING.md).
 
+## Trained native models
+
+`natlang setup --native SOURCE [--gguf q8_0]` pins a trained checkpoint and writes its profile; the native profile
+starts its reference server on the first model call (`natlang serve` keeps it loaded), and `NAME-gguf` runs the same
+weights on managed llama.cpp for ordinary tokens. A profile's `escalate: PROFILE` (or `--escalate`) reruns a call the
+student fails on another profile through the tiered engine and says so on stderr. `natlang traces good|bad|fix CALL`
+turns tested calls into `tune.examples.jsonl` roots. See [docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`

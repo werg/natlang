@@ -156,7 +156,8 @@ settings specific to the previous backend; shared `headers`, `apiKeyEnv`, and
 `runtime` settings remain. A model ID without a provider or endpoint is invalid;
 the managed local profile uses its pinned model. `NATLANG_MODEL_PATH`,
 `NATLANG_TEMPLATE`, and `NATLANG_LLAMA_SERVER` customize managed local
-execution. Secrets remain in environment variables.
+execution. Secrets remain in environment variables. Trained native checkpoints get
+their profiles from `natlang setup --native SOURCE`; see [our trained models](docs/NATIVE_MODELS.md).
 
 | Profile field | Managed local | OpenAI-compatible endpoint | Pi provider |
 | --- | --- | --- | --- |

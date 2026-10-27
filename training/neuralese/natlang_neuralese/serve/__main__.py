@@ -39,6 +39,11 @@ def main(argv=None):
                              "<data_nvme>/neuralese-blocks/<dialect> (NVMe)")
     parser.add_argument("--store-resident-gb", type=float, default=2.0,
                         help="with --store-dir: payload memory kept resident (least recently used blocks are evicted)")
+    parser.add_argument("--prefix-cache-gb", type=float, default=0,
+                        help="reuse prompt-prefix model state across requests within this memory (serve/prefix_cache.py); "
+                             "prefill then runs on a --prefix-block token grid, so numerics differ from the default "
+                             "single-chunk prefill (default 0: off)")
+    parser.add_argument("--prefix-block", type=int, default=256, help="prefix cache grid in tokens")
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
@@ -71,6 +76,9 @@ def main(argv=None):
         directory = args.store_dir or resolve("data_nvme", "neuralese-blocks", re.sub(r"[^A-Za-z0-9._-]+", "_", engine.dialect))
         engine.store = TensorStore(directory, int(args.store_resident_gb * 2**30))  # the loaders return an empty store
     engine.default_guidance = json.loads(args.guidance) if args.guidance else None
+    if args.prefix_cache_gb > 0:
+        from .prefix_cache import PrefixCache
+        engine.prefix_cache = PrefixCache(int(args.prefix_cache_gb * 2**30), args.prefix_block)
     engine.start()
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity

@@ -124,6 +124,8 @@ class Engine:
             'embedding_weight_sha256': embedding_weight_sha256,
             'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
         self.prefill_tokens = prefill_tokens
+        # Optional exact prompt-prefix reuse (serve/prefix_cache.py); None keeps single-chunk prefill.
+        self.prefix_cache = None
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.prompt_rendering = prompt_rendering
         self.width = backbone.config.hidden_size
@@ -147,7 +149,8 @@ class Engine:
                 'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
                 'natlang_native_open_produce_spans': sum(
                     seq.phase != 'done' and seq.native_capture_open for seq in active),
-                'natlang_queued_requests': self._incoming.qsize()}
+                'natlang_queued_requests': self._incoming.qsize(),
+                **(self.prefix_cache.metrics() if self.prefix_cache is not None else {})}
 
     def start(self):
         self._thread = threading.Thread(target=self._loop, name="neuralese-engine", daemon=True)
@@ -308,6 +311,8 @@ class Engine:
             raise ValueError('native prefill needs at least one token')
         if type(self.prefill_tokens) is not int or self.prefill_tokens <= 0:
             raise ValueError('native prefill_tokens must be a positive integer')
+        if cache is None and self.prefix_cache is not None and not torch.is_grad_enabled():
+            return self._native_prefix_prefill(ids)
         for start in range(0, len(ids), self.prefill_tokens):
             output = self._native_forward(ids[start:start+self.prefill_tokens], cache)
             cache = output['cache']
@@ -315,6 +320,23 @@ class Engine:
                 # Do not retain the preceding chunk's raw captures/hidden state
                 # while allocating the next chunk's layer workspace.
                 del output
+        return output
+
+    def _native_prefix_prefill(self, ids):
+        """A fresh prompt prefilled on the prefix cache's block grid, resuming from its longest stored prefix."""
+        from ..model.native_adapters import execution_binding
+        prefix = self.prefix_cache
+        digests = prefix.digests({'adapters': execution_binding(self), 'identity': self.native_identity}, ids)
+        start, cache, output = 0, None, None
+        hit = prefix.lookup(digests)
+        if hit is not None:
+            start, cache, h_last = hit
+            output = {'cache': cache, 'h_final': h_last}
+        for begin in range(start, len(ids), prefix.block):
+            end = min(begin + prefix.block, len(ids))
+            output = self._native_forward(ids[begin:end], cache)
+            cache = output['cache']
+            prefix.store(digests[end], cache, output['h_final'][:, -1:])
         return output
 
     def _native_logits(self, hidden):

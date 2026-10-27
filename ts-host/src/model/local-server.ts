@@ -13,6 +13,7 @@ import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, serverContextWindow, type OpenAICompatibleOptions } from './openai-compatible.js';
 import { neuraleseServerModelTurn } from './neuralese-server.js';
+import { ensureNativeServer, stopNativeServer } from './native-managed.js';
 import { randomUUID } from 'node:crypto';
 import { schedulerForSettings, type Scheduler } from './scheduler.js';
 import { planServerSlots, type SlotPlan } from './server-slots.js';
@@ -188,6 +189,10 @@ export function createManagedModelSession(profile: ModelProfile,
 export function createResolvedModelSession(choice: ResolvedModelChoice,
   environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
   runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
+  // A profile's own GGUF and template stand where NATLANG_MODEL_PATH/NATLANG_TEMPLATE would; those still override.
+  const profileModel = choice.kind === 'managed-local' ? choice.local : undefined;
+  if (profileModel?.modelPath && !environment.NATLANG_MODEL_PATH) environment = { ...environment, NATLANG_MODEL_PATH: profileModel.modelPath,
+    ...(profileModel.template && !environment.NATLANG_TEMPLATE ? { NATLANG_TEMPLATE: profileModel.template } : {}) };
   const external = choice.kind === 'external' ? choice : null;
   const localSettings = choice.kind === 'managed-local' ? choice.local : undefined;
   type PiBackend = ReturnType<(typeof import('./pi-provider.js'))['createPiModelBackend']>;
@@ -236,6 +241,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
+    if (external?.managedNative) await ensureNativeServer(external.managedNative, environment, error);
     if (external) return { endpoint: external.endpoint, chatCompletionsUrl: external.chatCompletionsUrl,
       model: external.model, headers: external.headers,
       request: external.request, apiKey: environment[external.apiKeyEnv] };
@@ -356,6 +362,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
       if (child) await stopChild(child);
       if (starting) await starting.catch(() => undefined);
       if (child) await stopChild(child);
+      if (external?.managedNative) await stopNativeServer(external.endpoint);
       child = null; local = null;
     },
   };
