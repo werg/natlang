@@ -1,5 +1,15 @@
 # Model-facing changes and their measurement
 
+### 2026-10-27 — learned optimizer revision operations and service requests
+
+`adapt/chooseRevision.nl` offers only the operations the services implement (`reencode`, `replace-skill`, `weights`,
+`keep`; `rewrite` and `reuse-skill` removed, `replace-skill` described as rewriting skill states). `adapt/adaptStep.nl`
+now passes `plan.operations` to every operator and `analysis.keyEvidence` to `propose`; the `optimizer` service
+declaration shows the `operations` and `keyEvidence` fields and explains the selection. New service errors (one
+sentence each): a plan naming an unknown binding, an unknown operation, an operation with no state for that binding
+("choose \"weights\" or \"keep\" for it"), and a plan that selects nothing ("choose the operator \"keep\""). Status:
+**unmeasured**; measure with the `chooseRevision` and `adapt.nl` examples of `meta-examples` on the live executor.
+
 ### 2026-10-27 — learned optimizer `chooseFocus` stage
 
 `applications/learned-optimizer/adapt/chooseFocus.nl` now holds the focus rule that was step 1 of `interpretEvidence`

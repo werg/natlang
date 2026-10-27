@@ -13,11 +13,11 @@ revised together. Work in eval and return the next state.
 2. plan = chooseRevision(analysis.focus, context.view, state.history).
 3. operator = chooseOperator(state.history, plan, state.remainingSteps).
 4. parent = state.current ? state.current.id : null. step = context.maxSteps - state.remainingSteps.
-5. Run the operator:
-   - "learned-proposal": candidate = await optimizer.propose({ parent, sample: step > 0, seed: step,
-     focus: analysis.focus, digests: analysis.digests }).
-   - "retrieval": candidate = await optimizer.retrieve({ parent }).
-   - "local-refinement": candidate = await optimizer.refine({ parent, steps: 10 }).
+5. Run the operator on the plan: operations = plan.operations.
+   - "learned-proposal": candidate = await optimizer.propose({ parent, sample: step > 0, seed: step, operations,
+     focus: analysis.focus, keyEvidence: analysis.keyEvidence, digests: analysis.digests }).
+   - "retrieval": candidate = await optimizer.retrieve({ parent, operations }).
+   - "local-refinement": candidate = await optimizer.refine({ parent, steps: 10, operations }).
    - "keep": candidate = null.
 6. best = state.current ? state.current.supportLoss : state.incomingLoss. accepted = candidate is not null and
    candidate.supportLoss < best.

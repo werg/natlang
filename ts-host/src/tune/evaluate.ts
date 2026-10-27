@@ -12,6 +12,7 @@ import { loadNatlang } from '../runtime/node-files.js';
 import type { ModelTurn } from '../contracts.js';
 import type { Partition, SplitExample } from './collect.js';
 import { scorable, scoreRoot } from './reward.js';
+import { rootServices } from './services.js';
 
 export type RootOutcome = {
   readonly id: string; readonly component: string; readonly partition: Partition | 'protected'; readonly function: string;
@@ -52,7 +53,7 @@ export async function evaluateRoots(options: { root: string; program: ProgramDes
       return turn;
     }, Object.fromEntries(Object.entries(options.driver))) as unknown as ModelDriver;
     const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: options.weights,
-      ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
+      ...await rootServices(options.root, options.services, example), trace: trace => {
       const recorded = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
       if (recorded) stacks.push({ identity: recorded.identity, status: recorded.status, requested: recorded.requested.length, effective: recorded.effective.length });
     } });

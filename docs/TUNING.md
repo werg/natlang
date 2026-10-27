@@ -25,6 +25,11 @@ natlang run ./my-program      # ordinary execution uses the result
   score (`ts-host/src/tune/reward.ts`): a full score is a success (a usable teacher demonstration, a correct
   evaluation root); graded scores are RL rewards, so tuning optimizes every part of the program toward the root's
   measured quality rather than only an exact answer.
+- Optionally services, `tune.services.mjs` beside `natlang.json`, when the program's roots call host services: its
+  default export `(example) => services` builds one root's services (it may read the example's `input` and
+  `reference`), and an optional `declarations` export (`{ name: declaration text }`) is what the model is shown of
+  each. Collection, evaluation, RL rollouts and repairs all run a root with these services
+  (`ts-host/src/tune/services.ts`); collection journals their calls so repairs replay the same world.
 
 No adapter manifest, adapter IDs, export, conversion or server-loading step is part of the author's work.
 
@@ -226,7 +231,11 @@ is validated and activated as usual. The job key binds the bank and optimizer-st
 including rejected ones, stays in the build receipt. Composed adapters slice the bank's learned basis
 (`bank-basis-slice-v1`) and run on the native reference server; managed llama.cpp receives exact per-node GGUF
 exports. The optimizer itself is built and trained with `python -m natlang_neuralese.tune.learned` and the Natlang
-program in `applications/learned-optimizer`.
+program in `applications/learned-optimizer`. Its outer meta-RL rewards proposals by real task outcomes:
+`python -m natlang_neuralese.tune.learned proposals` writes sampled proposals as release fragments with one request
+per program, and `natlang tune ./my-program --score-proposals REQUEST.json` seals each as a stored (not activated)
+release, runs it on the target's query roots (training roots outside its support, else development roots) and writes
+`REQUEST.json.outcomes.json`, which `collect` takes as `outcomes`.
 
 Optional `incoming` names a joint fit's build directory: the optimizer then revises that tuned bundle (its mixtures add
 exactly to the tuned adapters) and releases it unchanged when no proposal improves on it. This needs a fit on the
@@ -242,9 +251,11 @@ runs the base model.
 
 ## Programs that use host services
 
-`natlang tune` from the CLI runs programs without host services. An SDK host that tunes a service-using program
-passes `services: example => ({ ... })` in the tune options: fresh services per root invocation, a test or sandbox
-world rather than production systems, because collection, evaluation and rollouts call them. Every call made during
+A program provides its own tuning services in `tune.services.mjs` (see above); `natlang tune` from the CLI uses
+them, and runs a program without that file without host services. An SDK host that tunes a service-using program may
+instead pass `services: example => ({ ... })` in the tune options (the program's `declarations` still describe them):
+fresh services per root invocation, a test or sandbox world rather than production systems, because collection,
+evaluation and rollouts call them. Every call made during
 collection and on-policy repair runs is journaled exactly (service, method, arguments, result or error). A repair
 replays the student's journal: it is admitted only when every service call of the repaired run was answered from
 that journal, so a repair never acts on the world a second time; a continuation that needs a call the student's

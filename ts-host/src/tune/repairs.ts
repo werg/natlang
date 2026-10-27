@@ -27,6 +27,7 @@ import type { ModelDriver, Services } from '../runtime/runtime.js';
 import { openingText, type Message } from '../teacher/opening.js';
 import { observed, scriptedDriver } from '../teacher/replay.js';
 import { collect, type CollectedTurn, type SplitExample } from './collect.js';
+import { rootServices } from './services.js';
 import { replayServices } from './world.js';
 
 export const REPAIR_SCHEMA = 'natlang.tune-repair/v1';
@@ -130,7 +131,8 @@ export async function runRepairs(options: { root: string; program: ProgramDescri
       }, { contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as unknown as ModelDriver;
       // The same program and inputs with the student's replies replayed re-execute the student's world.
       // The student's journaled world, replayed: no call acts on the live world again.
-      const replayWorld = options.services && world ? replayServices(options.services(example), world) : undefined;
+      const live = world ? (await rootServices(options.root, options.services, example)).services : undefined;
+      const replayWorld = live && world ? replayServices(live, world) : undefined;
       const repaired = await collect({ root: options.root, program: options.program, scaffold: options.scaffold, examples: [example],
         partitions: ['train'], execution: options.execution, teacher: driver, teacherId: options.teacherId, ...(replayWorld ? { services: () => replayWorld.services } : {}) });
       const turns = repaired.turns.map(turn => ({ ...turn, role: scripted.get(sha(turn.messages)) ? 'student-prefix' as const : 'correction' as const }));

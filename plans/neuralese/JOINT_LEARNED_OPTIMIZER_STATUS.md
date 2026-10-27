@@ -101,10 +101,37 @@ Lane declaration and runbook: `training/neuralese/learned-optimizer/README.md`, 
 - Recipe identities are the full recipe: earlier fits continue through `parent` (weights, soft states, optimizer
   histories), not through identity exemptions.
 
-Still open in this area: RL over whole `adapt` episodes needs the optimizer services available to tune rollouts
-(the CLI passes none) and a persistent Python service so episodes are affordable; `chooseRevision` needs services
-that honor per-binding operations before it can be graded; the outer trainer's meta-RL still uses the shaping reward
-because proposals have no task outcomes yet.
+## Whole-episode RL, effective revision plans and real task outcomes (2026-10-27)
+
+- **Revision plans take effect.** `chooseRevision` chooses per binding among exactly the operations the services
+  implement (`apply.Context.OPERATIONS`: `reencode` its instruction state, `replace-skill` its skill states, `weights`
+  the LoRA mixtures on its path, `keep`); `rewrite`/`reuse-skill` are gone. `Context.selection` turns the plan into
+  the soft keys and scopes an operator may change; proposal, refinement and retrieval all change exactly that
+  selection and carry every other entry over from the parent (`Context._carry`), and a plan that selects nothing
+  fails with "choose the operator keep". `interpretEvidence`'s `keyEvidence` reaches the writer's request
+  (`ProgramContext.request(key_evidence=)`, validated against the view).
+- **Meta examples for it.** `meta-examples` labels `chooseRevision` counterfactually (each operation alone per
+  focused binding, scored on the support evidence), runs the episode on that plan, and also emits the whole
+  episode as an `adapt.nl` root (`reference: {plan, out, incomingLoss, bestLoss}`). `tune.reward.mjs` grades a
+  revision plan per binding (share of the best single-operation gain) and a whole episode by the services' own
+  measurement of the bundle it returns (`<out>/bundles/<id>.json`, written by every service call), never by the loss
+  the episode reports.
+- **Tune rollouts reach the services.** A program may provide `tune.services.mjs` (default export
+  `(example) => services`, optional `declarations`); `ts-host/src/tune/services.ts` resolves a root's services once
+  for collection, evaluation, rollouts and repairs (a host's services keep the program's declarations). The learned
+  optimizer's builds its `optimizer` from the root's `reference` context, so `natlang tune` runs SFT, RL and RFT over
+  whole `adapt` episodes.
+- **One persistent Python service.** `python -m natlang_neuralese.tune.learned serve`: JSON lines, every package
+  command plus the adaptation services, contexts kept loaded per (plan, out) while plan, bank and optimizer state
+  are unchanged. `applications/learned-optimizer/python.mjs` (`PythonService`, `AdaptationServices`) is the one
+  client, used by the program, its training services and its tune services.
+- **Real task outcomes for the outer meta-RL.** `proposals` samples as `collect` does and writes each proposal and
+  each target's incoming bundle as a release fragment plus one request per program root;
+  `natlang tune ROOT --score-proposals REQUEST` seals each fragment (`pipeline.releaseFromBuild`, the export stage
+  shared with fits), runs it on the target's query roots (training roots outside its support, else development)
+  and writes `{bundle: {before, after}}`; `collect` reads the proposals back with those outcomes. The runbook runs
+  this round (`outer-rl-round.sh`) between supervised outer training and meta-examples; `TrainingServices` does the
+  same when its operation names `outcomes`.
 
 ## Not yet done (next work, in rough priority)
 
@@ -116,21 +143,18 @@ because proposals have no task outcomes yet.
    development, 696 confirmation roots); case export binds the student checkpoint, so export, teacher collection and
    import also wait for the final LFM model. Afterwards: outer training, `natlang tune --learned` on development
    roots, the first ladder, and the grid step from fitted coefficients (`numbers.grid_step_for`; 0.05 is a start).
-2. **Oracle outcomes in collection.** `collect` uses the shaping reward; per-proposal oracle task outcomes are accepted
-   (`outcomes`) but not yet produced by a TS rollout worker that executes proposals on query worlds. The release path
-   already executes development roots through `evaluateRelease`.
-3. **Planted controls run continuously** as a scheduled worker (`controls` command exists; no scheduled job).
-4. **Teacher collection for the supplied programs** (case export against the final student, reviewed Luna campaign,
+2. **Planted controls run continuously** as a scheduled worker (`controls` command exists; no scheduled job).
+3. **Teacher collection for the supplied programs** (case export against the final student, reviewed Luna campaign,
    import), then tune rounds and `corpus` over them; held with item 1, owned by the program-tuning lane.
-5. **Mellum**: the code is shared and generic over expert axes, but shared hidden-side expert bases are not tied
+4. **Mellum**: the code is shared and generic over expert axes, but shared hidden-side expert bases are not tied
    (expert bases are per expert); no Mellum run.
-6. **Reachability measurement** of directly tuned state targets (per-target writer context fit) is not implemented.
-7. **Joint memetic search**: `rl/memetic_program.py` is not generalized to bundle candidates; the `adapt` program's
+5. **Reachability measurement** of directly tuned state targets (per-target writer context fit) is not implemented.
+6. **Joint memetic search**: `rl/memetic_program.py` is not generalized to bundle candidates; the `adapt` program's
    operators (learned proposal, refinement, retrieval) cover the episode.
-8. **Registry/recipe admission** of target manifests under `training/corpus-manifests/` and production-recipe
+7. **Registry/recipe admission** of target manifests under `training/corpus-manifests/` and production-recipe
    scheduling of the optimizer objectives.
-9. **Live measurement** of the model-facing request, writer template and NL stages (`plans/MODEL_FACING_CHANGES.md`).
-10. Coefficient head readout on the native HTTP server (the Python engine path has it; serving the executor never
+8. **Live measurement** of the model-facing request, writer template and NL stages (`plans/MODEL_FACING_CHANGES.md`).
+9. Coefficient head readout on the native HTTP server (the Python engine path has it; serving the executor never
     needs it).
 
 ## Notes from implementation

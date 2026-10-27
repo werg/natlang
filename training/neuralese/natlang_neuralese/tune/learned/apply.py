@@ -37,6 +37,7 @@ class Context:
         from .trainer import OuterRecipe, OuterTrainer
         from .__main__ import _grid
         self.plan, _, _, _ = load_plan(plan_path)
+        self.plan_path = str(Path(plan_path).resolve())
         self.learned = self.plan.get('learned')
         if not isinstance(self.learned, dict):
             raise LearnedOptimizerError('the plan carries no learned optimizer settings')
@@ -86,65 +87,124 @@ class Context:
         with torch.no_grad():
             return self.support.accumulate(adapters, lambda: {}, self._states_of(bundle), backward=False)
 
-    def propose(self, parent, *, sample, seed, digests=(), focus=None):
+    # -- what one revision may change ----------------------------------------------------------------------------
+    OPERATIONS = ('reencode', 'replace-skill', 'weights', 'keep')
+
+    def selection(self, operations=None):
+        """``(soft keys, scopes)`` a revision may change. ``operations`` maps bindings to `OPERATIONS` (the Natlang
+        `chooseRevision` plan): "reencode" rewrites the binding's instruction state, "replace-skill" its skill states,
+        "weights" the LoRA mixtures of every scope on its path, "keep" nothing; unnamed bindings keep everything. None
+        selects the whole bundle. Every operator (proposal, refinement, retrieval) changes exactly the selection and
+        carries every other entry over from its parent unchanged."""
+        if operations is None:
+            return set(self.soft), set(self.scopes)
+        bindings = {binding['id']: binding for binding in self.manifest['bindings']}
+        keys, scopes = set(), set()
+        for binding, operation in operations.items():
+            if binding not in bindings:
+                raise LearnedOptimizerError(f'the revision plan names {binding}, which is not a binding of this program; '
+                                            f'use one of {sorted(bindings)}')
+            if operation not in self.OPERATIONS:
+                raise LearnedOptimizerError(f'revision operation {operation!r} is not one of {list(self.OPERATIONS)}')
+            kind = {'reencode': 'instructions', 'replace-skill': 'skill'}.get(operation)
+            if kind:
+                own = {key for key in self.soft if json.loads(key)[:2] == [binding, kind]}
+                if not own:
+                    raise LearnedOptimizerError(f'{binding} has no {"skill" if kind == "skill" else "instruction"} state '
+                                                f'to revise; choose "weights" or "keep" for it')
+                keys |= own
+            elif operation == 'weights':
+                scopes |= set(bindings[binding]['ancestry']) & set(self.scopes)
+        if not keys and not scopes:
+            raise LearnedOptimizerError('the revision plan selects nothing to change; choose the operator "keep"')
+        return keys, scopes
+
+    def _parent_adapters(self, parent):
+        """Every scope's adapter of ``parent`` (None: the incoming bundle)."""
+        return {s: self.incoming_adapters.get(s, self.placeholders[s]) for s in self.scopes} if parent is None \
+            else dict(parent['adapters'])
+
+    def _carry(self, parent, adapters, mixtures, states, *, actor, extra=None):
+        """A complete bundle: the selection's new entries over ``parent``'s (or the incoming) others."""
+        from .bundle import bundle_slot, make_bundle
+        instructions, skills = dict((parent or {}).get('instructions', {})), dict((parent or {}).get('skills', {}))
+        for key, state in states.items():
+            field, slot = bundle_slot(key)
+            (instructions if field == 'instructions' else skills)[slot] = state
+        all_adapters = {**self._parent_adapters(parent), **adapters}
+        all_mixtures = {**(parent or {}).get('loraMixtures', {}), **mixtures}
+        for scope in self.scopes:
+            if scope not in all_mixtures:  # an unrevised scope of the incoming bundle: an all-zero mixture over it
+                from .views import mixture_encoding
+                view = self.views[scope]
+                all_mixtures[scope] = mixture_encoding(view, [0] * len(view.slots), None,
+                                                       torch.zeros(len(view.slots), len(self.bank.group_labels)),
+                                                       self.incoming_adapters.get(scope))
+                all_adapters[scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
+                    list(view.slots), torch.zeros(len(view.slots), len(self.bank.group_labels)),
+                    offset=self.bank.incoming(self.engine, self.context, scope))).id
+        return make_bundle(program=self.manifest['program'], base=self.engine.native_identity, bank=self.bank,
+                           parent=None if parent is None else parent['id'], instructions=instructions, skills=skills,
+                           adapters=all_adapters, mixtures=all_mixtures, provenance={'actor': actor, **(extra or {})})
+
+    def incoming_bundle(self):
+        """The incoming adaptation as a complete bundle (its every scope composed exactly), the parent of a first
+        revision."""
+        if getattr(self, '_incoming', None) is None:
+            self._incoming = self._carry(None, {}, {}, {}, actor='incoming')
+        return self._incoming
+
+    def propose(self, parent, *, sample, seed, digests=(), focus=None, key_evidence=None, operations=None):
+        """The learned writer's revision of the selection; the request carries the analysis' focus, key evidence and
+        native digests through the one request builder."""
         from .episode import propose
-        context = dict(self.context, parent=parent)
-        if digests or focus is not None:
-            # The Natlang analysis' native digests and focus enter the request; everything else is unchanged.
-            content = context['messages'][0]['content'] + [{'type': 'text', 'text': '\n'}]
-            if focus:
-                content.append({'type': 'text', 'text': 'Revise: ' + ', '.join(focus) + '\n'})
-            for binding, state in digests:
-                content += [{'type': 'text', 'text': f'Missing behavior at {binding}: '}, {'type': 'native_state', 'id': state},
-                            {'type': 'text', 'text': '\n'}]
-            context['messages'] = [{'role': 'user', 'content': content}]
+        keys, scopes = self.selection(operations)
+        context = self.pc.request(incoming_states=self.incoming_states, incoming_adapters=self.incoming_adapters,
+                                  focus=focus, digests=digests, key_evidence=key_evidence)
+        context = dict(context, parent=parent or self.incoming_bundle(), program=context['program'],
+                       writes=[w for w in context['writes'] if w['key'] in keys],
+                       arrays=[a for a in context['arrays'] if a['view']['scope'] in scopes])
         return propose(self.trainer, context, sample=sample, seed=seed)
 
-    def refine(self, parent, *, steps=10):
-        """Local in-bank refinement starting from ``parent``'s mixtures and states (a gradient operator inside the
-        episode); returns a complete bundle composed from the refined labels."""
-        from .bundle import make_bundle
+    def refine(self, parent, *, steps=10, operations=None):
+        """Local in-bank refinement of the selection from ``parent``'s mixtures and states (a gradient operator inside
+        the episode); everything else runs at its parent value."""
         from .fit import fit_in_bank
         from .views import mixture_encoding
         from .head import receipt as head_receipt
-        arrays = self.pc.scope_arrays(self.incoming_adapters)
+        keys, scopes = self.selection(operations)
+        parents = self._parent_adapters(parent)
+        arrays = [array for array in self.pc.scope_arrays(self.incoming_adapters) if array.scope in scopes]
         init = None
         if parent is not None:
-            init = {scope: torch.tensor([int(w) * self.bank.number_format.step for w in parent['loraMixtures'][scope]['weights']])
-                    for scope in self.scopes}
+            init = {array.scope: torch.tensor([int(w) * self.bank.number_format.step
+                                               for w in parent['loraMixtures'][array.scope]['weights']]) for array in arrays}
         soft = {key: state for key, (_, state) in self._states_of(parent).items()}
         result = fit_in_bank(self.engine, self.bank, self.support, arrays, soft_states=soft, steps=steps,
-                             refine_steps=max(1, steps // 2), init=init)
+                             refine_steps=max(1, steps // 2), init=init, fixed_states=set(soft) - keys,
+                             fixed_adapters={s: a for s, a in parents.items() if s not in scopes})
         adapters, mixtures = {}, {}
-        for scope in self.scopes:
-            fitted = result['arrays'][scope]
-            array = arrays[self.scopes.index(scope)]
-            adapters[scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(array.slots, fitted['executed'],
-                                                                                              offset=array.offset)).id
-            mixtures[scope] = mixture_encoding(self.views[scope], fitted['integers'],
-                                               head_receipt(None, fitted['integers'], fitted['u'], fitted['v'], fitted['executed'], mode='head'),
-                                               fitted['executed'], self.incoming_adapters.get(scope))
-        instructions, skills = dict((parent or {}).get('instructions', {})), dict((parent or {}).get('skills', {}))
-        for key, block in result['states'].items():
-            binding, kind, target = json.loads(key)
-            state = self.engine.store.put_native_state(block).id
-            if kind == 'instructions':
-                instructions[binding] = state
-            else:
-                skills[f'{binding}#{target}'] = state
-        return make_bundle(program=self.manifest['program'], base=self.engine.native_identity, bank=self.bank,
-                           parent=None if parent is None else parent['id'], instructions=instructions, skills=skills,
-                           adapters=adapters, mixtures=mixtures, provenance={'actor': 'in-bank-refinement', 'loss': result['loss']['final']})
+        for array in arrays:
+            fitted = result['arrays'][array.scope]
+            adapters[array.scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
+                array.slots, fitted['executed'], offset=array.offset)).id
+            mixtures[array.scope] = mixture_encoding(self.views[array.scope], fitted['integers'],
+                                                     head_receipt(None, fitted['integers'], fitted['u'], fitted['v'], fitted['executed'], mode='head'),
+                                                     fitted['executed'], self.incoming_adapters.get(array.scope))
+        states = {key: self.engine.store.put_native_state(block).id for key, block in result['states'].items()}
+        return self._carry(parent, adapters, mixtures, states, actor='in-bank-refinement', extra={'loss': result['loss']['final']})
 
-    def retrieve(self, parent, *, rounds=1):
-        """Gradient-free mixing over each scope's view (the retrieval baseline): coordinate search over grid integers
-        on the exact support loss, from the parent's integers."""
-        from .bundle import make_bundle
+    def retrieve(self, parent, *, rounds=1, operations=None):
+        """Gradient-free mixing over each selected scope's view (the retrieval baseline): coordinate search over grid
+        integers on the exact support loss, from the parent's integers; other scopes run at their parent adapters."""
         from .head import executed, shares_from_norms
         from .views import mixture_encoding
+        _, scopes = self.selection(operations)
+        selected = [scope for scope in self.scopes if scope in scopes]
+        parents = self._parent_adapters(parent)
         shares = shares_from_norms(self.bank.group_norms())
         current = {scope: list((parent or {}).get('loraMixtures', {}).get(scope, {}).get('weights', [0] * len(self.views[scope].slots)))
-                   for scope in self.scopes}
+                   for scope in selected}
         def coefficients_for(values, scope):
             slots = list(self.views[scope].slots)
             return executed(values[scope], torch.zeros(len(slots)), torch.zeros(len(slots), len(self.bank.group_labels)),
@@ -152,12 +212,13 @@ class Context:
         def loss_of(values):
             # Trials run through live leaves on the placeholder adapters; only the selected mixture is stored.
             leaves = {self.placeholders[scope]: self.bank.adapter_tensors(self.bank.composed_cores(list(self.views[scope].slots),
-                      coefficients_for(values, scope), offset=self.bank.incoming(self.engine, self.context, scope))) for scope in self.scopes}
+                      coefficients_for(values, scope), offset=self.bank.incoming(self.engine, self.context, scope))) for scope in selected}
+            adapters = {scope: self.placeholders[scope] if scope in scopes else parents[scope] for scope in self.scopes}
             with torch.no_grad():
-                return self.support.accumulate(dict(self.placeholders), lambda: leaves, self._states_of(parent), backward=False)
+                return self.support.accumulate(adapters, lambda: leaves, self._states_of(parent), backward=False)
         best_loss = loss_of(current)
         for _ in range(rounds):
-            for scope in self.scopes:
+            for scope in selected:
                 for slot, free in enumerate(self.views[scope].available):
                     if not free:
                         continue
@@ -168,16 +229,12 @@ class Context:
                         if loss < best_loss:
                             best_loss, current = loss, trial
         adapters, mixtures = {}, {}
-        for scope in self.scopes:
+        for scope in selected:
             coefficients = coefficients_for(current, scope)
             adapters[scope] = self.bank.compose_adapter(self.engine, self.bank.composed_cores(
                 list(self.views[scope].slots), coefficients, offset=self.bank.incoming(self.engine, self.context, scope))).id
             mixtures[scope] = mixture_encoding(self.views[scope], current[scope], None, coefficients, self.incoming_adapters.get(scope))
-        best = make_bundle(program=self.manifest['program'], base=self.engine.native_identity, bank=self.bank,
-                           parent=None if parent is None else parent['id'],
-                           instructions=dict((parent or {}).get('instructions', {})), skills=dict((parent or {}).get('skills', {})),
-                           adapters=adapters, mixtures=mixtures, provenance={'actor': 'gradient-free-mixing'})
-        return best, best_loss
+        return self._carry(parent, adapters, mixtures, {}, actor='gradient-free-mixing'), best_loss
 
 
 def episode(context, *, steps, patience, seed):
@@ -198,15 +255,13 @@ def episode(context, *, steps, patience, seed):
     return incumbent, incumbent_loss, history
 
 
-def release_fragment(context, incumbent):
-    """`tune.build`'s release fragment for the selected bundle (or, when nothing improved on a tuned incoming bundle,
-    that incoming bundle): scope adapters with their actual ranks and the writer states."""
-    adapters = incumbent['adapters'] if incumbent is not None else context.incoming_adapters
-    if not adapters:
-        return [], []
-    parent_of = {node['id']: node['parent'] for node in context.manifest['tree']}
+def bundle_release(engine, manifest, adapters, states, text_shas):
+    """`tune.build`'s release fragment of one bundle: its scope adapters (tree order, each with its actual rank and
+    the adapters of its ancestors) and its writer states (``states``: soft key -> state id; ``text_shas``: soft key ->
+    the binding text's hash)."""
+    parent_of = {node['id']: node['parent'] for node in manifest['tree']}
     artifacts, soft_states = [], []
-    for scope in context.scopes:
+    for scope in (node['id'] for node in manifest['tree']):
         if scope not in adapters:
             continue
         requires, parent = [], parent_of[scope]
@@ -214,14 +269,40 @@ def release_fragment(context, incumbent):
             if parent in adapters:
                 requires.append(adapters[parent])
             parent = parent_of[parent]
-        rank = context.engine.store.get_native_tensor_artifact(adapters[scope]).artifact.provenance['adapter_spec']['rank']
+        rank = engine.store.get_native_tensor_artifact(adapters[scope]).artifact.provenance['adapter_spec']['rank']
         artifacts.append({'node': scope, 'artifact': adapters[scope], 'rank': rank,
                           'parameterization': 'native-subspace', 'requires': requires[::-1]})
-    for key, (block, state) in sorted(context._states_of(incumbent).items()):
+    for key, state in sorted(states.items()):
         binding, kind, target = json.loads(key)
-        soft_states.append({'binding': binding, 'kind': kind, 'target': target, 'state': state,
-                            'textSha256': context.soft[key]['textSha256'], 'tokens': len(block.token_ids)})
+        soft_states.append({'binding': binding, 'kind': kind, 'target': target, 'state': state, 'textSha256': text_shas[key],
+                            'tokens': len(engine.store.get_native_state(state).block.token_ids)})
     return artifacts, soft_states
+
+
+def write_release(engine, manifest, out, artifacts, soft_states, receipt):
+    """A release fragment as a `tune.build` output directory (``result.json``, ``artifacts/``, ``states/``), which
+    `natlang tune` seals into a release exactly as it does a fit's output."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    persist_artifacts(engine, [item['artifact'] for item in artifacts] + [item['state'] for item in soft_states],
+                      out / 'artifacts', out / 'states')
+    _write(out / 'result.json', {'schema': 'natlang.tune.build-result/1', 'artifacts': artifacts,
+                                 'families': [dict(item) for item in manifest.get('families', [])],
+                                 'memberships': [dict(item) for item in manifest.get('memberships', [])],
+                                 'softStates': soft_states,
+                                 'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
+                                 'receipt': receipt})
+
+
+def release_fragment(context, incumbent):
+    """The release fragment of the selected bundle (or, when nothing improved on a tuned incoming bundle, that
+    incoming bundle); nothing when there are no adapters to release."""
+    adapters = incumbent['adapters'] if incumbent is not None else context.incoming_adapters
+    if not adapters:
+        return [], []
+    states = {key: state for key, (_, state) in context._states_of(incumbent).items()}
+    return bundle_release(context.engine, context.manifest, {s: a for s, a in adapters.items() if s in context.scopes}, states,
+                          {key: record['textSha256'] for key, record in context.soft.items()})
 
 
 def main(argv=None):
@@ -236,59 +317,117 @@ def main(argv=None):
         incumbent, _, history = episode(context, steps=learned.get('steps', 4), patience=learned.get('patience', 2),
                                         seed=learned.get('seed', 0))
         artifacts, soft_states = release_fragment(context, incumbent)
-        if artifacts:
-            persist_artifacts(context.engine, [item['artifact'] for item in artifacts] + [s['state'] for s in soft_states],
-                              context.out / 'artifacts', context.out / 'states')
-            if 'gguf' in context.plan.get('exports', []):
-                export_release_nodes(context.engine, context.plan, context.out, artifacts)
         receipt = {'schema': 'natlang.lopt.apply-receipt/1', 'bank': context.bank.snapshot, 'writer': context.trainer.state['writer'],
                    'head': context.trainer.state['head'], 'incomingLoss': incoming_loss,
                    'selected': None if incumbent is None else incumbent['id'], 'history': history,
                    'operatorPolicy': 'crisp-greedy-then-sample-v1'}
-        _write(context.out / 'result.json', {'schema': 'natlang.tune.build-result/1', 'artifacts': artifacts,
-                                             'families': [dict(item) for item in context.manifest.get('families', [])],
-                                             'memberships': [dict(item) for item in context.manifest.get('memberships', [])],
-                                             'softStates': soft_states,
-                                             'softStateFiles': {item['state']: f"states/{item['state']}.nzs" for item in soft_states},
-                                             'receipt': receipt})
+        write_release(context.engine, context.manifest, context.out, artifacts, soft_states, receipt)
+        if artifacts and 'gguf' in context.plan.get('exports', []):
+            export_release_nodes(context.engine, context.plan, context.out, artifacts)
     finally:
         context.close()
     return 0
 
 
+def handle(context, request):
+    """One adaptation service call on a prepared context; bundles travel as JSON. ``operations`` (the revision plan)
+    restricts what an operator may change (`Context.selection`)."""
+    op, parent, operations = request['op'], request.get('parent'), request.get('operations')
+
+    def persist(bundle, loss):
+        # Artifacts for the release, and the measured bundle under its id: a root's verifier checks the bundle an
+        # episode reports against what the services actually measured (`tune.reward.mjs`).
+        persist_artifacts(context.engine, [*bundle['adapters'].values(), *bundle['instructions'].values(),
+                                           *bundle['skills'].values()], context.out / 'artifacts', context.out / 'states')
+        (context.out / 'bundles').mkdir(parents=True, exist_ok=True)
+        _write(context.out / 'bundles' / f"{bundle['id']}.json", {'bundle': bundle, 'supportLoss': loss})
+        return {'bundle': bundle, 'supportLoss': loss}
+    if op == 'evidence':
+        return {'view': context.evidence, 'scopes': context.scopes,
+                'bindings': [binding['id'] for binding in context.manifest['bindings']],
+                'incoming': dict(context.incoming_states), 'incomingLoss': context.evaluate(None)}
+    if op == 'evaluate':
+        return {'supportLoss': context.evaluate(parent)}
+    if op == 'propose':
+        bundle, proposal, behavior = context.propose(parent, sample=request.get('sample', False), seed=request.get('seed', 0),
+                                                     digests=[tuple(item) for item in request.get('digests', [])],
+                                                     focus=request.get('focus'), key_evidence=request.get('keyEvidence'),
+                                                     operations=operations)
+        return {**persist(bundle, context.evaluate(bundle)), 'proposal': proposal, 'behavior': behavior}
+    if op == 'refine':
+        bundle = context.refine(parent, steps=request.get('steps', 10), operations=operations)
+        return persist(bundle, context.evaluate(bundle))
+    if op == 'retrieve':
+        return persist(*context.retrieve(parent, rounds=request.get('rounds', 1), operations=operations))
+    if op == 'release':
+        artifacts, soft_states = release_fragment(context, parent)
+        return {'artifacts': artifacts, 'softStates': soft_states}
+    raise LearnedOptimizerError(f'unknown adaptation service {op}')
+
+
 def service(spec):
-    """One service call of the Natlang `adapt` program: ``{"plan", "out", "op", ...}``; bundles travel as JSON."""
+    """One service call of the Natlang `adapt` program: ``{"plan", "out", "op", ...}`` (a fresh context per call)."""
     context = Context(spec['plan'], spec['out'])
     try:
-        op = spec['op']
-        parent = spec.get('parent')
-        if op == 'evidence':
-            return {'view': context.evidence, 'scopes': context.scopes,
-                    'incoming': {k: r['state'] for k, r in context.soft.items()}, 'incomingLoss': context.evaluate(None)}
-        if op == 'evaluate':
-            return {'supportLoss': context.evaluate(parent)}
-        if op == 'propose':
-            bundle, proposal, behavior = context.propose(parent, sample=spec.get('sample', False), seed=spec.get('seed', 0),
-                                                         digests=[tuple(item) for item in spec.get('digests', [])],
-                                                         focus=spec.get('focus'))
-            persist_artifacts(context.engine, list(bundle['adapters'].values()) + list(bundle['instructions'].values())
-                              + list(bundle['skills'].values()), context.out / 'artifacts', context.out / 'states')
-            return {'bundle': bundle, 'proposal': proposal, 'behavior': behavior, 'supportLoss': context.evaluate(bundle)}
-        if op == 'refine':
-            bundle = context.refine(parent, steps=spec.get('steps', 10))
-            persist_artifacts(context.engine, list(bundle['adapters'].values()) + list(bundle['instructions'].values())
-                              + list(bundle['skills'].values()), context.out / 'artifacts', context.out / 'states')
-            return {'bundle': bundle, 'supportLoss': context.evaluate(bundle)}
-        if op == 'retrieve':
-            bundle, loss = context.retrieve(parent, rounds=spec.get('rounds', 1))
-            persist_artifacts(context.engine, list(bundle['adapters'].values()), context.out / 'artifacts', context.out / 'states')
-            return {'bundle': bundle, 'supportLoss': loss}
-        if op == 'release':
-            artifacts, soft_states = release_fragment(context, parent)
-            return {'artifacts': artifacts, 'softStates': soft_states}
-        raise LearnedOptimizerError(f'unknown adaptation service {op}')
+        return handle(context, spec)
     finally:
         context.close()
+
+
+def serve(stream_in, stream_out, *, commands=None, limit=8):
+    """The persistent service: one JSON request per input line, one JSON reply per output line (``{"id", "result"}``
+    or ``{"id", "error"}``). A request is an adaptation service call (``{"id", "plan", "out", "op", ...}``, as
+    `service`) or, with ``commands``, any command of the package (``{"id", "command", "spec"}``). Adaptation contexts
+    stay loaded per (plan, out) while the plan, bank and optimizer state files are unchanged, at most ``limit`` at a time (least recently used first out), so an episode's calls and
+    many episodes of one program pay the model and context preparation once. Ends at end of input."""
+    import contextlib
+    import sys
+    contexts = {}
+    for line in stream_in:
+        if not line.strip():
+            continue
+        request = json.loads(line)
+        reply = {'id': request.get('id')}
+        try:
+            with contextlib.redirect_stdout(sys.stderr):  # the replies own the output stream
+                if 'command' in request:
+                    if commands is None:
+                        raise LearnedOptimizerError('this service runs adaptation calls only')
+                    reply['result'] = commands(request['command'], request['spec'])
+                else:
+                    key = _context_key(request)
+                    for stale in [k for k in contexts if k[:2] == key[:2] and k != key]:
+                        contexts.pop(stale).close()
+                    context = contexts.pop(key, None) or Context(request['plan'], request['out'])
+                    contexts[key] = context
+                    while len(contexts) > limit:
+                        contexts.pop(next(iter(contexts))).close()
+                    reply['result'] = handle(context, request)
+        except LearnedOptimizerError as error:
+            reply['error'] = str(error)
+        except Exception as error:  # an infrastructure fault is reported to the caller, which fails the call
+            reply['error'] = f'{type(error).__name__}: {error}'
+            print(f'learned optimizer service fault: {reply["error"]}', file=sys.stderr, flush=True)
+        stream_out.write(json.dumps(reply, sort_keys=True, default=_tensor_json) + '\n')
+        stream_out.flush()
+    for context in contexts.values():
+        context.close()
+
+
+def _context_key(request):
+    """A loaded context's identity: its plan and output, and the files it read (a retrained optimizer, a published
+    bank or a changed plan loads afresh)."""
+    plan = Path(request['plan']).resolve()
+    learned = json.loads(plan.read_text()).get('learned') or {}
+    files = [plan, *(Path(learned[name]).resolve() for name in ('bank', 'state') if learned.get(name))]
+    return (str(Path(request['out']).resolve()), str(plan),
+            *((str(path), path.stat().st_mtime_ns, path.stat().st_size) for path in files))
+
+
+def _tensor_json(value):
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().tolist()
+    raise TypeError(f'not JSON serializable: {type(value).__name__}')
 
 
 if __name__ == '__main__':

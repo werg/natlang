@@ -8,14 +8,18 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { TargetContext } from '@natlang/node';
-import { AdaptationServices, TrainingServices, adapt, train, type PythonEntry } from './index.js';
+import { AdaptationServices, PythonService, TrainingServices, adapt, train } from './index.js';
 
 export async function main(context: TargetContext): Promise<number> {
   const args = context.args;
   const option = (name: string) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : undefined; };
   const positional = args.filter((arg, index) => !arg.startsWith('--') && !args[index - 1]?.startsWith('--'));
-  const python: PythonEntry = { argv: [option('--python') ?? 'python3', '-m'], cwd: context.workspace,
-    env: { PYTHONPATH: [resolve(context.workspace, 'training/neuralese'), context.workspace, process.env.PYTHONPATH].filter(Boolean).join(':') } };
+  const python = new PythonService({ argv: [option('--python') ?? 'python3', '-m'], cwd: context.workspace,
+    env: { PYTHONPATH: [resolve(context.workspace, 'training/neuralese'), context.workspace, process.env.PYTHONPATH].filter(Boolean).join(':') } });
+  try { return await run(context, python, positional, option); } finally { await python.close(); }
+}
+
+async function run(context: TargetContext, python: PythonService, positional: string[], option: (name: string) => string | undefined) {
   const [command, ...rest] = positional;
   if (command === 'adapt' && rest.length === 2) {
     const services = new AdaptationServices(python, resolve(context.workspace, rest[0]!), resolve(context.workspace, rest[1]!));

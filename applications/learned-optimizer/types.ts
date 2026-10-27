@@ -23,7 +23,7 @@ export type InterpretedEvidence = {
   digests: { binding: string; digest: Neuralese<EvidenceDigest> }[];
 };
 
-export type RevisionOperation = 'reencode' | 'rewrite' | 'reuse-skill' | 'replace-skill' | 'weights' | 'keep';
+export type RevisionOperation = 'reencode' | 'replace-skill' | 'weights' | 'keep';
 export type RevisionPlan = { operations: Record<string, RevisionOperation>; reason: string };
 export type Operator = 'learned-proposal' | 'retrieval' | 'local-refinement' | 'keep';
 

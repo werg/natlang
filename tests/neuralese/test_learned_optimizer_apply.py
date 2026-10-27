@@ -100,3 +100,72 @@ def test_tune_build_emits_free_tune_boundaries_after_each_commit(tmp_path):
     assert boundaries[0]['kind'] == 'final-residual' and boundaries[1]['kind'] == 'incremental'
     assert set(boundaries[0]['nodesAfter']) == {'tree:', 'folder:a', 'lambda:x'}
     assert boundaries[1]['nodesBefore'] == boundaries[0]['nodesAfter']
+
+
+def test_revision_plans_select_what_each_operator_changes(tmp_path):
+    import pytest
+    from natlang_neuralese.tune.learned import LearnedOptimizerError
+    from natlang_neuralese.tune.learned.apply import Context
+    plan, _, _ = operation(tmp_path)
+    context = Context(plan, tmp_path / 'ctx')
+    try:
+        ancestry = {binding['id']: set(binding['ancestry']) & set(context.scopes) for binding in context.manifest['bindings']}
+        assert context.selection({'bx': 'weights', 'by': 'keep'}) == (set(), ancestry['bx'])
+        assert context.selection(None) == (set(context.soft), set(context.scopes))
+        with pytest.raises(LearnedOptimizerError, match='not a binding of this program'):
+            context.selection({'bz': 'weights'})
+        with pytest.raises(LearnedOptimizerError, match='is not one of'):
+            context.selection({'bx': 'rewrite'})
+        with pytest.raises(LearnedOptimizerError, match='choose the operator "keep"'):
+            context.selection({'bx': 'keep'})
+        incoming = context.incoming_bundle()
+        # Every operator changes exactly the selection; every other scope keeps its parent's adapter and mixture.
+        plan_ops = {'bx': 'weights'}
+        for bundle in (context.refine(None, steps=1, operations=plan_ops), context.retrieve(None, operations=plan_ops)[0],
+                       context.propose(None, sample=False, seed=0, operations=plan_ops)[0]):
+            assert set(bundle['adapters']) == set(context.scopes)
+            for scope in set(context.scopes) - ancestry['bx']:
+                assert bundle['adapters'][scope] == incoming['adapters'][scope]
+                assert bundle['loraMixtures'][scope] == incoming['loraMixtures'][scope]
+            assert bundle['instructions'] == incoming['instructions'] and bundle['skills'] == incoming['skills']
+    finally:
+        context.close()
+
+
+def test_the_persistent_service_keeps_contexts_and_runs_commands(tmp_path):
+    import io
+    from natlang_neuralese.tune.learned.apply import serve
+    plan, _, _ = operation(tmp_path)
+    out = str(tmp_path / 'svc')
+    calls = []
+    lines = [{'id': 1, 'plan': plan, 'out': out, 'op': 'evidence'},
+             {'id': 2, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'steps': 1, 'operations': {'bx': 'weights'}},
+             {'id': 3, 'plan': plan, 'out': out, 'op': 'refine', 'parent': None, 'operations': {'bx': 'keep'}},
+             {'id': 4, 'command': 'ladder', 'spec': {'x': 1}},
+             {'id': 5, 'plan': plan, 'out': out, 'op': 'nonsense'}]
+    output = io.StringIO()
+    def commands(name, spec):
+        calls.append((name, spec))
+        print('a command writing to stdout does not corrupt the replies')
+        return {'ran': name}
+    import natlang_neuralese.tune.learned.apply as apply
+    opened = []
+    original = apply.Context.__init__
+    def counting(self, *args, **kwargs):
+        opened.append(args)
+        original(self, *args, **kwargs)
+    apply.Context.__init__ = counting
+    try:
+        serve(io.StringIO(''.join(json.dumps(line) + '\n' for line in lines)), output, commands=commands)
+    finally:
+        apply.Context.__init__ = original
+    replies = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert [reply['id'] for reply in replies] == [1, 2, 3, 4, 5]
+    assert len(opened) == 1  # one loaded context served every call of this plan
+    assert replies[0]['result']['incomingLoss'] > 0
+    refined = replies[1]['result']
+    measured = json.loads((tmp_path / 'svc' / 'bundles' / f"{refined['bundle']['id']}.json").read_text())
+    assert measured['supportLoss'] == refined['supportLoss']  # what a root verifier checks an episode's result against
+    assert 'choose the operator "keep"' in replies[2]['error']
+    assert replies[3]['result'] == {'ran': 'ladder'} and calls == [('ladder', {'x': 1})]
+    assert 'unknown adaptation service' in replies[4]['error']

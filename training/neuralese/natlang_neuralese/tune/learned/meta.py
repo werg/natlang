@@ -13,11 +13,18 @@ them, because each decision can be scored exactly against the services after the
 * ``adapt/chooseFocus`` -- leave-one-binding-out hindsight (`fit.focus_labels`): a binding is in focus when fitting
   the program with that binding's own scope and soft states held at their incoming value loses a material share of
   the full fit's gain.
+* ``adapt`` -- the whole episode as one root (input ``maxSteps``, reference: the context's plan and output and this
+  episode's incoming and best support loss): `natlang tune` runs it against the live services (the program's
+  ``tune.services.mjs``), so SFT, RL and RFT train every stage of whole episodes on the global target.
+* ``adapt/chooseRevision`` -- per focused binding, every revision operation (`apply.Context.OPERATIONS`) is applied
+  alone by in-bank refinement from the incoming bundle and scored; the expected operation is the one with the lowest
+  support loss when it beats the incoming bundle, else ``keep``. The episode then revises exactly that plan's
+  selection, as the services do for the Natlang program.
 
 Each example also carries its exact ``reference`` measurements, which the program's verifier
 (`applications/learned-optimizer/tune.reward.mjs`) turns into graded rewards toward the global target -- the
-adaptation's support-loss improvement: the share of the best improvement an operator achieves, the share of the
-episode's gain an early stop loses, and the F1 of a focus. Teacher demonstrations still need a full score.
+adaptation's support-loss improvement: the share of the best improvement an operator achieves (per
+binding, for a revision plan), the share of the episode's gain an early stop loses, and the F1 of a focus. Teacher demonstrations still need a full score.
 
 The episode follows the counterfactual best operator, so its states are those of a good policy. Every example of one
 program carries the program's group: a program's episodes stay on one side of the meta-tuning split, and programs
@@ -27,6 +34,7 @@ confirmation outcome enters a label.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from . import LearnedOptimizerError
 
@@ -38,20 +46,25 @@ def summary(bundle, loss, actor):
     return None if bundle is None else {'id': bundle['id'], 'supportLoss': loss, 'parent': bundle.get('parent'), 'actor': actor}
 
 
-def operator_outcomes(context, parent, *, step, refine_steps):
-    """Every operator from the same parent, scored exactly: ``{operator: (bundle, support loss)}``."""
+def operator_outcomes(context, parent, *, step, refine_steps, operations=None, focus=None):
+    """Every operator from the same parent on the plan's selection, scored exactly: ``{operator: (bundle, support
+    loss)}``; empty when the plan selects nothing (only "keep" is possible)."""
+    if operations is not None and not any(operation != 'keep' for operation in operations.values()):
+        return {}
     out = {}
-    bundle, _, _ = context.propose(parent, sample=step > 0, seed=step)
+    bundle, _, _ = context.propose(parent, sample=step > 0, seed=step, focus=focus, operations=operations)
     out['learned-proposal'] = (bundle, context.evaluate(bundle))
-    bundle = context.refine(parent, steps=refine_steps)
+    bundle = context.refine(parent, steps=refine_steps, operations=operations)
     out['local-refinement'] = (bundle, context.evaluate(bundle))
-    bundle, loss = context.retrieve(parent)
+    bundle, loss = context.retrieve(parent, operations=operations)
     out['retrieval'] = (bundle, loss)
     return out
 
 
 def best_operator(outcomes, incumbent_loss):
-    operator = min(OPERATORS, key=lambda name: outcomes[name][1])
+    if not outcomes:
+        return 'keep'
+    operator = min(outcomes, key=lambda name: outcomes[name][1])
     return operator if outcomes[operator][1] < incumbent_loss else 'keep'
 
 
@@ -84,6 +97,29 @@ def focus_label(context, *, threshold=.05, limit=3, fit=None):
     return sorted(chosen), {'fullGain': full, 'labels': labels}
 
 
+def revision_label(context, focus, *, refine_steps=10):
+    """Counterfactual revision plan for ``focus``: ``(operations, losses)`` where ``losses[binding][operation]`` is
+    the support loss of refining that operation alone from the incoming bundle (operations that select nothing for
+    the binding, such as a skill operation on a binding without skills, are absent)."""
+    incoming_loss = context.evaluate(None)
+    operations, losses = {}, {}
+    for binding in focus:
+        losses[binding] = {}
+        for operation in context.OPERATIONS:
+            if operation == 'keep':
+                continue
+            try:
+                context.selection({binding: operation})
+            except LearnedOptimizerError:
+                continue
+            bundle = context.refine(None, steps=refine_steps, operations={binding: operation})
+            losses[binding][operation] = context.evaluate(bundle)
+        tried = losses[binding]
+        best = min(tried, key=tried.get) if tried else None
+        operations[binding] = best if best is not None and tried[best] < incoming_loss else 'keep'
+    return operations, losses
+
+
 def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=None):
     """Exact meta-tuning examples from one full-budget, counterfactual-best episode on ``context`` (an
     `apply.Context`). Returns ``(examples, receipt)``."""
@@ -96,13 +132,24 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
         examples.append({'function': 'adapt/chooseFocus.nl', 'input': {'view': view, 'history': []}, 'expected': chosen,
                          'reference': {'focus': chosen}, 'group': group})
         receipt['focus'] = focus_receipt
-    plan = {'operations': {binding['id']: ('weights' if chosen and binding['id'] in chosen else 'keep')
-                           for binding in context.manifest['bindings']}, 'reason': 'hindsight focus'}
     incoming_loss = context.evaluate(None)
+    if chosen is None:  # no focus stage: revise every binding's weights
+        chosen = sorted(binding['id'] for binding in context.manifest['bindings'])
+        revision = {binding: 'weights' for binding in chosen}
+    else:
+        revision, revision_losses = revision_label(context, chosen, refine_steps=refine_steps)
+    operations = {binding['id']: revision.get(binding['id'], 'keep') for binding in context.manifest['bindings']}
+    if focus:
+        examples.append({'function': 'adapt/chooseRevision.nl', 'input': {'focus': chosen, 'view': view, 'history': []},
+                         'expected': {'operations': operations}, 'group': group,
+                         'reference': {'losses': revision_losses, 'incomingLoss': incoming_loss}})
+        receipt['revision'] = {'operations': operations, 'losses': revision_losses}
+    plan = {'operations': operations, 'reason': 'hindsight revision'}
     current, current_loss, history, best_losses, states = None, incoming_loss, [], [], []
     for step in range(steps):
         remaining = steps - step
-        outcomes = operator_outcomes(context, current, step=step, refine_steps=refine_steps)
+        outcomes = operator_outcomes(context, current, step=step, refine_steps=refine_steps, operations=operations,
+                                     focus=chosen)
         operator = best_operator(outcomes, current_loss)
         examples.append({'function': 'adapt/chooseOperator.nl', 'expected': operator, 'group': group,
                          'input': {'history': list(history), 'plan': plan, 'remainingSteps': remaining},
@@ -125,12 +172,16 @@ def episode_examples(context, *, steps, group, refine_steps=10, focus=True, fit=
         examples.append({'function': 'adapt/shouldStop.nl', 'input': {'state': state}, 'expected': stop, 'group': group,
                          'reference': {'stop': stop, 'remainingShare': remaining}})
     receipt['bestLosses'] = best_losses
+    # The whole episode as one root: the program's `adapt` run against the live services on this context, graded by
+    # the share of this counterfactual episode's improvement its final bundle reaches (tune.reward.mjs).
+    examples.append({'function': 'adapt.nl', 'input': {'maxSteps': steps}, 'group': group,
+                     'reference': {'plan': context.plan_path, 'out': str(Path(context.out).resolve()),
+                                   'incomingLoss': incoming_loss, 'bestLoss': best_losses[-1]}})
     return examples, receipt
 
 
 def write_examples(path, examples):
     """Append-only JSONL in the tuner's ``tune.examples.jsonl`` row format."""
-    from pathlib import Path
     with Path(path).open('a') as stream:
         for row in examples:
             stream.write(json.dumps(row, sort_keys=True) + '\n')

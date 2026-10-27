@@ -3,7 +3,7 @@
   "name": "@natlang/learned-optimizer",
   "version": "0.1.0",
   "description": "The joint learned optimizer: revise a program's native instruction states, skill states and LoRA mixtures together through iterateOn, and schedule its outer training (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).",
-  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "services.d.ts", "types.ts", "adapt.nl", "adapt", "train.nl", "train", "tsconfig.json"],
+  "include": ["README.md", "DECOMPOSITION.md", "main.ts", "index.ts", "services.d.ts", "types.ts", "adapt.nl", "adapt", "train.nl", "train", "tsconfig.json", "python.mjs", "python.d.mts", "tune.reward.mjs", "tune.services.mjs"],
   "targets": { "learned-optimizer": { "entry": "main.ts", "authority": ["filesystem:workspace", "process:commands"], "commands": ["*"],
     "description": "natlang run applications/learned-optimizer -- adapt PLAN.json OUT [--steps N] | train OPERATION.json [--cycles N]" } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }

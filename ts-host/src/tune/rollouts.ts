@@ -27,6 +27,7 @@ import { createNatlangRuntime, type ModelDriver, type Services } from '../runtim
 import type { SplitExample } from './collect.js';
 import { exampleArguments } from './evaluate.js';
 import { scorable, scoreRoot, verifierDigest, type RootScore } from './reward.js';
+import { rootServices } from './services.js';
 
 export const ROLLOUT_SCHEMA = 'natlang.tune-rollout/v1';
 
@@ -143,7 +144,7 @@ async function runOne(options: Parameters<typeof runRollouts>[0], example: Split
   const decide = (options.driver as unknown as { decide?: (...args: unknown[]) => unknown }).decide;
   if (decide) (driver as unknown as { decide: unknown }).decide = (...args: unknown[]) => { decided = true; return decide(...args); };
   const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: options.weights,
-    ...(options.services ? { services: options.services(example) } : {}), trace: trace => {
+    ...await rootServices(options.root, options.services, example), trace: trace => {
     const weights = (trace.adaptation as { weights?: ResolvedWeightStack } | undefined)?.weights;
     if (weights) stacks.push(weights);
     events.push(...trace.events.filter(event => typeof event.node === 'string' && Array.isArray(event.inputs)));

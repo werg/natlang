@@ -100,9 +100,11 @@ def placeholder_adapters(engine, bank, scopes, owner=None):
 
 
 def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, learning_rate=5e-2,
-                state_learning_rate=1e-3, refine_steps=30, beta=.5, init=None, train_states=True, fixed_states=()):
+                state_learning_rate=1e-3, refine_steps=30, beta=.5, init=None, train_states=True, fixed_states=(),
+                fixed_adapters=None):
     """Fit in the learner's parameterization. ``arrays``: list of `ScopeArray`; ``soft_states``: ``{soft key: state
-    id}`` trained jointly when ``train_states`` (except ``fixed_states``, held at their incoming value); ``init``: scope -> (K,) initial mean strengths. Returns labels and
+    id}`` trained jointly when ``train_states`` (except ``fixed_states``, held at their incoming value);
+    ``fixed_adapters``: scope -> adapter that runs unchanged in every stack (scopes outside the fit); ``init``: scope -> (K,) initial mean strengths. Returns labels and
     history.
 
     Phase 1 trains a per-slot mean strength ``m`` (in grid-free units) and the head's bounded centered modulation
@@ -126,7 +128,7 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
                 value.requires_grad_(False)
         states[key] = (block, state_id, values)
     soft_blocks = {key: (block, state_id) for key, (block, state_id, _) in states.items()}
-    adapters = {array.scope: array.adapter for array in arrays}
+    adapters = {**(fixed_adapters or {}), **{array.scope: array.adapter for array in arrays}}
     def leaves(values):
         return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope], offset=array.offset))
                 for array in arrays}

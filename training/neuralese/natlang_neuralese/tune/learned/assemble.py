@@ -30,7 +30,7 @@ def store_fitted_states(engine, states, owner=None):
 def training_target(engine, bank, *, manifest, rows, contract, view, soft_texts, incoming_states, bank_views,
                     target_integers, target_adapters, target_states, target_rho=None, target_delta=None,
                     placeholders, digests=(), focus=None, extra_slots=0, target_factors=None, tier='in-bank-fit',
-                    incoming_adapters=None, program=None, lineage=None):
+                    incoming_adapters=None, program=None, lineage=None, key_evidence=None):
     """``soft_texts``: soft key -> its binding text; ``incoming_states``: soft key -> current state id;
     ``incoming_adapters``: scope -> the adapter the mixture revises (slicing the bank basis; absent: zero);
     ``bank_views``: scope -> `views.BankView`; ``target_*``: scope- or key-indexed target tuple, with
@@ -44,7 +44,12 @@ def training_target(engine, bank, *, manifest, rows, contract, view, soft_texts,
         if len(target_integers[scope]) != len(bank_view.slots):
             raise LearnedOptimizerError(f'target array of {scope} differs from its view length')
     focus = focus if focus is not None else focus_baseline(view)
-    key_evidence = key_evidence_rule(view, focus)
+    if key_evidence is None:
+        key_evidence = key_evidence_rule(view, focus)
+    known = {item['id'] for item in view['items']}
+    unknown = sorted({item for items in key_evidence.values() for item in items} - known)
+    if unknown:
+        raise LearnedOptimizerError(f'key evidence {unknown[:3]} is not in the evidence view; name ids of view.items')
     full = {item for items in key_evidence.values() for item in items}
     bindings = sorted({json.loads(key)[0] for key in soft_texts} | {b['id'] for b in manifest['bindings']})
     lines = compact_rows(view, full, focus or bindings)

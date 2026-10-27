@@ -2,7 +2,8 @@
 # HOLD (owner, 2026-10-27): run only after LFM main training is done.
 # usage: run-after-lfm-main.sh <final LFM full checkpoint .pt>
 # Rebinds the prepared specs to the final checkpoint, then queues, one after another in the memory ledger:
-# bank-init -> corpus (tuner fits on the bank basis + joint targets) -> outer training -> meta-examples (exact labels
+# bank-init -> corpus (tuner fits on the bank basis + joint targets) -> outer training -> outer meta-RL with real task
+# outcomes -> meta-examples (exact labels
 # for the optimizer's own stages). See README.md beside this script. Supplied programs need case export, teacher
 # collection and import first (program-tuning lane); add their imported tune plans to corpus-spec.json "programs".
 set -euo pipefail
@@ -37,8 +38,13 @@ until grep -q '"command": "corpus"' $W/corpus.log 2>/dev/null; do sleep 120; don
 mkdir -p $W/optimizer
 python3 scripts/memory_ledger.py run --unit lopt-outer-train-final --budget-gb 20 --wait 86400 --resumable --workdir /home/werg/natlang -- \
   $ENV /bin/bash -c "$PY -m natlang_neuralese.tune.learned train --spec $W/train-spec.json >> $W/train.log 2>&1"
-# Meta-learner examples (exact hindsight/counterfactual labels for its own stages) after outer training.
+# Outer meta-RL with real task outcomes, after supervised outer training: sample proposals per target, seal and run
+# each on its program's query roots (natlang tune --score-proposals), then the policy update on those rewards.
 until grep -q '"command": "train"' $W/train.log 2>/dev/null; do sleep 120; done
+python3 scripts/memory_ledger.py run --unit lopt-outer-rl-final --budget-gb 24 --wait 86400 --resumable --workdir /home/werg/natlang -- \
+  $ENV /bin/bash -c "/home/werg/natlang/training/neuralese/learned-optimizer/outer-rl-round.sh $W >> $W/outer-rl.log 2>&1"
+# Meta-learner examples (exact hindsight/counterfactual labels for its own stages) after the outer meta-RL round.
+until grep -q '"command": "train"' $W/outer-rl/policy.log 2>/dev/null; do sleep 120; done
 python3 scripts/memory_ledger.py run --unit lopt-meta-examples-final --budget-gb 20 --wait 86400 --resumable --workdir /home/werg/natlang -- \
   $ENV /bin/bash -c "$PY -m natlang_neuralese.tune.learned meta-examples --spec $W/meta-spec.json >> $W/meta.log 2>&1"
 # Then: tune the optimizer program itself with $W/meta/tune.examples.jsonl (plans/neuralese/JOINT_LEARNED_OPTIMIZER_STATUS.md).

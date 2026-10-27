@@ -1,5 +1,7 @@
-"""The learned optimizer's resumable entrypoint end to end: bank-init, targets, train, propose, ladder."""
+"""The learned optimizer's resumable entrypoint end to end: bank-init, targets, train, proposals and outcomes, collect,
+propose, ladder."""
 import json
+from pathlib import Path
 
 from test_native_serving_adapters import engine_fixture
 from test_tune_trainer import manifest_for, rows_for
@@ -48,7 +50,8 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
           {key: {'state': incoming, 'binding': 'bx', 'kind': 'instructions', 'target': None, 'textSha256': 'x', 'tokens': 2}})
     targets_spec = write(tmp_path / 'targets-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'out': str(tmp_path / 'targets.jsonl'),
                                                           'work': str(tmp_path / 'work'), 'fit': {'steps': 2, 'refine_steps': 1},
-                                                          'programs': [{'plan': plan, 'scopes': {'lambda': 2}, 'subsets': 2}]})
+                                                          'programs': [{'plan': plan, 'root': str(tmp_path / 'program'),
+                                                                        'scopes': {'lambda': 2}, 'subsets': 2}]})
     assert main(['targets', '--spec', targets_spec]) == 0
     labeled = [json.loads(line) for line in (tmp_path / 'targets.jsonl').read_text().splitlines()]
     assert {item['tier'] for item in labeled} == {'in-bank-fit'} and all(item['id'].startswith('njt1:') for item in labeled)
@@ -67,6 +70,29 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
     assert main(['collect', '--spec', collect_spec]) == 0
     records = [json.loads(line) for line in (tmp_path / 'records.jsonl').read_text().splitlines()]
     assert len(records) == 2 * len(labeled) and all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
+    # Real task outcomes: proposals become release fragments with one scoring request per program root; `collect`
+    # then reads the proposals back with the outcomes `natlang tune --score-proposals` writes.
+    proposals_spec = write(tmp_path / 'proposals-spec.json', {**json.loads(Path(collect_spec).read_text()), 'out': str(tmp_path / 'proposals.jsonl'),
+                                                              'releases': str(tmp_path / 'releases')})
+    assert main(['proposals', '--spec', proposals_spec]) == 0
+    request_path = tmp_path / 'releases' / 'requests' / 'program-0.json'
+    request = json.loads(request_path.read_text())
+    assert request['root'] == str((tmp_path / 'program').resolve()) and len(request['targets']) == len(labeled)
+    for entry in request['targets']:
+        assert entry['support'] and len(entry['proposals']) == 2
+        for release in [entry['incoming'], *(item['release'] for item in entry['proposals'])]:
+            result = json.loads((Path(release) / 'result.json').read_text())
+            assert result['schema'] == 'natlang.tune.build-result/1' and result['artifacts']
+            assert all((Path(release) / 'artifacts' / f"{item['artifact']}.nnt").exists() for item in result['artifacts'])
+            assert all((Path(release) / result['softStateFiles'][item['state']]).exists() for item in result['softStates'])
+    sampled = [json.loads(line) for line in (tmp_path / 'proposals.jsonl').read_text().splitlines()]
+    outcomes = {item['bundle']: {'before': .25, 'after': .75} for item in sampled[:2]}
+    scored_spec = write(tmp_path / 'scored-spec.json', {'proposals': str(tmp_path / 'proposals.jsonl'), 'outcomes': outcomes,
+                                                        'out': str(tmp_path / 'scored.jsonl')})
+    assert main(['collect', '--spec', scored_spec]) == 0
+    scored = [json.loads(line) for line in (tmp_path / 'scored.jsonl').read_text().splitlines()]
+    assert len(scored) == len(sampled) and [item['bundle'] for item in scored] == [item['bundle'] for item in sampled]
+    assert [item['reward']['task'] for item in scored[:2]] == [.5, .5] and all(item['reward']['task'] is None for item in scored[2:])
     policy_spec = write(tmp_path / 'policy-spec.json', {**json.loads((tmp_path / 'train-spec.json').read_text()), 'steps': 0,
                                                         'policy_records': [str(tmp_path / 'records.jsonl')]})
     assert main(['train', '--spec', policy_spec]) == 0

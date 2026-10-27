@@ -95,7 +95,7 @@ class ProgramContext:
 
     # -- the optimizer's request for one incoming bundle --------------------------------------------------------
     def request(self, *, incoming_states=None, incoming_adapters=None, focus=None, digests=(), tier=None, labels=None,
-                lineage=None):
+                lineage=None, key_evidence=None):
         """The assembled request (a target without labels when ``labels`` is None): incoming soft states (default: the
         initial states), incoming adapters per scope (default: zero) and the bound bank views."""
         from .assemble import training_target
@@ -112,7 +112,7 @@ class ProgramContext:
             target_adapters=labels.get('adapters', {}), target_states=labels.get('states', {}),
             target_rho=labels.get('rho'), target_delta=labels.get('delta'), target_factors=labels.get('factors'),
             placeholders=self.placeholders, focus=focus, digests=digests, tier=tier, program=self.program,
-            lineage=lineage)
+            lineage=lineage, key_evidence=key_evidence)
 
     @property
     def program(self):

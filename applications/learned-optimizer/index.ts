@@ -6,89 +6,37 @@
  * Bundles stay host-side; the program sees their identities and exact support losses.
  */
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { NatlangRuntime } from '@natlang/node';
 import adaptFlow from './adapt.nl';
 import trainFlow from './train.nl';
-import type { AdaptationState, BundleSummary, EvidenceView, TrainingMetrics, TrainingState } from './types.js';
+import { optimizerDeclaration, type AdaptationServices, type PythonService } from './python.mjs';
+import type { AdaptationState, TrainingMetrics, TrainingState } from './types.js';
 
 export type * from './types.js';
 
-/** How to run the Python entry: an argv ending in `-m` (e.g. `[".venv/bin/python", "-m"]`) and its environment. */
-export type PythonEntry = { readonly argv: readonly string[]; readonly env?: Readonly<Record<string, string>>; readonly cwd?: string };
+export { AdaptationServices, PythonService, optimizerDeclaration, type PythonEntry } from './python.mjs';
 
-async function runPython(entry: PythonEntry, command: string, spec: Record<string, unknown>): Promise<unknown> {
-  const directory = await mkdtemp(join(tmpdir(), 'natlang-lopt-'));
-  const specPath = join(directory, 'spec.json'), resultPath = join(directory, 'result.json');
-  await writeFile(specPath, JSON.stringify({ ...spec, result: resultPath }));
-  let tail = '';
-  await new Promise<void>((resolveRun, reject) => {
-    const child = spawn(entry.argv[0]!, [...entry.argv.slice(1), 'natlang_neuralese.tune.learned', command, '--spec', specPath],
-      { cwd: entry.cwd ?? process.cwd(), env: { ...process.env, ...entry.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+function runCommand(argv: readonly string[], args: readonly string[], cwd?: string): Promise<void> {
+  return new Promise((resolveRun, reject) => {
+    let tail = '';
+    const child = spawn(argv[0]!, [...argv.slice(1), ...args], { cwd: cwd ?? process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
     const keep = (chunk: Buffer) => { tail = (tail + chunk.toString()).slice(-4000); };
     child.stdout.on('data', keep); child.stderr.on('data', keep);
     child.once('error', reject);
-    child.once('exit', code => code === 0 ? resolveRun() : reject(new Error(`learned optimizer ${command} exited with ${code}\n${tail.trim()}`)));
+    child.once('exit', code => code === 0 ? resolveRun() : reject(new Error(`${[...argv, ...args].join(' ')} exited with ${code}\n${tail.trim()}`)));
   });
-  if (command !== 'service') return JSON.parse(tail.trim().split('\n').pop()!).result;
-  return JSON.parse(await readFile(resultPath, 'utf8'));
 }
-
-type Bundle = { id: string; parent: string | null; provenance?: { actor?: string } };
-const neuraleseId = (value: unknown): string => {
-  const ref = (value as { $neuralese?: { id?: unknown } })?.$neuralese;
-  if (!ref || typeof ref.id !== 'string') throw new TypeError('a digest must be a native Neuralese value');
-  return ref.id;
-};
-
-/** The adaptation services over one prepared program context (`apply.Context`: a tune plan and its output dir). */
-export class AdaptationServices {
-  private readonly bundles = new Map<string, Bundle>();
-  constructor(private readonly python: PythonEntry, private readonly plan: string, private readonly out: string) {}
-  bundle(id: string): Bundle { const found = this.bundles.get(id); if (!found) throw new Error(`unknown bundle ${id}`); return found; }
-  private async call(op: string, extra: Record<string, unknown>) {
-    return await runPython(this.python, 'service', { plan: this.plan, out: this.out, op, ...extra }) as Record<string, any>;
-  }
-  private summary(result: Record<string, any>, actor: string): BundleSummary {
-    const bundle = result.bundle as Bundle;
-    this.bundles.set(bundle.id, bundle);
-    return { id: bundle.id, supportLoss: result.supportLoss as number, parent: bundle.parent, actor };
-  }
-  private parent(id: string | null) { return id === null ? null : this.bundle(id); }
-  readonly optimizer = {
-    evidence: async (): Promise<{ view: EvidenceView; scopes: string[]; incomingLoss: number }> => {
-      const result = await this.call('evidence', {});
-      return { view: result.view, scopes: result.scopes, incomingLoss: result.incomingLoss };
-    },
-    propose: async (request: { parent: string | null; sample: boolean; seed: number; focus: string[]; digests: { binding: string; digest: unknown }[] }) =>
-      this.summary(await this.call('propose', { parent: this.parent(request.parent), sample: request.sample, seed: request.seed,
-        focus: request.focus, digests: request.digests.map(item => [item.binding, neuraleseId(item.digest)]) }), 'learned-optimizer'),
-    refine: async (request: { parent: string | null; steps: number }) =>
-      this.summary(await this.call('refine', { parent: this.parent(request.parent), steps: request.steps }), 'in-bank-refinement'),
-    retrieve: async (request: { parent: string | null }) =>
-      this.summary(await this.call('retrieve', { parent: this.parent(request.parent) }), 'gradient-free-mixing'),
-  };
-  /** The release fragment (composed scope adapters and writer states) of the selected bundle. */
-  async release(id: string | null) { return this.call('release', { parent: this.parent(id) }); }
-}
-
-export const optimizerDeclaration = `/** Exact adaptation services: they score, write and compose; they never decide what to revise. */
-export function evidence(): Promise<{ view: EvidenceView; scopes: string[]; incomingLoss: number }>;
-/** The learned writer's complete bundle from parent (null: the incoming bundle); sample false decodes deterministically. */
-export function propose(request: { parent: string | null; sample: boolean; seed: number; focus: string[]; digests: { binding: string; digest: Neuralese<EvidenceDigest> }[] }): Promise<BundleSummary>;
-/** Local in-bank refinement from parent by gradient on the support evidence. */
-export function refine(request: { parent: string | null; steps: number }): Promise<BundleSummary>;
-/** Gradient-free mixing over the bank from parent (the retrieval baseline). */
-export function retrieve(request: { parent: string | null }): Promise<BundleSummary>;`;
 
 /** The outer-training services over one operation (bank, targets, optimizer state, store), each a resumable spec. */
 export class TrainingServices {
-  constructor(private readonly python: PythonEntry, private readonly operation: {
+  constructor(private readonly python: PythonService, private readonly operation: {
     readonly common: Record<string, unknown>; readonly bank: string; readonly state: string; readonly targets: string;
     readonly targetsSpec: Record<string, unknown>; readonly records: string; readonly receipt: string; readonly ladder?: Record<string, unknown>;
-    readonly recipe?: Record<string, unknown> }) {}
+    readonly recipe?: Record<string, unknown>;
+    /** Score proposals by real task outcomes: the natlang CLI argv (e.g. `["node", "ts-host/bin/natlang.mjs"]`) and the
+     * directory for proposal releases. Without it the outer reward is the shaping reward alone. */
+    readonly outcomes?: { readonly natlang: readonly string[]; readonly releases: string; readonly cwd?: string } }) {}
   private collected = { records: 0, contrastGroups: 0, noContrastGroups: 0, snr: 0 };
   private latestLadder: Record<string, number | null> = {};
   private targetCount = 0;
@@ -97,7 +45,7 @@ export class TrainingServices {
   }
   private train(extra: Record<string, unknown>) {
     const o = this.operation;
-    return runPython(this.python, 'train', { ...o.common, bank: o.bank, targets: o.targets, state: o.state, receipt: o.receipt,
+    return this.python.command('train', { ...o.common, bank: o.bank, targets: o.targets, state: o.state, receipt: o.receipt,
       ...(o.recipe ? { recipe: o.recipe } : {}), ...extra });
   }
   readonly trainer = {
@@ -111,14 +59,26 @@ export class TrainingServices {
           .map(line => (JSON.parse(line) as { manifest: { program: { id: string } } }).manifest.program.id))).size };
     },
     refitLabels: async () => {
-      this.targetCount = await runPython(this.python, 'targets', { ...this.operation.common, ...this.operation.targetsSpec,
+      this.targetCount = await this.python.command('targets', { ...this.operation.common, ...this.operation.targetsSpec,
         bank: this.operation.bank, out: this.operation.targets }) as number;
       return { targets: this.targetCount };
     },
     supervised: async (request: { steps: number }) => ({ step: await this.train({ steps: request.steps }) as number }),
     collectProposals: async (request: { perContext: number }) => {
-      const summary = await runPython(this.python, 'collect', { ...this.operation.common, bank: this.operation.bank, state: this.operation.state,
-        targets: this.operation.targets, perContext: request.perContext, out: this.operation.records }) as Record<string, number>;
+      const o = this.operation, sampling = { ...o.common, bank: o.bank, state: o.state, targets: o.targets, perContext: request.perContext };
+      let scored: Record<string, unknown> = {};
+      if (o.outcomes) {
+        // Real task outcomes: proposals become releases, each program scores its own on query roots.
+        const phase = await this.python.command('proposals', { ...sampling, out: `${o.records}.proposals.jsonl`,
+          releases: o.outcomes.releases }) as { requests: Record<string, string> };
+        const outcomes: Record<string, unknown> = {};
+        for (const [root, path] of Object.entries(phase.requests)) {
+          await runCommand(o.outcomes.natlang, ['tune', root, '--score-proposals', path], o.outcomes.cwd);
+          Object.assign(outcomes, JSON.parse(await readFile(`${path}.outcomes.json`, 'utf8')));
+        }
+        scored = { proposals: `${o.records}.proposals.jsonl`, outcomes };
+      }
+      const summary = await this.python.command('collect', { ...sampling, ...scored, out: o.records }) as Record<string, number>;
       this.collected = { records: summary.records!, contrastGroups: summary.contrastGroups!, noContrastGroups: summary.noContrastGroups!,
         snr: Number.isFinite(summary.snr) ? summary.snr! : 1e9 };
       return { recorded: summary.records! };
@@ -131,7 +91,7 @@ export class TrainingServices {
     },
     ladder: async () => {
       if (!this.operation.ladder) return this.latestLadder;
-      await runPython(this.python, 'ladder', this.operation.ladder);
+      await this.python.command('ladder', this.operation.ladder);
       const report = JSON.parse(await readFile(this.operation.ladder.out as string, 'utf8')) as { aggregate: { medianGaps: Record<string, number | null> } };
       return this.latestLadder = report.aggregate.medianGaps;
     },

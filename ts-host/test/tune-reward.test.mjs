@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scorable, scoreRoot, verifierDigest } from '../dist/tune/reward.js';
@@ -41,4 +41,22 @@ test('the learned optimizer grades its own stages by their share of the measured
   assert.equal((await scoreRoot(root, stop, true, false)).quality, .75);
   const focus = { function: 'adapt/chooseFocus.nl', expected: ['a', 'b'], reference: { focus: ['a', 'b'] } };
   assert.equal((await scoreRoot(root, focus, ['a'], false)).quality, 2 / 3);
+});
+
+test('the learned optimizer grades revision plans per binding and whole episodes by measured bundles', async () => {
+  const root = new URL('../../applications/learned-optimizer/', import.meta.url).pathname;
+  const revision = { function: 'adapt/chooseRevision.nl', expected: { operations: { a: 'weights', b: 'keep' } },
+    reference: { incomingLoss: 2, losses: { a: { reencode: 1.5, weights: 1 } } } };
+  assert.equal((await scoreRoot(root, revision, { operations: { a: 'weights', b: 'keep' }, reason: 'any' }, false)).quality, 1);
+  assert.equal((await scoreRoot(root, revision, { operations: { a: 'reencode', b: 'keep' }, reason: '' }, false)).quality, .75);
+  assert.equal((await scoreRoot(root, revision, { operations: { a: 'weights', b: 'weights' }, reason: '' }, false)).quality, .5);
+  const out = mkdtempSync(join(tmpdir(), 'natlang-lopt-context-'));
+  mkdirSync(join(out, 'bundles'));
+  writeFileSync(join(out, 'bundles', 'nja1:abc.json'), JSON.stringify({ bundle: { id: 'nja1:abc' }, supportLoss: 1.5 }));
+  const episode = { function: 'adapt.nl', reference: { plan: '/p', out, incomingLoss: 2, bestLoss: 1 } };
+  // The score uses the services' own measurement of the returned bundle, never the loss the episode reports.
+  assert.equal((await scoreRoot(root, episode, { current: { id: 'nja1:abc', supportLoss: 0 } }, false)).quality, .5);
+  assert.equal((await scoreRoot(root, episode, { current: { id: 'nja1:unmeasured', supportLoss: 0 } }, false)).quality, 0);
+  assert.equal((await scoreRoot(root, episode, { current: null }, false)).quality, 0);
+  assert.equal((await scoreRoot(root, episode, { current: { id: 'nja1:abc' } }, true)).quality, 0);
 });

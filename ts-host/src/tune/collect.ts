@@ -17,6 +17,7 @@ import { WeightBinding } from '../adaptation/weights/binding.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { scoreRoot } from './reward.js';
+import { rootServices } from './services.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import { createNatlangRuntime, type Services } from '../runtime/runtime.js';
 import { journaledServices, type World } from './world.js';
@@ -174,8 +175,10 @@ export async function collect(options: { root: string; program: ProgramDescripto
       return reply;
     }, { decide: (options.teacher as { decide?: unknown }).decide, contextWindow: (options.teacher as { contextWindow?: unknown }).contextWindow }) as ModelDriver;
     const world: World = { schema: 'natlang.tune-world/v1', calls: [] };
-    const services = options.services ? journaledServices(options.services(example), world) : undefined;
-    const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: [binding], ...(services ? { services } : {}),
+    const provided = await rootServices(options.root, options.services, example);
+    const services = provided.services ? journaledServices(provided.services, world) : undefined;
+    const runtime = createNatlangRuntime({ program: options.program, ...await tuneRuntime(driver, options.execution), weights: [binding],
+      ...(services ? { ...provided, services } : {}),
       trace: trace => { outcomes.set(trace.callId, trace.outcome); events.set(trace.callId, trace.events ?? []); } });
     let ok = false, oracle: boolean | null = null, error: string | undefined;
     try {

@@ -6,6 +6,8 @@
     python -m natlang_neuralese.tune.learned propose   --spec SPEC   apply the trained optimizer: bundle + receipt
     python -m natlang_neuralese.tune.learned ladder    --spec SPEC   ceiling ladder and gaps from measurements
     python -m natlang_neuralese.tune.learned service   --spec SPEC   one adaptation service of the Natlang `adapt` program
+    python -m natlang_neuralese.tune.learned serve                   the persistent service: every command and the
+                                                                      adaptation services as JSON lines on stdin
     python -m natlang_neuralese.tune.learned collect   --spec SPEC   sampled proposal groups with paired rewards (policy records)
     python -m natlang_neuralese.tune.learned corpus    --spec SPEC   tuner fits on the bank basis + their targets, per program
     python -m natlang_neuralese.tune.learned controls  --spec SPEC   planted-mixture recovery (optimizer vs in-bank fit)
@@ -115,7 +117,8 @@ def bank_init(spec):
 def targets(spec):
     """Joint target records from tuner plans and builds (`program.ProgramContext`), appended to ``out`` as they are
     labeled; a rerun skips finished episodes. Spec: ``{checkpoint, store, bank, out, work, fit?, programs: [{plan,
-    build?, scopes?, tiers?, subsets?, incremental?, seed?}], max_support?, incremental_max?}``. ``free-tune`` targets come from the build (its final
+    build?, root?, scopes?, tiers?, subsets?, incremental?, seed?}], max_support?, incremental_max?}``; ``root`` (the
+    program's directory) enters each target's lineage, so its proposals can be scored on the program's task roots. ``free-tune`` targets come from the build (its final
     residual and, for fits on the bank basis, every recorded update); ``in-bank-fit`` targets from support subsets of
     the plan's training roots, starting from the base bundle and, when the build sliced the bank basis, from the tuned
     bundle."""
@@ -142,10 +145,11 @@ def targets(spec):
             build=build, occurrences=occurrences, soft=soft)
         full = context()
         name = full.program['id']
+        root = {'root': program['root']} if program.get('root') else {}
         if 'free-tune' in tiers and f'{name}:free-tune' not in done:
             emit(f'{name}:free-tune', free_tune_targets(full, fit=spec.get('fit'), incremental=program.get('incremental', True),
                                                        incremental_max=spec.get('incremental_max'),
-                                                       lineage={'plan': str(program['plan'])}))
+                                                       lineage={'plan': str(program['plan']), **root}))
         if 'in-bank-fit' not in tiers:
             continue
         tuned = None
@@ -175,7 +179,7 @@ def targets(spec):
             labels, report = fit_labels(pc, incoming_states=incoming_states, incoming_adapters=incoming_adapters, fit=spec.get('fit'))
             pc.persist([*labels['adapters'].values(), *labels['states'].values()])
             emit(key, [pc.request(tier='in-bank-fit', incoming_states=incoming_states, incoming_adapters=incoming_adapters,
-                                  labels=labels, lineage={'plan': str(program['plan']), 'build': build, 'episode': episode,
+                                  labels=labels, lineage={'plan': str(program['plan']), **root, 'build': build, 'episode': episode,
                                                           'fit': report})])
     return sum(len(ids) for ids in done.values())
 
@@ -190,15 +194,27 @@ def _occurrence(turn):
     return occurrence(turn)
 
 
+def _program_root(program):
+    """The program's root directory: given, or the one whose `natlang tune` work holds its plan."""
+    if program.get('root'):
+        return str(Path(program['root']).resolve())
+    parts = Path(program['plan']).resolve().parts
+    for index in range(len(parts) - 1):
+        if parts[index:index + 2] == ('.natlang', 'tune'):
+            return str(Path(*parts[:index]))
+    return None
+
+
 def corpus(spec):
     """The optimizer's training corpus from tuner work: for each program's existing tune plan (its admitted teacher
     rows, manifest and student), run the same `tune.build` fit on the bank basis with update boundaries, then label
     its free-tune and in-bank targets. Resumable: a finished fit resumes as complete and labeled episodes are skipped.
 
-    Spec: ``{checkpoint, store, bank, work, out, recipe?, fit?, subsets?, rebase?, programs: [{name, plan, recipe?}]}``;
+    Spec: ``{checkpoint, store, bank, work, out, recipe?, fit?, subsets?, rebase?, programs: [{name, plan, root?, recipe?}]}``;
     ``recipe`` overrides the source plan's recipe (``basis`` is always the bank's basis). ``rebase`` rebinds plans
     prepared for an earlier student to the spec's checkpoint (teacher turns are model-independent and are lowered
-    again with this student; the earlier base is recorded as ``rebasedFrom``)."""
+    again with this student; the earlier base is recorded as ``rebasedFrom``). A program's ``root`` defaults to the
+    directory whose `natlang tune` work holds its plan."""
     from ..build import load_plan, main as build, persist_artifacts
     work = Path(spec['work'])
     bank_manifest = json.loads(Path(spec['bank']).read_text())['bank']
@@ -238,6 +254,7 @@ def corpus(spec):
         if build(['--plan', str(plan_path), '--out', str(directory / 'fit')]) != 0:
             raise LearnedOptimizerError(f'the corpus fit of {program["name"]} failed')
         programs.append({'plan': str(plan_path), 'build': str(directory / 'fit'), 'subsets': spec.get('subsets', 3),
+                         **({'root': root} if (root := _program_root(program)) else {}),
                          **({'scopes': program['scopes']} if 'scopes' in program else {})})
     return targets({**spec, 'programs': programs, 'work': str(work / 'targets')})
 
@@ -373,20 +390,21 @@ def propose(spec):
     return bundle['id']
 
 
-def collect(spec):
-    """Sample ``perContext`` proposals per target context, score each by the paired shaping reward (mean change of
-    the training-role actions' log-likelihood against the incoming bundle) and record leave-one-out advantages. Oracle
-    task outcomes are recorded when the spec supplies them per proposal (``outcomes``); otherwise the task component
-    is absent, never invented."""
+def _outer_trainer(spec):
     from .bank import load_bank
-    from .episode import action_logprobs, propose as run
-    from .meta_rl import advantage_snr, leave_one_out_advantages, paired_reward
     from .trainer import OuterRecipe, OuterTrainer
     engine = _engine(spec)
     bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
     state = json.loads(Path(spec['state']).read_text())
-    trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
-    records, groups = [], []
+    return engine, OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
+
+
+def _sample_proposals(spec, engine, trainer):
+    """``perContext`` sampled proposals per target context, each with its paired shaping reward (mean change of the
+    training-role actions' log-likelihood against the incoming bundle): ``[(target, [proposal item])]``; an item
+    keeps its whole bundle under ``bundleValue``."""
+    from .episode import action_logprobs, propose as run
+    out = []
     for index, target in enumerate(_rows(spec['targets'])):
         before = action_logprobs(engine, _incoming_bundle(engine, target), target['manifest'], target['rows'])
         group = []
@@ -394,26 +412,102 @@ def collect(spec):
             bundle, proposal, behavior = run(trainer, target, sample=True, seed=spec.get('seed', 0) * 1000003 + index * 101 + sample)
             after = action_logprobs(engine, bundle, target['manifest'], target['rows'])
             tokens = max(1, sum(1 for _ in target['rows']))
-            shaping = (sum(after) - sum(before)) / tokens
-            outcome = (spec.get('outcomes') or {}).get(bundle['id'])
+            group.append({'context': target, 'behavior': behavior, 'bundle': bundle['id'], 'proposal': proposal['id'],
+                          'old_executor_logprob': sum(after), 'shaping': (sum(after) - sum(before)) / tokens,
+                          'bundleValue': bundle})
+        out.append((target, group))
+    return out
+
+
+def _write_jsonl(path, items):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(''.join(json.dumps(item, sort_keys=True, default=_jsonable) + '\n' for item in items))
+    os.replace(temporary, path)
+
+
+def proposals(spec):
+    """Phase one of outer collection with task outcomes. Samples proposals as `collect` does, writes them to ``out``
+    (`collect` reads them back with ``proposals``) and writes every proposal, and each target's incoming bundle, as a
+    release fragment under ``releases``. For each program it writes ``releases/requests/<program>.json``, the request
+    of ``natlang tune ROOT --score-proposals``: the program root (the target lineage's ``root``), and per target its
+    support roots (excluded from scoring), its incoming release and its proposals' releases. Targets without a program
+    root are recorded without a request: their task component stays absent."""
+    from ..soft import text_sha256
+    from .apply import bundle_release, write_release
+    from .bundle import soft_states_for
+    engine, trainer = _outer_trainer(spec)
+    sampled = _sample_proposals(spec, engine, trainer)
+    releases, requests = Path(spec['releases']), {}
+    def release(target, bundle, name, actor):
+        directory = releases / name
+        if not (directory / 'result.json').exists():
+            states = {key: state for binding in target['manifest']['bindings']
+                      for key, state in soft_states_for(bundle, binding['id']).items()}
+            artifacts, soft_states = bundle_release(engine, target['manifest'], bundle['adapters'], states,
+                                                    {write['key']: text_sha256(write['text']) for write in target['writes']})
+            write_release(engine, target['manifest'], directory, artifacts, soft_states,
+                          {'schema': 'natlang.lopt.proposal-release/1', 'target': target['id'], 'actor': actor,
+                           'bundle': bundle.get('id')})
+        return str(directory.resolve())
+    for target, group in sampled:
+        root = target.get('lineage', {}).get('root')
+        support = (target.get('lineage', {}).get('episode') or {}).get('support') or sorted({_support_item(row) for row in target['rows']})
+        incoming = release(target, _incoming_bundle(engine, target), f"incoming-{target['id'].split(':')[-1][:24]}", 'incoming')
+        entry = {'target': target['id'], 'support': support, 'incoming': incoming,
+                 'proposals': [{'bundle': item['bundle'], 'release': release(target, item['bundleValue'], item['bundle'].split(':')[-1][:32],
+                                                                             'learned-optimizer')} for item in group]}
+        if root:
+            entry['scaffold'] = target['manifest'].get('digest')
+            requests.setdefault(root, {'schema': 'natlang.lopt.score-request/1', 'root': root, 'targets': []})['targets'].append(entry)
+    _write_jsonl(spec['out'], [{**{k: v for k, v in item.items() if k != 'bundleValue'}, 'group': index}
+                               for index, (_, group) in enumerate(sampled) for item in group])
+    paths = {}
+    for number, (root, request) in enumerate(sorted(requests.items())):
+        path = releases / 'requests' / f'program-{number}.json'
+        _write(path, request)
+        paths[root] = str(path.resolve())
+    return {'proposals': sum(len(group) for _, group in sampled), 'requests': paths}
+
+
+def collect(spec):
+    """Score sampled proposals and record leave-one-out advantages. Proposals are sampled here, or read from
+    ``proposals`` (the `proposals` phase's file). The reward is the paired shaping reward plus the task outcome when
+    the spec supplies one per proposal bundle (``outcomes``: ``{bundle: {before, after}}`` or the path of such a
+    JSON file, as ``natlang tune --score-proposals`` writes); otherwise the task component is absent, never
+    invented."""
+    from .meta_rl import advantage_snr, leave_one_out_advantages, paired_reward
+    if spec.get('proposals'):
+        grouped = {}
+        for item in _rows(spec['proposals']):
+            grouped.setdefault(item.pop('group'), []).append(item)
+        sampled = [(None, grouped[index]) for index in sorted(grouped)]
+    else:
+        engine, trainer = _outer_trainer(spec)
+        sampled = _sample_proposals(spec, engine, trainer)
+    outcomes = spec.get('outcomes') or {}
+    if isinstance(outcomes, str):
+        outcomes = json.loads(Path(outcomes).read_text())
+    records, groups = [], []
+    for _, group in sampled:
+        for item in group:
+            item.pop('bundleValue', None)
+            outcome = outcomes.get(item['bundle'])
             reward = paired_reward(outcome['after'] if outcome else 0., outcome['before'] if outcome else 0.,
-                                   shaping=shaping, lambda_shape=float(spec.get('lambda_shape', 1.)))
+                                   shaping=item.pop('shaping'), lambda_shape=float(spec.get('lambda_shape', 1.)))
             reward['taskOutcome'] = outcome
             if outcome is None:
                 reward['task'] = None  # no oracle outcome for this proposal: the component is absent, not zero
-            group.append({'context': target, 'behavior': behavior, 'bundle': bundle['id'], 'proposal': proposal['id'],
-                          'old_executor_logprob': sum(after), 'reward': reward})
+            item['reward'] = reward
         advantages, info = leave_one_out_advantages([item['reward']['total'] for item in group])
         for item, advantage in zip(group, advantages):
             item['advantage'] = advantage
         groups.append((advantages, info))
         records.extend(group)
-    path = Path(spec['out'])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(''.join(json.dumps(item, sort_keys=True, default=_jsonable) + '\n' for item in records))
-    os.replace(temporary, path)
-    summary = {'records': len(records), 'contrastGroups': sum(1 for _, info in groups if info['contrast']),
+    _write_jsonl(spec['out'], records)
+    summary = {'records': len(records), 'outcomes': sum(1 for item in records if item['reward']['taskOutcome'] is not None),
+               'contrastGroups': sum(1 for _, info in groups if info['contrast']),
                'noContrastGroups': sum(1 for _, info in groups if not info['contrast']), **advantage_snr(groups)}
     if spec.get('summary'):
         _write(spec['summary'], summary)
@@ -447,24 +541,36 @@ def service(spec):
     return result
 
 
-COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder,
+COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder, 'proposals': proposals,
             'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples}
+
+
+def run_command(command, spec):
+    """One command in this process; every engine it opened is closed afterwards."""
+    try:
+        return COMMANDS[command](spec)
+    finally:
+        while _OPEN:
+            _OPEN.pop().store.close()
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('command', choices=sorted(COMMANDS))
-    parser.add_argument('--spec', required=True)
+    parser.add_argument('command', choices=sorted([*COMMANDS, 'serve']))
+    parser.add_argument('--spec')
     args = parser.parse_args(argv)
-    spec = json.loads(Path(args.spec).read_text())
+    if args.command == 'serve':
+        import sys
+        from .apply import serve
+        serve(sys.stdin, sys.stdout, commands=run_command)
+        return 0
+    if not args.spec:
+        parser.error('--spec is required')
     try:
-        result = COMMANDS[args.command](spec)
+        result = run_command(args.command, json.loads(Path(args.spec).read_text()))
     except LearnedOptimizerError as error:
         print(json.dumps({'error': str(error)}))
         return 2
-    finally:
-        while _OPEN:
-            _OPEN.pop().store.close()
     print(json.dumps({'command': args.command, 'result': result}))
     return 0
 

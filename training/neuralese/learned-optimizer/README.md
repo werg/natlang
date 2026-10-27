@@ -33,12 +33,17 @@ exported. Use that exact checkpoint for everything below (tune plans prepared fo
    - `corpus`: each tune plan refit on the bank basis with update boundaries, then free-tune and in-bank targets
      (`natlang.joint-target/1`), resumable;
    - `train`: outer training of the optimizer on those targets;
+   - `outer-rl-round.sh`: one outer meta-RL round with real task outcomes (`proposals`, then
+     `natlang tune ROOT --score-proposals` per program, `collect` with those outcomes, the policy update);
    - `meta-examples`: exact labels for the optimizer's own stages (below).
 4. **Tune the meta-learner.** Copy `applications/learned-optimizer` to a tuning project and run
    `natlang tune <copy> --examples <operation>/meta/tune.examples.jsonl` (teacher collection, SFT, RL as for any
-   program). Its stages `adapt/chooseFocus`, `adapt/chooseOperator` and `adapt/shouldStop` have exact expected values:
-   leave-one-binding-out hindsight focus, the counterfactually best operator measured from the same state, and
-   hindsight stopping over a full-budget episode (`tune/learned/meta.py`). The examples group by program, so a
+   program). Its stages `adapt/chooseFocus`, `adapt/chooseRevision`, `adapt/chooseOperator` and `adapt/shouldStop`
+   have exact expected values: leave-one-binding-out hindsight focus, the counterfactually best operation per focused
+   binding, the counterfactually best operator measured from the same state, and hindsight stopping over a
+   full-budget episode (`tune/learned/meta.py`); `tune.reward.mjs` grades them by their share of the measured
+   improvement. Whole episodes are `adapt.nl` roots run against the live services (`tune.services.mjs`, one
+   persistent `serve` process), so RL and RFT train every stage on the episode's measured result. The examples group by program, so a
    program's episodes stay on one side of the split; programs on the optimizer's evaluation side never supply them.
    Once its tuned program has teacher rows, its plan joins the corpus like any other program: the optimizer then also
    proposes adaptations of itself. Large-scale targeted tuning of the meta-learner grows with every recorded episode.
