@@ -48,7 +48,7 @@ The dev server's tests run with `npm run test:website`.
 
 ## Publish
 
-The site is published at <https://werg.github.io/natlang/>. The workflow in
+The default site address is <https://werg.github.io/natlang/>; GitHub Pages may redirect it to the account’s configured custom domain. The workflow in
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) runs the tests on pull requests that touch the site,
 and publishes `website/` to GitHub Pages whenever it changes on `main`. It can also be started by hand from the Actions
 tab. Before the first run, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**.
@@ -57,5 +57,5 @@ A typical round: run the dev server, edit and save, review `git diff website/`, 
 changing the headline or the example at the top of the page, render the preview image again with
 `node scripts/website-dev/social-card.mjs`.
 
-The page names its address in `og:url`, `og:image` and `rel="canonical"`. If the site moves, for example to a custom
+The deployment binds `og:url`, `og:image` and `rel="canonical"` to the actual address reported by `configure-pages`, including an inherited account domain. The source page uses the default GitHub address. If the site moves, for example to a custom
 domain, change those three to the new address.

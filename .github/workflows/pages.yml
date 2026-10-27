@@ -44,8 +44,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        id: pages
+      - name: Bind social metadata to the configured Pages address
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          python3 - <<'PYTHON'
+          import html, os, shutil
+          from pathlib import Path
+          shutil.copytree('website', '_site')
+          page = Path('_site/index.html')
+          address = html.escape(os.environ['SITE_URL'].rstrip('/') + '/', quote=True)
+          assert address.startswith(('https://', 'http://'))
+          page.write_text(page.read_text().replace('https://werg.github.io/natlang/', address))
+          PYTHON
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
