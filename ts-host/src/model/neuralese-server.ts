@@ -49,7 +49,7 @@ export function isUnknownNativeArtifactError(error: unknown): boolean {
  * Upload to the server every native artifact of `ids` it lacks, from `archive` (the runtime's content-addressed store) or the
  * registered constants. Returns the IDs that neither has; the caller reports them in its own terms.
  */
-export async function restoreNativeArtifacts(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
+export async function restoreNativeArtifacts(remote: NeuraleseStore, archive: Pick<NeuraleseStore, 'getNativeState' | 'getNativeTensorArtifact'> | undefined,
     ids: Iterable<string>): Promise<string[]> {
   const missing: string[] = [], visited = new Set<string>();
   const restore = async (id: string): Promise<void> => {

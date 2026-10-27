@@ -66,3 +66,45 @@ The provenance-fixed ticket release completed a valid development evaluation at 
 A tokenizer/template audit of all 871 admitted teacher turns found median prompts of 4,631–5,185 tokens versus replies of 81–98 tokens. With prompt weight 0.1, the reply carries only about 14–16% of total weighted supervision. This is a concrete optimization concern, not proof of the cause of all failures. Continue the actual saved fits with reply-only SFT (`recipe.prompt_weight: 0`), then inspect development execution and sample RL from the resulting release. Preserve earlier exposure and moments; do not reset the adapters or count old turns as newly distinct. Diagnose actual gold-action loss and train/inference parity alongside behavior, rather than treating a low prompt-dominated aggregate loss as task mastery.
 
 Adaptive rounds journals must bind the student base, SFT recipe, round settings (including the initial fit parent), soft-state mode and execution limits. A recipe change starts a fresh journal continuing the explicit earned parent; the identical continuation resumes that journal. Existing journals and their diagnostic evidence remain intact. Larger RL cohorts need useful reward variation; zero-success sampling is evidence to improve SFT or the training curriculum, not earned policy learning.
+
+
+## World-bound curriculum and saved reply-only fit
+
+The ticket reply-only continuation saved 60 additional updates across three passes,
+continuing the actual earlier adapter and native soft-state optimizer histories.
+Its final batch mean reply loss was about 0.52. Development execution is still
+being evaluated; loss reduction is not a capability result. A read-only gold-action
+check on three training bindings also confirmed that the actual serving adapter
+lowers action-token cross entropy versus the base. No policy update or held-task
+lift follows from that check.
+
+The first standalone leaf curriculum exposed a root-identity defect: identical
+function inputs in different invocation worlds collided because root keys omitted
+the world component. Strict imports correctly rejected conflicting results. Current
+`natlang.tune-root/v2` identities bind the world component, function, input, oracle
+presence and expected value; identical roots within one world are deduplicated.
+Build and world split assignments remain unchanged. Preserve existing fits and
+actor identities; collect fresh executions under the corrected keys instead of
+relabeling historical teacher rows or relaxing import custody.
+
+The fresh three-program campaign is
+`runs/luna-program-world-root-v2-six-20261027-v1`, sharing the same authorized
+six-worker authority. It contains 665 train/development roots: 301 ticket,
+246 invoice and 118 inventory. Ticket includes 187 distinct additional standalone
+training invocations of its named leaf functions, alongside the original main
+roots. These are complete new episodes, not detached turns from larger graphs.
+Confirmation worlds remain excluded. Import verified new results into the
+world-root-v2 program projects, continue from each actual newest earned fit, and
+measure whole-program and leaf outcomes separately. RL still updates every actual
+graph dependency and only nonconstant outcome groups earn policy updates.
+
+
+Release serving must restore the complete native dependency closure before
+uploading a derived state. Alphabetically retrying rejected state uploads makes
+long optimizer histories expensive and produces missing-parent errors. The CLI
+now uses the same dependency restoration mechanism as ordinary native execution,
+including tensor/state dependencies and exact-object reuse. The parent-order,
+reuse and tampered-file checks pass. Continue the saved fit and identical round
+journal through this serving fix; it earns no repeated SFT credit. The 60-update
+ticket fit has a separately verified private full adapter/soft-state recovery
+capsule, independent of the production LFM checkpoint.

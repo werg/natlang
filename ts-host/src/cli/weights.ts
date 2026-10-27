@@ -4,7 +4,7 @@
  * A release the backend cannot serve runs the base model, marked degraded with the reason; never as tuned execution.
  */
 import { createReadStream, existsSync, readdirSync, readFileSync } from 'node:fs';
-import { HttpNeuraleseStore } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, restoreNativeArtifacts } from '../model/neuralese-server.js';
 import { decodeNativeState, decodeNativeTensorArtifact } from '../native/neuralese-store.js';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -95,31 +95,31 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
  * native server store. Each file must hold exactly the content its name claims. Returns the IDs now served.
  */
 export async function uploadRelease(store: HttpNeuraleseStore, directory: string): Promise<Set<string>> {
-  const served = new Set<string>();
-  const put = async (bytes: Uint8Array, file: string) => file.endsWith('.nzs')
-    ? (await store.putNativeState(decodeNativeState(bytes))).id : (await store.putNativeTensorArtifact(decodeNativeTensorArtifact(bytes))).id;
-  for (const folder of ['artifacts', 'states']) {
+  const files = new Map<string, string>();
+  for (const [folder, extension] of [['artifacts', '.nnt'], ['states', '.nzs']] as const) {
     const path = join(directory, folder);
-    if (!existsSync(path)) continue;
-    // Derivation chains (tuned states, their updates and histories) need parents first; retry until no progress.
-    let pending = readdirSync(path).sort(), failures: string[] = [];
-    while (pending.length) {
-      const next: string[] = []; failures = [];
-      for (const file of pending) {
-        try {
-          const id = await put(new Uint8Array(readFileSync(join(path, file))), file);
-          if (id !== file.replace(/\.[^.]+$/, '')) throw new Error(`release file ${folder}/${file} does not hold its named content (${id})`);
-          served.add(id);
-        } catch (error) {
-          if (/does not hold its named content/.test(String(error))) throw error;
-          next.push(file); failures.push(`${file}: ${(error as Error).message}`);
-        }
-      }
-      if (next.length === pending.length) throw new Error(`release upload made no progress: ${failures.slice(0, 3).join('; ')}`);
-      pending = next;
+    if (existsSync(path)) for (const file of readdirSync(path).sort()) {
+      if (!file.endsWith(extension)) throw new Error(`unexpected native release file ${folder}/${file}`);
+      files.set(file.slice(0, -extension.length), join(path, file));
     }
   }
-  return served;
+  const read = (id: string, state: boolean) => {
+    const path = files.get(id);
+    if (!path) return undefined;
+    const bytes = new Uint8Array(readFileSync(path));
+    const artifact = state ? decodeNativeState(bytes) : decodeNativeTensorArtifact(bytes);
+    if (artifact.id !== id) throw new Error(`release file ${path} does not hold its named content (${artifact.id})`);
+    return artifact;
+  };
+  // Use the same dependency traversal as ordinary native execution: parents,
+  // gradients and numeric histories arrive before their derived state. Existing
+  // exact objects are reused rather than repeatedly uploading whole histories.
+  const missing = await restoreNativeArtifacts(store, {
+    getNativeState: async id => read(id, true) as ReturnType<typeof decodeNativeState> | undefined,
+    getNativeTensorArtifact: async id => read(id, false) as ReturnType<typeof decodeNativeTensorArtifact> | undefined,
+  }, files.keys());
+  if (missing.length) throw new Error(`release is missing native dependencies: ${missing.slice(0, 3).join(', ')}`);
+  return new Set(files.keys());
 }
 
 /**
