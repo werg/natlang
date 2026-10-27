@@ -2337,7 +2337,8 @@ def _main(argv=None, *, requested_refresh):
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress,
                       async_allowed=(args.async_checkpoint and step < total_end and not policy.signaled
                           and not relative_refresh_due and not requested_refresh.requested
-                          and not (args.refresh_at_checkpoint and due_checkpoint)))
+                          and not (args.refresh_after_updates is None
+                              and args.refresh_at_checkpoint and due_checkpoint)))
                 last_saved_step = step
                 metadata_dirty = False
             if requested_refresh.requested or relative_refresh_due or (args.refresh_after_updates is None

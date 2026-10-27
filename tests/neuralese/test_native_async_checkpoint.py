@@ -145,7 +145,8 @@ def test_recipe_declares_async_checkpoint_as_operational_native_sft_control():
     assert 'async_checkpoint' in OPERATIONAL_STAGE_PARAMETERS
 
 
-def test_native_trainer_drains_on_update_and_schedule_close_errors_without_saving_partial_update(tmp_path,monkeypatch):
+@pytest.mark.parametrize('explicit_refresh_updates', [None, 3])
+def test_native_trainer_drains_on_update_and_schedule_close_errors_without_saving_partial_update(tmp_path,monkeypatch,explicit_refresh_updates):
     import json
     from test_native_serve import _tiny_source
     from natlang_neuralese.model.native_model import load_native_model
@@ -201,6 +202,8 @@ def test_native_trainer_drains_on_update_and_schedule_close_errors_without_savin
         '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
         '--epochs','3','--eval-every','1','--checkpoint-every','1','--task-eval-every','0',
         '--async-checkpoint','--out',str(tmp_path/'run')]
+    if explicit_refresh_updates is not None:
+        argv += ['--refresh-at-checkpoint', '--refresh-after-updates', str(explicit_refresh_updates)]
     with pytest.raises(RuntimeError,match='deliberate partial optimizer-update failure') as failure:
         trainer.main(argv)
     assert entered.is_set() and release.is_set() and drains
