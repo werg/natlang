@@ -86,7 +86,8 @@ def _owner_status(owner_path, command_fragment):
             'scope': owner.get('scope'), 'command_sha256': hashlib.sha256(command.encode()).hexdigest()}
 
 
-def _checkpoint_status(cursor_path, internal_path):
+def _checkpoint_status(cursor_path, internal_path, *, external_roots=(), external_mount=None,
+                       external_uuid=None):
     cursor_file = Path(cursor_path)
     cursor_before = cursor_file.stat()
     cursor = _json(cursor_file)
@@ -95,8 +96,22 @@ def _checkpoint_status(cursor_path, internal_path):
     if not isinstance(raw_path, str) or not raw_path:
         raise ValueError('cycle cursor has no selected checkpoint path')
     path, internal = Path(raw_path), Path(internal_path).resolve()
-    if not path.is_absolute() or not path.resolve().is_relative_to(internal):
+    if not path.is_absolute():
         raise ValueError('selected checkpoint escapes the configured internal training root')
+    resolved = path.resolve()
+    if not resolved.is_relative_to(internal):
+        if not external_roots or external_mount is None or not external_uuid:
+            raise ValueError('selected checkpoint escapes the configured internal training root')
+        mount = Path(external_mount)
+        if not mount.is_mount() or _mount_uuid(mount) != external_uuid:
+            raise ValueError('external checkpoint mount identity is not verified')
+        roots = [Path(root) for root in external_roots]
+        if any(not root.is_absolute() or not root.resolve(strict=True).is_relative_to(mount.resolve(strict=True))
+               for root in roots):
+            raise ValueError('external checkpoint root escapes the verified mount')
+        if (not any(resolved.is_relative_to(root.resolve(strict=True)) for root in roots)
+                or resolved.stat().st_dev != mount.stat().st_dev):
+            raise ValueError('selected checkpoint escapes the declared external training roots')
     stat_result = path.stat()
     if not path.is_file():
         raise ValueError('selected checkpoint is not a regular file')
@@ -843,7 +858,9 @@ def _archive_apply(policy, budget_bytes, protected_paths, expected):
     """Apply only a dry-run batch after rechecking owner, controls, cursor and mount."""
     owner = _owner_status(policy['owner_path'], policy['owner_command_contains'])
     config_sha = _stable_file_sha256(policy['config_path'])
-    checkpoint = _checkpoint_status(policy['cursor_path'], policy['internal_path'])
+    checkpoint = _checkpoint_status(policy['cursor_path'], policy['internal_path'],
+        external_roots=policy.get('external_checkpoint_roots', ()),
+        external_mount=policy.get('external_mount'), external_uuid=policy.get('external_uuid'))
     observed = {'owner': {k: owner.get(k) for k in ('pid', 'unit', 'runtime', 'scope', 'command_sha256')},
                 'config_sha256': config_sha,
                 'checkpoint': {k: checkpoint.get(k) for k in (
@@ -978,7 +995,9 @@ def inspect(policy, *, mellum_prune_plan=False):
         if not status['owner']['live']:
             raise ValueError('declared training owner process is no longer live')
         status['config_sha256'] = _stable_file_sha256(policy['config_path'])
-        status['checkpoint'] = _checkpoint_status(policy['cursor_path'], internal)
+        status['checkpoint'] = _checkpoint_status(policy['cursor_path'], internal,
+            external_roots=policy.get('external_checkpoint_roots', ()),
+            external_mount=policy.get('external_mount'), external_uuid=policy.get('external_uuid'))
         needed = int(status['checkpoint']['bytes'] * float(policy['checkpoint_peak_factor'])) \
             + int(policy['internal_min_free_bytes'])
         status['internal'].update(next_write_required_headroom_bytes=needed,

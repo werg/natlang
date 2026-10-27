@@ -69,6 +69,39 @@ def test_manager_rejects_owner_command_change_and_selected_path_escape(tmp_path,
     assert checkpoint.exists()
 
 
+@pytest.mark.parametrize('placement', ['declared', 'wrong-mount', 'undeclared', 'symlink-escape'])
+def test_external_training_checkpoint_requires_declared_root_and_actual_mount(tmp_path, monkeypatch, placement):
+    policy, usage, checkpoint = _fixture(tmp_path)
+    mount = Path(policy['external_mount'])
+    workspace = mount / 'active-workspaces'
+    workspace.mkdir()
+    selected = workspace / 'checkpoint.pt'
+    if placement == 'undeclared':
+        selected = mount / 'unrelated-checkpoint.pt'
+    elif placement == 'symlink-escape':
+        outside = tmp_path / 'outside'
+        outside.mkdir()
+        (workspace / 'escape').symlink_to(outside, target_is_directory=True)
+        selected = workspace / 'escape' / 'checkpoint.pt'
+    checkpoint.rename(selected)
+    cursor = json.loads(Path(policy['cursor_path']).read_text())
+    cursor['checkpoint']['path'] = str(selected)
+    Path(policy['cursor_path']).write_text(json.dumps(cursor))
+    policy['external_checkpoint_roots'] = [str(workspace)]
+    monkeypatch.setattr(Path, 'is_mount', lambda path: path == mount)
+    monkeypatch.setattr(manager, '_mount_uuid', lambda _: 'foreign' if placement == 'wrong-mount' else 'fixture-uuid')
+    monkeypatch.setattr(manager.shutil, 'disk_usage', lambda _: usage)
+    status = manager.inspect(policy)
+    if placement == 'declared':
+        assert status['state'] == 'healthy'
+        assert status['checkpoint']['path'] == str(selected)
+        assert status['checkpoint']['bytes'] == len(b'full-state')
+    else:
+        assert 'internal_state_error' in status
+        assert 'identity' in status['internal_state_error'] or 'escapes' in status['internal_state_error']
+    assert selected.read_bytes() == b'full-state'
+
+
 def test_invalid_owner_or_cursor_never_reaches_archive_planner(tmp_path, monkeypatch):
     policy, usage, _ = _fixture(tmp_path, free=2)
     monkeypatch.setattr(manager, '_mount_uuid', lambda _: 'fixture-uuid')
