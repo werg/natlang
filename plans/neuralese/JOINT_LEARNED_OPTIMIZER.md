@@ -65,7 +65,7 @@ The scope stays complete: every output route, objective, controller and serving 
 | Program tuning can produce real lift. Ticket routing went from 0/20 (base) to 12/20 (teacher SFT) and 17/20 (mixed SFT/RL) on the same development roots and invocation limits. Each tuned program needed a teacher campaign of roughly 100–300 roots and hours of tuning; three programs have saved fits | [Program tuning runs](../PROGRAM_TUNING_RUNS_20261026.md) | The target generator works but is expensive. Distinct adaptation problems, not tuner checkpoints, are the scarce resource |
 | Median prompts of 4.6–5.2k tokens against 81–98-token replies; reply-focused SFT preceded the measured lift | Same | Repeated context must not dominate the optimizer's inputs or losses |
 | The retired projected adapter code reached 0.0023 held-out relative round-trip error on 33 adapters; its planned end-to-end stage reported no task result before retirement | [Learning continuum](LEARNING_CONTINUUM.md) | Reconstruction accuracy is not evidence of usefulness |
-| In the earlier memetic runs, gradient refinement of soft states and adapters produced the gains, 8-case support and validation sets overfit, and proposals authored by LFM2.5-2.6B lowered fitness every time | Same | Gradient refinement is the reliable operator; analysis written by a small model is weak; selection sets must be large |
+| In the earlier memetic runs, gradient refinement of soft states and adapters produced the gains, 8-case support and validation sets overfit, and proposals authored by LFM2.5-2.6B lowered fitness every time | Same | Gradient refinement is the reliable operator; untrained small models prompted to author guidance are weak, so the 350M's functions are trained for their jobs; selection sets must be large |
 | Text-to-LoRA, trained on 479 tasks: hypernetworks trained to reconstruct task LoRAs failed to generalize to unseen tasks, while SFT-trained ones did. The authors attribute this to functionally similar LoRAs not lying near each other in parameter space | [Text-to-LoRA](https://arxiv.org/abs/2506.06105) | Downstream behavior must be the primary supervised signal; independently tuned weights are weak labels. Zero-shot transfer needed hundreds of distinct tasks |
 | SEAL rewards self-generated adaptations by their downstream result. It found GRPO and PPO unstable for that outer loop and used filtered behavior cloning (ReST-EM) | [SEAL](https://arxiv.org/abs/2506.10943) | Begin reward learning with a low-variance estimator and add joint-ratio policy optimization as the measured signal permits |
 | LFM2.5-350M has 16 layers (10 convolution, 6 attention) with hidden width 1024 and MLP width 4608 after auto-adjustment: 92 target matrices. Mellum2.1-12B-A2.5B has 28 sliding/full-attention layers with hidden width 2304, and every layer is sparse with 64 routed experts of width 896 (8 active) and no shared expert | `config.json` of both models, checked 2026-10-27 | A rank-64 shared basis and hundreds of low-rank components fit easily on LFM. Mellum's routed experts need shared hidden-side bases rather than per-expert bases |
@@ -75,12 +75,12 @@ The scope stays complete: every output route, objective, controller and serving 
 
 | Risk | Why it would defeat the system | Response |
 | --- | --- | --- |
-| Too few distinct adaptation problems | Meta-learning generalizes across problems. A few programs with thousands of correlated checkpoints are still a few problems | [Many problems from each program](#many-problems-from-each-program), [tiered targets](#comparable-and-plentiful-targets) and a program-supply worker steered by the learning curve over program count |
+| Too few distinct adaptation problems | Meta-learning generalizes across problems. A few programs with thousands of correlated checkpoints are still a few problems | [Many problems from each program](#many-problems-from-each-program), [tiered targets](#comparable-and-plentiful-targets) and [program supply at scale](#program-supply-at-scale), steered by the learning curve over program count |
 | Weight labels that do not transfer | Independent tunes reach arbitrary equivalent solutions | [Behavior-first supervision](#behavior-first-supervision), behaviorally fitted mixture targets, tunes from a common start and replicate seeds that measure label noise |
 | A sparse signal for the weight route | Token cross-entropy against noisy labels plus score-function credit over digit strings learns slowly, and a coarse grid cannot express fine adjustments | [Tokens plus a coefficient head](#weight-arrays-tokens-plus-a-coefficient-head): a small integer grid, forced structure and slot cues for the visible choice; a zero-initialized, bounded head for differentiable refinement and per-group modulation; a declared token-expectation estimator |
 | A bank too small to move the needle | No optimizer can recover gains that its components cannot express | [A bank large enough to move the needle](#a-bank-large-enough-to-move-the-needle): a large shared basis with low-rank component cores, components from gradient subspaces and many sources, bank views with gradient probes, and sizing by measured gain recovery |
 | Unreachable state targets and misaligned spans | Directly tuned tensors can lie off the writer's manifold; sampled spans change length | [Contextual re-encoding](#native-states-the-writer-can-reach) as the default writing mode, with measured reachability |
-| Weak analysis by a small writer base | `interpretEvidence` and `chooseRevision` running on a 350M model | [Declared actors](#declared-actors-for-analysis), with recorded teacher analysis supplied as evidence |
+| Weak analysis on the 350M | `interpretEvidence` and `chooseRevision` running on a 350M model | [Everything on the 350M](#everything-on-the-350m): exact facts computed crisply, a small typed analysis trained with hindsight labels and whole-graph gradients, and the teacher only as a measured fallback |
 | Context and losses dominated by repeated prompts | Each support trajectory renders thousands of shared prompt tokens | [Compact evidence views](#compact-evidence-views) and output-only optimizer token losses |
 | Sparse, noisy reward | Binary success on a few query worlds rarely contrasts | [Dense, contrastive reward](#dense-and-contrastive-reward), beginning with filtered imitation |
 | Integration faults that look like an inability to learn | Many interacting parts and one end-to-end number | [Planted controls](#planted-controls) alongside the existing exact references |
@@ -124,7 +124,35 @@ Count independent problems by program and binding family, not by episodes or che
 
 Choose training problems by measured tuner headroom. A program that no tune improves teaches only the no-op; keep a measured share of such problems, not a majority.
 
-Run program supply as a worker of the same operation. It adds programs with deterministic oracles, grouped world splits and teacher demonstrations through the existing reviewed campaign path, favoring new Natlang domains over more worlds of familiar ones. Track the held-out learned-proposal gain against the number of distinct training programs. While that curve still rises, program supply receives compute before further passes over existing problems. Text-to-LoRA's zero-shot transfer used hundreds of tasks; plan for program supply on that order over the life of the operation. Start from the three current programs and from existing applications once each has an oracle and a split.
+Episode multiplication stretches each program, but it does not replace new programs. Text-to-LoRA's zero-shot transfer used hundreds of tasks; [program supply at scale](#program-supply-at-scale) provides them.
+
+### Program supply at scale
+
+Program supply is a standing worker of the operation, not a preparatory step. Its aim is a large, diverse, continuously growing pool of programs, each with oracles, grouped worlds and enough data to tune and to train the optimizer on.
+
+**Pool milestones.** Grow from the current three programs to about 30, then 100, then several hundred across many Natlang domains, raising the pace as quality and throughput allow. These are milestones, not limits. Each program has:
+
+- deterministic oracles that reject meaningful wrong answers, missing required effects and incomplete repairs;
+- grouped worlds, with on the order of 100–300 training worlds plus development and confirmation worlds (the current campaigns used 118–301 training and development roots per program);
+- verified demonstrations on the training worlds where the student cannot yet succeed.
+
+**Sources.**
+
+1. Existing applications under `applications/`, wherever a callable folder warrants a world generator and an oracle.
+2. Verifier-backed task families in the production sources, wrapped as Natlang programs with their checks as oracles.
+3. New programs in new domains, authored with crisp oracles through the existing reviewed campaign path, with exact actor provenance.
+4. Program variants: parameterized mutations of each seed program, such as changed policy tables, thresholds, schemas or tool behavior, and added or removed steps. Each variant is a distinct adaptation problem whose oracle derives from its seed's parameterized checks. All variants of one seed form one family and share one split.
+5. Binding-level problems within each program, as described above.
+
+**Cost.** Request teacher demonstrations only where the student cannot yet succeed. Elsewhere, student rollouts with oracle verdicts are the evidence, and the tuner's RL uses them directly. Reuse world generators across a family's variants. Warm starts from the learned optimizer reduce the tuning work per program as it improves.
+
+**Splits.** Assign whole families to training, development or confirmation before any collection, roughly 70/15/15 by family. Keep fresh worlds of training programs for within-program checks. Claims about unseen programs use confirmation families only.
+
+**Data volume.** The optimizer and the executor both run on the 350M, so episodes are cheap enough to train on a lot of data locally. Plan for tens of thousands of target tuples and optimizer episodes, counted as actual exposure, before judging the learned optimizer, and judge it by its learning curves over program count and exposure rather than by a single checkpoint. Track programs, worlds, demonstrations, targets prepared and admitted, episodes exposed, optimizer updates and measured outcomes.
+
+**Production feedback.** Verified executions on training worlds also pass through ordinary source admission into both production recipes, preserving exact actor and split custody. Development and confirmation worlds stay protected. Program supply therefore improves the base models as well as the optimizer.
+
+**Priorities.** Prefer programs where the base student fails and a tune helps, and new domains over more worlds of familiar ones. While held-out gain still rises with program count, program supply receives compute ahead of further passes over existing problems.
 
 ### A bank large enough to move the needle
 
@@ -212,9 +240,41 @@ It costs one extra decoding step for the sign branch not taken. Measure the beha
 
 **Serving.** The executor never needs the head: bundles carry the executed coefficients and composed adapters. Running the optimizer itself requires the final hidden states at slot decision positions, which the native reference server provides. A backend without that access runs the optimizer in a declared head-off mode, with `rho = delta = 0` and measured loss, never silently.
 
-### Declared actors for analysis
+### Everything on the 350M
 
-Every Natlang function of the optimizer declares its actor. Native state writing and weight arrays run on the writer for the executor's exact base. Evidence interpretation and revision analysis may run on the self-hosted teacher when it is available. Its text output is recorded with its own actor identity and becomes part of the optimizer's input. Train the writer both with and without that analysis, so application still works when only the native actor is available. The teacher's analysis receives no student policy gradient; improve it through memetic search over its instructions. On the larger Mellum base, measure whether native analysis suffices.
+Owner direction, 2026-10-27: run every function of the optimizer on LFM2.5-350M, the executor's own base with the optimizer's adapters. That covers evidence analysis, revision choice, state writing, weight arrays, operator choice and stopping. The self-hosted teacher is a fallback, used only after a [measured failure](#when-to-fall-back-to-the-teacher). This rule concerns the optimizer's own functions. Demonstrations for program supply still come from the authorized generation path; that is the separate execution-teacher role.
+
+This is a sound bet. The earlier evidence against small authors came from untrained models prompted to write guidance text. Here each 350M function is trained for one job, has typed outputs, receives exact labels wherever the runtime can supply them, and hands native state to the next function, so whole-graph gradients train the chain end to end. It also keeps application cheap, local and independent of the teacher sandbox.
+
+#### What evidence analysis is
+
+The evidence is the permitted support view: the program contract and current bundle, verified demonstrations, the student's own attempts with their actions and observations, oracle verdicts, runtime receipts, and earlier improvement steps with their measured outcomes. Evidence analysis turns that view into what a revision needs: where to change the program, which evidence shows the problem, and a compact description of the missing behavior. It has three parts.
+
+1. **Exact facts, computed crisply.** The evidence-view builder records what the runtime already knows exactly: which roots passed or failed, the first failing invocation and binding in each failed graph, the error kind (type, tool, wrong value, missing effect, budget stop), the verified action beside the attempted one where a demonstration exists, and per-binding failure counts. These are inputs; no model guesses them.
+2. **Interpretation by `interpretEvidence` on the 350M.** It returns a typed record:
+   - `focus`: a ranked list of the bindings and scopes to revise in this step;
+   - `keyEvidence`: the few evidence items that best show each focused problem;
+   - `digest`: one `Neuralese<EvidenceDigest>` per focused binding, a short native span describing the missing behavior.
+3. **Use.** `chooseRevision` turns `focus` into concrete operations for each focused binding: re-encode its state, rewrite its text, reuse or replace a skill, change its scope's weights, or leave it unchanged. Bindings outside `focus` are retained by reference. `keyEvidence` decides which items enter the writer's context in full; the rest appear as compact rows. The writer consumes each `digest` natively when it writes that binding's states and weight array, so the coefficient head also sees it through the slot hidden states. The record is stored in the improvement step for inspection and for later steps of the episode.
+
+#### How analysis learns
+
+- `digest` is a producer span consumed by the writer. Distillation and behavior losses train it through the whole graph, like any other native producer.
+- `focus` is supervised with hindsight labels from leave-one-binding-out in-bank refits on the same support evidence, run on a sample of problems. A binding is a focus target when restricting the fit to the other bindings loses measured gain. As a discrete choice, `focus` also receives reward credit.
+- `keyEvidence` starts from a crisp rule behind the pluggable interface: failed items of focused bindings first, then their demonstrations. It learns from reward credit and from development measurements of which items the writer's outputs depend on.
+- Two arms keep the stage honest. In one, the writer reads compact evidence with no analysis; analysis must beat it. In the other, an oracle analysis supplies hindsight `focus` with the crisp `keyEvidence` rule; it bounds what better analysis could add.
+
+#### When to fall back to the teacher
+
+Fall back only when all of these hold on development problems:
+
+- the ceiling ladder shows a substantial amortization gap;
+- the oracle-analysis arm closes a substantial share of that gap, so analysis is the bottleneck;
+- native analysis has plateaued, both against hindsight labels and in development gain, after training on the full problem pool, and in-model remedies have been tried: more problems, a larger optimizer adapter rank and longer digests.
+
+Then use the teacher in two steps. First, have it write analyses for training problems, used only as supervised targets for the 350M's own analysis; deployment stays 350M-only. Only if that also fails, supply teacher analysis as recorded input at application time, under its own actor identity. Each fallback is a measured arm on the ladder against the 350M arm, and it is withdrawn if the 350M catches up.
+
+On the Mellum line, native state writing must run on Mellum's own base. Running Mellum's analysis and weight arrays on the 350M, with keys in the 350M's native space, is a measured option rather than the default.
 
 ### Compact evidence views
 
@@ -274,6 +334,8 @@ Starting settings, to be changed by measurement (they are not limits):
 | Executed query worlds per proposal | 8, with shaping scores on every available query world | Reward variance |
 | Episode length | 1–2 steps | Measured gain per additional step |
 | Reward estimator | Filtered behavior cloning, then joint-ratio optimization | Advantage signal-to-noise |
+| Optimizer actor | LFM2.5-350M for every function | The measured fallback criteria |
+| Program pool | About 30 programs, then 100, then several hundred | Oracle quality, campaign throughput and the held-out learning curve |
 
 ### Evaluation power
 
@@ -460,7 +522,7 @@ The optimizer is authored as typed natural-language functions with callable fold
 
 | Responsibility | Form | Reason and implementation direction |
 | --- | --- | --- |
-| Interpret failures and demonstrations | NL function `interpretEvidence` | Decide what behavior is missing, which evidence matters and which explanations are plausible |
+| Interpret failures and demonstrations | NL function `interpretEvidence` on the 350M | Return the bindings to revise, the evidence that shows each problem and a native digest of the missing behavior; exact failure facts come from the crisp evidence view |
 | Choose bindings, skills and scope of an update | NL function `chooseRevision` | A semantic policy over the program's contracts, dependency structure and observed failures |
 | Write revised instruction and skill state | NL functions/native writer | Produce evidence-conditioned native spans; train their actual captured tensors and downstream use |
 | Choose reusable weight components and their mixture | NL optimizer computation consuming learned Neuralese keys | Generates a typed, positionally aligned numerical array using its existing token head, refined by the coefficient head; exact bank lookup, validation and composition are crisp |
@@ -473,7 +535,7 @@ The optimizer is authored as typed natural-language functions with callable fold
 | Persist a candidate, compare it and install a release | Existing store/release mechanism | Atomicity, parent comparison and dependency identity are exact requirements |
 | Select training work and adapt the loss mixture | NL policy with recorded metrics and a pluggable deterministic baseline | A learning/operations decision; the actual scheduler, quotas and receipts remain crisp |
 
-Each function declares its actor. Native writing and weight arrays run on the writer for the executor's exact base; analysis functions may run on the self-hosted teacher, whose recorded output then becomes optimizer input (see [declared actors](#declared-actors-for-analysis)).
+Every function runs on the 350M executor base with the optimizer's adapters, and each records its actor. The teacher is a measured fallback (see [everything on the 350M](#everything-on-the-350m)).
 
 Place the application with the tuner/improvement code and reuse the existing policy interfaces. Proposed public names must be checked against the runtime's existing surface before being adopted. Authoring and integration guidance must describe any new model-facing interface and its recovery errors in the same implementation change.
 
@@ -939,7 +1001,7 @@ The following are responsibilities to implement together. Suggested new module n
 | Tuner export | Add an improvement-example emitter around real [joint trainer](../../training/neuralese/natlang_neuralese/tune/trainer.py) commits and [round](../../ts-host/src/tune/rounds.ts) outcomes; reference exact support and paired evaluation evidence |
 | Learned bases and component bank | Extend [basis handling](../../training/neuralese/natlang_neuralese/tune/bases.py) and [adapter math](../../training/neuralese/natlang_neuralese/tune/parameterization.py) with gradient-subspace and update-derived fitting, low-rank reusable cores inside a shared large-rank basis, per-source component fits, Mellum shared hidden-side expert bases, bank views with gradient probes, gain-recovery and saturation measurement, immutable basis/bank IDs, projection/coordinate transforms, residual accounting and exact export |
 | Learned soft descriptions | Add versioned ordered native-state keys attached to component IDs; train their real state tensors through optimizer token/state objectives and preserve their native identity and lineage |
-| Natlang optimizer application | Add typed evidence interpretation, joint revision, operator-choice and stopping functions, with adaptation and outer-training `iterateOn` controllers; expose exact execution/tuning services through callable folders |
+| Natlang optimizer application | Add typed evidence interpretation (focus, key evidence and native digests over the crisp evidence facts), joint revision, operator-choice and stopping functions, all on the 350M, with adaptation and outer-training `iterateOn` controllers; expose exact execution/tuning services through callable folders |
 | Typed return and composition | Return `Neuralese` prompt/skill fields and per-scope `number[]` weights; validate bank order, masks, finite values and scope; compose and persist complete native adapters and bundle manifests |
 | Mixing and base dropout | Implement combination target fitting, mask sampling, same-mask target refitting, stable positional arrays, zero unavailable weights, full-bank application and actual mask/exposure receipts |
 | Numerical token supervision | Add the integer-grid array serialization, forced structure and slot cues, token CE, the declared token-expectation estimator, numerical/decoded diagnostics and ambiguity-aware complete-mixture targets; reuse the model's token head |
@@ -947,7 +1009,7 @@ The following are responsibilities to implement together. Suggested new module n
 | Behavior distillation | Add the executor-distribution distillation objective against target bundles on shared histories, with reply/action weighting and reported gradient shares for every auxiliary |
 | State target objective | Add the contextual re-encoding writer mode with optional forced extra slots; extend native graph training with detached optimized-state targets, producer token/slot alignment, field-wise masks, normalized regression through actual capture and reachability measurement |
 | In-bank fitting | Fit coefficient vectors and soft states against support evidence through a pinned bank by exact differentiable composition; refit labels at each bank publication |
-| Problem supply and accounting | Run program supply through the reviewed campaign path; generate binding-level, support-subset, starting-bundle and mask episodes; report independent program and binding-family counts with every result |
+| Problem supply and accounting | Run program supply through the reviewed campaign path toward the pool milestones, including application, task-family, new-domain and variant sources with family-level splits; route training-world executions to production admission; generate binding-level, support-subset, starting-bundle and mask episodes; report independent program and binding-family counts with every result |
 | Controls and ladder | Maintain planted mixture, state, perturbation and negative-control fixtures, and compute the ceiling ladder, its gaps and the warm-start effect continuously on development problems |
 | Composition gradients | Keep generated native states and trainable shared component/basis/key parameters connected through whole-graph execution, including repeated consumers; parsed numerical actions remain fixed for differentiation |
 | Outer RL | Extend [native replay](../../training/neuralese/natlang_neuralese/rl/native_replay.py), [policy math](../../training/neuralese/natlang_neuralese/rl/policy_math.py) and [native gradient service](../../training/neuralese/natlang_neuralese/serve/native_grad.py) with numerical-token actions, complete sequence likelihoods, old/current bank and mask receipts, and critics/advantages |
