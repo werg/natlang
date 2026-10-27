@@ -126,15 +126,15 @@ def test_saved_fit_import_uses_verified_batch_and_checks_file_names(tmp_path, mo
         _artifacts(engine.store, target)
         for record in records:
             (directory / f'{record.id}.nzs').write_bytes(encode_native_state(record.block))
-        batch = target.put_native_archive
+        batch = target.put_native_archive_payloads
         sizes = []
 
-        def checked(blocks, artifacts):
-            values = list(blocks)
+        def checked(payloads):
+            values = list(payloads)
             sizes.append(len(values))
-            return batch(values, artifacts)
+            return batch(values)
 
-        monkeypatch.setattr(target, 'put_native_archive', checked)
+        monkeypatch.setattr(target, 'put_native_archive_payloads', checked)
         import_archive(SimpleNamespace(store=target), state_directories=[directory])
         assert sizes == [5]
         assert encode_native_state(target.get_native_state(records[-1].id).block) == encode_native_state(records[-1].block)

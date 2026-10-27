@@ -93,3 +93,57 @@ def test_cycle_rejected_before_admission(tmp_path, monkeypatch):
     finally:
         target.close()
         engine.store.close()
+
+
+def test_file_import_decodes_once_and_owns_values(tmp_path, monkeypatch):
+    from test_native_state_batch_import import _history
+    import natlang_neuralese.serve.store as store_module
+    import natlang_neuralese.model.native_artifact as tensor_module
+    engine, records = _history(tmp_path, 'lfm', 'adam')
+    target = SimpleNamespace(store=TensorStore())
+    try:
+        persist_artifacts(engine, [records[-1].id], tmp_path / 'artifacts', tmp_path / 'states')
+        decoded = {}
+        state_decode, tensor_decode = store_module.decode_native_state, tensor_module.decode_native_tensor_artifact
+        def state(body):
+            value, ident = state_decode(body)
+            assert ident not in decoded
+            decoded[ident] = value
+            return value, ident
+        def tensor(body):
+            value, ident = tensor_decode(body)
+            assert ident not in decoded
+            decoded[ident] = value
+            return value, ident
+        monkeypatch.setattr(store_module, 'decode_native_state', state)
+        monkeypatch.setattr(tensor_module, 'decode_native_tensor_artifact', tensor)
+        import_archive(target, [tmp_path / 'artifacts'], [tmp_path / 'states'])
+        assert len(decoded) == len(list((tmp_path / 'artifacts').glob('*.nnt'))) + len(list((tmp_path / 'states').glob('*.nzs')))
+        for ident, value in decoded.items():
+            record = target.store.get_native_state(ident) if ident.startswith('nzs1_') else target.store.get_native_tensor_artifact(ident)
+            assert (record.block if ident.startswith('nzs1_') else record.artifact) is value
+        before = target.store.get_native_state(records[-1].id).block.embeddings.clone()
+        (tmp_path / 'states' / f'{records[-1].id}.nzs').write_bytes(b'changed')
+        assert target.store.get_native_state(records[-1].id).block.embeddings.equal(before)
+    finally:
+        target.store.close()
+        engine.store.close()
+
+
+def test_object_admission_copies_inputs_and_rejects_mutable_payload(tmp_path):
+    from test_native_state_batch_import import _history
+    from natlang_neuralese.serve.store import encode_native_state
+    engine, records = _history(tmp_path, 'lfm', 'adam')
+    target = TensorStore()
+    try:
+        root = records[0]
+        target.put_native_archive([root.block], [])
+        before = target.get_native_state(root.id).block.embeddings.clone()
+        root.block.embeddings.add_(1)
+        assert target.get_native_state(root.id).block.embeddings.equal(before)
+        with pytest.raises(TypeError, match='immutable bytes'):
+            target.put_native_archive_payloads([(root.id, bytearray(encode_native_state(root.block)))])
+        assert len(target) == 1
+    finally:
+        target.close()
+        engine.store.close()

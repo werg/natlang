@@ -30,22 +30,16 @@ def _write(path, value):
 
 def import_archive(engine, artifact_directories=(), state_directories=()):
     """Admit all archive directories as one verified mixed dependency closure."""
-    from ..model.native_artifact import decode_native_tensor_artifact
-    from ..serve.store import decode_native_state
     from .archive_links import read_archive, remember
-    tensors, states, references = {}, {}, {}
-    for directories, suffix, decoder, output in (
-        (artifact_directories, 'nnt', decode_native_tensor_artifact, tensors),
-        (state_directories, 'nzs', decode_native_state, states)):
-        for directory in directories:
-            for path in sorted(Path(directory).glob(f'*.{suffix}')):
-                body, reference = read_archive(path)
-                value, ident = decoder(body)
-                if path.stem != ident:
-                    raise ValueError(f'archive file {path} does not hold its named content')
-                output[ident] = value
-                references[ident] = reference
-    engine.store.put_native_archive(states.values(), tensors.values())
+    references = {}
+    def payloads():
+        for directories, suffix in ((artifact_directories, 'nnt'), (state_directories, 'nzs')):
+            for directory in directories:
+                for path in sorted(Path(directory).glob(f'*.{suffix}')):
+                    body, reference = read_archive(path)
+                    references[path.stem] = reference
+                    yield path.stem, body
+    engine.store.put_native_archive_payloads(payloads())
     for ident, reference in references.items(): remember(engine, ident, reference)
 
 

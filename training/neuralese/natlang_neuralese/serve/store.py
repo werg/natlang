@@ -335,18 +335,44 @@ class TensorStore:
 
     def put_native_archive(self, blocks, artifacts, owner: str | None = None):
         """Verify a complete mixed archive against private copies before admission."""
-        from ..model.native_artifact import (encode_native_tensor_artifact, decode_native_tensor_artifact,
-                                             native_tensor_dependencies)
+        from ..model.native_artifact import encode_native_tensor_artifact, native_tensor_artifact_id
+        def payloads():
+            for block in blocks:
+                yield native_state_id(block), encode_native_state(block)
+            for artifact in artifacts:
+                yield native_tensor_artifact_id(artifact), encode_native_tensor_artifact(artifact)
+        return self._put_native_archive_payloads(payloads(), owner)
+
+    def put_native_archive_payloads(self, payloads, owner: str | None = None):
+        """Decode named immutable archive bodies once, owning every decoded tensor."""
+        return self._put_native_archive_payloads(payloads, owner)
+
+    def _put_native_archive_payloads(self, payloads, owner):
+        from ..model.native_artifact import decode_native_tensor_artifact
+        states, tensors = {}, {}
+        for expected, body in payloads:
+            if not isinstance(body, bytes):
+                raise TypeError('native archive payload must be immutable bytes')
+            if not isinstance(expected, str):
+                raise TypeError('native archive payload requires its expected content ID')
+            kind = expected[:5]
+            if kind == 'nzs1_':
+                block, ident = decode_native_state(body)
+                states[ident] = NativeStateRecord(ident, block)
+            elif kind == 'nnt1_':
+                artifact, ident = decode_native_tensor_artifact(body)
+                tensors[ident] = NativeTensorRecord(ident, artifact)
+            else:
+                raise ValueError('archive file does not hold its named content: unsupported native ID')
+            if ident != expected:
+                raise ValueError(f'archive file {expected} does not hold its named content')
+        return self._verify_and_publish_native_archive(states, tensors, owner)
+
+    def _verify_and_publish_native_archive(self, states, tensors, owner):
+        from ..model.native_artifact import encode_native_tensor_artifact, native_tensor_dependencies
         from ..model.state_block import native_state_dependencies
         from ..model.native_derivative_contract import verify_derivative_gradient_origin
         from ..model.native_state_derivation import verify_state_derivation
-        states, tensors = {}, {}
-        for block in blocks:
-            copy, ident = decode_native_state(encode_native_state(block))
-            states[ident] = NativeStateRecord(ident, copy)
-        for artifact in artifacts:
-            copy, ident = decode_native_tensor_artifact(encode_native_tensor_artifact(artifact))
-            tensors[ident] = NativeTensorRecord(ident, copy)
         store = self
         class Overlay:
             def get_native_state(self, ident):
