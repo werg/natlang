@@ -30,7 +30,10 @@ serve = [
     "tree-sitter==0.26.0",
     "tree-sitter-typescript==0.23.2",
 ]
-dev = ["pytest==9.1.1"]
+# Test-suite imports beyond the runtime extras: peft (Qwen3.5 LoRA injection, LoRA/DPO training-loss and
+# export-merge tests; pinned as in train) and requests (the private-export upload body test drives a real
+# HTTP PUT through it, as the CoreWeave export clients do).
+dev = ["pytest==9.1.1", "peft==0.21.2", "requests==2.34.2"]
 
 [tool.setuptools]
 # Training commands are checkout scripts, not importable distribution packages.

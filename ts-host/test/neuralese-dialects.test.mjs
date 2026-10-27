@@ -90,3 +90,27 @@ test('text at a slot of another dialect is not written by the runtime\'s port', 
   assert.equal(await runtime.run(() => softText('plain notes')), 'accepted');
   assert.equal(store.size, 1);
 });
+
+test('a server without /v1/neuralese/info is no Neuralese server, and one without native state is refused at setup', async () => {
+  const { createServer } = await import('node:http');
+  const { neuraleseServerInfo, serves } = await import('../dist/model/neuralese-info.js');
+  const { nativeStateRuntimeOptions } = await import('../dist/model/native-state-client.js');
+  const answers = { '/v1/neuralese/info': null };
+  const server = createServer((request, response) => {
+    const body = answers[request.url];
+    if (!body) { response.writeHead(404); response.end(); return; }
+    response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(body));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const endpoint = `http://127.0.0.1:${server.address().port}`;
+  try {
+    await assert.rejects(neuraleseServerInfo(endpoint), /neuralese-unsupported-backend: .* answered HTTP 404/);
+    // A server that predates native state (the vendored WebAssembly build) lists dialects but no native_state.
+    answers['/v1/neuralese/info'] = { dialects: ['nd:natlang@1'], capabilities: ['chat', 'decide'] };
+    await assert.rejects(nativeStateRuntimeOptions({ endpoint, store: new MemoryNeuraleseStore() }),
+      error => error.code === 'neuralese-native-state-unavailable');
+    // Capabilities come only from the list a server reports.
+    assert.equal(serves({ dialects: [] }, 'chat'), false);
+    assert.equal(serves({ capabilities: ['chat'] }, 'chat'), true);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

@@ -82,7 +82,7 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
     if body.get('schema') != 'natlang.native-gradient-request/1':
         raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
     if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
-        raise RequestError('neuralese-native-grad-order', 'native graph learning currently accepts first-order objectives only; remove derived computations or use a service advertising grad.order2')
+        raise RequestError('neuralese-native-grad-order', 'native graph requests are first-order; send a second-order objective as a natlang.native-derivative-program/1 request')
     from ..model.native_adapters import resolve_adapters, run_native
     try:
         declarations=body.get('invocation_adapters')

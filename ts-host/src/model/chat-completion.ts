@@ -54,6 +54,11 @@ export type ChatCompletionOptions = {
   onRequestStart?: (request: ModelTurnRequest, retryIndex: number) => void | Promise<void>;
   /** Called once per turn with its token counts and duration. */
   onTurn?: (stats: ChatTurnStats) => void;
+  /**
+   * The transport carries weight adapters (`x_natlang_adapters`, a native-state server). Other transports refuse a
+   * request that names adapters instead of sending a field the server would ignore.
+   */
+  adapters?: boolean;
 };
 
 /** Tool-call markup (Qwen-style XML or <tool_call> tags, LFM2's pythonic call markers) left in a reply's text. */
@@ -257,17 +262,20 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       if (!tools.length) { delete wireRequest.tools; delete wireRequest.tool_choice; }
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       // Weight adapters bound by the calling function's context; only Neuralese transports send them.
-      if (request.adapters?.length) wireRequest.x_natlang_adapters = request.adapters;
+      if (request.adapters?.length) {
+        if (!options.adapters) throw Object.assign(new Error('neuralese-native-adapters-unavailable: this call binds weight ' +
+          'adapters, which only a native-state model server applies; call it through that server'),
+          { code: 'neuralese-native-adapters-unavailable' });
+        wireRequest.x_natlang_adapters = request.adapters;
+      }
       if (request.guidance) wireRequest.guidance = request.guidance;
       if (request.native_teacher_forced_turn) {
         wireRequest.x_natlang_forced_message = request.native_teacher_forced_turn;
         wireRequest.x_natlang_native_recording = true;
       }
       if (request.template) {
-        const { length, passes, ...template } = request.template;
+        const template = request.template;
         wireRequest.neuralese_template = { ...template, call: forward[template.call] ?? template.call };
-        if (length !== undefined) wireRequest.neuralese_length = length;
-        if (passes !== undefined) wireRequest.neuralese_passes = passes;
       }
       if (request.seed !== null) wireRequest.seed = request.seed;
       // The configured collection cap and the runtime's remaining allowance
@@ -409,8 +417,8 @@ export function promptLogprobDecider(transport: ChatTransport, options: { reques
  * without header or body timeouts; callers bound calls with their own deadlines. Elsewhere this is plain fetch.
  */
 let longDispatcher: Promise<unknown> | undefined;
-/** In-process endpoints: a base URL whose requests a handler answers instead of the network (the WebAssembly
- * Neuralese service in a browser worker or in Node). */
+/** In-process endpoints: a base URL whose requests a handler answers instead of the network (e.g. a test's fake
+ * provider). */
 const localEndpoints = new Map<string, (url: string, init: RequestInit) => Promise<Response>>();
 
 /** Answer requests under `base` (such as `http://neuralese.local`) with `handler`; returns the unregistration. */

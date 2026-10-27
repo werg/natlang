@@ -1,338 +1,409 @@
 # Neuralese port contract
 
-Version 1, 2026-10-03. Normative for runtimes and model servers. Part of the
-Neuralese section of [SPEC.md](SPEC.md). The model-side procedures are designed in
-[plans/neuralese/S3_PORT.md](../plans/neuralese/S3_PORT.md); the source design is
-[port mechanics and training](../plans/neuralese/sources/port-mechanics-and-training.md).
+Version 2, 2026-10-26. Normative for runtimes and model servers. Part of the
+Neuralese section of [SPEC.md](SPEC.md). The design and its cutover are tracked in
+[plans/neuralese/SHARED_STATE_MIGRATION_20261015.md](../plans/neuralese/SHARED_STATE_MIGRATION_20261015.md).
+The projected-value protocol (vector payload blocks, `nz1_` IDs and their endpoints)
+is retired; servers reject its request fields and content parts.
 
-## Control tokens
+Neuralese is native shared state. A producer writes ordinary tokens between producer
+markers; the server captures the positional KV and hybrid layer state of that span
+and stores it as a native state. A consumer imports a stored state between consumer
+markers, and the server splices it into the consumer's cache at the consumer's own
+positions. No separate communication latent space exists.
 
-Two special tokens delimit a soft block:
+## Role markers
 
-| Token | LFM2.5 ID slot |
+Four special tokens mark producing and consuming:
+
+| Marker | Meaning |
 | --- | --- |
-| `<|neuralese|>` | `<|reserved_7|>` |
-| `<|/neuralese|>` | `<|reserved_8|>` |
+| `<\|neuralese_produce\|>` | Opens a producer span. |
+| `<\|/neuralese_produce\|>` | Closes a producer span. |
+| `<\|neuralese_consume\|>` | Precedes an imported native state. |
+| `<\|/neuralese_consume\|>` | Follows an imported native state. |
 
-Each has its own trained input embedding. Other backbones register the same token
-strings as special tokens. A model declares the dialect it reads and writes
-([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)).
+A native checkpoint adds the four strings as special tokens with four distinct IDs.
+The server reports the IDs in this order as `native_state.role_marker_ids` in
+`GET /v1/neuralese/info`.
 
-**Escaping.** Only the runtime (when rendering) and the write procedure (when
-writing) produce these token IDs. Renderers tokenize content (messages, tool
-outputs, file contents, string values) with special-token parsing disabled, so the
-text `<|neuralese|>` in content becomes ordinary text tokens.
+**Embeddings.** Producer tokens are ordinary vocabulary tokens with their ordinary
+input embeddings. The model applies a learned low-rank residual transform, inside
+embedding space, to the embeddings of positions that are producing. The transform
+starts at the identity.
 
-## Placement
+**Escaping.** Only the server inserts marker token IDs. When it renders a request,
+every special-token string that occurs inside message content or tool-call arguments
+is tokenized as ordinary text, so the text `<|neuralese_produce|>` in content never
+becomes a marker. Only structure inserted by the chat template becomes special tokens.
 
-A block may occur wherever the runtime shows or the model writes TypeScript or
-values, inside the backbone's native chat template, with no new role:
+## Producing
 
-- message content, including the opening declarations of a call;
-- tool-call arguments, in particular the `code` string of `eval` and the `value` of
-  `return_result`. For LFM2.5's Pythonic tool calls
-  (`<|tool_call_start|>[eval(code="…")]<|tool_call_end|>`), the block sits inside
-  the quoted string. Tool-call parsers recognise the control tokens there and do
-  not treat the vectors as string characters;
-- tool responses, where eval results and locals are listed.
+A producer span is opened and closed by the model's own sampled tokens, or by a
+forced template write (Template readout, below).
 
-The block ends at `<|/neuralese|>`. It does not end the message, the tool call, the
-string, or the function. Everything that describes a block (its type, a function
-signature, captures) is ordinary TypeScript before the opening token.
+1. When the model samples `<|neuralese_produce|>`, the server feeds it as an
+   ordinary input and opens a span.
+2. Each following token is fed as a producing input: the low-rank transform applies
+   to it, and its per-layer state is captured.
+3. When the model samples `<|/neuralese_produce|>`, the server feeds it as an
+   ordinary input, closes the span, stores the captured state as a new native state,
+   and continues decoding.
 
-## Rendering (reference → model form)
+The markers and the span's tokens do not appear in the reply text. The reply carries
+a `native_state` content part at the span's position instead.
 
-When rendering a conversation, the runtime replaces each soft value it shows with
-the token `<|neuralese|>`, `L` payload positions, and `<|/neuralese|>`, where `L`
-is the stored block's length. It sends the payload as a content part referencing
-the block ID (see Wire protocol). The server builds the input embedding sequence
-by embedding the surrounding tokens and splicing the stored vectors (mapped into
-the model's space by its adapter, if any) at the payload positions. Attention
-masks, positions and lengths count every payload position.
+The server rejects these draws with the listed code:
 
-## Writing (model form → reference)
+| Draw | Code |
+| --- | --- |
+| `<\|/neuralese_produce\|>` with no open span | `neuralese-native-state-close` |
+| `<\|neuralese_consume\|>` or `<\|/neuralese_consume\|>` at any point | `neuralese-native-state-consume-marker` |
+| `<\|neuralese_produce\|>` inside an open span | `neuralese-native-state-nested` |
+| A stop token inside an open span, or `max_tokens` reached inside one | `neuralese-native-state-open` |
 
-When the model samples `<|neuralese|>` during decoding, the server switches to the
-write procedure:
+Without protocol recovery, the request fails with that code. With it, the server
+answers a failure observation (Native marker failure observations, below).
 
-1. Run the shallow sketch recurrence (layers `1…k`) from the current context,
-   one position at a time. At each position the stop head decides `continue` or
-   `stop`; stop is masked before the first position unless empty blocks are
-   allowed.
-2. On `stop`, run layers `k+1…D` over the collected shallow states in one causal
-   pass. The content projection predicts a mean `μ` and a per-dimension scale `σ`
-   for every position, and the payload is `z = μ + τ·σ⊙ε` with `ε ~ N(0, I)` at
-   the Neuralese temperature `τ` (see Temperature).
-3. Store the payload as a new block (content ID, dialect, length, producer) and
-   emit `<|/neuralese|>`.
-4. Read back: restore the decoder cache to the position before the payload,
-   prefill the payload and `<|/neuralese|>` through the full model, and resume
-   ordinary decoding.
+There is no separate span length limit in chat: a span ends when the model closes it,
+and the request's `max_tokens` bounds it.
 
-Restoring the cache covers attention keys and values and short-convolution state,
-with positions reset to the committed sequence. Text sampling settings apply only
-to text; the block's length is decided by the stop head alone.
+## Consuming
 
-**Hard maximum.** The runtime sets a maximum block length per server or request.
-Reaching it closes the block, sets `truncated: true` on the stored entry, and is
-recorded in the trace; it is not learned stopping.
+A native state referenced in a request renders as `<|neuralese_consume|>`, the
+imported state, and `<|/neuralese_consume|>`. The server chooses how to import the
+state, in this order:
 
-## Temperature
+| Mode | When | What the server does |
+| --- | --- | --- |
+| `same-base-adapter-state` | The request declares this mode for the state's ID (`x_natlang_native_state_modes`). | Splices the raw state, validated against its own source identity on the same base checkpoint. The state is not relabelled. |
+| `exact-native-state` | The state's checkpoint (as executed, including active adapters), tokenizer fingerprint, embedding-weight digest, architecture and layer layout equal the consumer's. | Splices the stored state at the consumer's positions. |
+| `learned-semantic-state-deltas` | The server runs with a semantic adapter whose bindings include both the state's identity and the consumer's. | Adapts the state through the adapter, then splices the result. |
+| `best-effort-text-retokenization` | Otherwise. | Discards the stored tensors, tokenizes the state's text with the consumer's tokenizer, and prefills those tokens between the markers. |
 
-Writing is stochastic, gated by a **Neuralese temperature** `τ ≥ 0`, separate from
-the text sampling temperature. At `τ = 0` the payload is the mean `μ` and writing
-is deterministic. At `τ > 0` the payload is a sample `z = μ + τ·σ⊙ε`.
+Attention keys are stored before rotary embedding, so the consumer rotates them at
+its own logical positions. An exactly imported state occupies its token count plus
+the two markers in the consumer's positions.
 
-- **Setting.** `τ` is a model-turn setting (`neuraleseTemperature`), defaulting to
-  0 at inference. Training sets it on a schedule.
-- **Seeds.** `ε` is drawn from a seed derived like other sampling seeds, so replay
-  reproduces the same payload.
-- **What is stored.** The block's value is the delivered payload `z`, the vectors
-  every consumer read. The trace records `μ`, `σ`, `τ` and the seed with the block
-  write, so the payload's log-density `log N(z; μ, τ²σ²)` is available to
-  `logLikelihood` objectives and replay.
-- **Why.** Noise at write time makes representations robust to perturbation
-  (VAE-style, with an optional KL term to a standard normal prior in training),
-  and gives continuous payloads a tractable likelihood. That lets policy-gradient
-  and other sampling-based objectives train encodings, including in RL, alongside
-  backpropagation through the payload.
+Each import is reported in the response's `native_state.imports`:
+`{"id", "mode", "observed_native_state_id"?, "semantic_adaptation"?,
+"adapter_state_consumption"?, "state_derivation"?, "stop_gradient"?,
+"source_occurrence"?}`. `observed_native_state_id` names the state actually spliced
+(absent for text retokenization).
 
-Stored trainable blocks may also be distributions; see
-[NEURALESE_FILES.md](NEURALESE_FILES.md).
+Errors: `neuralese-unknown-native-state` (the store lacks the state),
+`neuralese-native-state-mode` (an invalid mode declaration),
+`neuralese-semantic-adapter-mismatch` (semantic adaptation failed),
+`neuralese-native-state-empty-text` (text retokenization of a state with tokens but
+no text).
 
-**Parsing.** In the model turn returned to the runtime, each written block appears
-as a content part with its ID, at its position in the text or tool argument. Before
-compiling eval code, the runtime replaces each block with the reference expression
-`__neuralese.value("nz1_…")` (or `__neuralese.body("nz1_…")` inside an `nl.with`
-template), so the TypeScript checker sees ordinary code.
+## Native states
+
+A native state (`schema: "neuralese.native-state/1"`) holds:
+
+- `text`: the span's source text, and `tokenizer_fingerprint`, `checkpoint_sha256`,
+  `embedding_weight_sha256`, `architecture`: the producer's identity;
+- tensors `token_ids` (int64), `positions` (int64, contiguous), `embeddings` (the
+  tokens' input embeddings), all with the token count as first dimension;
+- one state per layer, listed in `layer_kinds`: `attention` (`raw_k`, `v`: pre-rotary
+  keys and values), `finite_convolution` (`gated_inputs`), or `gated_delta`
+  (`mixed_qkv`, `z`, `b`, `a`);
+- optional `adapter_binding` (the actor adapters active when it was produced) and
+  `derivation` (a state produced by an optimizer step).
+
+A server with a semantic adapter stores produced spans as semantic messages
+(`schema: "neuralese.semantic-state/1"`) carrying `adapter_sha256` and a code tensor.
+
+Reuse of raw state requires the exact identity above. Moving a state to another
+checkpoint, tokenizer or architecture goes through text retokenization or a learned
+semantic adapter; equal tensor shapes do not make states interchangeable.
+
+**ID.** `nzs1_` followed by the lowercase, unpadded base32 SHA-256 (52 characters) of:
+the bytes `natlang.native-state/1`, a NUL byte, the metadata length as a
+little-endian u64 and the metadata as canonical JSON (sorted keys, no spaces,
+non-ASCII as UTF-8); then for each tensor in name order, the name length (u32) and
+name, the descriptor `{"dtype","shape"}` length (u32) and JSON, and the raw byte
+length (u64) and raw little-endian bytes.
+
+**Body.** A safetensors file with one entry per tensor (`F16`, `BF16`, `F32`, `F64`
+or `I64`), payloads contiguous in name order without gaps, and under the
+`__metadata__` key `natlang.native_state` the metadata with its `id` as a canonical
+JSON string. A decoder rejects gaps, overlaps, unknown tensors and an `id` that does
+not match the content.
+
+**Native tensor artifacts** (`nnt1_…`, same ID construction under the domain
+`natlang.neuralese-native-tensor-artifact/1`) hold named tensors with metadata
+`{"schema", "kind", "native_identity", "source_artifact_id", "provenance",
+"tensors"}`. Kinds: `parameter-set`, `parameter-gradient`, `parameter-update`,
+`state-gradient`, `optimizer-state`, `adapter-basis`, `adapter-coefficients`,
+`adapter-gradient`, `derivative-program`. The body metadata key is
+`natlang.native_tensor_artifact`.
 
 ## Wire protocol
 
-Two servers implement this protocol: the reference server
-(`training/neuralese/natlang_neuralese/serve/`, PyTorch) and the llama.cpp fork
-(`tools/neuralese/neuralese-service.cpp`, also built to WebAssembly for the browser
-runtime). Rows marked **both** must agree; `tests/neuralese/test_server_conformance.py`
-checks them on identical weights. Rows marked **reference only** or **fork only** are
-served by one server; the other answers 501 with the capability's code (Capabilities,
-below), never 404 and never by silently ignoring the request.
+This repository contains one implementation of this protocol, the reference server
+(`training/neuralese/natlang_neuralese/serve/`, `python -m natlang_neuralese.serve`).
+The llama.cpp fork serves part of it for llama.cpp models without this protocol's routes:
+it consumes stored native states exported as native state spans (`--native-state`, content
+parts `{type: "native_state", id}`), scores decisions (`POST /v1/natlang/score`), and guides
+generation with the `guidance` field and `POST /v1/neuralese/guidance/check` below (the same
+checks; a rollback restores the slot's cache or a context checkpoint; there is no `--guidance`
+startup default). The browser's local model is the patched wllama
+(`ts-host/src/browser/local-model.ts`), which runs that fork in the page: a tuned release's soft states, decision readout and guidance work there, while producing
+native state, the store and learning need a native-state server.
 
 ### Capabilities
 
-`GET /v1/neuralese/info` lists what a server serves in `capabilities`, from this
-vocabulary. Clients choose paths by it instead of probing endpoints. A request that needs
-a capability the server lacks answers **501** `neuralese-<capability>-unavailable` (dots
-become dashes, e.g. `neuralese-chat-stream-unavailable`).
+`GET /v1/neuralese/info` lists what the server serves in `capabilities`. Clients choose
+paths by it instead of probing endpoints. The TypeScript client fails a request that
+needs an unlisted capability with `neuralese-<capability>-unavailable` (dots become
+dashes) before sending it.
 
-| Capability | Meaning | Reference | Fork (native, wasm) |
-| --- | --- | --- | --- |
-| `chat`, `decide`, `score`, `render`, `guidance.check`, `encode`, `embed`, `write`, `view`, `template`, `store` | The endpoints and fields of the same names below. | yes | yes |
-| `init-body` | `POST /v1/neuralese/init_body`: in-context text initialisation of a soft body with its gate. | yes | no |
-| `store.owners` | Owner-scoped holds, pins and collection (`x-natlang-owner`). | listed once its store implements holds | yes |
-| `chat.stream` | `"stream": true` on chat completions. | yes | yes (the wasm build streams through its event hook) |
-| `template.value-type`, `template.argument-path` | `neuralese_template.value_type` other than `"string"`, `neuralese_template.argument_path`. | yes | yes |
-| `parts.value-type` | Content parts with `value_type: "unknown"`. | yes | yes |
-| `grad`, `grad.order2` | `POST /v1/neuralese/grad` (order 2: second-order). | yes | no |
-| `optim` | `POST /v1/neuralese/optim`. | yes | no |
-| `native.adapters` | Exact-base actor coefficient artifacts and their native graph gradient/optimizer path. | native model mode | no |
-| `adapters.lora-load` | Load a caller-supplied GGUF LoRA for generic llama.cpp model serving. | no | yes |
+| Capability | Meaning |
+| --- | --- |
+| `chat`, `chat.stream` | Chat completions; `"stream": true`. |
+| `template`, `template.value-type`, `template.argument-path` | `neuralese_template` and its `value_type` and `argument_path` fields. |
+| `parts.value-type` | Template-written parts carry `value_type` in tool-call arguments. |
+| `guidance`, `guidance.check` | The `guidance` request field; `POST /v1/neuralese/guidance/check`. |
+| `decide`, `score` | `POST /v1/neuralese/decide`; `POST /v1/neuralese/decide_many` and `POST /v1/natlang/score`. |
+| `render` | `POST /v1/neuralese/render`. |
+| `view` | `POST /v1/neuralese/view`. |
+| `native.text-write`, `native.init-body` | `POST /v1/neuralese/native-states/write-text`, `/init-body`. |
+| `native.protocol-recovery` | The `x_natlang_native_protocol_recovery` request field. |
+| `grad`, `grad.order2` | `POST /v1/neuralese/grad`. A graph request with `order` other than 1 is rejected; differentiation through optimizer steps uses derivative programs. |
+| `optim` | `POST /v1/neuralese/optim`. |
+| `native.adapters`, `adapters.create` | Exact-base actor adapters: `x_natlang_adapters` and `adapters` fields; `POST /v1/neuralese/adapters`. |
+| `store`, `store.native-state`, `store.native-tensor-artifact` | The native state and tensor artifact routes. |
+| `store.owners` | Owner-scoped holds, pins and collection (`x-natlang-owner`). |
 
 ### Conventions
 
-- Bodies are JSON unless stated. Every error answers
-  `{"error": {"code": "…", "message": "…"}}`, including unexpected failures (500
-  `internal`) and unsupported methods (405 `method-not-allowed`: every method but GET, PUT and POST, HEAD included). A POST body that is not
-  a JSON object answers 400 `bad-json` before anything acts on it.
-- Status codes: 400 for a request error, including a block the request names that the
-  store lacks (`neuralese-unknown-block`), that is in another dialect
-  (`neuralese-dialect-mismatch`) or whose width is not the server's (`neuralese-bad-block`); 404 `not-found` for an unknown path and 404
-  `neuralese-unknown-block` when fetching or pinning an absent block; 500 for a write
-  or decode that failed in the server.
-- **Block metadata** ("meta" below) is
-  `{"id", "dialect", "length", "width", "dtype", "type"?, "producer"?, "truncated"?}`.
-  An endpoint that creates a block stores it before answering; the ID is the content
-  ID (`nz1_…`, as `ts-host/src/native/neuralese-store.ts`).
-- **Block body**: a safetensors file with one rank-2 `payload` tensor (`F32`, `F16` or
-  `BF16`) and the metadata as a JSON string under the `natlang.block` metadata key.
+- Bodies are JSON unless stated. Errors answer `{"error": {"code": "…", "message":
+  "…"}}`; for a request error the message is `"<code>: <detail>"`.
+- A POST body that is not valid JSON or not a JSON object answers 400 `bad-json`.
+- 400 for a request error, with the error's code. 404 `not-found` for an unknown path.
+  405 `method-not-allowed` for every method but GET, PUT and POST, HEAD included.
+  500 `internal` for an unexpected failure. Every failure of every method answers this
+  envelope ([ERRORS.md](ERRORS.md) "Model server codes").
+- The server reads only the request fields named in this document. Other fields are
+  ignored, except the retired fields listed under Chat completions, which are rejected.
+- An endpoint that creates a native state or tensor artifact stores it before answering.
 
 ### Content parts
 
-The model-turn request and response (`ts-host/src/contracts.ts`) carry blocks as
-content parts, in both directions:
+Messages carry native states as content parts, in requests and responses:
 
 ```json
-{ "type": "neuralese", "id": "nz1_…", "value_type": "string" }
+{ "type": "native_state", "id": "nzs1_…" }
 ```
 
-They may appear in message `content` arrays and in tool-call arguments (an argument
-string sent as an array of text and neuralese parts, or a JSON argument value that is
-such an array). In a response, a part marks a block the server wrote; it is already in
-the server's store.
+| Field | Meaning |
+| --- | --- |
+| `id` | `nzs1_` and 52 base32 characters, else 400 `neuralese-bad-part`. |
+| `stop_gradient` | Optional; must be `true` when present (else `neuralese-bad-part`). The import is a constant in gradients and captures. |
+| `source_occurrence` | Optional non-empty string naming the producer occurrence (else `neuralese-bad-part`). Copied to the import receipt and capture. |
+| `value_type` | Emitted by the server on parts in a template-written argument: `"string"` or `"unknown"`. Ignored on input. |
 
-| Field | Meaning | Servers |
-| --- | --- | --- |
-| `id` | The block. Must start with `nz1_`, else `neuralese-bad-part`. | both |
-| `value_type` | `"string"` (default): the block sits inside the quoted string. `"unknown"`: a tool-call argument value that is exactly this block renders unquoted, in native value syntax. A stored block of type `Neuralese<unknown>` defaults to `"unknown"`. | both (`parts.value-type`) |
+Parts occur in message `content` arrays (with `{"type": "text", "text"}` parts) and in
+tool-call arguments: an `arguments` value that is a part array, or a JSON argument
+value that is such an array. An argument value that is exactly one native state
+renders unquoted in the template's call syntax; a state inside a longer string stays
+inside the quoted string. Inside a nested argument value, a part array with a
+malformed `native_state` ID is kept as ordinary argument data.
+
+A part of type `"neuralese"` anywhere in content or arguments answers 400
+`neuralese-retired-part`. A chat template that drops or duplicates a reference
+answers 400 `neuralese-render`. Tool-call `arguments` given as JSON text that does not
+parse answer 400 `tool-arguments`.
 
 ### Chat completions: `POST /v1/chat/completions`
 
-OpenAI-style chat completion. Request fields beyond OpenAI's:
+OpenAI-style chat completion. Request fields:
 
-| Field | Meaning | Servers |
+| Field | Meaning | Errors |
 | --- | --- | --- |
-| `neuralese_temperature` | `τ` for every block written (see Temperature). Default 0. | both |
-| `neuralese_max_length` | Per-request maximum block length, capped by the server's (`max_block_length`). | both |
-| `neuralese_length` | Optional size hint: write exactly that many vectors, no stop decision. | both |
-| `neuralese_passes` | With a length hint, write the block in that many parallel passes (exact when ≥ the length). | both |
-| `neuralese_template` | Template readout: `{"call", "arguments"?, "argument"? (default "value"), "value": "write" \| "decode"}`. The reply is forced to the model's own rendering of that call, cut at the argument; `write` makes it a written block and closes the call, `decode` decodes the value and the rest. Errors: `neuralese-template`. | both |
-| `neuralese_template.value_type` | `"string"` (default) or `"unknown"`: the written value sits unquoted; the block is typed `Neuralese<unknown>` and its parts carry `value_type: "unknown"`. Another value is `neuralese-template`. | both (`template.value-type`) |
-| `neuralese_template.argument_path` | A list of string or integer keys addressing the value inside nested arguments; it starts at `argument`, and every key must exist in `arguments` (else `neuralese-template`). | both (`template.argument-path`) |
-| `x_natlang_adapters` | Native model mode: exact nnt1 actor coefficient references `[{"id", "scale"}]`, bound to the checkpoint's declared actor policy. The llama.cpp fork uses this field for its generic loaded-LoRA references. The former `nz1` projected/tiny-adapter blocks are not accepted. | native mode (`native.adapters`); fork (`adapters.lora-load`) |
-| `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"?, "syntax"?, "retries"?, "run"?}` (`{}`: on, every default; absent, `null` or `false`: off): the reply opens a tool call (`require_call` defaults to `tool_choice == "required"`), call names are checked against `tools` (default: the offered tools), eval code is checked line by line for repetition and TypeScript syntax, and a rejected line is rolled back and resampled. | both; the reference may also apply a server default (`--guidance`) |
-| `seed` | Also seeds the payload noise of each written block (with the block's index). | both; the noise generators differ, so payloads at `τ > 0` differ between servers |
-| `x_natlang_forced` | Test hook: a plan of text strings and `{"neuralese": "write"}` items that replaces sampling. Errors: `forced-plan`. | both |
-| `stream` | `true`: server-sent `chat.completion.chunk` events (below). | both (`chat.stream`) |
+| `messages`, `tools` | As OpenAI, with content parts. | |
+| `max_tokens`, `max_completion_tokens` | Generation allowance, first present one; default 512; 0 generates nothing (`finish_reason: "length"`). Counts every generated position, markers and producer tokens included. | `bad-max-tokens` for anything but a non-negative integer |
+| `temperature` | 0 or absent: greedy. Above 0: sampling at that temperature. | |
+| `seed` | Seeds sampling. Default: derived from the request ID. | |
+| `tool_choice` | Read only by guidance (`require_call` default). | |
+| `stream` | `true`: server-sent events (Streaming). | |
+| `guidance` | `true` or `{"require_call"?, "tools"?, "repeat"? (3), "syntax"? (true), "run"? (4), "retries"? (4)}`; absent, `null` or `false`: off, unless the server was started with `--guidance`. The reply opens a tool call when `require_call` (default `tool_choice == "required"`); call names are checked against `tools` (default: the offered tools); eval code is checked line by line for repetition, redeclaration and TypeScript syntax; a rejected line is rolled back to its exact cache state and resampled with the offending token banned, at most `retries` times per point. A native state in eval code is read as the identifier `__nz`. | `neuralese-guidance-template-conflict` when a forced template violates guidance |
+| `neuralese_template` | Template readout: `{"call", "arguments"? ({}), "argument"? ("value"), "value": "write" \| "decode", "value_type"? ("string" \| "unknown"), "argument_path"?}`. The reply is forced to the model's own rendering of that call, cut at the argument's value. `write`: the server forces `<\|neuralese_produce\|>`, the model writes the span until it closes it, and the server forces the rest of the call. `decode`: the value and the rest are generated as text. `value_type: "unknown"` places the value unquoted. `argument_path` is a list of string or integer keys addressing the value inside nested arguments, starting at `argument`. | `neuralese-template` |
+| `x_natlang_adapters` | Actor adapters for this request: a list of `nnt1_` coefficient artifact IDs or `{"id", "scale"?, "stop_gradient"?}`. | `neuralese-native-adapter-invalid` |
+| `x_natlang_native_state_modes` | `{state_id: "same-base-adapter-state"}` for states named in the request. | `neuralese-native-state-mode` |
+| `x_natlang_rl_capture` | `true`: return `x_natlang_rl_capture`. Requires `temperature` above 0 unless `x_natlang_native_recording` is set. | `native-rl-sampling-law` |
+| `x_natlang_native_recording` | `true`: structural capture, at any temperature; also returns `x_natlang_rl_capture`. | |
+| `x_natlang_forced_message` | Teacher-forced replay: `{"schema": "natlang.native-teacher-forced-turn/1", "source_receipt", "assistant", "native_text_spans"?}`. The reply is forced to exactly the assistant message; each `native_text_spans` entry (`{"path", "marker", "text"}`) becomes a producer span at its marker. Requires `x_natlang_native_recording: true`. | `bad-request`, `forced-message` |
+| `x_natlang_native_protocol_recovery` | Boolean. `true`: marker violations answer a failure observation instead of an error. | `bad-request` if not boolean |
+
+Retired fields answer 400 `unsupported-request-field`: `x_natlang_forced`,
+`neuralese_temperature`, `neuralese_max_length`, `neuralese_length`,
+`neuralese_passes`.
+
+Other request errors: `empty-prompt`, `prompt-rendering` (the messages do not fit the
+server's declared prompt rendering), `context-length` (the prompt, or a template
+prefix, does not fit the served context), `neuralese-native-actor-changed` (the adapter
+binding changed during a captured request), `cancelled` (the client left).
 
 Response fields beyond OpenAI's:
 
-| Field | Meaning | Servers |
-| --- | --- | --- |
-| `choices[0].message` | `content` is an array of text and neuralese parts when the reply wrote a block; tool-call `arguments` is a JSON string whose string values that hold a block are part arrays. That string is canonical, the same bytes on both servers: compact JSON (no spaces after `,` and `:`), non-ASCII characters as UTF-8 rather than `\u` escapes, keys in the order the model wrote them (`json.dumps(value, separators=(",", ":"), ensure_ascii=False)`; the fork's `ordered_json::dump()`). Clients parse it as JSON and do not depend on its spacing. `reasoning_content` holds thinking: a `<think>…</think>` block, or everything before a lone `</think>` (thinking templates open the block in the generation prompt). Tool calls are parsed from Pythonic `<\|tool_call_start\|>[…]<\|tool_call_end\|>` (LFM2) and then JSON `<tool_call>{"name", "arguments"}</tool_call>` markup (the Qwen family: Maple, Mellum), numbered in that order; markup that does not parse stays in `content`. | both |
-| `neuralese` | `{"dialect", "blocks": [meta…]}`, one entry per written block, in order. A written block's `producer` is its write record: `{"kind": "write", "request", "index", "cutoff", "temperature", "seed", "stop_logits", "mean"?, "log_sigma"?, "length_hint"?, "passes"?}`, where `mean` and `log_sigma` are stored blocks holding `μ` and `log σ`. A block that hit the hard maximum has `truncated: true`. | both; the fork adds `"rng": "mt19937-normal"` |
-| `x_natlang_guidance` | `{"rejections": […]}` when guidance was on. | both |
+| Field | Meaning |
+| --- | --- |
+| `id` | `chatcmpl-<n>`. Tool-call IDs are `<id>_<index>`. |
+| `choices[0].message` | `content` is a string, `null`, or an array of text and `native_state` parts when the reply produced a state. Tool-call `arguments` is compact JSON text (no spaces after `,` and `:`, non-ASCII as UTF-8, keys in the order the model wrote them); a string value that holds a state is a part array. `reasoning_content` holds a `<think>…</think>` block, or everything before a lone `</think>`. Tool calls are parsed from Pythonic `<\|tool_call_start\|>[…]<\|tool_call_end\|>` (LFM2) and then JSON `<tool_call>{"name", "arguments"}</tool_call>` (Qwen family), numbered in that order; markup that does not parse stays in `content`. |
+| `choices[0].finish_reason` | `stop`, `length`, or `error` (a failure observation). |
+| `usage` | `prompt_tokens`: prompt positions, imports and their markers included. `completion_tokens`: generated positions, markers and producer tokens included. |
+| `native_state` | `{"blocks": [meta…], "imports": [receipt…]}`: every state the reply produced, in order, and every import (Consuming). |
+| `x_natlang_guidance` | `{"rejections": [{"reason", "offset", "accepted"?}]}` when guidance was on. |
+| `x_natlang_rl_capture` | When requested, recorded, or on a failure observation: `{"schema", "policy", "adapter_binding"?, "teacher_source_receipt"?, "replay_prompt_sha256"?, "prompt", "samples", "generated_inputs", "writes", "finish_reason", "sample_range_convention": "half-open", "sampling_law": {"temperature", "seed", "guidance", "probabilities"}, "protocol_failure"?}`. Schemas: `natlang.native-teacher-forced-capture/1` (forced replay), `natlang.native-structural-capture/1` (temperature 0), `natlang.native-rl-sampling/3` (with adapters) or `/2` (sampled); on a failure observation `natlang.native-structural-capture/2` or `natlang.native-rl-sampling/4`. `prompt` lists token segments (with per-token `producing` flags) and imported states; `writes` gives each produced state with its sample and own-position ranges. |
+| `x_natlang_native_failure` | The failure descriptor (Native marker failure observations). |
 
-**Streaming** (both; `chat.stream`). Events are `chat.completion.chunk` objects: a role
-delta; text `content` deltas until a tool call opens (call markup, `<|tool_call_start|>` or `<tool_call>`, is held
-back, and nothing after it streams as content); per
-written block, a delta `{"content": [{"type": "neuralese", "id"}]}` with
-`neuralese.block` set to the block's meta; parsed calls as one `tool_calls` delta; a
-final chunk with `finish_reason`, `usage`, `neuralese`, `x_natlang_guidance` (when guidance was on), and
-`x_natlang_message`, the complete parsed message as a non-streaming response would return it. Clients take the
-final message from `x_natlang_message`; the deltas before it are for showing output while it is produced (text
-streamed before a guidance rollback is not retracted). An error after
-the headers is sent as an `{"error": …}` event (`code` as in a non-streaming answer, `internal` for an unexpected
-failure); `[DONE]` ends the stream. A client that disconnects cancels the request: the server notices at its next
-event or, while it has nothing to send, between generated positions (the reference polls the connection, the fork
-asks `sink.is_writable()`), stops generating and sends nothing more. The WebAssembly service streams through its event
-hook (`nzw_handle(…, events)` calls the module's `nzwOnEvent`; a hook that returns `false` cancels the same way), and
-the browser's in-process endpoint answers a streamed request at its first event. Under Node the module runs on the
-event loop's thread, so the HTTP wrapper cannot see a client leave until the request ends.
+**Streaming** (`chat.stream`). Events are `chat.completion.chunk` objects sent with
+chunked transfer encoding as `text/event-stream`: a role delta; text `content` deltas
+until tool-call markup (`<|tool_call_start|>` or `<tool_call>`) opens, after which
+nothing streams as content; per produced state a delta
+`{"content": [{"type": "native_state", "id"}]}` with `native_state.block` set to its
+meta; parsed calls as one `tool_calls` delta; a final chunk with `finish_reason`,
+`usage`, `x_natlang_message` (the complete message as a non-streaming response returns
+it), and `native_state`, `x_natlang_rl_capture`, `x_natlang_guidance`,
+`x_natlang_native_failure` when present. Producer-span tokens never stream as text.
+With guidance on, deltas are sent only for committed output when generation ends.
+Clients take the final message from `x_natlang_message`. An error after the headers is
+an `{"error": …}` event (`internal` for an unexpected failure); `[DONE]` ends the
+stream. A client that disconnects cancels the request: the server checks the
+connection while it has nothing to send and stops generating.
 
-### Block store
+### Native artifact store
 
-| Endpoint | Meaning | Servers |
-| --- | --- | --- |
-| `PUT /v1/neuralese/blocks/{id}` | Store a block (block body). 400 `neuralese-bad-block` for a malformed body, 400 `neuralese-id-mismatch` when the content hashes to another ID. The first block of an ID is kept (a later upload may add a missing `type`). Answers 201 with its meta. | both |
-| `GET /v1/neuralese/blocks/{id}` | The block body. | both |
-| `GET /v1/neuralese/blocks/{id}/meta` | The block's meta. | both |
-| `POST /v1/neuralese/blocks/{id}/pin` | Count one pin on the block for the requesting owner (owners, below; anonymous pins belong to the owner `""`): a pinned block survives every collection, and an owner's pin also holds the block for that owner. 404 `neuralese-unknown-block` for an absent block. Answers `{"ok": true}`. | both |
-| `POST /v1/neuralese/blocks/{id}/unpin` | Release one of the requesting owner's pins. Answers `{"ok": true}`. | both |
-| `POST /v1/neuralese/collect` | `{"referenced": [id…]}` (anything but a list of IDs is 400 `bad-json`). With an owner: afterwards the owner holds exactly the stored blocks in `referenced` (and those it pins); each block it released is dropped unless another owner holds or pins it. Without an owner: drop every stored block that no owner holds or pins and `referenced` does not name. Answers `{"removed": [id…]}`. | both |
+| Endpoint | Meaning |
+| --- | --- |
+| `PUT /v1/neuralese/native-states/{id}` | Store a native state (body, `application/octet-stream`). 201 with its meta. 400 `neuralese-bad-native-state` for a body that does not decode or that the store refuses (a failed derivation check, a content collision), 400 `neuralese-id-mismatch` when the content hashes to another ID. A repeated upload of identical content is accepted. |
+| `GET /v1/neuralese/native-states/{id}` | The body. 404 `neuralese-unknown-native-state`. |
+| `GET /v1/neuralese/native-states/{id}/meta` | `{"id", …metadata}`. 404 `neuralese-unknown-native-state`. |
+| `PUT /v1/neuralese/native-tensor-artifacts/{id}` | Store a tensor artifact. 201 with its meta. 400 `neuralese-bad-native-artifact` for a body that does not decode or that the store refuses (a failed gradient-origin check, a content collision), 400 `neuralese-id-mismatch`. |
+| `GET /v1/neuralese/native-tensor-artifacts/{id}`, `…/{id}/meta` | Body or meta. 404 `neuralese-unknown-native-artifact`. |
+| `POST /v1/neuralese/native-states/{id}/pin`, `POST /v1/neuralese/native-tensor-artifacts/{id}/pin` | Count one pin for the requesting owner (anonymous pins belong to the owner `""`). A pinned artifact survives every collection; an owner's pin also holds it for that owner. `{"ok": true}`. 404 `neuralese-unknown-native-state` or `neuralese-unknown-native-artifact` for an absent artifact. |
+| `POST …/{id}/unpin` | Release one of the requesting owner's pins. `{"ok": true}`. |
+| `POST /v1/neuralese/collect` | `{"referenced": [id…]}` (absent or `null`: empty; anything but a list of strings is 400 `bad-json`). With an owner: afterwards the owner holds exactly the stored artifacts in `referenced` and those it pins; each artifact it released is removed unless another owner holds or pins it. Without an owner: remove every stored artifact that no owner holds or pins and `referenced` does not name. Artifacts that a kept, held or pinned artifact depends on (adapter bases, derivation inputs) are kept. `{"removed": [id…]}`. |
 
-**Owners.** A client names itself (a session or runtime ID) in the `x-natlang-owner` request header. The owner holds
-every block it uploads (`PUT`) and every block ID a successful response names to it (a written block, a fetched block,
-a gradient); pins and collections are per owner, so one session's collection never drops another session's blocks.
-A client that receives `neuralese-unknown-block` for a block it referenced (the server restarted or the block was
-collected) uploads the block again from its own content-addressed store and retries. Whether blocks, holds and pins
-survive a server restart is a server option (the reference's `--store-dir`), not part of the wire protocol; `info`
-reports it. The WebAssembly service has no request headers and serves a single, anonymous owner. In a browser the
-client's own store is the runtime's OPFS block archive (`OpfsNeuraleseStore`, `ts-host/src/browser/neuralese-opfs-store.ts`):
-one file per block in the origin-private file system, named by its ID and holding the block's safetensors body (as
-`PUT` sends it), its metadata indexed when the archive opens and its bytes checked against the ID when read. The in-page
-service keeps blocks only in memory, so after a page reload or an engine restart the runtime restores every block a
-request names from that archive. Blocks move between the archive and `.nz` files by ID (`importNz`, `exportNz`).
+**Owners.** A client names itself (a session or runtime ID) in the `x-natlang-owner`
+request header; an absent or empty header is anonymous. An owner holds every artifact
+it uploads, every artifact a request of its own produces (including states produced
+before a failure), and every `nzs1_`/`nnt1_` ID that appears as a whole string in a
+successful JSON response or stream event sent to it. Pins and collections are per
+owner, so one session's collection never removes another session's artifacts. A
+client that receives `neuralese-unknown-native-state` or
+`neuralese-unknown-native-artifact` for an artifact it referenced uploads it again
+from its own archive and retries.
 
-### Writing blocks
+Whether artifacts, holds and pins survive a restart is a server option
+(`--store-dir`): the store then keeps one safetensors file per artifact and an SQLite
+index on disk, with a bounded resident set (`--store-resident-gb`, default 2).
+`info.store.persistent` reports it. One process owns a store directory.
 
-Each answers 201 with the new block's meta.
+### Producing states outside chat
 
-| Endpoint | Meaning | Servers |
-| --- | --- | --- |
-| `POST /v1/neuralese/write` | The write procedure at a write site: `{"messages", "prefix"?, "tools"?, "neuralese_temperature"?, "length"?, "passes"?}`. The reply is forced to `prefix` and then the open marker; the stop head decides the length unless `length` hints it (`passes` as `neuralese_passes`). 500 `neuralese-write` if no block was written. | both |
-| `POST /v1/neuralese/encode` | Text into a block in one forward pass through the port (supplied-input write, one vector per token, no stop decision): `{"text", "type"?, "context"?}`, where `context` is chat messages without blocks rendered as the write site. Errors: `neuralese-encode`. Producer `{"kind": "text-encode", "text"}`. | both |
-| `POST /v1/neuralese/embed` | A block initialised from the token embeddings of `{"text", "type"?}`. Errors: `neuralese-embed`. Producer `{"kind": "text-init", "text"}`. | both (`embed`) |
-| `POST /v1/neuralese/init_body` | In-context text initialisation of a soft body (`natlang_neuralese/text_init.py`): `{"messages", "tools"?, "placeholder", "text", "type"?, "gate"?, "reply_tokens"?}`, where `messages` is the soft call as the runtime renders it with the block `placeholder` at the body's position (exactly once). The body's rows are the read transport's inverse of the embeddings of the instruction tokens as the text-instructed call (the same rendering with `text` in place of the placeholder) tokenizes them; exact when the transport has no markers and an identity input map and the span tokenizes as in the joint rendering (`aligned`). With `gate` (default true) the soft call with the body is compared with the text-instructed call over the generation position and a greedy reply of `reply_tokens` (24) tokens: `{"agreement", "kl", "max_abs_logit_delta", "bit_exact", "passed"}` (passed: agreement ≥ 0.98, KL ≤ 0.02). Answers 201 `{"block", "init", "gate"}`. Errors: `neuralese-init-body`. Producer `{"kind": "text-init-in-context", "text", …init}`. | reference only (`init-body`) |
-| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`natlang_neuralese/view.py`, pinned by `tests/fixtures/view-site.json`): `{"value", "instructions"?, "system"?, "window"?}`. Every write is the template write of view's body at its site: the system text is the body (`system`, as text or parts with its soft form; default the body's text), the user message gives `instructions` (if any) and the value, and the reply is forced by template readout to `return_result(status="success", value=…)` with the value written as a block (the site offers that one tool). Without `instructions` the view is faithful compression. Answers the view block's meta plus `parts` (1 unless the value exceeds the write site's window and is viewed in chunks, then combined at a combine site that reads the part views) and `window`. The default window is what the writer attends to at the write site: the serving server's `context` (info) less the site's prompt rendered without the value (system text or parts, the user text with any instructions, the tool, the chat template), the reply (`max_block_length` + 64: the block and the forced call) and 32 tokens (a part site's longer header, retokenized chunk edges), at least 256; a request `window` can only lower it. Two servers serving the same context plan the same chunks. | both |
+| Endpoint | Meaning |
+| --- | --- |
+| `POST /v1/neuralese/native-states/write-text` | `{"text", "type"?, "adapters"?}`. Runs `<\|neuralese_produce\|>`, the text's tokens as producing inputs, and `<\|/neuralese_produce\|>` from an empty context, and stores the span. 201 `{"id", "native_state": meta, "source_capture": {"policy", "segments", "payload_start", "payload_stop"}, "source_text_sha256"}`; `type`, when given, is copied into the returned meta only. Errors: `neuralese-native-state-text`, `context-length`. |
+| `POST /v1/neuralese/native-states/init-body` | Contextual text initialisation of a soft body: `{"messages", "tools"?, "placeholder", "text", "type"?, "placeholder_occurrence"?, "adapters"?, "native_state_modes"?}`. `placeholder` is a stored `nzs1_` state referenced by a `native_state` part in `messages` (also inside JSON-text tool arguments); the selected occurrence is replaced by `text` wrapped in producer markers at its rendered position, the rest of the prompt (other imports included) is run, and the body's state is captured. Without `placeholder_occurrence` the placeholder must occur exactly once. 201 `{"id", "native_state", "init": {"schema": "natlang.native-state-text-init/1", "tokens", "exact": false, "aligned": true, "exact_transport": true, "contextual": true, "source_position_start"}, "gate": null, "source_capture": {…, "imports"}, "source_text_sha256"}`. Errors: `neuralese-native-state-text`, `neuralese-unknown-native-state`, `neuralese-native-state-placeholder`, `neuralese-native-state-mode`, `context-length`. |
+| `POST /v1/neuralese/view` | The Neuralese instance of the builtin `view(value, instructions?)` (`natlang_neuralese/view.py`): `{"value", "instructions"?, "system"?, "window"?, "x_natlang_native_protocol_recovery"?}`. Each write is a template write of `return_result(status="success", value=…)` at the view site, sampled at temperature 1 with capture: the system message is view's body (`system`, as text or parts; default the body's text), the user message gives `instructions` (if any) and the value. Without `instructions` the view is faithful compression. A value that exceeds the window is viewed in chunks and combined. 201 with the final state's meta plus `"parts"` (number of chunks, 1 when unchunked), `"window"` and `"source_turns"` (every write's messages, tools, template and full response). The default window is the served `context` less the site's prompt without the value and less `max_block_length` + 96 reserved tokens; a request `window` can only lower it. On a failure observation: 200 `{"x_natlang_native_failure", "source_turns", "window"}`. Errors: `neuralese-view-window`, `context-length`, `neuralese-view`, `neuralese-view-source`. |
 
 ### Readouts
 
-| Endpoint | Meaning | Servers |
-| --- | --- | --- |
-| `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?}` → `{"log_probs", "tokens"}`. Each option is a reply text scored as the whole assistant reply after one prompt pass; `tokens[i]` counts the tokens where the options differ. Native runtimes also accept exact nnt1 actor coefficient references in `adapters`. Other runtimes reject that field as an unsupported request field. Errors: `neuralese-decision`. | both |
-| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | Batched decisions (plans/BATCHED_EXECUTION.md): `{"items": [{"messages", "options" \| "continuations", "tools"?}]}` → `{"results": [{"log_probs", "tokens"} \| {"error"}]}`, one per item in order. Each result equals `decide` on that item alone; items with the same messages and tools share one prefill wherever they sit in the request (servers group them and answer in request order); a failing item fails alone. An item's `error` is `"<code>: <detail>"` for a request error (the same text on both servers) and `"internal: …"` otherwise. | both |
-| `POST /v1/neuralese/render` | The rendered prompt of `{"messages", "tools"?}` with each block as `<block>` → `{"prompt"}` (201). For conformance. | both |
-| `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}` (201). For conformance. | both |
+| Endpoint | Meaning |
+| --- | --- |
+| `POST /v1/neuralese/decide` | `{"messages", "options", "tools"?, "adapters"?, "native_state_modes"?, "native_recording"?}` → 200 `{"log_probs", "tokens", "native_state_imports", "native_decision_capture"?}`. Each option is a reply text scored as the whole assistant reply, end of message included, after one shared prompt pass; `tokens[i]` is the option's token count. `native_recording` adds `native_decision_capture` (`natlang.native-decision-capture/1`). Errors: `neuralese-decision` (no options, non-string options, options that render different prompts or contain states). |
+| `POST /v1/neuralese/decide_many`, `POST /v1/natlang/score` | `{"items": [{"messages", "options" \| "continuations", "tools"?, "adapters"?, "native_state_modes"?, "native_recording"?}], "adapters"?, "native_state_modes"?, "native_recording"?}` → 200 `{"results": [{"log_probs", "tokens", …} \| {"error"}]}`, one per item in order. Top-level fields are item defaults. Each result equals `decide` on that item alone; a failing item fails alone with `error` `"<code>: <detail>"` (`internal` for an unexpected failure), cut to 500 characters. `items` not a list: 400 `neuralese-decision`. |
+| `POST /v1/neuralese/render` | `{"messages", "tools"?}` → 201 `{"prompt"}`: the rendered prompt with each native-state reference as `<block>`. |
+| `POST /v1/neuralese/guidance/check` | `{"reply", "guidance": {"tools"?, "repeat"?, "syntax"?, "run"?}}` → 201 with the first rejection when `reply` is checked prefix by prefix as during generation, `{"reason", "offset", "end"}`, or `{"reason": null}`. Reasons: `unknown-tool`, `repetition`, `redeclaration`, `syntax`. |
 
 ### Learning
 
-| Endpoint | Meaning | Servers |
-| --- | --- | --- |
-| `POST /v1/neuralese/grad` | Gradient replay session: `{"arguments": [id…], "terms": [term…], "producers"?, "order"? (1 or 2), "derived"?}` → `{"loss", "terms": [loss…], "gradients": {argument id: gradient id}}`. Term kinds: `crossEntropy`, `logLikelihood`, `decision`, `selfDistill`, `klPrior`. Gradient blocks are in dialect `{dialect}#grad`. Errors: `neuralese-grad-term`, `neuralese-grad-target`, `neuralese-grad-derived`, `neuralese-grad-unavailable`. | reference only (`grad`, `grad.order2`); the fork answers 501 `neuralese-grad-unavailable` |
-| `POST /v1/neuralese/optim` | One optimiser step: `{"optimizer": "sgd" \| "adam", "hyper", "params": [id…], "grads": [id…], "state"?: {"step", "m"?, "v"?}}` → `{"params": [id…], "state": {"step", "m"?, "v"?}}`. State blocks are in dialect `{dialect}#opt`. Errors: `neuralese-optim`. | reference only (`optim`); the fork answers 501 `neuralese-optim-unavailable` |
-| `POST /v1/neuralese/adapters` | Create an exact-base native actor coefficient artifact from named trainable parameters. The result is an immutable native tensor artifact, not a generic legacy block. | native runtime (`native.adapters`) |
+| Endpoint | Meaning |
+| --- | --- |
+| `POST /v1/neuralese/grad` | One of four request forms. (1) `{"schema": "natlang.native-gradient-request/1", "graph", "target", "objective"? ("graph-ce"), "native_identity"?, "graph_sha256"?, "adapters"?, "invocation_adapters"?, "native_state_modes"?, "adapter_gradient_precision"?}`: one complete train-split native graph row evaluated in one pass; `target` is `{"kind": "model-parameters", "names"}`, `{"kind": "adapter", "id", "names"?}` or `{"kind": "native-state", "id", "names"?}` (an imported state of the graph); `objective` is `"graph-ce"`, `{"kind": "native-policy", "path", "sha256"}` or `{"kind": "native-query", …}`. 200 `{"loss", "stats", "gradient": meta, "native_identity", "objective", "effective_native_identity" \| "invocation_actors", "actor_graph_sha256"}`. (2) `{"native_recorded_objective": {…}}` or a body with `schema: "natlang.native-recorded-objective-request/1"` (`turns`, `events`, `terms`, `targets`, `native_state_modes`?): 200 `{"loss", "stats", "gradients": {root: meta}, "native_identity", "objective"}`. (3) `{"native_derivative_program": {…}}` or a body with `schema: "natlang.native-derivative-program/1"` (`inputs`, `nodes`, `outer`, `wrt`, `arithmetic`): 200 `{"schema": "natlang.native-derivative-execution/1", "program_id", "execution_id", "loss", "arithmetic", "gradients", "outputs", "optimizer_states"}`. Gradients are stored tensor artifacts of kind `parameter-gradient`, `adapter-gradient` or `state-gradient`, held for the requesting owner. Errors: `neuralese-native-grad-schema`, `neuralese-native-grad-order` (a graph request with `order` other than 1, `derived` or `create_graph`: graph requests are first order, and a second-order objective is sent as form 3), `neuralese-native-grad-graph`, `neuralese-native-grad-objective`, `neuralese-native-grad-target`, `neuralese-native-grad-invalid` (any form that fails validation, decision objectives included). |
+| `POST /v1/neuralese/optim` | `{"schema": "natlang.native-optimizer-request/1", "native_identity", "gradient_id", "optimizer": {"name": "sgd" \| "adam", "learning_rate"? (1e-3), "weight_decay"? (0), "beta1"? (0.9), "beta2"? (0.999), "eps"? (1e-8), "momentum"? (0)}, "optimizer_state_id"?}`. The live model is not changed. A `parameter-gradient` publishes a new composite checkpoint: 200 `{"checkpoint", "parameters": meta, "optimizer_state_id", "native_identity", "step"}`. An `adapter-gradient` updates the coefficients: 200 `{"adapter": meta, "optimizer_state_id", "step", "native_identity", …}`. A `state-gradient` updates the native state: 200 `{"native_state_id", "native_state": meta, "optimizer_state_id", "update_artifact_id", "step", "native_identity"}`. A server started from an actor view or an inference-only checkpoint refuses. Errors: `neuralese-native-optim-schema`, `neuralese-native-optim-invalid`. |
+| `POST /v1/neuralese/adapters` | Create an exact-base actor adapter: `{"parameter_names", "kind"? ("xs" \| "free-lora"), "rank"? (8), "seed"? (0), "alpha"? (free-lora; default `rank`), "basis_id"?, "native_identity"?}` → 201 meta of an `adapter-coefficients` artifact. The adapter's weight delta starts at zero. `xs` also stores an `adapter-basis` artifact (the coefficients' `source_artifact_id`); `basis_id` slices an existing canonical basis. Errors: `neuralese-native-adapter-invalid`. |
 
-Gradient determinism (reference server setting): on a GPU the attention backward accumulates with atomics, so the same `grad` request can return different gradient bytes (and, after a learning-rate step, different losses). `NATLANG_NEURALESE_DETERMINISTIC=1` or `python -m natlang_neuralese.serve --deterministic-gradients` runs `GradSession.run` under strict `torch.use_deterministic_algorithms` with `CUBLAS_WORKSPACE_CONFIG=:4096:8` (`GradSession(engine, deterministic=…)` per session). Off by default: it is slower on long contexts and an op without a deterministic CUDA kernel fails the request, so trainers sharing `GradSession` enable it only when a recipe declares it. The learning tests and the conformance suite set it. Order 1 and order 2 use different kernels (order 2: math attention, unfused convolution), so under bf16 their losses for one request agree to a few percent, not exactly.
+Actor adapters change model weights for one request; they are not stored program
+guidance. Guidance uses native-state spans, which condition the call's KV and hybrid
+state without changing weights.
 
-### Retired weight-adapter requests
-
-The `nz1` projected/tiny-adapter block channel and its reference GGUF exporter
-are removed. The llama.cpp fork retains its independent loader for caller-supplied
-GGUF LoRA models. Native model learning uses immutable nnt1 coefficient artifacts
-with exact checkpoint identity and whole-graph actor gradients. Those actor
-bindings are not stored program guidance. Guidance uses positional native-state
-spans, which condition call KV/hybrid state without changing model weights.
-
-### Info and health
+### Info, health, models, metrics
 
 `GET /v1/neuralese/info`:
 
-| Field | Meaning | Servers |
-| --- | --- | --- |
-| `dialects` | Dialects spoken (one per server today). | both |
-| `width`, `dtype`, `max_block_length`, `cutoff` | Payload width, payload dtype (`f32`), hard maximum block length, shallow cutoff layer. | both |
-| `context` | The served context in tokens: positions one request's prompt and reply may span. Fork: `min(n_ctx_train, -c)` (default `-c` 8192); reference: `min(max_position_embeddings, -c)` (default the model's `max_position_embeddings`). `view` plans its write sites against it. | both |
-| `grad` | Whether `grad` sessions are served: `true` (reference), `false` (fork). | both |
-| `grad_order` | Highest gradient order: 2 (reference), 0 (fork: none). | both |
-| `stream` | `true`: chat completions honour `"stream": true` (Streaming, above). Clients stream only to a server that declares it; absent means not streaming. | both |
-| `store` | `{"owners": true, "persistent": bool}`: owner-scoped holds, pins and collection; whether blocks outlive a restart. | both |
-| `server` | `"reference"` or `"llama.cpp"`. | both |
-| `capabilities` | The sorted list of capabilities served (Capabilities, above). Native model mode includes `native.adapters` for exact actor learning; llama.cpp retains `adapters.lora-load`. | both |
+| Field | Meaning |
+| --- | --- |
+| `dialects` | One dialect: `native-state/<architecture>`, or `semantic-state/<adapter_sha256>` with a semantic adapter ([NEURALESE_DIALECTS.md](NEURALESE_DIALECTS.md)). |
+| `width`, `dtype` | Hidden width; the embedding weight dtype (`float32`, `bfloat16`). |
+| `max_block_length` | The producer-span token budget a view write reserves (64). Chat spans are bounded only by `max_tokens`. |
+| `context` | Served context in tokens: `min(max_position_embeddings, -c)`. `view` plans against it. |
+| `grad`, `grad_order`, `stream` | `true`, `2`, `true`. |
+| `store` | `{"owners": true, "persistent": bool}`. |
+| `native_state` | `{"enabled": true, "format": "neuralese.native-state/1" \| "neuralese.semantic-state/1", "semantic_adapter_sha256"?, "consumption_modes", "architecture", "checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "role_marker_ids"}`. `consumption_modes` lists the modes of Consuming that this server can use. |
+| `server` | `"reference"`. |
+| `rl_policy_binding` | `natlang.rl-policy-binding/2`: the served actor's checkpoint and native identity, history-reasoning policy, Python runtime, and participant, actor view and semantic adapter when present. |
+| `prompt_rendering`, `prompt_rendering_identity_sha256` | Serving prompt policy (`full` or `program-header`) and its identity. |
+| `capabilities` | The sorted list of capabilities served. |
 
-`GET /health`, `GET /v1/health` (`{"status": "ok"}`) and `GET /v1/models` are served
-by both.
+`GET /health` and `GET /v1/health` answer `{"status": "ok"}`. `GET /v1/models`
+answers `{"object": "list", "data": [{"id": "native-<architecture>", "object":
+"model"}]}`. `GET /metrics` answers Prometheus text with scheduler counters:
+`natlang_native_decode_tokens_total`,
+`natlang_native_batched_decode_rounds_total`,
+`natlang_native_batched_decode_tokens_total`, `natlang_active_sequences`,
+`natlang_native_open_produce_spans`, `natlang_queued_requests`.
 
-### No text fallback
+### Missing server
 
-A request containing neuralese parts sent to a server that does not declare a
-matching dialect fails; the runtime reports `neuralese-unsupported-backend` or
-`neuralese-dialect-mismatch`. There is no text fallback.
+A runtime that cannot read `GET /v1/neuralese/info` from its model server fails with
+`neuralese-unsupported-backend`; a server that does not list the declared dialect
+fails with `neuralese-dialect-mismatch`.
+
+## Native marker failure observations
+
+`native.protocol-recovery` advertises the boolean request field
+`x_natlang_native_protocol_recovery` (chat completions and view). Without it, a marker
+violation (Producing) fails the request with its code. With it, a malformed draw
+answers a completion with `finish_reason: "error"`, the raw sampled text as `content`
+(no tool calls, including calls that parsed before the failure), and
+`x_natlang_native_failure`:
+
+```json
+{ "schema": "natlang.native-marker-failure/1", "code": "neuralese-native-state-…",
+  "message": "<code>: <detail>", "trigger": "sample" | "length",
+  "sample_index": 0, "fed": false, "own_input_count": 0, "generated_input_count": 0,
+  "max_tokens": 0, "stop_token_ids": [] }
+```
+
+`code` is one of `neuralese-native-state-open`, `-close`, `-consume-marker`,
+`-nested`. `trigger` is `length` (with `sample_index: null`) only for a span left open
+at `max_tokens`; otherwise `sample_index` is the offending final draw and `fed` says
+whether it was fed. The matching `x_natlang_rl_capture` uses
+`natlang.native-rl-sampling/4` at positive temperature or
+`natlang.native-structural-capture/2` at temperature 0, with the descriptor as
+`protocol_failure`. Capture retains the actual actor, normalized draw log-probabilities,
+forced inputs, producing flags, imports and completed writes. Greedy observations are
+not policy-gradient samples. An unfinished span produces no state. `usage.completion_tokens`
+counts the sampled draws and forced inputs.
+
+Clients preserve the failed turn before feeding its typed rejection back to the same
+invocation. All sampled actions and complete episode occurrences remain part of graph
+replay. A native view failure contains every `source_turns` entry through the failed
+write and the failure, with no final `id`. An owner holds the states its request
+produced, including those produced before the failure; collection by another owner
+cannot remove them.
 
 ## Agreement
 
-A server's cached execution must agree with recomputation on the same committed
-sequence: identical greedy continuations and logits within the tolerance stated by
-the parity suite (`conformance/neuralese/`).
-
-#### Native marker failure observations
-
-`native.protocol-recovery` advertises boolean request opt-in
-`x_natlang_native_protocol_recovery`. Without opt-in, native marker violations
-retain their existing error behavior. With opt-in, an actual malformed native
-draw yields a completion with `finish_reason: "error"`, ordinary raw sampled
-text, no executable tool calls, and `x_natlang_native_failure` schema
-`natlang.native-marker-failure/1`. Its matching `x_natlang_rl_capture` uses
-`natlang.native-rl-sampling/4` for positive temperature or
-`natlang.native-structural-capture/2` for greedy capture. The descriptor binds
-code, message, exact final sample index (or explicit length boundary), actual
-fed disposition, own/generated input counts, maximum and stop-token IDs.
-Capture retains the actual actor, normalized draw logps, forced inputs,
-producing masks, imports and completed writes. Greedy observations are not
-policy-gradient samples. An unfinished span supplies no artifact.
-
-Clients preserve the failed turn before feeding its typed rejection back to
-the same invocation. All actual sampled actions and complete episode
-occurrences remain part of graph replay. Native view failure envelopes contain
-all actual `source_turns` through the failed chunk/combine turn and the failure,
-with no fabricated final `id`. Existing store owners immediately hold newly
-created producer/decoded trace dependencies, including dependencies that only
-become public when generation fails. Clients must not collect their own
-in-flight requests' dependencies; foreign-owner collection cannot remove them.
+Cached execution must agree with explicit execution on the same committed sequence.
+The shared-state tests check that incremental capture and splicing match one-pass
+graph execution in outputs and gradients
+(`tests/neuralese/test_shared_state.py`), and that batched decoding of unequal cached
+sequences, producing and not, matches each sequence decoded alone in states, outputs
+and gradients (`tests/neuralese/test_native_decode_batch.py`). Guidance rollback
+restores the cache from the prompt anchor and replays the retained inputs with their
+recorded roles.

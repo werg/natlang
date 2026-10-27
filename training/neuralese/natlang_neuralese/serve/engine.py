@@ -101,7 +101,7 @@ class Sequence:
 class Engine:
     def __init__(self, backbone, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-native", device: str = "cpu",
-                 prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None,
+                 prefill_tokens: int = 8192, context: int | None = None,
                  prompt_rendering: str = "full", *, shared_model, role_tokens, model_config,
                  checkpoint_sha256: str, embedding_weight_sha256: str):
         from .chat import bind_history_reasoning
@@ -123,7 +123,7 @@ class Engine:
             'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
             'embedding_weight_sha256': embedding_weight_sha256,
             'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
-        self.prefill_tokens, self.prefill_padding = prefill_tokens, prefill_padding
+        self.prefill_tokens = prefill_tokens
         self.dialect, self.max_block, self.model_name, self.device = dialect, max_block, model_name, device
         self.prompt_rendering = prompt_rendering
         self.width = backbone.config.hidden_size
@@ -210,8 +210,11 @@ class Engine:
 
         # In program-header mode the natlang runtime sends no generic tools. A separate
         # client (for example an app or harness) can still supply its own tool schemas.
-        messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering,
-                                                 keep_supplied_tools=True)
+        try:
+            messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering,
+                                                     keep_supplied_tools=True)
+        except ValueError as error:  # the messages do not fit the declared prompt rendering
+            raise RequestError("prompt-rendering", str(error)) from error
         return render_messages(messages, tools, template or self._template, self.specials)
 
     def _tokens(self, text: str) -> list[int]:

@@ -29,14 +29,9 @@ def main(argv=None):
     parser.add_argument("--prompt-rendering", choices=("full", "program-header"), default=None,
                         help="serving prompt policy (direct artifacts bind this in their manifest; base default: full)")
     parser.add_argument("--threads", type=int, default=8)
-    parser.add_argument("--deterministic-gradients", action="store_true",
-                        help="gradient replay under torch.use_deterministic_algorithms (same request, same gradient bytes on a GPU; "
-                             "slower, and an op without a deterministic kernel fails); same as NATLANG_NEURALESE_DETERMINISTIC=1")
     parser.add_argument("-c", "--ctx-size", type=int, default=None,
-                        help="served context in tokens (default and maximum: the model's max_position_embeddings), as "
-                             "the fork's -c; view plans its write sites against it")
-    parser.add_argument("--prefill-padding", action="store_true",
-                        help="pack prompts of different lengths into one left-padded prefill (faster, not bit-identical)")
+                        help="served context in tokens (default and maximum: the model's max_position_embeddings); "
+                             "view plans its write sites against it")
     parser.add_argument("--memory-gb", type=float, default=float(os.environ["NATLANG_CUDA_MEMORY_GB"]) if os.environ.get("NATLANG_CUDA_MEMORY_GB") else None,
                         help="cap this process's CUDA allocations (memory is shared with the rest of the machine)")
     parser.add_argument("--store-dir", nargs="?", const="", default=None, metavar="DIR",
@@ -54,10 +49,6 @@ def main(argv=None):
         from pathlib import Path
         actor_view = {'path':str(Path(args.native_actor_view).resolve(strict=True)),
                       'sha256':args.native_actor_view_sha256,'bytes':Path(args.native_actor_view).stat().st_size}
-    if args.deterministic_gradients:
-        os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
-        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
-
     import torch
 
     model_dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16}.get(args.dtype)
@@ -71,7 +62,6 @@ def main(argv=None):
     engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
                                 prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
                                 semantic_adapter=args.semantic_adapter, actor_view=actor_view)
-    engine.prefill_padding = args.prefill_padding
     if args.ctx_size:
         engine.context = min(engine.context, args.ctx_size)
     if args.store_dir is not None:

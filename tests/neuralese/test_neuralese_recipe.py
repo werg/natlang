@@ -569,9 +569,12 @@ def test_registered_artifacts_bind_by_id_and_are_hash_checked(tmp_path,monkeypat
     from natlang_neuralese import artifacts
     from natlang_neuralese.train.recipe import resolve_stage_inputs,validate_input_bindings
     (tmp_path/'training').mkdir();source=tmp_path/'bank.nz'
-    header={'exports':{'p':{'type':'Neuralese<string>','value':{'$neuralese':{'id':'b'}}}},'blocks':{'b':{'dialect':'nd:test@1'}}}
-    save_file({'b':torch.zeros(2,4)},str(source),metadata={'natlang':json.dumps(header)})
-    artifacts.register(tmp_path,{'id':'bank-recipe-test-v1','kind':'prompt-bank','dialect':'nd:test@1',
+    state='nzs1_'+'a'*52
+    header={'format':'natlang.neuralese-file/1','dialect':'native-state/test','types':'','native_tensors':{},
+        'exports':{'p':{'type':'Neuralese<string>','value':{'$neuralese':{'type':'Neuralese<string>','id':state}}}},
+        'native_states':{state:{'bytes':4}}}
+    save_file({state:torch.zeros(4,dtype=torch.uint8)},str(source),metadata={'natlang':json.dumps(header)})
+    artifacts.register(tmp_path,{'id':'bank-recipe-test-v1','kind':'prompt-bank','dialect':'native-state/test',
         'backbone':{'model':'m','revision':'r'},'init':{'method':'text'},
         'qualification':{'status':'unqualified'}},{'bank.nz':source})
     monkeypatch.setattr(artifacts,'REPO',tmp_path)

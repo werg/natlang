@@ -43,3 +43,25 @@ test('native chat transport rejects flat vector content before the request reach
     /does not accept flat vector blocks/);
   assert.deepEqual(requests, ['http://native-fixture/v1/neuralese/info']);
 });
+
+test('native adapter calls reject missing or undeclared server capabilities before chat', async t => {
+  for (const [label, infoResponse] of [
+    ['unavailable server info', new Response('unavailable', { status: 503 })],
+    ['server info without capabilities', Response.json({ dialects: ['native-state/fixture'], stream: false })],
+  ]) {
+    const requests = [];
+    t.mock.method(globalThis, 'fetch', async (input, init = {}) => {
+      const url = String(input);
+      requests.push({ url, method: init.method ?? 'GET' });
+      if (url.endsWith('/v1/neuralese/info')) return infoResponse.clone();
+      throw new Error(`unexpected request ${init.method ?? 'GET'} ${url}`);
+    });
+    const turn = neuraleseServerModelTurn({ endpoint: 'http://native-fixture', model: 'fixture' });
+    await assert.rejects(() => turn({ messages: [{ role: 'user', content: 'Answer.' }], tools: [],
+      adapters: [{ id: 'nnt1_' + 'a'.repeat(52), scale: 1 }] }),
+    error => error.code === 'neuralese-native-adapters-unavailable' && /does not apply weight adapters/.test(error.message), label);
+    assert.deepEqual(requests, [{ url: 'http://native-fixture/v1/neuralese/info', method: 'GET' }],
+      `${label}: an adapter must not reach chat without an explicit capability declaration`);
+    t.mock.restoreAll();
+  }
+});

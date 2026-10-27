@@ -7,7 +7,7 @@
  *
  * Replies stream when the server declares `stream: true` in `/v1/neuralese/info` (plans/STREAMING.md §1.2): text and
  * each written native state arrives as the turn's deltas (`ModelTurnOptions.onDelta`), and the final `x_natlang_message` is the
- * reply. A server that does not declare it (the llama.cpp fork until it serves SSE) gets whole requests.
+ * reply. A server that does not declare it gets whole requests.
  *
  * The driver keeps native state and named tensor custody in step across the runtime archive and model server.
  *
@@ -522,7 +522,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const nativeRecording=(!!recorder||scopedNativeStates.length>0)&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
     if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
-    if (body.guidance && capabilities && !serves(capabilities, 'guidance.check'))
+    if (body.guidance && capabilities && !serves(capabilities, 'guidance'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
     if (body.neuralese_template && capabilities) {
       const template = body.neuralese_template as Record<string, unknown>;
@@ -535,6 +535,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const consumptionModes=await nativeStateModesFor(materializeNativeStateSentinels(body.messages) as unknown[]);
     if (consumptionModes) body = { ...body, x_natlang_native_state_modes: consumptionModes };
     if(coefficientPolicy){body={...body};delete body.x_natlang_native_coefficient_policy;}
+    if ((body.x_natlang_adapters as unknown[] | undefined)?.length && (!capabilities || !serves(capabilities, 'native.adapters')))
+      throw Object.assign(new Error('neuralese-native-adapters-unavailable: this model server does not apply weight adapters; ' +
+        'use a native-state server that lists native.adapters'), { code: 'neuralese-native-adapters-unavailable' });
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
@@ -630,7 +633,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     return normalizeReply(reply);
   };
   const request: Json = { ...extra };
-  const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn });
+  const driver = chatCompletionModelTurn(transport, { request, onExchange, onTurn, adapters: true });
   // Decision readout: one prompt pass, every option scored from its cache (serve/grad.py `decide`).
   type Item = Parameters<DecisionScorer>[0];
   type Settled = PromiseSettledResult<DecisionScores>;
@@ -700,7 +703,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       }catch(error){results[index]={status:'rejected',reason:error};}
     }));
     const order=prepared.filter(entry=>entry!==undefined).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:a.index-b.index);
-    const scored=await (serves((await serverInfo())??{},'score')?batched:perItem)(order.map(entry=>entry.item),signal);
+    // A server that lists its capabilities is asked by them; one that lists none is asked the batch endpoint once,
+    // whose 404 falls back to per-item decisions for the rest of the session.
+    const info=await serverInfo();
+    const batch=Array.isArray(info?.capabilities)?serves(info!,'score'):true;
+    const scored=await (batch?batched:perItem)(order.map(entry=>entry.item),signal);
     await Promise.all(order.map(async(entry,position)=>{
       const result=scored[position]!;
       if(result.status==='rejected'){results[entry.index]=result;return;}

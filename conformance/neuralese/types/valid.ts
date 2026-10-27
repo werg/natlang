@@ -1,7 +1,7 @@
 // Programs the type rules accept (spec/SPEC.md, "Neuralese").
 import { map, zip, ap, combine, empty, split, splitList, read, convert, type Neuralese } from 'natlang:neuralese';
 import { grad, valueAndGrad, stopGradient, objectives, optimizers, type Loss } from 'natlang:learning';
-import type { Bound, Context } from 'natlang:context';
+import type { Bound, Context } from '@natlang/node';
 
 type Ticket = { id: string; text: string };
 type Label = 'urgent' | 'normal' | 'spam';
@@ -15,7 +15,7 @@ declare const ctx: Context;
 
 export async function examples() {
   // A literal's type comes from its annotation; the compiler emits the reference expression.
-  const plan: Neuralese<Summary> = __neuralese.value('nz1_example');
+  const plan: Neuralese<Summary> = __neuralese('nzs1_example');
 
   // Records may mix exact and soft fields.
   const brief: { summary: Neuralese<Summary>; path: string } = { summary: plan, path: 'a/b.md' };
@@ -25,7 +25,7 @@ export async function examples() {
   const headline: string = s.headline;
 
   // Soft functions are callable with their declared parameters and result.
-  const triage: Neuralese<(t: Ticket) => Promise<Label>> = __neuralese.value('nz1_triage');
+  const triage: Neuralese<(t: Ticket) => Promise<Label>> = __neuralese('nzs1_triage');
   const label: Label = await triage(ticket);
 
   // Combinators.
@@ -35,7 +35,7 @@ export async function examples() {
   const merged: Neuralese<Summary> = await combine(note, plan, empty<Summary>());
   const parts: { headline: Neuralese<string>; points: Neuralese<string[]> } = await split(note);
   const items: Neuralese<string>[] = await splitList(parts.points);
-  const moved: Neuralese<Summary, 'nd:natlang@2'> = await convert(note, 'nd:natlang@2');
+  const moved: Neuralese<Summary, 'native-state/other'> = await convert(note, 'native-state/other');
 
   // Learning over context-held values.
   const loss = async (r: Neuralese<string>): Promise<Loss> =>

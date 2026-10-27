@@ -220,6 +220,8 @@ declare module 'natlang:neuralese' {
   export function splitList<E>(v: N<E[]>): Promise<N<E>[]>;
   export function read<T>(v: N<T>): Promise<T>;
   export function convert<T>(v: N<T>, to: string): Promise<N<T>>;
+  /** f after g, exactly; the map-fusion rewrite writes map(v, compose(f, g)) for map(map(v, g), f). */
+  export function compose<A, B, C>(f: (b: B) => C | Promise<C>, g: (a: A) => B | Promise<B>): (a: A) => Promise<C>;
   export function gloss(v: N<unknown>): Promise<string>;
   /** The query operator, read(map(v, question)): the answer to question from what v holds. */
   export function ask(v: N<unknown>, question: string): Promise<string>;
@@ -262,6 +264,24 @@ declare module 'natlang:learning' {
     create(nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
       options: { parameterNames: string[]; kind?: 'xs'; rank?: number; seed?: number }): Promise<NativeAdapter>;
     ref(id: string): NativeAdapter;
+    optimize(gradient: unknown,
+      nativeIdentity: { architecture: string; checkpoint_sha256: string; tokenizer_fingerprint: string; embedding_weight_sha256: string },
+      optimizer: { name: 'sgd' | 'adam'; learning_rate?: number; weight_decay?: number; beta1?: number; beta2?: number; eps?: number; momentum?: number },
+      optimizerStateId?: string): Promise<unknown>;
+  };
+  export type FilePatch = { readonly schema: 'natlang.file-patch/1'; readonly base: string; readonly changes: Readonly<Record<string, string | null>> };
+  export const deltas: {
+    diff(after: NativeAdapter, base: NativeAdapter): Promise<NativeAdapter>;
+    apply(base: NativeAdapter, delta: NativeAdapter, scale?: number): Promise<NativeAdapter>;
+    compose(deltas: readonly (NativeAdapter | { delta: NativeAdapter; scale?: number })[]): Promise<NativeAdapter>;
+    interference(base: NativeAdapter, deltas: readonly NativeAdapter[], measure: (value: NativeAdapter) => Promise<number>):
+      Promise<{ base: number; alone: number[]; joint: number; interference: number }>;
+    learnMerge(base: NativeAdapter, deltas: readonly NativeAdapter[], loss: (value: NativeAdapter) => Promise<Loss>,
+      options?: { steps?: number; lr?: number; init?: number | number[] }):
+      Promise<{ coefficients: number[]; value: NativeAdapter; trace: { loss: number; coefficients: number[] }[] }>;
+    diffFiles(after: Readonly<Record<string, string>>, base: Readonly<Record<string, string>>): FilePatch;
+    applyPatch(files: Readonly<Record<string, string>>, patch: FilePatch, options?: { strict?: boolean }): Record<string, string>;
+    composePatches(patches: readonly FilePatch[]): FilePatch;
   };
   export function trajectory(run: Promise<unknown> | (() => Promise<unknown>)): Promise<Trajectory>;
   export const objectives: {
@@ -272,6 +292,8 @@ declare module 'natlang:learning' {
     policyGradient(samples: { trajectory: Trajectory; reward: number }[], options?: { baseline?: 'mean' | number }): Promise<Loss>;
     conditionedDistill(student: Promise<unknown> | (() => Promise<unknown>), teacher: Promise<unknown> | (() => Promise<unknown>), options?: { privileged?: unknown; rule?: 'logLoss' | 'brier' | 'rps' }): Promise<Loss>;
     logLikelihood(trajectory: Trajectory, weight?: number): Promise<Loss>;
+    law(name: 'mapIdentity' | 'mapFusion' | 'readMapCommutation' | 'combineAssociativity' | 'combineIdentity' | 'splitZip',
+      ...args: unknown[]): Promise<Loss>;
     sum(...losses: Loss[]): Promise<Loss>;
     scale(loss: Loss, weight: number): Promise<Loss>;
   };
@@ -280,6 +302,7 @@ declare module 'natlang:learning' {
     adam(options: { lr: number; betas?: [number, number]; weightDecay?: number }): Optimizer;
   };
   export function save(path: string, exports: Record<string, unknown>): Promise<{ path: string; exports: string[] }>;
+  export function load(path: string): Promise<{ path: string; header: unknown; exports: Record<string, unknown>; types: Record<string, string> }>;
 }
 `;
 

@@ -2,8 +2,8 @@ import {verifyNativeDerivativeGradientOrigin} from '../native/native-derivative-
 import { verifyNativeStateDerivation } from '../native/native-state-derivation.js';
 /**
  * The browser runtime's native artifact archive: content-addressed positional/hybrid states and named tensors in the
- * origin-private file system (OPFS), one safetensors file per artifact ID. The archive backs native restore when the
- * in-page service loses artifacts after a page reload or engine restart.
+ * origin-private file system (OPFS), one safetensors file per artifact ID. The archive keeps artifacts across page
+ * reloads and backs native restore when the serving model loses them (a server restart).
  *
  * Metadata of every artifact is read from the files' headers when the store opens and kept in memory, so `peek`, `meta`
  * and `has` need no I/O. Payloads are read on demand, checked against their ID (an artifact whose bytes do not hash to its
@@ -270,7 +270,7 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
 
 /**
  * The browser runtime's native artifact archive: an `OpfsNeuraleseStore` when this browser offers OPFS (artifacts
- * outlive page reloads and engine restarts), else a `MemoryNeuraleseStore` (artifacts live as long as the page).
+ * outlive page reloads and server restarts), else a `MemoryNeuraleseStore` (artifacts live as long as the page).
  */
 export async function openBrowserNeuraleseStore(options: Omit<OpfsNeuraleseStoreOptions, 'storage'> & { storage?: OpfsStorage | null } = {}):
     Promise<NeuraleseStore> {

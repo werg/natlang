@@ -2,7 +2,7 @@
  * The agent's model as pi-ai models with one provider, "agent": pi-ai's OpenAI-compatible provider, or natlang's own
  * model transport (host/natlang-provider.ts), whose model declares the reader it is (text or a Neuralese dialect).
  * Platform-neutral: the Node host reads the settings from its flags and the profile (main.ts), the browser host from
- * its options (browser.ts), where the endpoint may be the in-page WebAssembly Neuralese engine's.
+ * its options (browser.ts).
  */
 import { createModels, createProvider, type Models } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';

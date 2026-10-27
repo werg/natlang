@@ -48,12 +48,15 @@ jobs:
       - name: Training tools tests
         run: |
           # CPU torch and transformers for the training-tool tests; model-backed tests skip without a cached model.
-          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          # Install the test suite's declared data extra (zstandard) and Triton,
-          # which is declared in the train extra but is imported by CPU-safe
-          # Neuralese tests as well. Do not install the train extra here: it
-          # pins a CUDA-agnostic torch wheel and would replace the CPU build.
-          python -m pip install -e '.[dev,data]' transformers 'accelerate==1.15.0' 'triton==3.6.0; sys_platform == "linux"'
+          # Use the torch and transformers versions pinned by the train/serve extras (the production stack):
+          # exact numerical fixtures depend on them (e.g. torch 2.14 draws different BF16 randn values for
+          # the same seed, so the seed-67 rounding-midpoint regression fixture no longer lands on a midpoint).
+          python -m pip install 'torch==2.11.0' --index-url https://download.pytorch.org/whl/cpu
+          # Install the test suite's declared dev (pytest, peft, requests) and data (zstandard) extras and
+          # Triton, which is declared in the train extra but is imported by CPU-safe Neuralese tests as
+          # well. Do not install the train extra here: it pins a CUDA-agnostic torch wheel and would
+          # replace the CPU build.
+          python -m pip install -e '.[dev,data]' 'transformers==5.18.0' 'accelerate==1.15.0' 'triton==3.6.0; sys_platform == "linux"'
           python -m pytest -q
       - name: Install Chromium for browser smoke tests
         if: ${{ always() && steps.runtime_tests.outcome == 'success' }}

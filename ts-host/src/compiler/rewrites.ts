@@ -162,11 +162,33 @@ export function rewriteCombinators(source: string, options: { gate: RewriteGate;
 
   const transformer: ts.TransformerFactory<ts.SourceFile> = context => {
     const f = context.factory;
+    // Bare names a rule introduces (`compose`, `read`), with the bare callee they stand beside.
+    const introduced = new Map<string, string>();
     const callNamed = (like: ts.CallExpression, name: string, args: ts.Expression[]) => {
       const callee = like.expression;
+      if (ts.isIdentifier(callee) && callee.text !== name) introduced.set(name, callee.text);
       const target = ts.isPropertyAccessExpression(callee) ? f.updatePropertyAccessExpression(callee, callee.expression, f.createIdentifier(name)) :
         f.createIdentifier(name);
       return f.createCallExpression(target, undefined, args);
+    };
+    /** Add each introduced name to the `natlang:neuralese` import that binds its callee, unless the file has it. */
+    const withImports = (out: ts.SourceFile): ts.SourceFile => {
+      if (!introduced.size) return out;
+      const statements = out.statements.map(statement => {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
+            statement.moduleSpecifier.text !== 'natlang:neuralese') return statement;
+        const bindings = statement.importClause?.namedBindings;
+        if (!bindings || !ts.isNamedImports(bindings)) return statement;
+        const local = new Set(bindings.elements.map(element => element.name.text));
+        const missing = [...introduced].filter(([name, via]) => local.has(via) && !local.has(name)).map(([name]) => name);
+        if (!missing.length) return statement;
+        const elements = [...bindings.elements,
+          ...missing.map(name => f.createImportSpecifier(false, undefined, f.createIdentifier(name)))];
+        return f.updateImportDeclaration(statement, statement.modifiers,
+          f.updateImportClause(statement.importClause!, statement.importClause!.isTypeOnly, statement.importClause!.name,
+            f.updateNamedImports(bindings, elements)), statement.moduleSpecifier, statement.attributes);
+      });
+      return f.updateSourceFile(out, statements);
     };
 
     /** Fold `const a = map(v, g)` into its single later use as `map(a, f)`, when nothing effectful runs between. */
@@ -299,7 +321,7 @@ export function rewriteCombinators(source: string, options: { gate: RewriteGate;
       }
       return node;
     };
-    return root => visit(root) as ts.SourceFile;
+    return root => withImports(visit(root) as ts.SourceFile);
   };
   const result = ts.transform(file, [transformer]);
   const transformed = result.transformed[0]!;

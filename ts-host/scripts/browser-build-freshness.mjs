@@ -2,9 +2,9 @@
 /**
  * Whether dist/browser holds the browser build of the current sources (build-browser.mjs), and not a stale or partly
  * overwritten one. build-browser.mjs records a stamp (dist/browser/build-stamp.json): the sha256 of every file esbuild
- * read for the bundles (its metafiles), of the build's own configuration and of the assets it copied (the vendored
- * Neuralese wasm, sqlite-wasm, wllama, Pyodide), and of every file it wrote. The bundle is fresh when all of them still
- * match and the vendored Neuralese wasm matches its provenance.json. Anything else fails with what changed.
+ * read for the bundles (its metafiles), of the build's own configuration and of the assets it copied (sqlite-wasm,
+ * wllama, Pyodide), and of every file it wrote. The bundle is fresh when all of them still match. Anything else fails
+ * with what changed.
  *
  *   node scripts/browser-build-freshness.mjs             exit 1 with the reasons when dist/browser is not fresh
  *   node scripts/browser-build-freshness.mjs --rebuild   rebuild (build-browser.mjs) when it is not fresh, then recheck
@@ -20,7 +20,6 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(import.meta.dirname, '..');
 export const STAMP = resolve(root, 'dist/browser/build-stamp.json');
 export const STAMP_SCHEMA = 'natlang.browser-build/1';
-const VENDOR = resolve(root, 'vendor/neuralese-wasm');
 
 export const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 /** A path as the stamp records it: relative to ts-host, with forward slashes. */
@@ -35,23 +34,9 @@ export function makeStamp({ inputs, assets, outputs }) {
     outputs: hashes(outputs) };
 }
 
-/** Why the vendored Neuralese wasm is not what provenance.json pins (empty when it is). */
-export function vendoredWasmProblems() {
-  const provenance = JSON.parse(readFileSync(resolve(VENDOR, 'provenance.json'), 'utf8'));
-  const problems = [];
-  for (const [name, expected] of Object.entries(provenance.sha256 ?? {})) {
-    const path = resolve(VENDOR, name);
-    if (!existsSync(path)) problems.push(`vendor/neuralese-wasm/${name} is missing`);
-    else if (sha256(path) !== expected) problems.push(`vendor/neuralese-wasm/${name} does not match provenance.json ` +
-      `(fork ${provenance.fork_commit}); re-vendor it or update provenance.json, then run ` +
-      'scripts/verify_neuralese_wasm_provenance.py');
-  }
-  return problems;
-}
-
 /** Why dist/browser is not the build of the current sources (empty when it is). */
 export function browserBuildProblems() {
-  const problems = vendoredWasmProblems();
+  const problems = [];
   if (!existsSync(STAMP)) {
     problems.push(`${stampPath(STAMP)} is missing: dist/browser was not built by build-browser.mjs, or its build was interrupted`);
     return problems;
@@ -95,8 +80,7 @@ export function exitUnlessFreshBrowserBuild(what) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const rebuild = process.argv.includes('--rebuild');
   let problems = browserBuildProblems();
-  // A vendoring mismatch is not fixed by rebuilding the bundle.
-  if (rebuild && problems.length && !vendoredWasmProblems().length) {
+  if (rebuild && problems.length) {
     process.stderr.write(`dist/browser is not fresh; rebuilding:\n${problems.map(problem => `  - ${problem}`).join('\n')}\n`);
     const built = spawnSync(process.execPath, [resolve(root, 'scripts/build-browser.mjs')], { stdio: 'inherit' });
     if (built.status !== 0) process.exit(built.status ?? 1);

@@ -58,16 +58,19 @@ export function coalescingScorer(base: DecisionScorer, options: { windowMs?: num
 /**
  * The explicit-batch scoring contract (optional endpoint, capability-gated; plans/BATCHED_EXECUTION.md step 2):
  *
- *   POST {url}  { items: [{ messages, continuations: string[], adapters? }], ...extra }
+ *   POST {url}  { items: [{ messages, continuations: string[], adapters?, ...itemExtra }], ...extra }
  *   200         { results: [{ log_probs: number[], tokens?: number[] } | { error: string }] }
  *
  * `continuations[k]` is the k-th option written as the closed final assistant message after `messages`. The server
- * prefills each distinct prefix once and scores the K continuations from it. `log_probs[k]` and `tokens[k]` mean what
- * they mean in `DecisionScores`: total log-probability over the tokens where the options differ, end of message
- * included. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
+ * prefills each item's prompt once and scores its K continuations from it. `log_probs[k]` and `tokens[k]` mean what
+ * they mean in `DecisionScores`. 404, 405 and 501 mean the server has no such endpoint; the caller then falls back to concurrent scoring.
  */
 export type ExplicitBatchOptions = { url: string; headers?: Record<string, string>; extra?: Record<string, unknown>;
-  scheduler?: Scheduler; maxItems?: number };
+  scheduler?: Scheduler; maxItems?: number;
+  /** Requests with fewer items go to the fallback (default 2: single items score as well by the fallback). */
+  minItems?: number;
+  /** Per-item request fields (the llama.cpp fork's `lora` scales of the item's own call). */
+  itemExtra?: (item: DecisionRequest) => Record<string, unknown> | undefined };
 export class ScoreEndpointMissing extends Error {}
 
 export async function postExplicitBatch(options: ExplicitBatchOptions, items: DecisionRequest[], signal?: AbortSignal): Promise<Settled[]> {
@@ -75,7 +78,7 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
   try {
     const response = await fetchModel(options.url, { method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...options.headers },
-      body: JSON.stringify({ ...options.extra, items: items.map(item => ({ messages: item.messages, continuations: item.options,
+      body: JSON.stringify({ ...options.extra, items: items.map(item => ({ ...options.itemExtra?.(item), messages: item.messages, continuations: item.options,
         ...(item.adapters?.length ? { adapters: item.adapters } : {}),
         ...(item.native_state_modes ? {native_state_modes:item.native_state_modes}:{}),
         ...(item.native_recording ? {native_recording:true}:{}) })) }) });
@@ -100,9 +103,9 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
  */
 export function explicitBatchScoreMany(options: ExplicitBatchOptions, fallback: ScoreMany): ScoreMany {
   let missing = false;
-  const maxItems = options.maxItems ?? 64;
+  const maxItems = options.maxItems ?? 64, minItems = options.minItems ?? 2;
   return async (items, signal) => {
-    if (missing || items.length < 2) return fallback(items, signal);
+    if (missing || items.length < minItems) return fallback(items, signal);
     const out: Settled[] = [];
     for (let start = 0; start < items.length; start += maxItems) {
       const chunk = items.slice(start, start + maxItems);

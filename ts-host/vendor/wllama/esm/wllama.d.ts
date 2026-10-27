@@ -4,7 +4,7 @@ import { type WllamaWorkerResources } from './worker';
 import CacheManager, { type DownloadOptions } from './cache-manager';
 import { ModelManager, Model, type ModelSource } from './model-manager';
 import type { LoadedContextInfo, LoadModelParams, StreamParams } from './types/types';
-import type { ChatCompletionChunk, ChatCompletionParams, ChatCompletionResponse, CreateEmbeddingResponse, EmbeddingCreateParams, RawCompletionChunk, RawCompletionParams, RawCompletionResponse, RerankParams, RerankResponse, SystemOneParams, SystemOneResponse } from './types/oai-compat';
+import type { ChatCompletionChunk, ChatCompletionParams, ChatCompletionResponse, CreateEmbeddingResponse, EmbeddingCreateParams, RawCompletionChunk, RawCompletionParams, RawCompletionResponse, RerankParams, RerankResponse, SystemOneParams, SystemOneResponse, NatlangScoreParams, NatlangScoreResponse } from './types/oai-compat';
 import { type HuggingFaceParams } from './huggingface';
 export interface WllamaLogger {
     debug: typeof console.debug;
@@ -142,9 +142,11 @@ export interface WllamaCompat {
 export declare class Wllama {
     cacheManager: CacheManager;
     modelManager: ModelManager;
-    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs. */
+    /** Feature detection: `loraBlobs` means `lora_adapters` accepts GGUF blobs, `nativeStates` means `native_states` loads natlang native state spans, `natlangScore` means `createNatlangScore` is available. */
     readonly capabilities: {
         readonly loraBlobs: true;
+        readonly nativeStates: true;
+        readonly natlangScore: true;
     };
     private compat;
     private proxy;
@@ -337,6 +339,12 @@ export declare class Wllama {
      * @returns The answer of each question
      */
     createSystemOne(options: SystemOneParams): Promise<SystemOneResponse>;
+    /**
+     * Score candidate replies to chat messages (natlang decision readout): the log-probability of each reply as the closed final assistant message, summed over its tokens after the chat prompt. The replies of an item share the prompt.
+     * @param options The items to score
+     * @returns Per item, the log-probability and token count of each reply, or the error of an item that could not be rendered
+     */
+    createNatlangScore(options: NatlangScoreParams): Promise<NatlangScoreResponse>;
     /**
      * Make chat completion for a given chat messages.
      * @param options OAI-compatible chat completion options

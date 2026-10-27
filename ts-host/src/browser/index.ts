@@ -23,7 +23,7 @@ setDefaultCallStoreFactory(() => browserCallStoreAvailable() ? originStore ??= n
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 setModuleTarget('browser');
 setDefaultLibProvider(name => __NATLANG_TS_LIBS__[name]);
-// The combinators run against the task's Neuralese service (a server, or startBrowserNeuralese) as on Node.
+// The combinators run against the task's Neuralese server as on Node.
 registerBuiltinModule('natlang:neuralese', () => neuraleseModule);
 // Learning (grad, optimizers, adapter and system-prompt training) needs Node: per-task scopes on AsyncLocalStorage
 // and content hashing on node:crypto.
@@ -58,9 +58,7 @@ export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagn
 export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } from './models.js';
 export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
-export { startBrowserNeuralese, NeuraleseWasmService, chooseNeuraleseBuild } from './neuralese-wasm.js';
-export { cachedModelFile, removeCachedModelFiles, startNeuraleseModel, type ModelFileRef, type NeuraleseModelManifest } from './model-files.js';
-export type { NeuraleseWasmOptions, NeuraleseWasmModule, NeuraleseWasmFactory, StartedNeuralese } from './neuralese-wasm.js';
+export { cachedModelFile, removeCachedModelFiles, type ModelFileRef } from './model-files.js';
 export { neuraleseServerModelTurn, HttpNeuraleseStore, restoreNativeArtifacts, withRestoredNativeArtifacts, OWNER_HEADER } from '../model/neuralese-server.js';
 export { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type OpfsNeuraleseStoreOptions, type OpfsStorage,

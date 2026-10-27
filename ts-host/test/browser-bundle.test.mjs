@@ -7,7 +7,7 @@ import { browserNodeImports } from '../scripts/browser-node-imports.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const NEURALESE_NAMES = ['neuraleseServerInfo', 'checkNeuraleseReader', 'serverViewer', 'VIEW_TYPE', 'createNeuraleseLibrary',
   'loadStandardLibrary', 'buildStandardLibrary', 'COMBINATORS', 'restoreNativeArtifacts', 'withRestoredNativeArtifacts', 'supportsNeuralese',
-  'textToParts', 'registerBuiltinModule', 'ModuleUnavailableError', 'startBrowserNeuralese', 'neuraleseServerModelTurn'];
+  'textToParts', 'registerBuiltinModule', 'ModuleUnavailableError', 'neuraleseServerModelTurn'];
 const bundle = (entry, options = {}) => build({ entryPoints: [entry], bundle: true, platform: 'browser', format: 'esm',
   target: 'es2022', splitting: true, outdir: '/browser-bundle-test', write: false, absWorkingDir: root, external: ['undici'],
   logLevel: 'silent', plugins: [browserNodeImports(options)] });
@@ -33,6 +33,9 @@ test('the built browser bundle exports the Neuralese API', async () => {
   for (const name of NEURALESE_NAMES) assert.notEqual(browser[name], undefined, name);
   await assert.rejects(browser.loadStandardLibrary('/lib.nz'), /takes the \.nz file's bytes here/);
   assert.equal(browser.restoreBlocks, undefined);
+  // The retired projected-vector WebAssembly engine is gone; the in-page model is wllama (loadBrowserLocalModel).
+  for (const name of ['startBrowserNeuralese', 'NeuraleseWasmService', 'chooseNeuraleseBuild', 'startNeuraleseModel'])
+    assert.equal(browser[name], undefined, name);
 });
 
 test('browser programs import natlang:neuralese; natlang:learning fails with a teaching error', async () => {

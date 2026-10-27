@@ -24,6 +24,9 @@ the helpers in its companion folder; inline calls in application code see the
 nearest `natlang.d/` folder. Host capabilities are typed services, and every
 invocation is traced.
 
+[natlang, explained](https://werg.github.io/natlang/) is an illustrated, interactive
+introduction in nine chapters; its source is in [`website/`](website/).
+
 ## Get started
 
 ```sh

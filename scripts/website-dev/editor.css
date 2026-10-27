@@ -1,0 +1,44 @@
+/* Toolbar and editing marks for the website dev server. Fixed colours: the bar must read the same on every theme. */
+#nl-dev {
+  position: fixed; z-index: 1000; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; max-width: calc(100vw - 24px);
+  padding: 8px 10px; border-radius: 26px; background: #1d2840; color: #f2e9d6;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 0 2px #efb02e;
+  font: 600 13px/1 Jost, "Century Gothic", system-ui, sans-serif; letter-spacing: 0.04em;
+}
+#nl-dev button {
+  font: inherit; color: #f2e9d6; background: transparent; border: 2px solid #f2e9d6; border-radius: 999px;
+  padding: 7px 12px; cursor: pointer;
+}
+#nl-dev button:hover { background: #33426a; }
+#nl-dev button[aria-pressed="true"] { background: #efb02e; border-color: #efb02e; color: #1d2840; }
+#nl-dev button.nl-primary { background: #c4421f; border-color: #c4421f; }
+#nl-dev button:disabled { opacity: 0.45; cursor: default; }
+#nl-dev button:focus-visible { outline: 3px solid #efb02e; outline-offset: 2px; }
+#nl-dev .nl-fmt { display: inline-flex; gap: 4px; }
+#nl-dev .nl-fmt[hidden], #nl-dev [hidden] { display: none; }
+#nl-dev .nl-fmt button { padding: 7px 10px; }
+#nl-dev .nl-fmt code { font: 700 12px "Courier Prime", monospace; background: none; padding: 0; }
+#nl-dev .nl-status { padding: 0 6px; font-weight: 500; color: #cfd5e0; min-width: 0; max-width: 40ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#nl-dev button { white-space: nowrap; flex: none; }
+@media (max-width: 700px) { #nl-dev { flex-wrap: wrap; justify-content: center; } }
+#nl-dev .nl-status[data-kind="dirty"] { color: #efb02e; }
+#nl-dev .nl-status[data-kind="ok"] { color: #7fd6c9; }
+#nl-dev .nl-status[data-kind="error"] { color: #ff8a6b; }
+
+#nl-dev-banner {
+  position: fixed; z-index: 1000; left: 50%; transform: translateX(-50%); top: calc(76px + env(safe-area-inset-top, 0px));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; max-width: min(720px, calc(100vw - 24px));
+  padding: 12px 14px; border-radius: 6px; background: #c4421f; color: #f2e9d6;
+  font: 15px/1.4 "Libre Caslon Text", Georgia, serif; box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6);
+}
+#nl-dev-banner[hidden] { display: none; }
+#nl-dev-banner span { flex: 1 1 240px; }
+#nl-dev-banner button { font: 700 12px/1 Jost, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 12px; border-radius: 999px; border: 2px solid #f2e9d6; background: transparent; color: #f2e9d6; cursor: pointer; }
+
+body.nl-editing [data-nl-edit] { outline: 1px dashed rgba(196, 66, 31, 0.55); outline-offset: 3px; cursor: text; }
+body.nl-editing [data-nl-edit]:hover { outline-style: solid; }
+body.nl-editing [data-nl-edit]:focus { outline: 2px solid #c4421f; outline-offset: 3px; }
+[data-nl-edit].nl-dirty { outline: 2px solid #efb02e !important; outline-offset: 3px; background-color: rgba(239, 176, 46, 0.14); }
+body.nl-editing { padding-bottom: 90px; }

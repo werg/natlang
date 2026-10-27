@@ -201,3 +201,124 @@ def test_http_native_artifact_routes_share_owner_custody_and_collection():
         httpd.server_close()
         thread.join()
         store.close()
+
+
+class _RefusingStore(TensorStore):
+    """A store whose writes fail their content checks, and whose reads fail unexpectedly."""
+
+    def put_native_state(self, block, owner=None):
+        raise ValueError("native state content ID collision")
+
+    def get_native_tensor_artifact(self, block_id):
+        raise OSError("disk unavailable")
+
+
+def test_http_errors_answer_the_envelope_with_their_own_codes():
+    from natlang_neuralese.model.native_artifact import native_tensor_artifact_id
+    from natlang_neuralese.serve.http import serve
+
+    store = _RefusingStore()
+    httpd = serve(_FakeEngine(store))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+
+    def error(method, path, body=None):
+        status, raw = _call(base, method, path, body)
+        return status, json.loads(raw)["error"]["code"]
+
+    try:
+        absent_state, absent_artifact = "nzs1_" + "a" * 52, "nnt1_" + "b" * 52
+        # Pinning an absent artifact names the artifact's own kind.
+        assert error("POST", f"/v1/neuralese/native-states/{absent_state}/pin") == (404, "neuralese-unknown-native-state")
+        assert error("POST", f"/v1/neuralese/native-tensor-artifacts/{absent_artifact}/pin") == (
+            404, "neuralese-unknown-native-artifact")
+        # A store-level check that refuses an upload is a request error, not a dropped connection.
+        state = _state(1)
+        assert error("PUT", f"/v1/neuralese/native-states/{native_state_id(state)}", encode_native_state(state)) == (
+            400, "neuralese-bad-native-state")
+        # An unexpected failure while reading still answers the envelope.
+        artifact_id = native_tensor_artifact_id(_artifact(1))
+        assert error("GET", f"/v1/neuralese/native-tensor-artifacts/{artifact_id}") == (500, "internal")
+        # Malformed recorded-objective and derivative-program requests fail validation with 400, as graph requests do.
+        assert error("POST", "/v1/neuralese/grad", {"schema": "natlang.native-recorded-objective-request/1"}) == (
+            400, "neuralese-native-grad-invalid")
+        assert error("POST", "/v1/neuralese/grad", {"schema": "natlang.native-derivative-program/1"}) == (
+            400, "neuralese-native-grad-invalid")
+        # Graph requests are first order and say where second-order objectives go.
+        status, raw = _call(base, "POST", "/v1/neuralese/grad", {"schema": "natlang.native-gradient-request/1", "order": 2})
+        assert status == 400 and "natlang.native-derivative-program/1" in json.loads(raw)["error"]["message"]
+        # A batched item's error names its code once.
+        status, raw = _call(base, "POST", "/v1/neuralese/decide_many", {"items": [{"messages": [], "options": []}]})
+        assert status == 200
+        assert json.loads(raw)["results"] == [{"error": "neuralese-decision: a decision needs at least one option"}]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join()
+        store.close()
+
+
+def test_prompt_rendering_mismatch_is_a_request_error():
+    from natlang_neuralese.serve.chat import RequestError
+    from natlang_neuralese.serve.engine import Engine
+
+    engine = SimpleNamespace(prompt_rendering="program-header")
+    with pytest.raises(RequestError) as caught:
+        Engine.render_request(engine, [{"role": "system", "content": [{"type": "text", "text": "x"}]}])
+    assert caught.value.code == "prompt-rendering"
+
+
+def test_http_refuses_retired_fields_and_mismatched_uploads():
+    from natlang_neuralese.serve.chat import RequestError, _reject_projected_parts
+    from natlang_neuralese.serve.http import serve
+
+    store = TensorStore()
+    httpd = serve(_FakeEngine(store))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    try:
+        for field in ("neuralese_temperature", "neuralese_max_length", "neuralese_length", "neuralese_passes", "x_natlang_forced"):
+            status, raw = _call(base, "POST", "/v1/chat/completions", {"messages": [], field: 1})
+            assert status == 400 and json.loads(raw)["error"]["code"] == "unsupported-request-field", field
+        # An upload whose content hashes to another ID than its path is refused and nothing is stored.
+        state = _state(1)
+        other = "nzs1_" + "b" * 52
+        status, raw = _call(base, "PUT", f"/v1/neuralese/native-states/{other}", encode_native_state(state))
+        assert status == 400 and json.loads(raw)["error"]["code"] == "neuralese-id-mismatch"
+        assert store.get_native_state(native_state_id(state)) is None and store.get_native_state(other) is None
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join()
+        store.close()
+    # A part of the retired projected type anywhere in a message is refused.
+    with pytest.raises(RequestError) as caught:
+        _reject_projected_parts([{"role": "user", "content": [{"type": "text", "text": "x"},
+                                                              {"type": "neuralese", "id": "nz1_abc"}]}])
+    assert caught.value.code == "neuralese-retired-part"
+
+
+def test_grad_execution_failure_remains_internal(monkeypatch):
+    from natlang_neuralese.serve import http
+    from natlang_neuralese.serve import native_derivative
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("backend out of memory")
+
+    monkeypatch.setattr(native_derivative, "execute_derivative_program", broken)
+    store = TensorStore()
+    httpd = http.serve(_FakeEngine(store))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, raw = _call(f"http://127.0.0.1:{httpd.server_address[1]}", "POST", "/v1/neuralese/grad",
+                            {"schema": "natlang.native-derivative-program/1"})
+        assert status == 500
+        assert json.loads(raw)["error"]["code"] == "internal"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join()
+        store.close()

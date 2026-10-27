@@ -45,7 +45,7 @@ type NeuraleseStringMethods<T> = [T] extends [string] ? Pick<String,
   'trim' | 'trimStart' | 'trimEnd' | 'toLowerCase' | 'toUpperCase' |
   'includes' | 'startsWith' | 'endsWith' | 'indexOf' | 'lastIndexOf' | 'slice' | 'substring'> : {};
 /**
- * A soft value of type T in dialect D: an opaque reference to a stored block of vectors that a model reads.
+ * A soft value of type T in dialect D: an opaque reference to a stored native state that a model reads.
  * A Neuralese of a function type is callable with the function's parameters.
  */
 type Neuralese<T, D extends string = DefaultDialect> = [T] extends [(...args: infer A) => infer R] ?

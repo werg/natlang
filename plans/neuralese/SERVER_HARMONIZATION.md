@@ -4,7 +4,8 @@
 reference/fork conformance work. The reference runtime's legacy tiny-block
 adapter create/apply/export routes have since been retired. The llama.cpp
 server retains its generic caller-supplied GGUF LoRA loader; native actor
-coefficient artifacts are served by the native model runtime.
+coefficient artifacts are served by the native model runtime. The vendored
+Fork (wasm) build and its tests below were removed on 2026-10-26.
 
 Owner: "Can we harmonize our server behaviors?" This is the audit of the runtimes that serve
 the Neuralese wire protocol, the divergences found, and the single capability model they now
