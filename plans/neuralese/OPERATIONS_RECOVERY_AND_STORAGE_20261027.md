@@ -626,3 +626,23 @@ numeric copies preserved. Its first0.5GiB worker hit its own cgroup cap because
 the shared copier syncs512MiB windows; original bytes stayed intact and the
 partial is496MB. Replacement worker uses2GiB. Do not repeat that low allowance or
 claim its3.1GB freed before its actual verified link-swap receipt.
+
+### Follow-up, 20:56 Berlin
+
+Inventory actually completed at20:39:26: tuned18/34 versus untuned4/34 development
+roots (the real inventory split has34 invocations, not Invoice's60). The earlier
+"running/queued behind comparison" wording was stale. Invoice's first next-cycle
+entry then failed before fitting because the frozen client's schedule import
+could not locate source-review tables. The missing authoritative path is now
+explicitly bound through `NATLANG_SOURCE_REVIEWS`; the exact frozen schedule import
+passes. Retry supervisor is`natlang-invoice-whole-graph-rl-supervisor-r3-20261027`;
+it currently waits for actor memory admission. No policy update is credited.
+Failure status is now recorded explicitly and the owned actor is closed on exit.
+
+The two programme results are COMPLETE paired development comparisons. All60
+Invoice tuned invocations executed successfully,39 correctly. Confirmation is
+still untouched. The production learners continued independently throughout.
+Current active-R8 capsule and full37357 private export are verified; subsequent
+operator-source v4 includes the fixed programme launcher, frozen TypeScript client,
+frozen training code and authoritative review tables. Check its actual ready
+receipt before claiming that newer supplement complete; v3 remains durable.
