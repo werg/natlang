@@ -311,7 +311,8 @@ class Engine:
             raise ValueError('native prefill needs at least one token')
         if type(self.prefill_tokens) is not int or self.prefill_tokens <= 0:
             raise ValueError('native prefill_tokens must be a positive integer')
-        if cache is None and self.prefix_cache is not None and not torch.is_grad_enabled():
+        from ..model.native_adapters import live_adapter_leaves
+        if cache is None and self.prefix_cache is not None and not torch.is_grad_enabled() and not live_adapter_leaves():
             return self._native_prefix_prefill(ids)
         for start in range(0, len(ids), self.prefill_tokens):
             output = self._native_forward(ids[start:start+self.prefill_tokens], cache)

@@ -64,3 +64,25 @@ def test_budget_bounds_entries_and_parameter_changes_miss():
     assert ('big',) not in cache.entries
     parameters['w'].add_(1)
     assert InferenceReplacementCache.key(['a'], parameters) != key
+
+
+def test_live_leaves_bypass_both_value_caches(tmp_path):
+    """Live trainable leaves change under unchanged artifact IDs: neither cache may serve them."""
+    from natlang_neuralese.serve.prefix_cache import PrefixCache
+    engine = engine_fixture(tmp_path, 'lfm')
+    records = adapters(engine)
+    stack = [record.id for record in records]
+    engine.prefix_cache = PrefixCache(2**26, 4)
+    prompt = list(range(5, 17))
+
+    def logits(scale):
+        leaves = {record.id: {name: value * scale for name, value in record.artifact.tensors.items()} for record in records}
+        with torch.no_grad():
+            out = run_native(engine, lambda: engine._native_prefill_forward(prompt, None), stack, leaves=leaves)
+            return run_native(engine, lambda: engine.shared_model.logits(out['h_final'][:, -1]), stack, leaves=leaves)
+
+    first, second = logits(1.0), logits(3.0)
+    assert not torch.equal(first, second), 'changed live leaf values change the result'
+    assert torch.equal(logits(1.0), first)
+    assert getattr(engine, 'native_adapter_cache', None) is None or not engine.native_adapter_cache.entries
+    assert engine.prefix_cache.hits == 0 and not engine.prefix_cache.entries

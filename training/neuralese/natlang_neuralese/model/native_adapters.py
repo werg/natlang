@@ -18,6 +18,13 @@ from .native_adapter_math import singular_bases
 
 SCHEMA = 'natlang.native-adapter/1'
 _ACTIVE = contextvars.ContextVar('natlang_native_adapter_execution', default=())
+# Whether the running native operation substitutes live (trainable) adapter or bank-basis leaves: their values can change
+# under unchanged artifact IDs, so value caches keyed by IDs (inference weights, prompt prefixes) must not serve them.
+_LIVE_LEAVES = contextvars.ContextVar('natlang_native_live_adapter_leaves', default=False)
+
+
+def live_adapter_leaves() -> bool:
+    return _LIVE_LEAVES.get()
 
 
 class NativeAdapterError(ValueError):
@@ -455,6 +462,7 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
         lifecycle = reference.lifetime if reference is not None else {'active': True}
         token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
+        leaves_token = _LIVE_LEAVES.set(bool(leaves))
         try:
             if not resolved:
                 # No autograd carrier is consumed in inference. Avoid scanning
@@ -517,6 +525,7 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                 return result
         finally:
             if reference is None:lifecycle['active'] = False
+            _LIVE_LEAVES.reset(leaves_token)
             _ACTIVE.reset(token)
 
 
