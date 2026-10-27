@@ -138,10 +138,11 @@ def test_saved_fit_import_uses_verified_batch_and_checks_file_names(tmp_path, mo
         import_archive(SimpleNamespace(store=target), state_directories=[directory])
         assert sizes == [5]
         assert encode_native_state(target.get_native_state(records[-1].id).block) == encode_native_state(records[-1].block)
+        admitted_before_failure = set(target._resident)
         (directory / 'wrong.nzs').write_bytes(encode_native_state(records[0].block))
         with pytest.raises(ValueError, match='named content'):
             import_archive(SimpleNamespace(store=target), state_directories=[directory])
-        assert sizes == [5]
+        assert set(target._resident) == admitted_before_failure
     finally:
         target.close()
         engine.store.close()
