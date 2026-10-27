@@ -181,7 +181,8 @@ class _HostPeak:
 
 
 def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers=True,
-                     chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None):
+                     chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None,
+                     production_packing=False):
     """Cases are whole, source-authenticated graphs chosen by the supervisor.
 
     The existing gated optimizer hooks stay installed but unarmed. Temporary
@@ -258,6 +259,8 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                         with backend.autocast() if backend is not None else contextlib.nullcontext():
                             packing = ({'share_causal_prefixes':True}
                                 if getattr(model,'share_causal_prefixes',False) else {})
+                            if production_packing:
+                                packing.update(collect_accuracy=False, allow_communication_prefixes=backend is None)
                             if objective is not None:packing['objective']=objective
                             loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
                                 chunk_tokens=chunk_tokens,**packing)

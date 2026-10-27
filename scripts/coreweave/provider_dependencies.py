@@ -144,6 +144,33 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         for item in classification_proof_dependencies({'path':str(path),'sha256':sha256_file_hex_cached(path)}):
             bound(item)
 
+    def packed_capacity_inputs(options):
+        if not isinstance(options, dict) or options.get('sft_packed_capacity') is None:
+            return
+        receipt = options['sft_packed_capacity']
+        if not isinstance(receipt, dict): raise ValueError('packed capacity receipt is malformed')
+        geometry = bound(receipt['geometry'])
+        proof = bound(receipt['proof'])
+        geom = json.loads(geometry.read_text()); evidence = json.loads(proof.read_text())
+        if (geom.get('schema') != 'natlang.native-packed-geometry/1'
+                or evidence.get('schema') != 'natlang.native-sft-packed-capacity/1'
+                or evidence.get('geometry') != receipt['geometry'] or evidence.get('passed') is not True
+                or not isinstance(evidence.get('capacity_identity'), dict)
+                or not isinstance(evidence.get('runtime_code_sha256'), str) or len(evidence['runtime_code_sha256']) != 64
+                or evidence.get('optimizer_updates') != 0 or evidence.get('earned_exposure') != 0):
+            raise ValueError('packed capacity proof/geometry bindings differ')
+        bound(geom['source']); bound(evidence['source'])
+
+    def packed_geometry_input(reference):
+        if isinstance(reference, str):
+            try: reference = json.loads(reference)
+            except ValueError as error: raise ValueError('packed geometry requires a JSON file binding') from error
+        if not isinstance(reference, dict): raise ValueError('packed geometry requires an exact file binding')
+        geometry = json.loads(bound(reference).read_text())
+        if geometry.get('schema') != 'natlang.native-packed-geometry/1':
+            raise ValueError('packed geometry source schema differs')
+        bound(geometry['source'])
+
     def foundation_inputs(options):
         if not isinstance(options, dict):
             return
@@ -229,6 +256,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             return
         foundation_inputs(training.get('options') or {})
         foundation_inputs(training.get('training_options') or {})
+        packed_capacity_inputs(training.get('options') or {})
+        packed_capacity_inputs(training.get('training_options') or {})
         source_correction_inputs(training.get('options') or {})
         source_correction_inputs(training.get('training_options') or {})
         held_correction_inputs(training.get('options') or {})
@@ -253,6 +282,7 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
             # Foundation declarations are checkpoint dependencies even for a
             # completed carried frame; inspect before the source-frame skip.
             foundation_inputs(frame.get('options') or {})
+            packed_capacity_inputs(frame.get('options') or {})
             source_correction_inputs(frame.get('options') or {})
             held_correction_inputs(frame.get('options') or {})
             supervision = (frame.get('options') or {}).get('ce_supervision_policy_binding')
@@ -460,6 +490,8 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         for parameters in (value.get('trainer_parameters') or {}, value.get('seed_trainer_parameters') or {}):
             selected = parameters.get('source_classification_migration')
             if selected is not None:classification_input(selected)
+            selected_geometry = parameters.get('sft_packed_geometry')
+            if selected_geometry is not None: packed_geometry_input(selected_geometry)
         for command_name in ('seed_command','learner_command'):
             command=value.get(command_name) or []
             for index,argument in enumerate(command):
@@ -468,6 +500,11 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                     classification_input(command[index+1])
                 elif argument.startswith('--source-classification-migration='):
                     classification_input(argument.split('=',1)[1])
+                elif argument=='--sft-packed-geometry':
+                    if index+1>=len(command):raise ValueError('provider packed geometry command omitted its value')
+                    packed_geometry_input(command[index+1])
+                elif argument.startswith('--sft-packed-geometry='):
+                    packed_geometry_input(argument.split('=',1)[1])
         qualification=value.get('foundation_qualification_request')
         supervision=value.get('ce_supervision_policy')
         if supervision is not None:
@@ -555,6 +592,11 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
                 consumed = add(value[key])
                 if key == 'production_recipe' and json.loads(consumed.read_text()).get('extends'):
                     raise ValueError('provider production_recipe must be its exact resolved portable file')
+                if key == 'production_recipe':
+                    recipe = json.loads(consumed.read_text())
+                    for stage in recipe.get('stages', []):
+                        selected = (stage.get('parameters') or {}).get('sft_packed_geometry')
+                        if selected is not None: packed_geometry_input(selected)
         if value.get('semantic_refresh_config'): config(add(value['semantic_refresh_config']))
         if value.get('base'): asset(value['base'], base=True)
         if value.get('runtime'): asset(value['runtime'])

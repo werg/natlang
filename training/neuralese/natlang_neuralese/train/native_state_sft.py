@@ -1037,6 +1037,8 @@ def build_parser():
         help='exact admitted whole-policy source/objective MAX request; policy SGD always qualifies before updates')
     parser.add_argument('--memory-qualification', default=None,
         help='bound prepared new-source capacity request JSON; checked read-only after exact restore')
+    parser.add_argument('--sft-packed-geometry', default=None,
+        help='exact path/SHA binding of explicitly prepared packed source geometry')
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
@@ -1394,7 +1396,13 @@ def _main(argv=None, *, requested_refresh):
         if prior_held.get('sha256') != resident_state['payload']['held']['sha256']:
             args.continued_held_native_graphs = Path(prior_held['path'])
             checkpoint_options['continued_held_native_graphs'] = str(args.continued_held_native_graphs)
-    train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
+    cold_packed_geometry = None
+    prior_packed = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
+    if args.memory_qualification and not args.sft_packed_geometry and not prior_packed.get('geometry'):
+        from .native_packed_capacity import index_source
+        train, cold_packed_geometry = index_source(args.native_graphs, fingerprint, roles.ids)
+    else:
+        train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
     held = NativeGraphSource(args.held_native_graphs, fingerprint, required_split='test', role_ids=roles.ids)
     train_groups, held_groups = train.groups, held.groups
     if train_groups & held_groups:
@@ -1894,6 +1902,7 @@ def _main(argv=None, *, requested_refresh):
     # predecessor/source maps are no longer needed after optimizer/RNG restore;
     # retaining them through gradient and capacity checks wastes gigabytes.
     prior_policy_capacity = ((resume or {}).get('options') or {}).get('policy_capacity')
+    prior_packed_capacity = ((resume or {}).get('options') or {}).get('sft_packed_capacity') or {}
     admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
     prior_foundations = set((resume or {}).get('completed_foundations') or
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
@@ -1968,6 +1977,17 @@ def _main(argv=None, *, requested_refresh):
         foundation_communication_batches=args.foundation_communication_batches or 1,
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
         cohort_ids=urgent_cohort_ids)
+    if args.memory_qualification and objective is None:
+        from .native_packed_capacity import qualify_pending
+        from ..eval.native_memory import capacity_identity
+        packed = qualify_pending(model, optimizer, train, pending_batches, args, backend=backend,
+            checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
+            global_step=global_step, prior_geometry=(json.loads(args.sft_packed_geometry)
+                if args.sft_packed_geometry else prior_packed_capacity.get('geometry')),
+            indexed_geometry=cold_packed_geometry,capacity_identity=capacity_identity(config,args,backend))
+        if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
+    cold_packed_geometry = None
     if objective is not None and not mandatory_objective:
         from ..eval.native_memory import qualify_policy_objective
         checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
@@ -2086,7 +2106,29 @@ def _main(argv=None, *, requested_refresh):
                 last_saved_step = step
                 metadata_dirty = False
             if resident is not None:
-                expanded = resident.poll(global_step)
+                def packed_candidate_check(candidate_train, candidate_held, payload, candidate_ce, declarations):
+                    from .native_packed_capacity import qualify_pending
+                    from ..eval.native_memory import capacity_identity
+                    candidate_train.set_ce_policy(candidate_ce[1] if candidate_ce is not None else ce_policy)
+                    candidate_counts = dict(exposure_counts)
+                    for key in candidate_train.bindings: candidate_counts.setdefault(key,0)
+                    candidate_options = {**checkpoint_options, '_pending_native_source_declarations':declarations}
+                    candidate_frame = _retain_pending_sources({'source_row_bindings':candidate_train.bindings,
+                        'source_row_order':candidate_train.ordered_ids(), 'exposure_counts':dict(candidate_counts),
+                        'options':candidate_options}, pending_frame)
+                    candidate_cohorts = source_cohort_ids(candidate_train) if args.urgent_cohort_fairness else None
+                    _, candidate_batches = pending_exposure_batches(candidate_train.entries,candidate_counts,
+                        epochs=args.epochs,batch_graphs=args.batch_graphs,batch_tokens=args.batch_tokens,
+                        foundation_ids=foundation_priority_ids,
+                        foundation_communication_batches=args.foundation_communication_batches or 1,
+                        minimum_visits=candidate_frame.get('required_visits'),schedule_offset=global_step,
+                        cohort_ids=candidate_cohorts)
+                    return qualify_pending(model,optimizer,candidate_train,candidate_batches,args,backend=backend,
+                        checkpoint_sha256=sha256_file_hex_cached(policy.slot) if policy.slot.exists() else config['base_inventory_sha256'],
+                        global_step=global_step,prior_geometry=payload.get('sft_packed_geometry'),live_uncommitted=True,
+                        capacity_identity=capacity_identity(config,args,backend))
+                expanded = (resident.poll(global_step,candidate_check=packed_candidate_check)
+                    if args.memory_qualification and objective is None else resident.poll(global_step))
                 if expanded is not None:
                     schedule.close()
                     metadata_dirty = True
@@ -2143,6 +2185,9 @@ def _main(argv=None, *, requested_refresh):
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
                         cohort_ids=urgent_cohort_ids)
+                    if args.memory_qualification and objective is None:
+                        packed = resident.packed_capacity_update
+                        if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids,

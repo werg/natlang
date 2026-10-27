@@ -1432,7 +1432,7 @@ def _delta_payload(directory, previous, plan, proposed, stage_id, recipe_path,
 
 
 def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids,
-            runtime_package=None, geometry_evidence=None, publish=True, delta_sources=None):
+            runtime_package=None, geometry_evidence=None, publish=True, delta_sources=None, packed_geometry=None):
     """CPU preparation; callers decide admission and provide an immutable recipe."""
     if type(publish) is not bool:
         raise ValueError('resident preparation publish must be an explicit boolean')
@@ -1521,6 +1521,9 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
             'geometry': geometry, 'geometry_identity': initial['geometry_identity']}
         if geometry_evidence:
             payload['geometry_evidence'] = geometry_evidence
+    if packed_geometry is not None:
+        bound(packed_geometry)
+        payload['sft_packed_geometry'] = packed_geometry
     proposed.setdefault('resident_adoptions', []).append({'predecessor': predecessor,
         'recipe': payload['recipe'], 'train': payload['train'], 'held': payload['held'], 'stage_id': stage_id})
     request_id = digest(payload)
@@ -1553,6 +1556,7 @@ class ResidentAdoption:
         self.generation = self.state['generation'] if self.state else digest(self.plan)
         self.rejected = set()
         self.ce_policy_update = None
+        self.packed_capacity_update = None
         with locked(self.directory):
             initial = self.directory/'initial.json'
             prior = json.loads(initial.read_text()) if initial.exists() else None
@@ -1577,7 +1581,7 @@ class ResidentAdoption:
             raise ValueError('resident plan differs from actual loaded sources')
         self.pending_declarations = pending_declarations(self.plan, stage_id, train.tokenizer_fingerprint)
 
-    def poll(self, global_step):
+    def poll(self, global_step, *, candidate_check=None):
         """Return validated new data or None. Rejections do not stop SGD."""
         pointer = self.directory / 'pending.json'
         if not pointer.exists():
@@ -1671,7 +1675,10 @@ class ResidentAdoption:
                 payload['plan']['stage_inputs'][self.stage_id])
             ce_update = ((payload['plan']['stage_inputs'][self.stage_id]['ce_supervision_policy'],
                 ce_policy) if ce_policy is not None else None)
+            checked = candidate_check(train, held, payload, ce_update, declarations) if candidate_check else None
             with locked(self.directory):
+                if candidate_check and payload.get('sft_packed_geometry') is not None:
+                    bound(payload['sft_packed_geometry'])
                 if ce_update is not None:
                     bound(self.plan['stage_inputs'][self.stage_id]['ce_supervision_policy'])
                     bound(ce_update[0])
@@ -1699,6 +1706,7 @@ class ResidentAdoption:
                 self.train, self.held, self.recipe_binding = train, held, recipe
                 self.pending_declarations = declarations
                 self.ce_policy_update = ce_update
+                self.packed_capacity_update = checked
                 return train, held
         except (ValueError, KeyError, TypeError, OSError) as error:
             # A post-commit projection error is fatal/recoverable, never continue
@@ -1726,6 +1734,7 @@ def main(argv=None):
     parser.add_argument('--role-ids', nargs=4, type=int)
     parser.add_argument('--delta-train-source', type=Path,
                         help='validate only this exact appended source; learner verifies complete prefix and union')
+    parser.add_argument('--sft-packed-geometry', help='exact JSON binding of prepared packed geometry')
     parser.add_argument('--no-publish', action='store_true',
                         help='validate and write an immutable request without publishing it to the learner')
     args = parser.parse_args(argv)
@@ -1739,7 +1748,8 @@ def main(argv=None):
     print(json.dumps(prepare(args.directory, args.recipe, args.stage_id,
                             tokenizer_fingerprint=args.tokenizer_fingerprint, role_ids=args.role_ids,
                             publish=not args.no_publish,
-                            delta_sources={'train':binding(args.delta_train_source)} if args.delta_train_source else None)))
+                            delta_sources={'train':binding(args.delta_train_source)} if args.delta_train_source else None,
+                            packed_geometry=json.loads(args.sft_packed_geometry) if args.sft_packed_geometry else None)))
 
 
 if __name__ == '__main__':

@@ -115,6 +115,69 @@ def test_reused_resident_tree_rejects_changed_leaf_before_commit(tmp_path,monkey
     assert manager.train.ordered_ids()==['a','b']
 
 
+def test_packed_candidate_qualification_precedes_resident_commit(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    geom=tmp_path/'prepared-geometry.json';write_json(geom,{'source':'fixture'})
+    ref=resident.binding(geom)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),packed_geometry=ref)
+    seen=[]
+    def reject(train,held,payload,ce_update,declarations):
+        assert resident.current(directory) is None
+        assert payload['sft_packed_geometry']==ref and train.ordered_ids()==['a','b','c']
+        seen.append(True)
+        raise ValueError('actual packed case did not fit')
+    assert manager.poll(13,candidate_check=reject) is None
+    assert seen and resident.current(directory) is None and manager.train.ordered_ids()==['a','b']
+    # A new immutable request can be retried and committed only after its check.
+    manager.rejected.clear()
+    def accept(train,held,payload,ce_update,declarations):
+        assert resident.current(directory) is None
+        return {'proof':'live-model-measured'}
+    assert manager.poll(14,candidate_check=accept)[0].ordered_ids()==['a','b','c']
+    assert manager.packed_capacity_update=={'proof':'live-model-measured'}
+    assert resident.current(directory)['at_global_step']==14
+
+
+def test_resident_commits_only_after_actual_live_packed_backward(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    import torch
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
+    from natlang_neuralese.train.native_packed_capacity import geometry_for_source,qualify_pending
+    from test_native_optimizer_checkpointing import assert_exact
+    from test_shared_state import tiny
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    candidate=NativeGraphSource(paths['new'],'tokenizer-sha',required_split='train')
+    _,geometry,_=geometry_for_source(candidate,tmp_path,allow_build=True)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),packed_geometry=geometry)
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    native_training_update(model,optimizer,list(candidate.iter_indices([0])),checkpoint_layers=True,chunk_tokens=3)
+    gradients={name:(parameter.grad,parameter.grad.detach().clone())
+               for name,parameter in optimizer._native_named_parameters if parameter.grad is not None}
+    assert gradients
+    with torch.no_grad():model.port.embedding_weight[1].add_(.1)
+    before=copy.deepcopy(model.state_dict());optimizer_before=copy.deepcopy(optimizer.state_dict());rng=torch.get_rng_state().clone()
+    args=SimpleNamespace(out=tmp_path/'measurement',checkpoint_layers=True,chunk_tokens=3)
+    def actual(train,held,payload,ce_update,declarations):
+        assert resident.current(directory) is None
+        return qualify_pending(model,optimizer,train,[(0,[0,1],False)],args,backend=None,
+            checkpoint_sha256='a'*64,global_step=17,prior_geometry=payload['sft_packed_geometry'],live_uncommitted=True)
+    assert manager.poll(17,candidate_check=actual)[0].ordered_ids()==['a','b','c']
+    proof=json.loads(Path(manager.packed_capacity_update['proof']['path']).read_text())
+    assert proof['model_boundary']=='live-uncommitted' and proof['global_step']==17
+    assert proof['capacity']['cases'][0]['example_ids']==['a','b'] and proof['passed']
+    for key,value in model.state_dict().items():torch.testing.assert_close(value,before[key],rtol=0,atol=0)
+    assert_exact(optimizer.state_dict(),optimizer_before)
+    for name,parameter in optimizer._native_named_parameters:
+        if name in gradients:
+            assert parameter.grad is gradients[name][0]
+            torch.testing.assert_close(parameter.grad,gradients[name][1],rtol=0,atol=0)
+    assert torch.equal(rng,torch.get_rng_state())
+
+
 @pytest.mark.parametrize('prior_pending',[False,True])
 def test_prepare_without_publication_preserves_live_pending_and_sgd(tmp_path,monkeypatch,prior_pending):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
