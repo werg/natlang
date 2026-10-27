@@ -37,6 +37,13 @@ cold fixture preparation and cache offload from starving an earned checkpoint
 write; reuse verified current sealed test fixtures and use internal disposable
 scratch when its measured headroom permits.
 
+## Luna teacher concurrency (owner, 2026-10-27)
+
+Limit Luna training-data generation to **one worker**. This supersedes the earlier
+six-worker target below. Preserve historical actors, plans and completed data;
+new or resumed generation must use a reviewed one-slot plan. Engineering helpers
+are separate from this teacher-worker limit.
+
 ## Luna generation resumed (owner, 2026-10-26)
 
 Start and supervise six parallel Luna data-generation workers. This explicit
