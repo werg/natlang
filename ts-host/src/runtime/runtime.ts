@@ -37,7 +37,8 @@ export type ModelConfig = { driver: ModelDriver;
   /** `finite-returns`: every call with a finite result type uses the decision readout when the driver can score
    * replies; `declared` (default): only functions whose frontmatter says `readout: decision`. */
   decisionReadout?: 'declared' | 'finite-returns';
-  /** Guided generation on natlang's own servers (NativeToolAgent's `guidance`); off by default. */
+  /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
+   * the page); off by default. Other backends ignore the field. */
   guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
   review?: NativeReviewOptions };
 

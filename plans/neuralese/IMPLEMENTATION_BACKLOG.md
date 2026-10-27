@@ -51,7 +51,7 @@ exercised on the 350M port and the Python reference server. "Not wired" mostly m
 | Reference server on Mellum (markers, QAT latents) | partial | Markers via `hf_port.family_controls`; QAT conversion output not loadable as a served student yet |
 | llama.cpp fork (LFM2): ports, server, LoRA adapters, read adapter | used | fork 8155cff42, `tests/neuralese/test_server_conformance.py` |
 | llama.cpp fork for Maple/Mellum (MoE, ternary TQ2_0, heads) (#26, #32) | not started | `export/` handles LFM2 only |
-| Browser wasm/WebGPU | removed 2026-10-26 (retired projected-vector protocol; the browser's local model is the patched wllama on the llama.cpp fork: it consumes stored native state spans and scores decisions, but does not produce native state) | was `ts-host/vendor/neuralese-wasm` (fork 1f4e334d5) |
+| Browser wasm/WebGPU | removed 2026-10-26 (retired projected-vector protocol; the browser's local model is the patched wllama on the llama.cpp fork: it consumes stored native state spans, scores decisions and guides generation, but does not produce native state) | was `ts-host/vendor/neuralese-wasm` (fork 1f4e334d5) |
 | Legacy vLLM Neuralese parity (projected PortHeads) | retired | `scripts/neuralese_vllm_parity.py` removed with the projected adapter path; current vLLM serving is ordinary teacher inference |
 | Batched-execution integration (BATCHED_EXECUTION §7: diagnostic code union, turn/function in requests, shared scheduler in improvement/pi drivers, author note) | not started on main | Owner: TS batching session |
 

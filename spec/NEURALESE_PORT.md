@@ -145,10 +145,12 @@ This repository contains one implementation of this protocol, the reference serv
 (`training/neuralese/natlang_neuralese/serve/`, `python -m natlang_neuralese.serve`).
 The llama.cpp fork serves part of it for llama.cpp models without this protocol's routes:
 it consumes stored native states exported as native state spans (`--native-state`, content
-parts `{type: "native_state", id}`) and scores decisions (`POST /v1/natlang/score`). The
-browser's local model is the patched wllama (`ts-host/src/browser/local-model.ts`), which
-runs that fork in the page: a tuned release's soft states and decision readout work there,
-while producing native state, the store, guidance and learning need a native-state server.
+parts `{type: "native_state", id}`), scores decisions (`POST /v1/natlang/score`), and guides
+generation with the `guidance` field and `POST /v1/neuralese/guidance/check` below (the same
+checks; a rollback restores the slot's cache or a context checkpoint; there is no `--guidance`
+startup default). The browser's local model is the patched wllama
+(`ts-host/src/browser/local-model.ts`), which runs that fork in the page: a tuned release's soft states, decision readout and guidance work there, while producing
+native state, the store and learning need a native-state server.
 
 ### Capabilities
 
