@@ -7,12 +7,12 @@ import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
-import { defaultNativePython, ensureNativeServer, newerNativeCheckpoint, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf,
+import { defaultNativePython, ensureNativeServer, newerNativeCheckpoint, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
 import { parseRefinementSettings, type RefinementSettings } from '../native/refinement-settings.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
-import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
+import { createResolvedModelSession, loadModelConfiguration, resolveModelChoice, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites, localSlotPlan,
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
   type ModelSelectionOverrides, type ResolvedModelChoice } from '../model/index.js';
@@ -167,6 +167,7 @@ promoted by evidence; a case that fails hands the call back to the function.`;
   if (topic === 'runtime' || topic === 'setup') return `Model runtime commands:
   natlang setup [--profile NAME] [--provider ID] [--model ID] [--yes] [--json]
   natlang setup --native SOURCE [--profile NAME] [--gguf q8_0|bf16|f32] [--default] [--device D] [--port N] [--json]
+  natlang setup --program DIR [--json]
   natlang serve [--profile NAME]
   natlang runtime status [--json]
   natlang runtime install [--yes] [--json]
@@ -187,7 +188,9 @@ model call and stops it with the command; natlang serve keeps it running so
 later commands start at once. --gguf also exports the weights for the managed
 llama.cpp backend as profile NAME-gguf: faster, ordinary tokens only (the
 Neuralese producer runs on the native server). Rerun setup to move to a newer checkpoint; runs
-say when the source has one. See docs/NATIVE_MODELS.md.`;
+say when the source has one. A tuned program always runs on the checkpoint
+its active release was tuned on, pinned on first use; setup --program DIR pins
+it ahead of time. See docs/NATIVE_MODELS.md.`;
   if (topic === 'models') return `List Pi providers and models:
   natlang models [PROVIDER] [--json] [--refresh]
 
@@ -314,13 +317,68 @@ function modelSelection(parsed: Parsed): LoadedModelConfiguration {
   return loaded;
 }
 
+const readConfigFile = (): NatlangConfigFile => {
+  const path = join(defaultNatlangConfigDirectory(), 'config.json');
+  return (existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {}) as NatlangConfigFile;
+};
+
+/**
+ * A tuned program runs on the exact checkpoint its active release was tuned on (the release's `base`): the adapters and
+ * soft states are only valid there. A native profile on another checkpoint, or the default profile, is rebound to that
+ * base, pinned and served natively with the launch settings of the selected (or first configured) native profile.
+ * An explicitly selected non-native backend is kept and runs untuned with the usual notice; --no-weights runs the
+ * selected model untuned.
+ */
+async function bindTunedModel(parsed: Parsed, selected: LoadedModelConfiguration, root: string | undefined): Promise<LoadedModelConfiguration> {
+  const release = root && !parsed.options.has('--no-weights') ? currentRelease(root) : undefined;
+  if (!release) return selected;
+  const sha256 = release.manifest.base.checkpoint_sha256, choice = selected.choice;
+  const native = choice.kind === 'external' ? choice.managedNative : undefined;
+  if (native?.sha256 === sha256) return selected;
+  const explicit = option(parsed, '--profile') || option(parsed, '--provider') || process.env.NATLANG_SERVER || process.env.NATLANG_PROVIDER || process.env.NATLANG_PROFILE;
+  // An unmanaged native server checks its own identity in weight binding; an explicit other backend is the user's call.
+  if (!native && (explicit || (choice.kind === 'external' && choice.neuraleseServer))) return selected;
+  const program = basename(root!);
+  const found = findNativeCheckpoint(sha256, { programRoot: root, sources: selected.nativeSources });
+  if (!found) {
+    process.stderr.write(`natlang: ${program} was tuned on checkpoint ${sha256.slice(0, 12)}, which is not available here; ` +
+      `natlang setup --native CHECKPOINT pins it. Running ${selected.name} untuned.\n`);
+    return selected;
+  }
+  const config = readConfigFile();
+  const launch = native ?? Object.values(config.profiles ?? {}).find(profile => profile.native)?.native;
+  const { checkpoint: _c, sha256: _s, sourceSha256: _o, source: _r, step: _t, port: _p, ...settings } = launch ?? {} as NativeModelSettings;
+  const pin = found.pinned ? { checkpoint: found.pinned, step: found.step } :
+    await pinNativeCheckpoint(found.pointer!, { ...defaultNativePython(), ...(settings.python ? { python: settings.python, pythonPath: settings.pythonPath } : {}) });
+  const step = pin.step ?? found.step;
+  const profile = { ...(native ? selected.profile : {}), native: { ...defaultNativePython(), ...settings, checkpoint: pin.checkpoint, sha256,
+    sourceSha256: sha256, ...(step !== undefined ? { step } : {}) }, ...(selected.profile.escalate ? { escalate: selected.profile.escalate } : {}) };
+  process.stderr.write(`natlang: ${program} runs its tuned release ${release.manifest.digest.slice(0, 12)} on the checkpoint it was tuned on ` +
+    `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned\n`);
+  return { ...selected, name: `${program}-tuned`, profile, choice: resolveModelChoice(profile) };
+}
+
+/** `natlang setup --program DIR`: pin the checkpoint a tuned program's active release was tuned on, ahead of its first run. */
+async function setupProgram(parsed: Parsed, root: string): Promise<number> {
+  const release = currentRelease(resolve(root));
+  if (!release) throw new Error(`${root} has no active tune release (.natlang/tune/active.json)`);
+  const sha256 = release.manifest.base.checkpoint_sha256, { nativeSources } = loadModelConfiguration(option(parsed, '--profile'));
+  const found = findNativeCheckpoint(sha256, { programRoot: resolve(root), sources: nativeSources });
+  if (!found) throw new Error(`checkpoint ${sha256} that ${root} was tuned on is not available here; natlang setup --native CHECKPOINT pins it`);
+  const pin = found.pinned ? { checkpoint: found.pinned, reused: true } : await pinNativeCheckpoint(found.pointer!, defaultNativePython());
+  const report = { ok: true, program: resolve(root), release: release.manifest.digest, checkpoint: pin.checkpoint, sha256, reused: pin.reused };
+  output(parsed.options.has('--json') ? report : `${basename(resolve(root))} runs its tuned release ${release.manifest.digest.slice(0, 12)} on ` +
+    `${sha256.slice(0, 12)} (pinned at ${pin.checkpoint})`, parsed.options.has('--json'));
+  return 0;
+}
+
 type NatlangConfigFile = { defaultProfile?: string; profiles?: Record<string, import('../model/config.js').ModelProfile>;
   nativeSources?: Record<string, string> } & Record<string, unknown>;
 
 /** `natlang setup --native SOURCE`: pin the checkpoint and write (or update) its profile. */
 async function setupNative(parsed: Parsed, source: string): Promise<number> {
   const configPath = join(defaultNatlangConfigDirectory(), 'config.json');
-  const config = (existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {}) as NatlangConfigFile;
+  const config = readConfigFile();
   const named = config.nativeSources?.[source];
   const name = option(parsed, '--profile') ?? (named ? source : 'native');
   const pointer = readCheckpointPointer(named ?? source);
@@ -587,7 +645,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
     option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
   const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
     join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
-  const selected = modelSelection(parsed), { choice } = selected;
+  const selected = await bindTunedModel(parsed, modelSelection(parsed), spec.root), { choice } = selected;
   const executorIdentity = executorIdentityForChoice(choice);
   const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
   if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
@@ -689,7 +747,8 @@ async function fusionForCheck(parsed: Parsed, project: string) {
 }
 
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
-  const selected = modelSelection(parsed), { choice } = selected;
+  const tunedHere = !parsed.options.has('--no-weights') && currentRelease(process.cwd()) ? process.cwd() : undefined;
+  const selected = await bindTunedModel(parsed, modelSelection(parsed), tunedHere), { choice } = selected;
   const trace = option(parsed, '--trace');
   if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
   const artifact = option(parsed, '--adaptation') ? parseAdaptation(readFileSync(resolve(option(parsed, '--adaptation')!), 'utf8')) : null;
@@ -957,6 +1016,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === 'auth') return authCommand(parsed, words);
   if (command === 'models') { if (words.length > 1) throw new Error('usage: natlang models [PROVIDER]'); return modelsCommand(parsed, words[0]); }
   if (command === 'serve') { acceptOptions(parsed, ['--profile']); noTrailingArguments(parsed); return serveCommand(parsed); }
+  if (command === 'setup' && option(parsed, '--program')) {
+    acceptOptions(parsed, ['--program', '--profile', '--json']); noTrailingArguments(parsed);
+    return setupProgram(parsed, option(parsed, '--program')!);
+  }
   if (command === 'setup' && option(parsed, '--native')) {
     acceptOptions(parsed, ['--native', '--profile', '--default', '--device', '--port', '--gguf', '--json']); noTrailingArguments(parsed);
     return setupNative(parsed, option(parsed, '--native')!);

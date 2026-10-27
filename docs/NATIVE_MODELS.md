@@ -24,9 +24,10 @@ natlang call triage/classify.nl --profile lfm-latest-gguf --inputs ticket.json
 A pointer names its file as `local_full_state`, `checkpoint` or `path` (with `sha256`, `bytes`, `global_step`), the
 format the training supervisors already maintain. Setup:
 
-1. verifies the source against its pointer's SHA-256 and pins a weights-only copy (the optimizer is dropped by the
-   trainers' own verified pruning, `train/checkpoint_offload.py`) as `<data dir>/native-models/<sha256>.pt`, so a
-   learner rewriting its own file never changes what runs;
+1. verifies the source against its pointer's SHA-256 and pins an exact copy (the trainers' verified copy,
+   `train/checkpoint_offload.py`) as `<data dir>/native-models/<sha256>.pt` (`NATLANG_NATIVE_MODELS` moves it), so a
+   learner rewriting its own file never changes what runs, and the pin keeps the training checkpoint's identity, which
+   tuned releases and RL receipts bind;
 2. writes the profile (named after the source, or `--profile NAME`): `native.checkpoint`, `sha256`, the source's
    training checkpoint hash and step, and the checkout's `.venv-neuralese` interpreter;
 3. with `--gguf q8_0|bf16|f32`, exports the same weights for llama.cpp (below) as profile `NAME-gguf`;
@@ -114,11 +115,23 @@ annotate a recorded call and add it as a root example to its program's `tune.exa
 and day so one session's calls stay on one side of every split (docs/TUNING.md "Examples from testing"). Protected
 examples are never rewritten. `natlang tune --incremental` then refits on them.
 
-## Tuned programs
+## Tuned programs run on the model they were tuned on
 
-A program with an active tune release (`.natlang/tune/active.json`) is served tuned only by the exact base it was
-trained on. A release fitted on another checkpoint runs untuned, with a notice saying why; pin that checkpoint as
-its own profile to test the tuned program.
+A program's active tune release (`.natlang/tune/active.json`) binds its adapters and soft states to the exact
+checkpoint it was tuned on (the release's `base`). `natlang run` and `natlang call` on such a program serve that
+checkpoint, whatever the default profile names:
+
+```
+natlang: ticket-routing runs its tuned release b0a4faf8b5e7 on the checkpoint it was tuned on (fe6740d1cda3) instead of dgx-qwen; --no-weights runs dgx-qwen untuned
+```
+
+The checkpoint is found as a pin, through the program's own tune job plans (which record the student checkpoint),
+or behind a `nativeSources` pointer, and pinned on first use; `natlang setup --program DIR` pins it ahead of time.
+The native server takes its launch settings (interpreter, launcher, device) from the selected native profile, or the
+first configured one. A native profile on another checkpoint is rebound the same way. An explicitly selected
+non-native backend (`--profile`, `--provider`, `NATLANG_SERVER`) is kept and runs the program untuned with a notice,
+and `--no-weights` runs the selected model untuned for comparison. A release whose base is nowhere available runs
+untuned, with a notice naming the missing checkpoint.
 
 ## Mellum
 

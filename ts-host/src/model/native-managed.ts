@@ -6,7 +6,7 @@
  * never changes what is served) and writes the profile.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultNatlangDataDirectory } from '../package/store.js';
@@ -18,7 +18,7 @@ export type NativeModelSettings = {
   sha256: string;
   /** Where the pin came from (a checkpoint pointer, a file or a `nativeSources` name) and its training step. */
   source?: string; step?: number;
-  /** The SHA-256 of the training checkpoint the pin was made from (the pin itself is weights only). */
+  /** The SHA-256 of the training checkpoint the pin was made from (an exact copy: equal to `sha256`). */
   sourceSha256?: string;
   /** Interpreter with natlang_neuralese importable, and extra PYTHONPATH entries. */
   python?: string; pythonPath?: string[];
@@ -206,22 +206,22 @@ export function readCheckpointPointer(source: string): CheckpointPointer {
 export const nativeModelsDirectory = (environment: NodeJS.ProcessEnv = process.env) =>
   environment.NATLANG_NATIVE_MODELS ? resolve(environment.NATLANG_NATIVE_MODELS) : join(defaultNatlangDataDirectory(environment), 'native-models');
 
-type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; reused: boolean };
+type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; step?: number; reused: boolean };
 
-// Weights-only copy through the trainers' own verified pruning (train/checkpoint_offload.py: optimizer entries dropped,
-// kept values compared bitwise after re-reading, `inference_source` naming the training checkpoint), or a verified byte
-// copy of a file that has no optimizer. The source hash is checked against its pointer.
+// An exact byte copy through the trainers' verified copy (train/checkpoint_offload.py: the opened file's identity, size
+// and SHA-256 are checked, written through a partial name and fsynced). The pin keeps the training checkpoint's own
+// identity, which is what tuned releases, RL receipts and the native server's checkpoint_sha256 bind.
 const PIN_SCRIPT = `import json, sys
-from natlang_neuralese.train.checkpoint_offload import pruned_copy, verified_copy
+from natlang_neuralese.train.checkpoint_offload import verified_copy
 from natlang_neuralese.common.hashing import sha256_file_hex_cached
 source, dest, expected = sys.argv[1], sys.argv[2], sys.argv[3]
 source_sha = sha256_file_hex_cached(source)
 if expected and source_sha != expected: sys.exit(f'{source} hashes to {source_sha}, its pointer says {expected}')
-receipt = pruned_copy(source, dest) or verified_copy(source, dest)
-if sha256_file_hex_cached(source) != source_sha: sys.exit(f'{source} changed while pinning')
+receipt = verified_copy(source, dest)
+if receipt['sha256'] != source_sha: sys.exit(f'{source} changed while pinning')
 print(json.dumps({'sha256': receipt['sha256'], 'bytes': receipt['bytes'], 'source_sha256': source_sha}))`;
 
-/** Pin the source checkpoint as `<native-models>/<sha256>.pt` (weights only); reuse an earlier pin of the same source. */
+/** Pin the source checkpoint as `<native-models>/<sha256>.pt`, an exact copy; reuse an earlier pin of the same source. */
 export async function pinNativeCheckpoint(pointer: CheckpointPointer, python: Pick<NativeModelSettings, 'python' | 'pythonPath'> = {},
   environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr): Promise<Pin> {
   const directory = nativeModelsDirectory(environment), index = join(directory, 'pins.json');
@@ -231,7 +231,7 @@ export async function pinNativeCheckpoint(pointer: CheckpointPointer, python: Pi
   if (known && existsSync(known.checkpoint) && statSync(known.checkpoint).size === known.bytes) return { ...known, reused: true };
   const size = statSync(pointer.path).size;
   if (pointer.bytes !== undefined && size !== pointer.bytes) throw new Error(`${pointer.path} has ${size} bytes, its pointer says ${pointer.bytes}`);
-  error.write(`natlang: pinning ${pointer.path} (${(size / 2 ** 30).toFixed(1)} GiB; weights only)\n`);
+  error.write(`natlang: pinning ${pointer.path} (${(size / 2 ** 30).toFixed(1)} GiB)\n`);
   const temporary = join(directory, `.pin-${process.pid}-${Date.now()}.pt`);
   const { command, env } = nativeServerCommand({ checkpoint: '', sha256: '0'.repeat(64), ...python }, environment);
   try {
@@ -245,7 +245,8 @@ export async function pinNativeCheckpoint(pointer: CheckpointPointer, python: Pi
     const receipt = JSON.parse(result.stdout.trim().split('\n').pop()!) as { sha256: string; bytes: number; source_sha256: string };
     const pinned = join(directory, `${receipt.sha256}.pt`);
     renameSync(temporary, pinned);
-    const pin = { checkpoint: pinned, sha256: receipt.sha256, bytes: receipt.bytes, sourceSha256: receipt.source_sha256 };
+    const pin = { checkpoint: pinned, sha256: receipt.sha256, bytes: receipt.bytes, sourceSha256: receipt.source_sha256,
+      ...(pointer.step !== undefined ? { step: pointer.step } : {}) };
     pins[receipt.source_sha256] = pin;
     const indexTemporary = `${index}.${process.pid}.tmp`;
     writeFileSync(indexTemporary, JSON.stringify(pins, null, 1) + '\n'); renameSync(indexTemporary, index);
@@ -311,4 +312,35 @@ export async function exportNativeGguf(native: Pick<NativeModelSettings, 'checkp
   }
   return { modelPath: join(directory, file.file), sha256: file.sha256, template: join(directory, manifest!.serving.chat_template),
     templateKwargs: manifest!.serving.chat_template_kwargs, logitBias: manifest!.serving.logit_bias, reused };
+}
+
+// ---- Tuned programs serve the base they were tuned on ----
+
+/**
+ * Where the checkpoint with SHA-256 `sha256` can be read: an existing pin, a tune job of the program that trained on it
+ * (`.natlang/tune/jobs/<key>/plan.json` records the student checkpoint and its exact base), or a `nativeSources`
+ * pointer to it. A tune plan names a file without a hash of its own, so pinning verifies it against `sha256`.
+ */
+export function findNativeCheckpoint(sha256: string, options: { programRoot?: string; sources?: Record<string, string> } = {},
+  environment: NodeJS.ProcessEnv = process.env): { pinned?: string; pointer?: CheckpointPointer; step?: number } | undefined {
+  const directory = nativeModelsDirectory(environment);
+  const pinned = join(directory, `${sha256}.pt`);
+  let step: number | undefined;
+  try { step = (JSON.parse(readFileSync(join(directory, 'pins.json'), 'utf8')) as Record<string, { step?: number }>)[sha256]?.step; } catch { /* no index */ }
+  if (existsSync(pinned)) return { pinned, ...(step !== undefined ? { step } : {}) };
+  if (options.programRoot) {
+    const jobs = join(options.programRoot, '.natlang', 'tune', 'jobs');
+    for (const job of existsSync(jobs) ? readdirSync(jobs).sort() : []) {
+      try {
+        const plan = JSON.parse(readFileSync(join(jobs, job, 'plan.json'), 'utf8')) as { base?: { checkpoint_sha256?: string }; student?: { checkpoint?: string } };
+        if (plan.base?.checkpoint_sha256 === sha256 && plan.student?.checkpoint && existsSync(plan.student.checkpoint))
+          return { pointer: { path: plan.student.checkpoint, sha256 } };
+      } catch { /* not a readable plan */ }
+    }
+  }
+  for (const source of Object.values(options.sources ?? {})) {
+    try { const pointer = readCheckpointPointer(source); if (pointer.sha256 === sha256 && existsSync(pointer.path)) return { pointer, ...(pointer.step !== undefined ? { step: pointer.step } : {}) }; }
+    catch { /* an unreadable pointer names nothing */ }
+  }
+  return undefined;
 }
