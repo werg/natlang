@@ -20,6 +20,10 @@ export type NativeModelSettings = {
   source?: string; step?: number;
   /** The SHA-256 of the training checkpoint the pin was made from (an exact copy: equal to `sha256`). */
   sourceSha256?: string;
+  /** The checkpoint's compact actor view (native_bundle.prepare_actor_view): its receipt, which binds the exact actor
+   * tensors without optimizer/RNG/exposure state. The server loads the view under the full checkpoint's identity
+   * (about a tenth of the startup time and a third of the host memory); `checkpoint` stays the complete source. */
+  actorView?: ActorView;
   /** Interpreter with natlang_neuralese importable, and extra PYTHONPATH entries. */
   python?: string; pythonPath?: string[];
   device?: string; dtype?: 'float32' | 'bfloat16'; memoryGb?: number; contextTokens?: number;
@@ -39,12 +43,16 @@ export type NativeModelSettings = {
   startTimeoutMs?: number;
 };
 
+export type ActorView = { path: string; sha256: string; bytes: number };
+
 const SHA256 = /^[0-9a-f]{64}$/;
 
 export function validateNativeSettings(native: NativeModelSettings): void {
   if (!native || typeof native !== 'object' || Array.isArray(native)) throw new TypeError('native must be an object');
   if (typeof native.checkpoint !== 'string' || !native.checkpoint) throw new Error('native.checkpoint must name the pinned checkpoint; run natlang setup --native SOURCE');
   if (typeof native.sha256 !== 'string' || !SHA256.test(native.sha256)) throw new Error('native.sha256 must be the checkpoint SHA-256');
+  if (native.actorView !== undefined && (typeof native.actorView?.path !== 'string' || !SHA256.test(native.actorView.sha256 ?? '')))
+    throw new Error('native.actorView must be the {path, sha256, bytes} receipt natlang setup --native wrote');
   if (native.port !== undefined && (!Number.isSafeInteger(native.port) || native.port < 1 || native.port > 65535))
     throw new Error('native.port must be a port number');
   if (native.dtype !== undefined && !['float32', 'bfloat16'].includes(native.dtype)) throw new Error('native.dtype must be float32 or bfloat16');
@@ -88,6 +96,7 @@ export function nativeServerCommand(native: NativeModelSettings, environment: No
     '--host', '127.0.0.1', '--port', String(nativePort(native)), '--device', native.device ?? 'auto',
     ...(native.dtype ? ['--dtype', native.dtype] : []), ...(native.memoryGb ? ['--memory-gb', String(native.memoryGb)] : []),
     ...(native.contextTokens ? ['--ctx-size', String(native.contextTokens)] : []),
+    ...(native.actorView ? ['--native-actor-view', native.actorView.path, '--native-actor-view-sha256', native.actorView.sha256] : []),
     ...((native.prefixCacheGb ?? 2) > 0 ? ['--prefix-cache-gb', String(native.prefixCacheGb ?? 2)] : []),
     ...(native.storeDir === true ? ['--store-dir'] : native.storeDir ? ['--store-dir', native.storeDir] : []), ...(native.args ?? [])];
   const joined = [...pythonPath, ...(environment.PYTHONPATH ? [environment.PYTHONPATH] : [])].join(':');
@@ -134,6 +143,10 @@ async function start(native: NativeModelSettings, endpoint: string, environment:
   if (current.checkpointSha256 === native.sha256) return;
   if (current.reachable) throw mismatch(native, endpoint, current);
   if (!existsSync(native.checkpoint)) throw new Error(`native checkpoint ${native.checkpoint} is missing; run natlang setup --native ${native.source ?? 'SOURCE'}`);
+  if (native.actorView && !existsSync(native.actorView.path)) {
+    error.write(`natlang: actor view ${native.actorView.path} is missing; loading the complete checkpoint (natlang setup --native prepares it again)\n`);
+    native = { ...native, actorView: undefined };
+  }
   const { command, env } = nativeServerCommand(native, environment);
   error.write(`natlang: starting native model ${native.sha256.slice(0, 12)}${native.step !== undefined ? ` (step ${native.step})` : ''} at ${endpoint}; ` +
     'loading takes a minute (natlang serve keeps it running between commands)\n');
@@ -206,7 +219,7 @@ export function readCheckpointPointer(source: string): CheckpointPointer {
 export const nativeModelsDirectory = (environment: NodeJS.ProcessEnv = process.env) =>
   environment.NATLANG_NATIVE_MODELS ? resolve(environment.NATLANG_NATIVE_MODELS) : join(defaultNatlangDataDirectory(environment), 'native-models');
 
-type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; step?: number; reused: boolean };
+type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; step?: number; actorView?: ActorView; reused: boolean };
 
 // An exact byte copy through the trainers' verified copy (train/checkpoint_offload.py: the opened file's identity, size
 // and SHA-256 are checked, written through a partial name and fsynced). The pin keeps the training checkpoint's own
@@ -228,7 +241,10 @@ export async function pinNativeCheckpoint(pointer: CheckpointPointer, python: Pi
   mkdirSync(directory, { recursive: true });
   const pins = (existsSync(index) ? JSON.parse(readFileSync(index, 'utf8')) : {}) as Record<string, Omit<Pin, 'reused'>>;
   const known = pointer.sha256 ? pins[pointer.sha256] : undefined;
-  if (known && existsSync(known.checkpoint) && statSync(known.checkpoint).size === known.bytes) return { ...known, reused: true };
+  if (known && existsSync(known.checkpoint) && statSync(known.checkpoint).size === known.bytes) {
+    if (known.actorView && existsSync(known.actorView.path)) return { ...known, reused: true };
+    return { ...recordPin(index, pointer.sha256!, { ...known, ...await viewOf(known, python, environment, error) }), reused: true };
+  }
   const size = statSync(pointer.path).size;
   if (pointer.bytes !== undefined && size !== pointer.bytes) throw new Error(`${pointer.path} has ${size} bytes, its pointer says ${pointer.bytes}`);
   error.write(`natlang: pinning ${pointer.path} (${(size / 2 ** 30).toFixed(1)} GiB)\n`);
@@ -247,11 +263,41 @@ export async function pinNativeCheckpoint(pointer: CheckpointPointer, python: Pi
     renameSync(temporary, pinned);
     const pin = { checkpoint: pinned, sha256: receipt.sha256, bytes: receipt.bytes, sourceSha256: receipt.source_sha256,
       ...(pointer.step !== undefined ? { step: pointer.step } : {}) };
-    pins[receipt.source_sha256] = pin;
-    const indexTemporary = `${index}.${process.pid}.tmp`;
-    writeFileSync(indexTemporary, JSON.stringify(pins, null, 1) + '\n'); renameSync(indexTemporary, index);
-    return { ...pin, reused: false };
+    recordPin(index, receipt.source_sha256, pin);
+    return { ...recordPin(index, receipt.source_sha256, { ...pin, ...await viewOf(pin, python, environment, error) }), reused: false };
   } finally { rmSync(temporary, { force: true }); }
+}
+
+function recordPin(index: string, key: string, pin: Omit<Pin, 'reused'>): Omit<Pin, 'reused'> {
+  const pins = (existsSync(index) ? JSON.parse(readFileSync(index, 'utf8')) : {}) as Record<string, Omit<Pin, 'reused'>>;
+  pins[key] = pin;
+  const temporary = `${index}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify(pins, null, 1) + '\n'); renameSync(temporary, index);
+  return pin;
+}
+
+/** The pin's compact actor view (`<native-models>/actor-views/<sha256>/`), prepared once from the complete checkpoint.
+ * Source forms without a view, and a failed preparation, keep serving the complete checkpoint. */
+async function viewOf(pin: Pick<Pin, 'checkpoint' | 'sha256'>, python: Pick<NativeModelSettings, 'python' | 'pythonPath'>,
+  environment: NodeJS.ProcessEnv, error: NodeJS.WritableStream): Promise<{ actorView?: ActorView }> {
+  error.write(`natlang: preparing the compact actor view of ${pin.sha256.slice(0, 12)} (one full decode)\n`);
+  const { command, env } = nativeServerCommand({ checkpoint: pin.checkpoint, sha256: pin.sha256, ...python }, environment);
+  const result = await new Promise<{ status: number | null; stdout: string; stderr: string }>(resolveRun => {
+    const child = spawn(command[0]!, ['-m', 'natlang_neuralese.model.native_bundle', 'actor-view', '--checkpoint', pin.checkpoint,
+      '--out', join(dirname(pin.checkpoint), 'actor-views')], { env: { ...env, CUDA_VISIBLE_DEVICES: env.CUDA_VISIBLE_DEVICES ?? '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-4000); });
+    child.once('error', failure => resolveRun({ status: -1, stdout, stderr: String(failure) }));
+    child.once('close', status => resolveRun({ status, stdout, stderr }));
+  });
+  try {
+    if (result.status !== 0) throw new Error(result.stderr.trim().split('\n').pop());
+    const view = JSON.parse(result.stdout.trim().split('\n').pop()!) as ActorView | null;
+    return view ? { actorView: view } : {};
+  } catch (failure) {
+    error.write(`natlang: no actor view (${(failure as Error).message}); the server loads the complete checkpoint\n`);
+    return {};
+  }
 }
 
 /** Forget a pin no profile uses any more: its file and its index entry. */
@@ -260,6 +306,7 @@ export function removeNativePin(checkpoint: string, environment: NodeJS.ProcessE
   if (dirname(resolve(checkpoint)) !== directory || !existsSync(checkpoint)) return false;
   rmSync(checkpoint);
   rmSync(join(directory, `gguf-${basename(checkpoint).slice(0, 12)}`), { recursive: true, force: true });
+  rmSync(join(directory, 'actor-views', basename(checkpoint, '.pt')), { recursive: true, force: true });
   if (existsSync(index)) {
     const pins = JSON.parse(readFileSync(index, 'utf8')) as Record<string, { checkpoint: string }>;
     for (const [key, pin] of Object.entries(pins)) if (pin.checkpoint === checkpoint) delete pins[key];

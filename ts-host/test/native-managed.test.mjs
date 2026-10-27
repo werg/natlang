@@ -1,10 +1,10 @@
 // Native model profiles: where a tuned program's base checkpoint is found, and how a managed server is launched.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { findNativeCheckpoint, nativePort, nativeServerCommand, validateNativeSettings } from '../dist/model/native-managed.js';
+import { findNativeCheckpoint, nativePort, nativeServerCommand, pinNativeCheckpoint, removeNativePin, validateNativeSettings } from '../dist/model/native-managed.js';
 
 const sha = 'ab'.repeat(32), other = 'cd'.repeat(32);
 
@@ -42,4 +42,39 @@ test('a native profile launches its pinned checkpoint on a port derived from it,
   assert.deepEqual(launched.slice(0, 6), ['ledger', 'run', '--unit', `natlang-native-${sha.slice(0, 12)}-${nativePort(native)}`, '--', 'env']);
   assert.throws(() => validateNativeSettings({ checkpoint: '/x', sha256: 'short' }), /sha256/);
   assert.throws(() => validateNativeSettings({ ...native, stop: ['x'] }), /launcher/);
+});
+
+test('a pin carries its compact actor view; the server loads it, and a pin made before views gains one', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-native-')), models = join(directory, 'models');
+  const environment = { ...process.env, NATLANG_NATIVE_MODELS: models };
+  // Stands in for the training interpreter: the pin script copies, native_bundle actor-view prints a receipt.
+  const python = join(directory, 'python'), calls = join(directory, 'calls');
+  writeFileSync(python, `#!/bin/sh
+echo "$1 $3" >> ${calls}
+if [ "$1" = -c ]; then cp "$3" "$4"; echo '{"sha256":"${sha}","bytes":7,"source_sha256":"${sha}"}'; exit 0; fi
+if [ "$FAIL_VIEW" = 1 ]; then echo 'actor view source lacks its actual optimizer/RNG/source validation' >&2; exit 1; fi
+mkdir -p "$7/${sha}"; echo receipt > "$7/${sha}/r.json"; echo '{"path":"'"$7/${sha}/r.json"'","sha256":"${other}","bytes":8}'
+`);
+  chmodSync(python, 0o755);
+  try {
+    const checkpoint = join(directory, 'student.pt');
+    writeFileSync(checkpoint, 'weights');
+    const failing = await pinNativeCheckpoint({ path: checkpoint, sha256: sha, step: 3 }, { python }, { ...environment, FAIL_VIEW: '1' }, { write() {} });
+    assert.equal(failing.actorView, undefined, 'a failed view keeps the complete checkpoint path');
+    const pin = await pinNativeCheckpoint({ path: join(models, `${sha}.pt`), sha256: sha }, { python }, environment, { write() {} });
+    assert.equal(pin.reused, true);
+    assert.deepEqual(pin.actorView, { path: join(models, 'actor-views', sha, 'r.json'), sha256: other, bytes: 8 });
+    assert.deepEqual(JSON.parse(readFileSync(join(models, 'pins.json'), 'utf8'))[sha].actorView, pin.actorView);
+    const again = await pinNativeCheckpoint({ path: checkpoint, sha256: sha }, { python }, environment, { write() {} });
+    assert.deepEqual(again.actorView, pin.actorView);
+    assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, 3, 'one copy, one failed and one prepared view; then reuse');
+    const native = { checkpoint: pin.checkpoint, sha256: sha, python, actorView: pin.actorView };
+    validateNativeSettings(native);
+    const { command } = nativeServerCommand(native, {});
+    assert.deepEqual(command.slice(command.indexOf('--native-actor-view'), command.indexOf('--native-actor-view') + 4),
+      ['--native-actor-view', pin.actorView.path, '--native-actor-view-sha256', other]);
+    assert.throws(() => validateNativeSettings({ ...native, actorView: { path: 'x', sha256: 'short' } }), /actorView/);
+    assert.ok(removeNativePin(pin.checkpoint, environment));
+    assert.ok(!existsSync(join(models, 'actor-views', sha)));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

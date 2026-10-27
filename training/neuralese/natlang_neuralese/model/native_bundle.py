@@ -122,6 +122,24 @@ def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=No
     return _file_binding(proof)
 
 
+def prepare_actor_view(checkpoint, out):
+    """Decode a complete native checkpoint once and write (or reuse) its verified actor view.
+
+    Returns the receipt binding, or None for source forms that keep the full-checkpoint path.
+    The view is read back through load_actor_view before it is returned.
+    """
+    from ..train.checkpoint_policy import CheckpointPolicy
+    source = Path(checkpoint).resolve(strict=True)
+    before = source.stat()
+    signature = (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)
+    state = CheckpointPolicy.load(source)
+    reference = write_actor_view(source,out,validated_state=state,decoded_source_stat=signature)
+    del state
+    if reference is not None:
+        load_actor_view(source,reference)
+    return reference
+
+
 def _actor_view_files(checkpoint, reference):
     """One exact file/receipt contract shared by transport and tensor loading."""
     if not isinstance(reference,dict) or set(reference) != {'path','sha256','bytes'}:
@@ -362,7 +380,11 @@ def main():
     commands = parser.add_subparsers(dest='action',required=True)
     export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--semantic-adapter');export.add_argument('--participant')
     verify = commands.add_parser('verify');verify.add_argument('--bundle',required=True)
+    view = commands.add_parser('actor-view');view.add_argument('--checkpoint',required=True);view.add_argument('--out',required=True)
     args = parser.parse_args()
+    if args.action == 'actor-view':
+        print(json.dumps(prepare_actor_view(args.checkpoint,args.out),sort_keys=True))
+        return
     print(json.dumps(export_bundle(args.checkpoint,args.out,semantic_adapter=args.semantic_adapter,participant=args.participant) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
 
 

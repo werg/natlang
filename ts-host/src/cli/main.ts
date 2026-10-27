@@ -318,8 +318,9 @@ async function setupProgram(parsed: Parsed, root: string): Promise<number> {
   const sha256 = release.manifest.base.checkpoint_sha256, { nativeSources } = loadModelConfiguration(option(parsed, '--profile'));
   const found = findNativeCheckpoint(sha256, { programRoot: resolve(root), sources: nativeSources });
   if (!found) throw new Error(`checkpoint ${sha256} that ${root} was tuned on is not available here; natlang setup --native CHECKPOINT pins it`);
-  const pin = found.pinned ? { checkpoint: found.pinned, reused: true } : await pinNativeCheckpoint(found.pointer!, defaultNativePython());
-  const report = { ok: true, program: resolve(root), release: release.manifest.digest, checkpoint: pin.checkpoint, sha256, reused: pin.reused };
+  const pin = await pinNativeCheckpoint(found.pinned ? { path: found.pinned, sha256, ...(found.step !== undefined ? { step: found.step } : {}) } : found.pointer!, defaultNativePython());
+  const report = { ok: true, program: resolve(root), release: release.manifest.digest, checkpoint: pin.checkpoint, sha256, reused: pin.reused,
+    actorView: pin.actorView ?? null };
   output(parsed.options.has('--json') ? report : `${basename(resolve(root))} runs its tuned release ${release.manifest.digest.slice(0, 12)} on ` +
     `${sha256.slice(0, 12)} (pinned at ${pin.checkpoint})`, parsed.options.has('--json'));
   return 0;
@@ -342,7 +343,7 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
   const pin = await pinNativeCheckpoint(pointer, { ...defaultNativePython(), ...(previous?.python ? { python: previous.python, pythonPath: previous.pythonPath } : {}) });
   const port = option(parsed, '--port'), device = option(parsed, '--device');
   const native: NativeModelSettings = { ...defaultNativePython(), ...previous, checkpoint: pin.checkpoint, sha256: pin.sha256, sourceSha256: pin.sourceSha256,
-    source: named ? source : resolve(source), ...(pointer.step !== undefined ? { step: pointer.step } : { step: undefined }),
+    source: named ? source : resolve(source), ...(pointer.step !== undefined ? { step: pointer.step } : { step: undefined }), actorView: pin.actorView,
     ...(device ? { device } : {}), ...(port ? { port: Number(port) } : {}) };
   config.profiles = { ...config.profiles, [name]: { ...existing, native } };
   // --gguf: the same weights as a GGUF for the managed llama.cpp backend (faster; ordinary tokens only).
@@ -367,7 +368,7 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
   if (previous && previous.checkpoint !== pin.checkpoint && !Object.values(config.profiles).some(profile => profile.native?.checkpoint === previous.checkpoint)
     && removeNativePin(previous.checkpoint)) removed = previous.checkpoint;
   const report = { ok: true, profile: name, default: config.defaultProfile === name, checkpoint: pin.checkpoint, sha256: pin.sha256,
-    step: pointer.step ?? null, sourceSha256: pin.sourceSha256, bytes: pin.bytes, reused: pin.reused,
+    step: pointer.step ?? null, sourceSha256: pin.sourceSha256, bytes: pin.bytes, reused: pin.reused, actorView: pin.actorView ?? null,
     ...(gguf ? { ggufProfile: ggufName, gguf: gguf.modelPath, ggufSha256: gguf.sha256 } : {}), ...(removed ? { removedPin: removed } : {}) };
   output(parsed.options.has('--json') ? report : `native profile ${name} ready${report.default ? ' (default)' : ''}\n` +
     `checkpoint: ${pin.sha256.slice(0, 12)}${pointer.step !== undefined ? ` (step ${pointer.step})` : ''}\n` +

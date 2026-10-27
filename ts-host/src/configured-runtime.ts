@@ -113,12 +113,13 @@ export async function bindTunedModel(selected: LoadedModelConfiguration, program
     return selected;
   }
   const launch = native ?? Object.values(readConfigFile(environment).profiles ?? {}).find(profile => profile.native)?.native;
-  const { checkpoint: _c, sha256: _s, sourceSha256: _o, source: _r, step: _t, port: _p, ...settings } = launch ?? {} as NativeModelSettings;
+  const { checkpoint: _c, sha256: _s, sourceSha256: _o, source: _r, step: _t, port: _p, actorView: _v, ...settings } = launch ?? {} as NativeModelSettings;
   const interpreter = { ...defaultNativePython(environment), ...(settings.python ? { python: settings.python, pythonPath: settings.pythonPath } : {}) };
-  const pin = found.pinned ? { checkpoint: found.pinned, step: found.step } : await pinNativeCheckpoint(found.pointer!, interpreter, environment, log);
+  const pin = await pinNativeCheckpoint(found.pinned ? { path: found.pinned, sha256, ...(found.step !== undefined ? { step: found.step } : {}) } : found.pointer!,
+    interpreter, environment, log);
   const step = pin.step ?? found.step;
   const profile: ModelProfile = { ...(native ? selected.profile : {}), native: { ...defaultNativePython(environment), ...settings,
-    checkpoint: pin.checkpoint, sha256, sourceSha256: sha256, ...(step !== undefined ? { step } : {}) },
+    checkpoint: pin.checkpoint, sha256, sourceSha256: sha256, ...(step !== undefined ? { step } : {}), ...(pin.actorView ? { actorView: pin.actorView } : {}) },
     ...(selected.profile.escalate ? { escalate: selected.profile.escalate } : {}) };
   log.write(`natlang: ${program} runs its tuned release ${release.manifest.digest.slice(0, 12)} on the checkpoint it was tuned on ` +
     `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned\n`);
