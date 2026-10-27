@@ -108,3 +108,30 @@ reuse and tampered-file checks pass. Continue the saved fit and identical round
 journal through this serving fix; it earns no repeated SFT credit. The 60-update
 ticket fit has a separately verified private full adapter/soft-state recovery
 capsule, independent of the production LFM checkpoint.
+
+
+## Measured ticket result and online RL (2026-10-27)
+
+The reply-focused ticket fit completed **12/20 correct development roots** with
+valid native provenance. The preceding valid SFT release completed 0/20. This is
+a development result between those actual releases, not a confirmation result or
+a newly paired base comparison at the current invocation limits. Confirmation
+remains untouched. Its saved build has an independent full adapter/soft-state
+backup, including optimizer history.
+
+The world-root-v2 teacher campaign completed all 665 cases with oracle acceptance.
+Imports admitted exactly 301 ticket, 246 invoice and 118 inventory roots, with no
+unbound turns; each import correctly rejected rows belonging to the other two
+programs. New teacher data has not thereby earned student exposure.
+
+Real RL sampling produced complete four-sample groups with differing task outcomes,
+including rewards [0,1,1,1]. Avoid waiting hours for all training roots before the
+first policy update: seal complete informative groups with exact actor/release and
+whole-graph custody, then continue the actual saved optimizer on those groups.
+The first sealed tranche contains 12 episodes from three informative groups. It
+keeps every episode intact and preserves the full teacher row set; constant-reward
+and incomplete groups retain their diagnostic records without policy credit.
+Shared `trainRelease`/native policy mechanisms perform the updates. Continue fresh
+cohorts and the expanded teacher curriculum from earned children; a tranche is
+not whole-program or production-recipe completion. Report actual RL optimizer
+steps and subsequent task outcomes separately from a successful collection.
