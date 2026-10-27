@@ -11,8 +11,9 @@ import { tuneProgram } from '../dist/tune/pipeline.js';
 import { collect, splitExamples, protectedExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
+import { nativeTuneStateExport } from './fixtures/native-tune.mjs';
 
-const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 
 test('an uninitialized host aborts evaluation instead of scoring its roots as model failures', () => {
   const root = project();
@@ -51,10 +52,11 @@ function project() {
   writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
   // A trainer stand-in: one rank-2 artifact per lambda node, recorded exactly as the real trainer reports them.
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
+import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
 const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(line => JSON.parse(line));
 if (rows.some(row => row.partition !== 'train')) throw new Error('non-training row reached the trainer');
-const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: 'nnt1:' + node.id, rank: 2, parameterization: 'native-subspace', requires: [] }));
+const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: writeNativeTuneTensor(out, plan.manifest.base, node.id), rank: 2, parameterization: 'native-subspace', requires: [] }));
 writeFileSync(out + '/result.json', JSON.stringify({ artifacts, receipt: { rows: rows.length, bindings: [...new Set(rows.map(row => row.binding))].length } }));
 console.log('progress: trained');`);
   return root;
@@ -307,21 +309,20 @@ test('managed llama.cpp releases train soft states only when declared and carry 
   assert.equal(softStatesServed({ backend: 'vllm', softStates: true }), false);
   const root = project();
   try {
-    const state = 'nzs1_' + 'c'.repeat(52);
+    const { id: state, gguf } = nativeTuneStateExport(base);
     // A stand-in trainer that reports one soft state with its llama.cpp export, as tune/build.py does.
-    writeFileSync(join(root, 'soft-trainer.mjs'), `import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+    writeFileSync(join(root, 'soft-trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
+import { writeNativeTuneState } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
 if (!plan.softStates) throw new Error('soft states were not requested');
-const lambda = plan.manifest.bindings[0];
-mkdirSync(out + '/exports', { recursive: true }); writeFileSync(out + '/exports/${state}.state.gguf', 'span');
-writeFileSync(out + '/result.json', JSON.stringify({ artifacts: [], receipt: {}, softStates: [{ binding: lambda.id, kind: 'instructions', target: null,
-  state: '${state}', textSha256: '0'.repeat(64), tokens: 3, exports: { gguf: { file: 'exports/${state}.state.gguf', sha256: 's', baseGgufSha256: 'f'.repeat(64) } } }] }));`);
+const state = writeNativeTuneState(out, plan.manifest.base, plan.manifest.bindings[0].id);
+writeFileSync(out + '/result.json', JSON.stringify({ artifacts: [], receipt: {}, softStates: [state] }));`);
     const options = { root, program: program(root), settings: { ...settings, softStates: true }, student: { ...student(root), trainer: [process.execPath, join(root, 'soft-trainer.mjs')] },
       teacher: scriptedModel(respond).driver, teacherId: 'teacher:test', serve: serve([]) };
     const data = await prepareData(options);
     const { manifest } = await trainRelease(options, data, { manifest: data.scaffold });
     assert.equal(manifest.softStates[0].exports.gguf.file, `exports/${state}.state.gguf`);
-    assert.equal(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, manifest.softStates[0].exports.gguf.file), 'utf8'), 'span');
+    assert.deepEqual(readFileSync(join(root, '.natlang/tune/releases', manifest.digest, manifest.softStates[0].exports.gguf.file)), gguf);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

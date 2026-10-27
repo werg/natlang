@@ -18,7 +18,7 @@ import { canonicalJson } from '../dist/package/archive.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const COLLECTOR = fileURLToPath(new URL('../dist/teacher/cli.js', import.meta.url));
-const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
 const respond = opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
 
@@ -57,9 +57,10 @@ function project() {
   examples.push({ function: 'outer.nl', input: { value: 'held' }, expected: 'HELD', protected: true });
   writeFileSync(join(root, 'tune.examples.jsonl'), examples.map(example => JSON.stringify(example)).join('\n') + '\n');
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync } from 'node:fs';
+import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
 const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(line => JSON.parse(line));
-const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: 'nnt1:' + node.id, rank: 2, parameterization: 'native-subspace', requires: [] }));
+const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: writeNativeTuneTensor(out, plan.manifest.base, node.id), rank: 2, parameterization: 'native-subspace', requires: [] }));
 writeFileSync(out + '/result.json', JSON.stringify({ artifacts, receipt: { rows: rows.length, teachers: [...new Set(rows.map(row => row.teacher))] } }));`);
   return root;
 }

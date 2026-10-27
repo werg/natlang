@@ -28,6 +28,7 @@ import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { rootSuccess, type ArmResult } from './evaluate.js';
 import { evaluateRelease, runStudentModule, saveArm, trainRelease, type TuneData, type TuneOptions } from './pipeline.js';
 import { pairedComparison } from './stats.js';
+import { copyNativeReleaseClosure } from '../native/release-artifact-closure.js';
 
 export type FamilyProgram = { readonly options: TuneOptions; readonly data: TuneData; readonly release: WeightManifest; readonly releaseDir: string };
 export type FamilyMember = readonly [program: string, binding: string];
@@ -269,9 +270,8 @@ async function measureTransfer(program: FamilyProgram, family: PublishedFamily, 
       mkdirSync(dirname(join(directory, file)), { recursive: true }); copyFileSync(join(from, file), join(directory, file));
     }
   };
-  for (const folder of ['artifacts', 'states']) if (existsSync(join(releaseDir, folder)))
-    for (const file of readdirSync(join(releaseDir, folder))) copy(releaseDir, join(folder, file));
-  if (existsSync(join(store, 'artifacts'))) for (const file of readdirSync(join(store, 'artifacts'))) copy(store, join('artifacts', file));
+  copyNativeReleaseClosure([releaseDir, store], directory,
+    [...composed.artifacts.map(item => item.artifact), ...composed.softStates.map(item => item.state), version.artifact]);
   for (const artifact of release.artifacts) if (artifact.exports?.gguf) copy(releaseDir, artifact.exports.gguf.file);
   if (version.exports?.gguf) copy(store, version.exports.gguf.file);
   log(`natlang tune: transfer of family ${family.family}@${family.version} to ${kind} program ${options.program.id}`);

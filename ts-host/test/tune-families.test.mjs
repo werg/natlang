@@ -10,12 +10,14 @@ import { currentRelease, readActive } from '../dist/adaptation/weights/release.j
 import { crispProposals, familyRegistry, proposeFamilies, registerTunedProgram, runFamilies } from '../dist/tune/families.js';
 import { scriptedModel } from './support/natlang.mjs';
 
-const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
 const respond = opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
 
 // A stand-in for the student's Python entry: `-m <module>` selects the build, discovery or family fit.
 const STUB = `import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
+const fixtureBase = ${JSON.stringify(base)};
 const args = process.argv.slice(2), module = args[args.indexOf('-m') + 1];
 const arg = name => args[args.indexOf(name) + 1];
 const plan = JSON.parse(readFileSync(arg('--plan'), 'utf8')), out = arg('--out');
@@ -24,7 +26,7 @@ if (module === 'natlang_neuralese.tune.build') {
   const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(line => JSON.parse(line));
   if (rows.some(row => row.partition !== 'train')) throw new Error('non-training row reached the trainer');
   const tag = plan.manifest.families.length ? '+f' : '';
-  const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: 'nnt1:' + node.id + tag, rank: 2, parameterization: 'native-subspace', requires: [] }));
+  const artifacts = plan.manifest.tree.filter(node => node.level === 'lambda').map(node => ({ node: node.id, artifact: writeNativeTuneTensor(out, plan.manifest.base, [node.id, tag]), rank: 2, parameterization: 'native-subspace', requires: [] }));
   writeFileSync(out + '/result.json', JSON.stringify({ artifacts, families: plan.manifest.families, memberships: plan.manifest.memberships,
     receipt: { rows: rows.length, imported: plan.artifacts ?? [] } }));
 } else if (args.includes('discover')) {
@@ -38,7 +40,7 @@ if (module === 'natlang_neuralese.tune.build') {
   const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(line => JSON.parse(line));
   writeFileSync(out + '/rows-seen.json', JSON.stringify(rows.map(row => [row.binding, row.partition])));
   writeFileSync(out + '/result.json', JSON.stringify({ schema: 'natlang.tune-family-fit/v1', family: plan.family, version: 'v1',
-    artifact: 'nnt1:family-' + plan.family, amplitudeHex: '0x1.0000000000000p+0', members: plan.members }));
+    artifact: writeNativeTuneTensor(out, fixtureBase, ['family', plan.family]), amplitudeHex: '0x1.0000000000000p+0', members: plan.members }));
 }`;
 
 function project(name, stub) {

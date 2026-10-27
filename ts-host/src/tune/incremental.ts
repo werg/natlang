@@ -17,6 +17,7 @@
  * are fitted. Families with their learned gates and the soft states of untouched bindings carry over unchanged.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { currentRelease, readRelease, tuneDirectory } from '../adaptation/weights/release.js';
 import type { WeightManifest } from '../adaptation/weights/manifest.js';
@@ -43,6 +44,34 @@ export type IncrementalPlan = {
   readonly bindings: readonly string[];
 };
 export type Previous = { readonly manifest: WeightManifest; readonly directory: string };
+
+/** Optimizer-only artifacts remain in the exact fit output, outside the serving closure. */
+export function incrementalHistoryArtifacts(root: string, previous: Previous): string[] {
+  const receipt = previous.manifest.receipts.trainingFitOutput;
+  if (receipt !== undefined) {
+    if (!receipt || typeof receipt !== 'object') throw new Error('invalid training fit output receipt');
+    const { jobKey, resultSha256 } = receipt as { jobKey?: unknown; resultSha256?: unknown };
+    if (typeof jobKey !== 'string' || !/^[a-f0-9]{24}$/.test(jobKey) ||
+        typeof resultSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(resultSha256))
+      throw new Error('invalid training fit output receipt');
+    const output = join(tuneDirectory(root), 'jobs', jobKey, 'out');
+    const bytes = readFileSync(join(output, 'result.json'));
+    const actual = createHash('sha256').update(bytes).digest('hex');
+    if (actual !== resultSha256) throw new Error(`training fit output receipt mismatch for ${jobKey}`);
+    if (canonical(JSON.parse(bytes.toString('utf8')).receipt) !== canonical(previous.manifest.receipts.training))
+      throw new Error(`training fit output does not match release training receipt for ${jobKey}`);
+    return [join(output, 'artifacts')];
+  }
+  const history = previous.manifest.receipts.trainingHistoryRelease;
+  if (history !== undefined) {
+    if (typeof history !== 'string' || !/^[a-f0-9]{64}$/.test(history)) throw new Error('invalid training history release receipt');
+    const original = readRelease(root, history);
+    if (canonical(original.receipts.training) !== canonical(previous.manifest.receipts.training))
+      throw new Error('training history release receipt does not match');
+    return [join(tuneDirectory(root), 'releases', history, 'artifacts')];
+  }
+  return [join(previous.directory, 'artifacts')];
+}
 export type BuildStep = { readonly kind: BuildKind; readonly previous: Previous;
   /** A candidate this shared refit completes: its trained leaves seed the refit. */
   readonly seed?: Previous };
@@ -149,9 +178,12 @@ export function incrementalSelector(options: TuneOptions, step: BuildStep): Rele
     log(`natlang tune: ${kind} build trains ${plan.trained.length} node(s), pins ${Object.keys(plan.pinned).length}, ` +
       `warm-starts ${Object.keys(warm).length}; ${rows.length} row(s) of ${plan.bindings.length} binding(s)`);
     const trainedBindings = new Set(plan.bindings);
+    const priorStateReceipts = previous.manifest.receipts.inferenceStateMaterializations;
     const variant: TrainVariant = { manifest: carried(previous, data.scaffold), rows, label: kind, pinned: plan.pinned, warm,
-      artifactDirs: [join(previous.directory, 'artifacts'), ...(seed ? [join(seed.directory, 'artifacts')] : [])],
-      carrySoftStates: { states: previous.manifest.softStates.filter(item => !trainedBindings.has(item.binding)), directory: previous.directory },
+      artifactDirs: [join(previous.directory, 'artifacts'), ...incrementalHistoryArtifacts(options.root, previous),
+        ...(seed ? [join(seed.directory, 'artifacts'), ...incrementalHistoryArtifacts(options.root, seed)] : [])],
+      carrySoftStates: { states: previous.manifest.softStates.filter(item => !trainedBindings.has(item.binding)), directory: previous.directory,
+        receipts: Array.isArray(priorStateReceipts) ? priorStateReceipts : [] },
       receipts: { build: kind, pinnedFrom: previous.manifest.digest, trained: plan.trained, pinned: plan.pinned, stalePins: plan.stalePins,
         ...(seed ? { completes: seed.manifest.digest } : {}) } };
     return (await trainRelease(options, data, variant, timings, log)).manifest;

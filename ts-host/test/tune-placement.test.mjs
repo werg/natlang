@@ -13,7 +13,7 @@ import { loadOverview, formatOverview } from '../dist/tune/report.js';
 import { protectedExamples, readRootExamples } from '../dist/tune/collect.js';
 import { scriptedModel } from './support/natlang.mjs';
 
-const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
 const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
 const words = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron', 'pi'];
 
@@ -29,13 +29,14 @@ function project() {
   // A trainer stand-in honouring the recipe's per-level ranks (0: no adapter) and removed (scale 0) nodes; it counts
   // its invocations so resumption can be checked.
   writeFileSync(join(root, 'trainer.mjs'), `import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { writeNativeTuneTensor } from ${JSON.stringify(new URL('./fixtures/native-tune.mjs', import.meta.url).href)};
 const args = process.argv.slice(2), plan = JSON.parse(readFileSync(args[args.indexOf('--plan') + 1], 'utf8')), out = args[args.indexOf('--out') + 1];
 appendFileSync(${JSON.stringify(join(root, 'trainer-runs.log'))}, 'run\\n');
 const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(line => JSON.parse(line));
 if (rows.some(row => row.partition !== 'train')) throw new Error('non-training row reached the trainer');
 const ranks = { tree: 8, folder: 4, lambda: 2, ...(plan.recipe.ranks ?? {}) };
 const artifacts = plan.manifest.tree.filter(node => ranks[node.level] > 0 && (plan.manifest.scales[node.id] ?? 1) !== 0)
-  .map(node => ({ node: node.id, artifact: 'nnt1:' + node.id + ':' + JSON.stringify(ranks), rank: ranks[node.level], parameterization: 'native-subspace', requires: [] }));
+  .map(node => ({ node: node.id, artifact: writeNativeTuneTensor(out, plan.manifest.base, [node.id, ranks]), rank: ranks[node.level], parameterization: 'native-subspace', requires: [] }));
 writeFileSync(out + '/result.json', JSON.stringify({ artifacts, receipt: { rows: rows.length } }));`);
   return root;
 }
@@ -48,14 +49,15 @@ const settings = { student: 'lfm', students: {}, teacher: 'teacher', backend: 'm
 const student = root => ({ name: 'lfm', base, checkpoint: '/unused', trainer: [process.execPath, join(root, 'trainer.mjs')], moduleMap: 'lfm2' });
 /** The stand-in student answers correctly only when its call runs a lambda-level adapter: tree and folder residuals
  * add cost but no measured quality, so placement should remove them and keep the lambdas. */
-function model() {
+function model(manifest) {
   let active = [];
+  const lambdaArtifacts = new Set(manifest.artifacts.filter(item => item.node.startsWith('lambda:')).map(item => item.artifact));
   const scripted = scriptedModel(opening => opening.includes('Pass value') ? 'return await inner(value)'
-    : active.some(id => id.includes('lambda:')) ? 'return value.toUpperCase()' : 'return value');
+    : active.some(id => lambdaArtifacts.has(id)) ? 'return value.toUpperCase()' : 'return value');
   return async (request, ...rest) => { active = activeNativeAdapters().map(item => item.id); return scripted.driver(request, ...rest); };
 }
 const teacher = scriptedModel(opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()').driver;
-const serve = async ({ manifest }) => ({ driver: model(), loaded: new Set(manifest.artifacts.map(item => item.artifact)), close: async () => {} });
+const serve = async ({ manifest }) => ({ driver: model(manifest), loaded: new Set(manifest.artifacts.map(item => item.artifact)), close: async () => {} });
 const optionsFor = root => ({ root, program: programOf(root), settings: { ...settings, placement: { maxSuccessLoss: 0, costWeights: { rank: 1, bytes: 0, stack: 1, latencyMs: 0 } } },
   student: student(root), teacher, teacherId: 'teacher:scripted', serve });
 

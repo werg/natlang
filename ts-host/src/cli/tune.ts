@@ -137,7 +137,9 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
               throw new Error('natlang tune: the native backend needs a default profile with neuraleseServer: true');
             const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { rlCapture: !!capture });
             await session.prepare();
-            const loaded = await uploadRelease(session.nativeArtifacts!()!, directory);
+            const loaded = await uploadRelease(session.nativeArtifacts!()!, directory,
+              [...manifest.artifacts.map(item => item.artifact), ...manifest.families.map(item => item.artifact),
+                ...manifest.softStates.map(item => item.state)], manifest.receipts.inferenceStateMaterializations);
             return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
           }
           if (settings.backend === 'vllm') {

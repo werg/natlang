@@ -7,7 +7,7 @@ import * as host from '../dist/index.js';
 import { tuneProgram } from '../dist/tune/pipeline.js';
 import { scaffoldManifest } from '../dist/tune/collect.js';
 import { programSites } from '../dist/tune/sites.js';
-import { incrementalSelector, readCounter, runIncrementalBuilds } from '../dist/tune/incremental.js';
+import { incrementalHistoryArtifacts, incrementalSelector, readCounter, runIncrementalBuilds } from '../dist/tune/incremental.js';
 import { currentRelease } from '../dist/adaptation/weights/release.js';
 import { scriptedModel } from './support/natlang.mjs';
 
@@ -27,6 +27,8 @@ function project() {
   // pinned nodes kept exactly, trained nodes new versions; every plan is appended to plans.jsonl.
   writeFileSync(join(root, 'trainer.mjs'), `import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { encodeNativeTensorArtifact, nativeTensorArtifactContentId } from ${JSON.stringify(new URL('../dist/native/neuralese-store.js', import.meta.url).href)};
 const args = process.argv.slice(2), planPath = args[args.indexOf('--plan') + 1], out = args[args.indexOf('--out') + 1];
 const plan = JSON.parse(readFileSync(planPath, 'utf8'));
 appendFileSync(${JSON.stringify(join(root, 'plans.jsonl'))}, JSON.stringify(plan) + '\\n');
@@ -34,8 +36,17 @@ const rows = readFileSync(plan.rows, 'utf8').split('\\n').filter(Boolean).map(li
 const ranks = plan.recipe.ranks ?? { tree: 8, folder: 4, lambda: 2 };
 const used = new Set(plan.manifest.bindings.flatMap(binding => binding.ancestry));
 const version = createHash('sha256').update(JSON.stringify([planPath, rows.length])).digest('hex').slice(0, 8);
-const artifacts = plan.manifest.tree.filter(node => used.has(node.id) && ranks[node.level] > 0).map(node => ({ node: node.id,
-  artifact: plan.pinned?.[node.id] ?? 'nnt1:' + node.id + ':' + version, rank: ranks[node.level], parameterization: 'native-subspace', requires: [] }));
+const artifacts = plan.manifest.tree.filter(node => used.has(node.id) && ranks[node.level] > 0).map(node => {
+  if (plan.pinned?.[node.id]) return { node: node.id, artifact: plan.pinned[node.id], rank: ranks[node.level], parameterization: 'native-subspace', requires: [] };
+  const metadata = { schema: 'natlang.neuralese-native-tensor-artifact/1', kind: 'parameter-set', native_identity: { ...plan.manifest.base,
+    tokenizer_fingerprint: /^[0-9a-f]{64}$/.test(plan.manifest.base.tokenizer_fingerprint) ? plan.manifest.base.tokenizer_fingerprint : 'd'.repeat(64) },
+    source_artifact_id: null, provenance: { fixture: true, node: node.id, version }, tensors: [{ name: 'weight', dtype: 'F32', shape: [1] }] };
+  const tensors = { weight: { dtype: 'F32', shape: [1], data: Uint8Array.from([0, 0, 128, 63]) } };
+  const artifact = nativeTensorArtifactContentId(metadata, tensors);
+  mkdirSync(out + '/artifacts', { recursive: true });
+  writeFileSync(out + '/artifacts/' + artifact + '.nnt', encodeNativeTensorArtifact({ metadata, tensors }));
+  return { node: node.id, artifact, rank: ranks[node.level], parameterization: 'native-subspace', requires: [] };
+});
 const optimizer_states = Object.fromEntries(artifacts.filter(item => !plan.pinned?.[item.node]).map(item => [item.node, 'opt:' + item.artifact]));
 writeFileSync(out + '/result.json', JSON.stringify({ artifacts, receipt: { rows: rows.length, optimizer_states,
   bindings: [...new Set(rows.map(row => row.binding))].sort() } }));`);
@@ -71,6 +82,8 @@ test('a leaf edit with lambda-only residuals builds one candidate: only the leaf
     const reports = await incremental(root, settings);
     assert.deepEqual(reports.map(report => [report.build, report.activated]), [['candidate', true]]);
     const plan = plans(root).at(-1), inner = nodeOf(before, 'inner.nl'), outer = nodeOf(before, 'outer.nl');
+    const history = incrementalHistoryArtifacts(root, { manifest: before, directory: join(root, '.natlang', 'tune', 'releases', before.digest) });
+    assert.ok(plan.artifacts.includes(history[0]), 'warm optimizer history comes from the verified fit output');
     const outerArtifact = before.artifacts.find(item => item.node === outer).artifact;
     assert.deepEqual(plan.pinned, { [outer]: outerArtifact });
     assert.deepEqual(Object.keys(plan.warm), [inner]);
@@ -85,6 +98,9 @@ test('a leaf edit with lambda-only residuals builds one candidate: only the leaf
     assert.deepEqual(after.receipts.stalePins, {}, 'no residual-bearing shared parent was dirty');
     assert.equal(after.artifacts.find(item => item.node === outer).artifact, outerArtifact, 'the pinned node is the exact released artifact');
     assert.equal(readCounter(root).sinceFull, 1);
+    const resultPath = join(history[0], '..', 'result.json');
+    writeFileSync(resultPath, '{}');
+    assert.throws(() => incrementalHistoryArtifacts(root, { manifest: before, directory: root }), /receipt mismatch/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

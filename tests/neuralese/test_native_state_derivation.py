@@ -90,6 +90,64 @@ def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_pat
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
+def test_inference_snapshot_matches_optimizer_state_forward_and_reader_gradients(tmp_path,family):
+    """Serving snapshots omit only optimizer ancestry; training and whole-graph state remain original."""
+    from concurrent.futures import Future
+    from natlang_neuralese.model.native_artifact import NativeTensorArtifact
+    from natlang_neuralese.model.native_state_derivation import optimize_state, state_values, verify_state_derivation
+    from natlang_neuralese.model.shared_state import Invocation, ImportSpan, compile_graph
+    from natlang_neuralese.serve.engine import GenerationRequest, Sequence
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    try:
+        parent_id=engine.native_write_text('t5 t6')['id']
+        parent=engine.store.get_native_state(parent_id).block
+        name=next(iter(state_values(parent)))
+        gradient=engine.store.put_native_tensor_artifact(NativeTensorArtifact('state-gradient',engine.native_identity,
+            {name:torch.full_like(state_values(parent)[name],.03)},parent_id,{'scope':'inference-snapshot-parity'}))
+        result,_,_=optimize_state(engine,gradient,{'name':'adam','learning_rate':.01,'eps':1e-6},None,'state-owner')
+        source_id=result['native_state_id'];source=engine.store.get_native_state(source_id).block
+        verify_state_derivation(engine.store,source)
+        snapshot_record=engine.store.put_native_state(replace(source,derivation=None))
+        snapshot_id=snapshot_record.id;snapshot=snapshot_record.block
+        assert snapshot_id!=source_id and snapshot.derivation is None
+        assert source.derivation['parent_state_id']==parent_id and source.derivation['gradient_id']==gradient.id
+        assert source.derivation['origin_state_ids']==[parent_id]
+        assert set(snapshot.tensors())==set(source.tensors())
+        for key,value in source.tensors().items():assert torch.equal(snapshot.tensors()[key],value),key
+        verify_state_derivation(engine.store,source)
+
+        # Exercise the real LFM/Mellum engine import and next-token forward for both IDs.
+        def consume(state_id):
+            sequence=Sequence(GenerationRequest(messages=[]),Future())
+            sequence.cache=engine._native_forward([4],None)['cache'];sequence.native_own_position=1
+            engine._native_consume(sequence,state_id)
+            return sequence.logits.detach().clone()
+        torch.testing.assert_close(consume(source_id),consume(snapshot_id),rtol=0,atol=0)
+
+        # The same consumer graph and current learnable model receive the same exact state at the same positions.
+        engine.shared_model.requires_grad_(True)
+        plan=compile_graph([Invocation('read',(4,engine.role_tokens.consume_open,engine.role_tokens.consume_close,7),
+            imports=(ImportSpan(2,'prior',0,len(source.token_ids)),))],external_sizes={'prior':len(source.token_ids)})
+        gradients=[];losses=[]
+        for block in (source,snapshot):
+            engine.shared_model.zero_grad(set_to_none=True)
+            with torch.enable_grad():
+                output=engine.shared_model(plan,external_blocks={'prior':block},external_identity={'prior':engine.native_identity})
+                loss=output['h_final'][:,-1].square().sum();loss.backward()
+            losses.append(loss.detach().clone())
+            gradients.append({name:param.grad.detach().clone() for name,param in engine.shared_model.named_parameters()
+                if param.grad is not None})
+        torch.testing.assert_close(losses[0],losses[1],rtol=0,atol=0)
+        assert gradients[0].keys()==gradients[1].keys()
+        for name in gradients[0]:
+            torch.testing.assert_close(gradients[0][name],gradients[1][name],rtol=0,atol=0)
+        # Snapshot identity never substitutes into a producer/consumer training export.
+        assert source.derivation['gradient_id']==gradient.id
+        assert engine.store.get_native_state(source_id).block.derivation==source.derivation
+    finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
 @pytest.mark.parametrize('objective_kind',['ce','query'])
 def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,objective_kind):
     import base64,json,os,subprocess

@@ -3,7 +3,7 @@
  * program's active release is found beside it and served on the selected backend without flags or manifests.
  * A release the backend cannot serve runs the base model, marked degraded with the reason; never as tuned execution.
  */
-import { createReadStream, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { HttpNeuraleseStore, restoreNativeArtifacts } from '../model/neuralese-server.js';
 import { decodeNativeState, decodeNativeTensorArtifact } from '../native/neuralese-store.js';
 import { createHash } from 'node:crypto';
@@ -14,6 +14,8 @@ import { currentRelease } from '../adaptation/weights/release.js';
 import { managedModelSha256, supportsNativeStates } from '../model/local-server.js';
 import { discoverLlamaRuntime } from '../model/llama-runtime.js';
 import type { ResolvedModelChoice } from '../model/config.js';
+import { nativeReleaseObjectClosure, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from '../native/release-artifact-closure.js';
+import { materializeExistingInferenceRelease } from '../tune/pipeline.js';
 
 export type TunedServing = {
   /** For `createNatlangRuntime({ weights })`. */
@@ -38,14 +40,16 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
   environment: NodeJS.ProcessEnv = process.env): Promise<TunedServing> {
   const release = currentRelease(root);
   if (!release) return {};
-  const { manifest, directory } = release;
+  const compact = materializeExistingInferenceRelease(root, release.manifest, release.directory);
+  const { manifest, directory } = compact;
   let incompatible: string | undefined;
   const loaded: { id: string; path: string }[] = [];
   if (choice.kind === 'external' && choice.neuraleseServer) {
     // The native reference server applies the exact native artifacts and imports soft states.
     const store = new HttpNeuraleseStore(choice.endpoint, { ...choice.headers,
       ...(environment[choice.apiKeyEnv] ? { authorization: 'Bearer ' + environment[choice.apiKeyEnv] } : {}) });
-    const uploaded = await uploadRelease(store, directory);
+    const uploaded = await uploadRelease(store, directory, [...manifest.artifacts.map(item => item.artifact),
+      ...manifest.families.map(item => item.artifact), ...manifest.softStates.map(item => item.state)], manifest.receipts.inferenceStateMaterializations);
     const binding = new WeightBinding(manifest, { ...(program ? { program } : {}), available: uploaded, nativeState: true });
     return { weights: [binding], ...(binding.status !== 'ready' ? { notice: `natlang: tuned weights ${binding.status}: ${binding.reason}` } : {}) };
   }
@@ -94,15 +98,8 @@ export async function tunedServing(root: string, program: ProgramDescriptor | un
  * Upload a release's native artifacts (`artifacts/*.nnt`: coefficients, bases) and soft states (`states/*`) to a
  * native server store. Each file must hold exactly the content its name claims. Returns the IDs now served.
  */
-export async function uploadRelease(store: HttpNeuraleseStore, directory: string): Promise<Set<string>> {
-  const files = new Map<string, string>();
-  for (const [folder, extension] of [['artifacts', '.nnt'], ['states', '.nzs']] as const) {
-    const path = join(directory, folder);
-    if (existsSync(path)) for (const file of readdirSync(path).sort()) {
-      if (!file.endsWith(extension)) throw new Error(`unexpected native release file ${folder}/${file}`);
-      files.set(file.slice(0, -extension.length), join(path, file));
-    }
-  }
+export async function uploadRelease(store: HttpNeuraleseStore, directory: string, roots: Iterable<string>, receipts?: unknown): Promise<Set<string>> {
+  const files = nativeReleaseObjectClosure([directory], roots);
   const read = (id: string, state: boolean) => {
     const path = files.get(id);
     if (!path) return undefined;
@@ -111,6 +108,17 @@ export async function uploadRelease(store: HttpNeuraleseStore, directory: string
     if (artifact.id !== id) throw new Error(`release file ${path} does not hold its named content (${artifact.id})`);
     return artifact;
   };
+  if (receipts !== undefined) {
+    if (!Array.isArray(receipts)) throw new Error('release inference-state materialization receipts must be an array');
+    for (const value of receipts) {
+      if (!value || typeof value !== 'object' || typeof (value as NativeInferenceMaterializationReceipt).inferenceState !== 'string')
+        throw new Error('release inference-state materialization receipt is malformed');
+      const receipt = value as NativeInferenceMaterializationReceipt;
+      const state = read(receipt.inferenceState, true);
+      if (!state) throw new Error(`release materialization snapshot ${receipt.inferenceState} is absent`);
+      verifyNativeInferenceSnapshotReceipt(state as ReturnType<typeof decodeNativeState>, receipt);
+    }
+  }
   // Use the same dependency traversal as ordinary native execution: parents,
   // gradients and numeric histories arrive before their derived state. Existing
   // exact objects are reused rather than repeatedly uploading whole histories.
