@@ -152,8 +152,12 @@ export function resolveModelChoice(profile: ModelProfile): ResolvedModelChoice {
     request: profile.request, ...(profile.neuraleseServer ? { neuraleseServer: true as const } : {}),
     ...(profile.vllm ? { vllm: true as const } : {}) };
   if (profile.model) throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
+  // The default model's own serving settings (a natlang export: its template arguments, banned marker tokens, greedy
+  // decoding) apply when the profile runs it; the profile's request overrides them.
+  const usesDefault = !profile.local?.modelPath && !profile.local?.modelId;
+  const defaults = usesDefault ? (DEFAULT_MODEL_RELEASE as { request?: Record<string, unknown> }).request : undefined;
   return { ...common, kind: 'managed-local', model: profile.local?.modelId ?? (profile.local?.modelPath ? 'local-gguf' : DEFAULT_MODEL_RELEASE.id),
-    request: profile.request, local: profile.local };
+    request: defaults ? { ...defaults, ...profile.request } : profile.request, local: profile.local };
 }
 
 export function loadModelConfiguration(name?: string, overrides: ModelSelectionOverrides = {},

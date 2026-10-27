@@ -43,6 +43,20 @@ format the training supervisors already maintain. Setup:
 Rerun the same command to move to a newer checkpoint. Every run says when the source has a newer one:
 `natlang: lfm-latest has a newer checkpoint (step 40500; profile lfm-latest pins 40128); run natlang setup --native lfm-latest to use it`.
 
+## The default model of a fresh install
+
+Without a configured profile, natlang downloads and runs `DEFAULT_MODEL_RELEASE` (`ts-host/src/model-default.ts`) on
+managed llama.cpp. It is a GGUF export of one of our native checkpoints, published as a GitHub release asset with its
+chat template under `models/templates/` and its serving settings (template arguments, the banned producer marker,
+greedy decoding), which apply whenever a profile runs the default model. Publish a newer export with
+
+```sh
+node scripts/publish_browser_model.mjs --native-gguf ~/.local/share/natlang/native-models/gguf-<sha12> --release natlang-lfm-step<STEP>
+```
+
+which verifies the file against its export manifest, uploads it, and regenerates `model-default.ts`; commit that and
+the template. Tuned programs still run on the checkpoint they were tuned on.
+
 ## From a TypeScript host
 
 `natlangRuntime()` from `@natlang/node` gives a host the runtime `natlang run` configures, from the same profiles:
