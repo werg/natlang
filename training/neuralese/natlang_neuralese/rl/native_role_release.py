@@ -1384,9 +1384,8 @@ def _semantic_completion_dependencies(completion_path,completion):
                     add({'path':task['score_path'],'sha256':task['score_sha256']})
                 runtime=task.get('task_runtime_identity')
                 if runtime is not None:
-                    if runtime.get('schema')!='natlang.task-eval-runtime-identity/1':
-                        raise ValueError('task execution receipt has an unknown evaluator runtime binding')
-                    for reference in runtime.get('files')or[]:add(reference)
+                    from ..common.runtime_inventory import task_runtime_identity_files
+                    for reference in task_runtime_identity_files(runtime):add(reference)
     for baseline in (completion.get('source_task_baselines')or{}).values():
         if not isinstance(baseline,dict):raise ValueError('source task baseline dependency is malformed')
         task_path=add(baseline['task_execution_receipt'])
@@ -1394,10 +1393,10 @@ def _semantic_completion_dependencies(completion_path,completion):
         if task.get('score_path'):
             add({'path':task['score_path'],'sha256':task['score_sha256']})
         runtime=baseline.get('task_runtime_identity')or{}
-        if (runtime.get('schema')!='natlang.task-eval-runtime-identity/1'
-                or task.get('task_runtime_identity')!=runtime):
+        from ..common.runtime_inventory import task_runtime_identity_files
+        if task.get('task_runtime_identity')!=runtime:
             raise ValueError('source task baseline omitted its exact evaluator runtime identity')
-        for reference in runtime.get('files')or[]:add(reference)
+        for reference in task_runtime_identity_files(runtime):add(reference)
     if completion.get('resolved_curriculum') is not None:
         add(completion['resolved_curriculum'])
     curriculum=json.loads(_bound(completion['curriculum']).read_text())

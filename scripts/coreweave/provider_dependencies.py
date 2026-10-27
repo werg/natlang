@@ -74,11 +74,11 @@ def source_task_baseline_dependencies(training):
                 or task.get('score_sha256')!=score.get('sha256')):
             raise ValueError('shared source task baseline score binding changed')
         runtime=baseline.get('task_runtime_identity')
-        if (not isinstance(runtime,dict)or runtime.get('schema')!='natlang.task-eval-runtime-identity/1'
-                or task.get('task_runtime_identity')!=runtime or not isinstance(runtime.get('files'),list)):
+        from natlang_neuralese.common.runtime_inventory import task_runtime_identity_files
+        if not isinstance(runtime,dict) or task.get('task_runtime_identity')!=runtime:
             raise ValueError('shared source task baseline omitted its evaluator runtime')
         references.extend((task_ref,score))
-        references.extend(runtime['files'])
+        references.extend(task_runtime_identity_files(runtime))
     unique={}
     for reference in references:
         key=(reference.get('path'),reference.get('sha256'))

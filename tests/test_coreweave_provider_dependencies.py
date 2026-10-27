@@ -355,9 +355,18 @@ def test_compiled_task_runtime_requires_and_binds_external_prelude(tmp_path):
     with pytest.raises(ValueError,match='built CLI and pinned npm manifests'):
         deps.task_runtime_inventory(host)
     (host/'prelude.js').write_text('// first exact prelude\n')
+    dependency=host/'node_modules/fixture-package/index.js'
+    dependency.parent.mkdir(parents=True)
+    dependency.write_text('export const dependencyValue = 1;\n')
     inventory=deps.task_runtime_inventory(host)
+    assert inventory['@dependency-files']['node_modules/fixture-package/index.js']['sha256']==deps.sha256_file_hex_cached(dependency,trust_archive_receipt=False)
     asset={'path':str(host),'kind':'task-runtime','inventory':inventory,
            'sha256':deps.canonical_json_sha256_hex(inventory)}
+    deps.verify_assets([asset])
+    dependency.write_text('export const dependencyValue = 2;\n')
+    with pytest.raises(ValueError,match='pre-staged asset content differs'):
+        deps.verify_assets([asset])
+    dependency.write_text('export const dependencyValue = 1;\n')
     deps.verify_assets([asset])
     (host/'prelude.js').write_text('// different runtime semantics\n')
     with pytest.raises(ValueError,match='pre-staged asset content differs'):

@@ -16,10 +16,13 @@ AUTHORING_SCHEMA = 'natlang.teacher-executable-authoring-quality-continuation/1'
 AUTHORING_REVIEWED_ALIAS_SCHEMA = 'natlang.teacher-reviewed-source-authoring-quality-continuation/1'
 AUTHORING_ALIAS_SCHEMA = 'natlang.teacher-source-grounded-authoring-quality-continuation/1'
 AUTHORING_REQUIREMENT_SCHEMA = 'natlang.teacher-authoring-construct-quality-continuation/1'
-AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/1'
+AUTHORING_COMPILER_SCHEMA = 'natlang.teacher-authoring-compiler-quality-continuation/2'
+AUTHORING_COMPILER_SCHEMA_V1 = 'natlang.teacher-authoring-compiler-quality-continuation/1'
 UNORDERED_SUMMARY_SCHEMA = 'natlang.teacher-reviewed-unordered-summary-continuation/1'
 SPAN_REVIEW_SCHEMA = 'natlang.teacher-span-answer-quality-continuation/1'
 HISTORICAL_AUTHORING_RUNTIME = '43e248a84b6faba6e793181fe593796dc03c878b05199091d95e824408de7ed1'
+HISTORICAL_AUTHORING_READER_COMMIT = '5f2505f1295be125cf1f42f308a8d6081c93541b'
+HISTORICAL_AUTHORING_READER_SHA256 = '8019b8a1b7d9c6e52ad85c78bc949bc9449e6d6856fe9239e8cf3e849aad4d20'
 
 
 def file_verdict(row):
@@ -114,9 +117,10 @@ def verify_quality_continuation(row, original, original_binding):
     elif schema == AUTHORING_REVIEWED_ALIAS_SCHEMA:
         expected = continue_authoring_alias_quality(original, original_binding,
             source_review=row['source_quality_continuation']['source_review'])
-    elif schema == AUTHORING_COMPILER_SCHEMA:
+    elif schema in (AUTHORING_COMPILER_SCHEMA_V1, AUTHORING_COMPILER_SCHEMA):
         expected = continue_authoring_compiler_quality(original, original_binding,
-            row['source_quality_continuation']['historical_runtime'])
+            row['source_quality_continuation']['historical_runtime'],
+            include_runtime_requalification=schema == AUTHORING_COMPILER_SCHEMA)
     else:
         expected = continuation(original, original_binding)
     # Historical runtime identity records custody, never admission authority.
@@ -422,16 +426,60 @@ def continue_authoring_alias_quality(original, original_binding, *, source_revie
     return result
 
 
+def _historical_authoring_inventory_v1(runtime):
+    """Recompute the flat inventory protocol captured by the 43e compiler epoch.
+
+    This reader is deliberately scoped to retained historical authoring proofs.
+    It reproduces the implementation in HISTORICAL_AUTHORING_READER_COMMIT;
+    current serving and publication continue to use task_runtime_inventory.
+    """
+    runtime = Path(runtime)
+    names = ['prelude.js', 'package.json', '../package.json', '../package-lock.json',
+             '../training/source-reviews/holds.jsonl',
+             '../training/source-reviews/family-holds.json',
+             '../training/source-reviews/datasets.json']
+    required = [runtime/'dist/teacher/cli.js', runtime/'prelude.js', runtime/'package.json',
+                *(runtime/name for name in names)]
+    if not all(item.is_file() for item in required):
+        raise ValueError('historical authoring runtime is incomplete for captured inventory protocol')
+    result = {str(path.relative_to(runtime)): sha256_file_hex(path)
+              for path in sorted((runtime/'dist').rglob('*')) if path.is_file()}
+    result.update({name: sha256_file_hex(runtime/name) for name in names})
+    return result
+
+
+def _historical_authoring_runtime_requalification(runtime_reference):
+    """Bind today's dependency closure without rewriting the captured V1 identity."""
+    from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
+    if (not isinstance(runtime_reference, dict) or set(runtime_reference) != {'path','inventory_sha256'}
+            or runtime_reference['inventory_sha256'] != HISTORICAL_AUTHORING_RUNTIME):
+        raise ValueError('historical authoring runtime is not the captured compiler epoch')
+    runtime = Path(runtime_reference['path']).resolve(strict=True)
+    historical = _historical_authoring_inventory_v1(runtime)
+    if canonical_json_sha256_hex(historical) != HISTORICAL_AUTHORING_RUNTIME:
+        raise ValueError('historical authoring runtime changed')
+    current = task_runtime_inventory(runtime)
+    return {'schema': 'natlang.historical-authoring-runtime-requalification/1',
+            'historical_reader_commit': HISTORICAL_AUTHORING_READER_COMMIT,
+            'historical_reader_source_sha256': HISTORICAL_AUTHORING_READER_SHA256,
+            'historical_inventory_sha256': HISTORICAL_AUTHORING_RUNTIME,
+            'current_inventory_sha256': canonical_json_sha256_hex(current),
+            'current_inventory_entries': len(current)}
+
+
 def historical_authoring_verdict(row, runtime_reference):
     """Reproduce the exact captured generation epoch; arbitrary checkers are forbidden."""
-    from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
     if (not isinstance(runtime_reference, dict) or set(runtime_reference) != {'path','inventory_sha256'}
         or runtime_reference['inventory_sha256'] != HISTORICAL_AUTHORING_RUNTIME):
         raise ValueError('historical authoring runtime is not the captured compiler epoch')
     runtime = Path(runtime_reference['path']).resolve(strict=True)
-    inventory = task_runtime_inventory(runtime)
+    inventory = _historical_authoring_inventory_v1(runtime)
     if canonical_json_sha256_hex(inventory) != HISTORICAL_AUTHORING_RUNTIME:
         raise ValueError('historical authoring runtime changed')
+    # The saved historic digest did not include installed dependency bytes.
+    # Requalify their current exact closure separately and preserve both records.
+    from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
+    current_inventory = task_runtime_inventory(runtime)
     code = ('import {readFileSync} from "node:fs";'
             'const {checkAuthoring}=await import(process.argv[1]);'
             'const p=JSON.parse(readFileSync(0,"utf8"));'
@@ -440,12 +488,14 @@ def historical_authoring_verdict(row, runtime_reference):
     completed = subprocess.run(['node','--input-type=module','-e',code,
         (runtime/'dist/teacher/authoring.js').as_uri()],input=json.dumps(payload),
         capture_output=True,text=True,check=True)
-    if task_runtime_inventory(runtime) != inventory:
+    if (_historical_authoring_inventory_v1(runtime) != inventory
+            or task_runtime_inventory(runtime) != current_inventory):
         raise ValueError('historical authoring runtime changed during execution')
     return json.loads(completed.stdout)
 
 
-def continue_authoring_compiler_quality(original, original_binding, historical_runtime):
+def continue_authoring_compiler_quality(original, original_binding, historical_runtime, *,
+                                       include_runtime_requalification=True):
     """Recover a reproduced compiler rejection only after every unchanged run passes."""
     if 'source_quality_continuation' in original:
         raise ValueError('compiler continuation requires original captured execution')
@@ -474,7 +524,12 @@ def continue_authoring_compiler_quality(original, original_binding, historical_r
         or not isinstance(problems,list)or len(problems)!=len(runs)
         or any(not isinstance(problem,str)or not problem.startswith(f'run {i}: authoring_check: quiesced: error: The authored export failed: '+marker)for i,problem in enumerate(problems))):
         raise ValueError('compiler continuation requires only captured raw-nl compiler failure')
+    legacy_requalification = (_historical_authoring_runtime_requalification(historical_runtime)
+                              if include_runtime_requalification else None)
     legacy=historical_authoring_verdict(original,historical_runtime)
+    if (include_runtime_requalification
+            and _historical_authoring_runtime_requalification(historical_runtime) != legacy_requalification):
+        raise ValueError('historical authoring dependency requalification changed during verification')
     if canonical_json_sha256_hex(legacy)!=canonical_json_sha256_hex(captured):
         raise ValueError('historical compiler verdict differs from captured execution')
     verdict,verifier=authoring_verdict(original)
@@ -485,11 +540,19 @@ def continue_authoring_compiler_quality(original, original_binding, historical_r
     result['outcome'].update(accepted=True,authoring=verdict,rejection_reasons=[],
         oracle={'accepted':True,'level':'exact','verdict':'executable-authoring-compiler/1'})
     result['outcome']['checks']['files']=True
-    result['source_quality_continuation']={'schema':AUTHORING_COMPILER_SCHEMA,'original':original_binding,
+    result['source_quality_continuation']={'schema':(AUTHORING_COMPILER_SCHEMA if include_runtime_requalification
+                                                     else AUTHORING_COMPILER_SCHEMA_V1),'original':original_binding,
         'original_row_sha256':canonical_json_sha256_hex(original),'verifier':verifier,
-        'historical_runtime':copy.deepcopy(historical_runtime),'original_spec_sha256':canonical_json_sha256_hex(spec),
+        'historical_runtime':copy.deepcopy(historical_runtime),
+        'original_spec_sha256':canonical_json_sha256_hex(spec),
         'comparator':{'kind':'typescript-authoring-compiler/1'},
-        'claim':'Reproduced historical compiler rejection; unchanged files and ALL exact original runs pass current compiler. Original actor, trajectory and targets unchanged.'}
+        'claim':('Reproduced historical compiler rejection using the captured runtime and separately requalified its current dependency closure; '
+                 'the original V1 receipt did not capture those dependency bytes. Original actor, trajectory and targets remain unchanged.'
+                 if include_runtime_requalification else
+                 'Reproduced historical compiler rejection; unchanged files and ALL exact original runs pass current compiler. '
+                 'Original actor, trajectory and targets unchanged.')}
+    if include_runtime_requalification:
+        result['source_quality_continuation']['historical_runtime_requalification']=legacy_requalification
     return result
 
 

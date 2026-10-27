@@ -207,16 +207,25 @@ def parse_task_eval(value):
     return spec
 
 
-def _task_eval_runtime_files(repo,runtime):
+def _task_eval_runtime_files(repo,runtime,inventory=None):
     """Return per-file custody for the full executing TS and Python closures."""
     from ..common.hashing import sha256_file_hex_cached
     from ..common.runtime_inventory import task_runtime_inventory
     from ..train.native_resident import code_inventory
     repo=Path(repo).resolve(strict=True);runtime=Path(runtime).resolve(strict=True)
     files={}
-    for relative,digest in task_runtime_inventory(runtime).items():
+    inventory=inventory if inventory is not None else task_runtime_inventory(runtime)
+    for relative,digest in inventory.items():
+        if relative.startswith('@dependency-'):
+            continue
         path=(runtime/relative).resolve(strict=True)
         files[str(path)]={'path':str(path),'bytes':path.stat().st_size,'sha256':digest}
+    for relative,entry in inventory.get('@dependency-files', {}).items():
+        if entry.get('kind') != 'file':
+            continue
+        path=(runtime/relative).resolve(strict=True)
+        files[f'{path}#dependency:{relative}']={'path':str(path),'bytes':path.stat().st_size,
+            'sha256':entry['sha256'],'runtime_dependency':relative}
     collector=(repo/'scripts/run_bonsai_queue.py').resolve(strict=True)
     files[str(collector)]={'path':str(collector),'bytes':collector.stat().st_size,
         'sha256':sha256_file_hex_cached(collector)}
@@ -232,9 +241,13 @@ def task_eval_runtime_identity(value):
     from ..common.paths import root as logical_root
     repo=logical_root('repo').resolve(strict=True)
     runtime=Path(value.get('runtime') or repo/'ts-host').resolve(strict=True)
-    return {'schema':'natlang.task-eval-runtime-identity/1','repo':str(repo),
+    from ..common.runtime_inventory import task_runtime_inventory
+    inventory=task_runtime_inventory(runtime)
+    return {'schema':'natlang.task-eval-runtime-identity/2','repo':str(repo),
         'runtime':str(runtime),'code_commit':_git_head(),
-        'files':_task_eval_runtime_files(repo,runtime)}
+        'files':_task_eval_runtime_files(repo,runtime,inventory),
+        'dependency_closure':{'files':inventory.get('@dependency-files', {}),
+                              'source_links':inventory.get('@dependency-source-links', {})}}
 
 
 def task_eval_policy_identity(value):
