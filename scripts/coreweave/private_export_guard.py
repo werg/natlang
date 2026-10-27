@@ -160,3 +160,35 @@ def receipt_for_source(receipt, *, source, identity):
         'independent_readback_repeated':False,
     }
     return result
+
+
+@contextmanager
+def sandbox_upload_lease(directory, sandbox_id, *, verified_legacy_reader=None):
+    """Serialize PUTs while allowing completed-object readbacks to overlap.
+
+    Old exporters held their original lock throughout GET verification. During
+    migration a caller may prove that exact lock holder is already only reading
+    its completed object. All new uploaders still share the new upload lock.
+    """
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha256(sandbox_id.encode()).hexdigest()
+    legacy = (directory / ('sandbox-upload-' + key + '.lock')).open('a+b')
+    modern = (directory / ('sandbox-put-' + key + '.lock')).open('a+b')
+    legacy_held = False
+    try:
+        try:
+            fcntl.flock(legacy, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            legacy_held = True
+        except BlockingIOError:
+            if verified_legacy_reader is None or not verified_legacy_reader(legacy):
+                fcntl.flock(legacy, fcntl.LOCK_EX)
+                legacy_held = True
+        fcntl.flock(modern, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(modern, fcntl.LOCK_UN)
+        if legacy_held:
+            fcntl.flock(legacy, fcntl.LOCK_UN)
+        modern.close()
+        legacy.close()
