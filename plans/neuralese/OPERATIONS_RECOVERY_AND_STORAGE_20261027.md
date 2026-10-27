@@ -299,3 +299,200 @@ peak was approximately 4 GiB; reduced only this CPU builder's envelope from
 CUDA waiter blocked CPU backfill and was cancelled; GPU qualification of the
 packed-capacity candidate must be rescheduled when appropriate. Megatoken move
 and native-cache offload remain active; original Megatoken tree is intact.
+
+
+## Supervisor continuation, 17:23 Berlin
+
+Compaction and provisional-readback fixes are committed and pushed
+(085f80756, d5299ec87). The UX session's complete canonical check at 3a926a5eb
+passed all eleven stages; the isolated compaction TS check passed 363 files,
+2,243 tests and 22 conformance cases. Current canonical integrations add the
+previously deployed R7 source-priority/exact-source-reuse changes and the CPU
+attention optimization. Their new full check is
+`natlang-check-main-supervision-integrated-20261027-r1`, log
+`/home/werg/data/program-tuning-20261026/check-main-supervision-integrated-20261027-r1.log`.
+Do not claim this new run has finished. Focused canonical tests passed 91 source/
+recipe cases and 84 attention/higher-order/gradient cases (24 platform skips).
+The complete recorded Mellum CPU fixture retained every assertion: baseline
+664.30 s, candidate 581.65 s (12.4% faster). The CPU learning subprocess allowance
+is now 900 s because the measured correct baseline exceeds the old 360 s;
+assertions, graphs, splits and tolerances remain intact. Explicit MATH backend
+selection falls back to ordinary differentiable SDPA. Existing cloud x86 CPU
+qualification passed all 15 applicable attention cases with Torch 2.14; no
+additional sandbox was allocated. The earlier instrumented candidate SIGSEGV
+remains unexplained; a clean full repeat passed. FFN remains the major CPU cost.
+
+Mellum completed SFT/DPO through saved step37313, SHA
+`7c9152beead844523992840ed0937377aa26a49eb8545dd8568c99df341578bd`.
+Its RL transition exposed an omitted recovery input:
+`/work/resume/corrected-rl-source-20261026/cases.jsonl`. Restored the exact already
+admitted 15-file curriculum from its independently verified private archive
+(archive SHA `0daa04ce4dfa13f9fa91f0ceb3d7b77f4917d99aa7b5cbaa91afa8ab5b6bdb79`),
+retaining checkpoint, optimizer/RNG/exposure, recipe, cursor and round. Controller
+44334 resumed normal round4; real child45561 runs `rl.native_stage --rl-mode rft`
+and reached37329 with finite loss. This is successful-trajectory RFT, not a claim
+of a new PPO/GRPO result or measured capability lift. The curriculum and restore
+source/proof are now explicitly included in the next closed-controller export.
+Future recovery must inventory RL-config `cases` alongside training manifests;
+the manual archive inventory caused this omission, not shared provider dependency
+enumeration. Do not replay the one-off restore script against a different owner.
+
+The same R5 allocation drains17:46 Berlin and expires19:46. Final full-state and
+closed-control exporters, current-operator capsule, same-owner/workspace closure
+and local mirror are armed. Closure requires the independently verified final
+full state and closed controls, fresh actual local-parent readback, actual private
+object presence and unchanged drained owner/workspace. Current operator capsule:
+28,155B, SHA `8c955e55a50c456933ee0b883a68bc525f46a29e6e7f53b6211fe5dfb794cf82`.
+Closure is not yet observed. Snapshot storage remains unqualified.
+
+Four superseded local Mellum replicas were removed only after current-parent,
+private-presence and reader checks: reclaimed193,014,968,320B on the external
+volume. Newest verified local parent37122 and all private fallback objects were
+retained. The stopped native-store offload completed and preserved its logical
+path:4,548 blocks,13,426,212,864B internal allocation reclaimed. Megatoken's
+91.7GB relocation is still copying and retains its original source. At17:21,
+internal free39GiB/external319GiB. Do not count the incomplete Megatoken move as
+reclaimed space.
+
+Packed-capacity actual CUDA qualification now passes (1 case;5 deselected),
+including full backward/graph-mean gradients and model/RNG preservation. Full LFM
+geometry preparation reached280,000/1,575,737 rows, is resumable and not adopted;
+no exposure or comprehensive capacity claim follows from preparation. Its exact
+parser-bound prefix must remain intact. Paired compact-release program evaluations
+are scheduled by `natlang-compact-program-paired-evaluation-supervisor-20261027`
+after the full integrated check succeeds. It starts one exact pinned reader,
+uses a separate external cache, evaluates invoice/inventory development worlds
+against their bases, journals each invocation and stops its own actor afterward.
+Confirmation worlds remain unused. No outcome or lift is claimed from scheduling.
+
+
+## Measured Mellum continuation, 17:51 Berlin
+
+Mellum advanced through37356 and the exact controller44334 exited normally after
+its17:46 lifetime drain. Its full final checkpoint exists at cycle26, but the
+final independent export is still selecting/verifying it; do not claim new private
+or local durability from file presence. Final-state and coherent closed-control
+exporters remain live; closure still waits on their complete verified receipts.
+Last completed private authority37313 is distinct from earned37356. LFM continues
+without cloud dependence; its latest inspected step40278/private40228.
+
+Worker stack sampling localized the low-GPU startup period to actual complete
+capacity forward/backward and file checkpoint-input copies. Two112k-token cases
+passed,111.60/111.48seconds each; GPU lifetime peak70.39GB. File-store telemetry
+peaked14,455,074,816B live inputs. Host cgroup limit103,079,215,104B, anonymous
+use~8-10GB; most of the93.5GB current charge was reclaimable file cache. Root
+and/work are virtiofs, and/tmp is not a separately faster storage device in the
+measured8MiB write/read sample. A64MiB exact GPU input-copy comparison measured
+mmap0.126s vs direct-buffer0.086s; CPU direct-buffer was slower. No speculative
+file-I/O implementation was deployed. The simpler already implemented pinned
+CPU-input mode is the next candidate on this ample-host-RAM allocation.
+
+Prepared and independently backed up **R8 v2** controls at
+`/work/resume/host-memory-offload-r8-v2-20261027`: retain R7 numerical runtime,
+source/held bindings, lineage and all earned optimizer/RNG/exposure; use pinned
+host input storage rather than files and a1000-update SFT quantum. The candidate
+includes the declaring plan AND config scheduling controls, and an actual call
+to the effective `_supervised_quantum` confirmed1000 after overrides. A recipe-only
+edit is insufficient because the coordinator supplies its own quantum. The new
+actual normal entry must still qualify complete current-parent graph capacity
+and exact numerical parity before updates. Preparation has zero updates and no
+live configuration mutation. Do not substitute it for the current final capsule.
+Use the v2 candidate plan/config together when constructing the exact final-state
+continuation; it is not accepted by the priority-only one-off activation helper
+without a proper operational-continuation implementation.
+
+R8v2 independent controls:352,310B, SHA
+`e1c0dc004fa0a01dd90b35fcb9e4824c19f6384d571d8cc3d30b0d6db58f5a50`,
+owner receipt
+`/home/werg/data/mellum-cloud-continuation-20261027-r5/host-memory-offload-r8-v2-independent-preparation/ready.json`.
+The earlier R8v1 controls do not include effective plan overrides; preserve their
+history but use v2. Current-operator supplement r2 is84files/79,638B, SHA
+`e2dfdce43288838376122eff485870165d4431e37986825a77474bbc8247b6b7`;
+it predates these new R8 preparers, which remain local and need the next source
+supplement refresh.
+
+Prefix-cache hard budget fixed and regression4/4 passed: skip an oversized
+snapshot before it evicts useful shorter prefixes, preserve storage reference
+accounting and keep bytes<=budget even for a single entry. Supported native
+optimizer updates clone selected parameters and publish new immutable composite
+checkpoints; no supported serving mutation of the live ordinary parameters was
+found. Do not create an unnecessary default-on barrier from hypothetical private
+in-place mutations. Managed-profile prefix reuse stays enabled as qualified;
+training actors retain their declared exact execution controls.
+
+
+## Verified closure and integrated-check recovery, 19:14 Berlin
+
+R5 final full state is independently private-GET/hash verified at step37356:
+48,346,161,681B, SHA
+`e09e40bc6bc3842e217e778e1b4cd60b6a7c8a549ca16cdf5398943ec1bf3be8`.
+PUT took1404.15s; full cloud readback239.16s. Exact closed control archive retains
+all1,992 files/3,535,716,315 source bytes: compressed653,830,120B, SHA
+`f679af822f16784c2c0406baa5a2932a0030d3aecd337a0cfc2ef392e7a1d3e9`.
+Its full private readback and retained local copy both passed. Unary ReadFile
+failed at the API size limit; the streaming API then truncated after604MB.
+Recovered the SAME sealed archive via the previously qualified private PUT/full
+owner GET route. Fixed the future initial exporter to use this route, without
+repacking or omitting files. Do not restart the retired gateway-copy helpers.
+
+The strict current-owner/workspace closer freshly rehashed the retained48GB
+local recovery parent, checked actual private presence and archived control bytes,
+and stopped only sandboxf3894d50-1b82-4a16-bdd4-9b652f5c8802 at18:49:35.
+Authoritative receipt: `mellum-cloud-continuation-20261027-r5/final-recovery-closed.json`.
+Newest local mirror is separate/pending; the older verified full parent remains.
+Final operator capsule v3 is30,999B, SHA
+`2666cfade411203e0189c660b7dd55ffb02f3af45823e9a353b8e7b7981d0f5b`.
+General source supplement r3 is99 files/99,735B, SHA
+`12787219b3ba10e2f55fbc718570923a9e70928724c45814880f00a95669846c`;
+its archive predates the final private-route correction, which is retained in the
+v3 final operator capsule. Snapshot restore remains unqualified. No replacement
+sandbox has been allocated yet. Installed SDK has no live lifetime-extension API;
+consider a longer bounded next allocation to amortize cold recovery, keeping one
+cloud learner and continuing the independent backup path. Rate/balance remain
+opaque; allocation hours are not a dollar cap.
+
+R8v2 controls remain PREPARATION, not launch-ready. Its candidate plan points
+`rl_config` at its candidate config; normal operations should retain the canonical
+`/work/resume/training/config.json` and plan locations. Before deployment, build
+the operational continuation with canonical plan/config installation, a fresh
+unused cycle, actual final37356 parent, unchanged source/held/lineage and exact
+R7 runtime. Rebind assigned hardware in capacity declarations if needed. The
+existing priority-only one-off activation script is not a generic R8 launcher.
+Pinned host-input capacity must pass the actual real-entry checks; do not claim
+its speed or numerical qualification from the metadata-only preparation.
+
+The full shared main run completed ten stages green, including2789 general
+Python cases,25 GPU cases, all TypeScript/conformance checks. The non-gpu-heavy
+neuralese pytest process was killed by its15GiB cgroup limit in recorded Mellum;
+MemoryPeak exactly matched16,106,127,360B. No learner was killed. Current-node
+census preserved4067 actually completed cases and selected1116 interrupted/unrun
+cases (including already skipped cases not captured by terminal-status parsing).
+The isolated continuation under16GiB passed1108 with8 skips in730.59s. Together
+these cover all5183 collected non-gpu-heavy nodes. The original monolithic log
+correctly remains FAILED137; do not rewrite it or claim a single green run.
+Fresh quick checks passed at57cbe7371. The UX owner's separate TS check atc5dcc776d
+also passed, including22 conformance cases. New owner bank commit34492ad09 has
+its own validation requirement and is not silently covered by earlier tests.
+
+Restarted `natlang-lfm-current-r7-reviewed-ancestry-retention-r3-20261027`,7GiB,
+after finding its predecessor stopped12:47; actual R7 pass is healthy with no
+eligible numeric-operation deletions. An audit found three older unexported pins
+in the SAME current lineage and no live path/inode references. Only40037/c7c65...
+is a regular internal copy (~3.1GB);37123 and37511 resolve onto the external
+volume. Audit made no deletions. First3GiB metadata audit hit its own memory
+limit; releasing each checkpoint metadata tree between reads and8GiB admission
+completed at4.5GiB peak. Do not delete merely from an older step number.
+
+Current learner/coordinator I/O priorities were NONE; a previous priority record
+named a retired PID. Applied explicit best-effort0 to the actual29 R7 training
+processes after checking their cgroup ownership. This changes no numeric state.
+Keep this priority in future launch wrappers and preserve low-priority cold I/O.
+
+The compact invoice/inventory paired-evaluation supervisor r4 is now live; its
+exact pinned reader started19:10 and reported ready19:12. It uses14GiB rather
+than the older22GiB full-artifact reservation, imports compact inference releases,
+retains original fit histories and journals development outcomes. No confirmation
+worlds are used. Do not claim lift before actual completed arm results. Earlier
+supervisors never started their actors because admission expired; their failed
+requests are not running evaluations. The current actor is
+`natlang-compact-program-evaluation-native-actor-r2-20261027`.
