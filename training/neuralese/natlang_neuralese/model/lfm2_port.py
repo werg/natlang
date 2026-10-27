@@ -432,7 +432,7 @@ def feed_forward_residual(layer, h, chunk_tokens=0):
     """
     from .native_gradient_partitions import token_local_chunks
     return token_local_chunks(h, chunk_tokens,
-        lambda part: part + layer.feed_forward(layer.ffn_norm(part)))
+        lambda part: part + layer.feed_forward(layer.ffn_norm(part)), cpu_rowwise=True)
 
 
 

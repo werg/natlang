@@ -227,7 +227,7 @@ def reduce_parameter_rows(partitions, count, contribution, *, add=None):
 
 
 @_scoped_weight_preparations
-def token_local_chunks(h, chunk_tokens, callback):
+def token_local_chunks(h, chunk_tokens, callback, *, cpu_rowwise=False):
     """Evaluate each physical FFN row once, with invocation-local routing plans.
 
     The layer-major graph still visits each layer once. FFN is token-local;
@@ -237,9 +237,10 @@ def token_local_chunks(h, chunk_tokens, callback):
     import torch
     partitions = active_gradient_partitions()
     if partitions is None:
-        if chunk_tokens <= 0 or h.shape[1] <= chunk_tokens:
+        width = 1 if cpu_rowwise and h.device.type == 'cpu' else chunk_tokens
+        if width <= 0 or h.shape[1] <= width:
             return callback(h)
-        return torch.cat([callback(part) for part in h.split(chunk_tokens, dim=1)], dim=1)
+        return torch.cat([callback(part) for part in h.split(width, dim=1)], dim=1)
     if h.ndim != 3 or h.shape[0] != 1:
         raise RuntimeError('graph FFN chunks lost their token axis')
     sections = token_slices(partitions, h.shape[1], reverse=False)
@@ -250,7 +251,12 @@ def token_local_chunks(h, chunk_tokens, callback):
     outputs = []
     for invocation_index, section in enumerate(sections):
         count = section.stop - section.start
-        width = chunk_tokens if chunk_tokens > 0 else count
+        # CPU GEMM implementations may change the reduction path with the
+        # number of rows in a call. Keep token-local CPU FFN arithmetic at the
+        # one-row geometry used by cached append, independent of the memory
+        # chunk cap. The enclosing graph still runs once, layer-major; only
+        # this token-local FFN kernel is rowwise.
+        width = 1 if cpu_rowwise and h.device.type == 'cpu' else (chunk_tokens if chunk_tokens > 0 else count)
         for start in range(section.start, section.stop, width):
             part = h[:, start:min(start + width, section.stop)]
             with gradient_partitions(GradientPartitions(

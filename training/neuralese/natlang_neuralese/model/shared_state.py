@@ -321,7 +321,12 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 payload = dict(zip(PAYLOAD_FIELDS, inputs))
                 captured = tuple(payload[name] for name in PAYLOAD_FIELDS)
                 external_fields = tuple(imported[j::4] for j in range(4)) if imported else ((), (), (), ())
-                full = tuple(torch.cat((tensor, *extra), dim=1) for tensor, extra in zip(captured, external_fields))
+                # Empty external blocks are zero-slot identities. Do not let
+                # their empty tensors change the layout/dispatch of the real
+                # payload (some CPU kernels select arithmetic from strides).
+                full = tuple(torch.cat((tensor, *(part for part in extra if part.shape[1])), dim=1)
+                             if any(part.shape[1] for part in extra) else tensor
+                             for tensor, extra in zip(captured, external_fields))
                 outputs = value.new_zeros(value.shape)
                 for invocation_index, (node, offset, sequence) in enumerate(
                         zip(plan.invocations, plan.offsets, plan.sequences)):
@@ -353,7 +358,7 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
             if attention:
                 q, k, v, *gate_values = values
                 gate = gate_values[0] if gate_values else None
-                if imported:
+                if imported and any(value.shape[2] for value in imported[0::2]):
                     k = torch.cat([k, *imported[0::2]], dim=2)
                     v = torch.cat([v, *imported[1::2]], dim=2)
                 captured = (k, v)
@@ -374,8 +379,8 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                     out = flat.view(h.shape[0], h.shape[1], -1, layer.self_attn.head_dim).transpose(1, 2)
             else:
                 gated, c = values
-                if imported:
-                    gated = torch.cat([gated, *imported], dim=1)
+                if imported and any(value.shape[1] for value in imported):
+                    gated = torch.cat([gated, *(value for value in imported if value.shape[1])], dim=1)
                 captured = (gated,)
                 out = _convolve(layer, gated, c, plan, range(plan.token_count), index=convolution_index)
             updated = _actor_finish(actor_bank,actor_groups,port,layer,value,out,attention,
@@ -683,6 +688,19 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
         return F.scaled_dot_product_attention(query, key, value, attn_mask=visible, scale=scale, enable_gqa=True)
 
     if not isinstance(plan, GraphPlan):
+        if q.device.type == 'cpu' and q.shape[-2]:
+            starts, ends = plan.bounds(q.device, window)
+            if (q.dtype == k.dtype == v.dtype == torch.float32 and torch.is_grad_enabled()
+                    and any(value.requires_grad for value in (q,k,v))):
+                from ..common.native_attention_carrier import cpu_flash_rows
+                return cpu_flash_rows(q,k,v,mask=mask,starts=starts.tolist(),
+                    ends=(ends+1).tolist(),scale=scale)[..., :head_width]
+            return torch.cat([
+                dense(q[:, :, row:row+1], k[:, :, int(starts[row]):int(ends[row])+1],
+                      v[:, :, int(starts[row]):int(ends[row])+1],
+                      mask[..., row:row+1, int(starts[row]):int(ends[row])+1])
+                for row in range(q.shape[-2])
+            ], dim=2)[..., :head_width]
         return dense(q, k, v, mask)[..., :head_width]
     # Dense SDPA kernels reduce each query row in key-index order with
     # vector-width body/tail splits and key blocks counted from key slot zero.
@@ -700,8 +718,33 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
             continue
         lo = plan.slot_offsets[index]
         hi = lo + max(plan.own_positions[offset:offset+count]) + 1
-        pieces.append(dense(q[:, :, offset:offset+count], k[:, :, lo:hi], v[:, :, lo:hi],
-                            mask[..., offset:offset+count, lo:hi]))
+        query = q[:, :, offset:offset+count]
+        key, value = k[:, :, lo:hi], v[:, :, lo:hi]
+        visible = mask[..., offset:offset+count, lo:hi]
+        if query.device.type == 'cpu':
+            # CPU SDPA can select a different reduction path when Q has two
+            # rows instead of one. Future causal keys are masked, but leaving
+            # them in the SDPA dimension also changes CPU reduction geometry.
+            # Match the exact logical prefix/window of each cached append,
+            # while retaining a single layer-major graph traversal and its
+            # joint gradients.
+            if (query.dtype == key.dtype == value.dtype == torch.float32 and torch.is_grad_enabled()
+                    and any(item.requires_grad for item in (query,key,value))):
+                from ..common.native_attention_carrier import cpu_flash_rows
+                ends=[plan.own_positions[offset+row]+1 for row in range(count)]
+                starts=[max(0,end-window) if window is not None else 0 for end in ends]
+                pieces.append(cpu_flash_rows(query,key,value,mask=visible,starts=starts,ends=ends,scale=scale))
+                continue
+            for row in range(count):
+                end = plan.own_positions[offset+row] + 1
+                start = max(0, end-window) if window is not None else 0
+                key_start, key_end = start, end
+                pieces.append(dense(query[:, :, row:row+1],
+                                    key[:, :, key_start:key_end],
+                                    value[:, :, key_start:key_end],
+                                    visible[..., row:row+1, key_start:key_end]))
+        else:
+            pieces.append(dense(query, key, value, visible))
     if not pieces:
         return q.new_empty((*q.shape[:-1], v.shape[-1]))[..., :head_width]
     return torch.cat(pieces, dim=2)[..., :head_width]

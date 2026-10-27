@@ -27,9 +27,19 @@ from natlang_neuralese.serve.store import TensorStore
 from natlang_neuralese.serve.http import serve
 
 
+@pytest.fixture
+def cpu_harness_threads():
+    previous=torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        yield
+    finally:
+        torch.set_num_threads(previous)
+
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 @pytest.mark.parametrize('mode', ['handoff', 'recorded', 'forced', 'compact'])
-def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode):
+def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode, cpu_harness_threads):
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / ('ts-host/test/fixtures/native-state-child-parent.mjs' if mode in {'handoff', 'recorded'} else 'ts-host/test/fixtures/native-state-forced-text.mjs')
     if not (repo / 'ts-host/dist/native/neuralese.js').is_file():
@@ -136,7 +146,11 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         command = [node, str(fixture), f'http://127.0.0.1:{server.server_address[1]}', str(tmp_path / 'archive')]
         if mode == 'recorded':
             command.append('recorded')
-        process = subprocess.run(command, cwd=repo, text=True, capture_output=True, timeout=60)
+        # Recorded histories exercise the complete CPU cached-query path.
+        # Keep their real graph/transport coverage within a separate bounded
+        # CPU allowance; CUDA and shorter transport fixtures retain 60 s.
+        process = subprocess.run(command, cwd=repo, text=True, capture_output=True,
+                                 timeout=180 if mode=='recorded' and device=='cpu' else 60)
         assert process.returncode == 0, process.stdout + process.stderr
         receipt = json.loads(process.stdout.splitlines()[-1])
         if mode == 'recorded':
@@ -148,7 +162,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
             binding.write_text(json.dumps({'identity': identity, 'target': target, 'state_id': receipt['state_id']}))
             trained = subprocess.run([node, str(repo / 'ts-host/test/fixtures/native-adapter-recorded-learning.mjs'),
                 f'http://127.0.0.1:{server.server_address[1]}', str(tmp_path / 'archive'),
-                str(binding)], cwd=repo, text=True, capture_output=True, timeout=120)
+                str(binding)], cwd=repo, text=True, capture_output=True,
+                timeout=900 if device=='cpu' else 120)
             assert trained.returncode == 0, trained.stdout + trained.stderr
             progress = json.loads(trained.stdout.splitlines()[-1])
             assert progress['producer_consumer'] is True

@@ -111,3 +111,63 @@ def cpu_kv_carrier_attention(query, key, value, *, mask, scale):
     if query.is_cuda or query.dtype != torch.bfloat16 or key.dtype != value.dtype or key.dtype != torch.float32:
         raise ValueError('host KV carriers require CPU BF16 query and FP32 key/value carriers')
     return _CPUKVCarrierAttention.apply(query, key, value, mask, scale)
+
+
+class _CPUFlashRows(torch.autograd.Function):
+    """One cached-prefix CPU Flash call per row with bounded KV adjoint fan-in."""
+    @staticmethod
+    def forward(ctx, query, key, value, mask, starts, ends, scale):
+        outputs, logsumexp = [], []
+        for row,(start,end) in enumerate(zip(starts,ends)):
+            visible=mask[...,row:row+1,start:end]
+            additive=torch.zeros_like(visible,dtype=query.dtype).masked_fill(~visible,float('-inf')) if visible.dtype==torch.bool else visible
+            out,lse=torch.ops.aten._scaled_dot_product_flash_attention_for_cpu.default(
+                query[:,:,row:row+1],key[:,:,start:end],value[:,:,start:end],0.,False,
+                attn_mask=additive,scale=scale)
+            outputs.append(out);logsumexp.append(lse)
+        output=torch.cat(outputs,dim=2);lse=torch.cat(logsumexp,dim=-1)
+        ctx.save_for_backward(query,key,value,mask,output,lse)
+        ctx.starts,ctx.ends,ctx.scale=starts,ends,scale
+        return output
+
+    @staticmethod
+    def backward(ctx, gradient):
+        query,key,value,mask,output,lse=ctx.saved_tensors
+        if torch.is_grad_enabled():
+            # Higher-order derivatives use the ordinary differentiable SDPA
+            # reference, never a detached first-order carrier.
+            import torch.nn.functional as F
+            with torch.enable_grad():
+                rows=[F.scaled_dot_product_attention(query[:,:,r:r+1],key[:,:,a:b],value[:,:,a:b],
+                    attn_mask=mask[...,r:r+1,a:b],scale=ctx.scale,enable_gqa=True)
+                    for r,(a,b) in enumerate(zip(ctx.starts,ctx.ends))]
+                inputs=[t for t in (query,key,value) if t.requires_grad]
+                grads=torch.autograd.grad(torch.cat(rows,dim=2),inputs,gradient,create_graph=True,allow_unused=True)
+            iterator=iter(grads)
+            return *(next(iterator) if t.requires_grad else None for t in (query,key,value)),None,None,None,None
+        dq=torch.empty_like(query);dk=torch.zeros_like(key);dv=torch.zeros_like(value)
+        # Autograd's cat/slice fan-in executes later rows first. Match that
+        # chronology while accumulating only the actual visible prefix.
+        for row in range(len(ctx.starts)-1,-1,-1):
+            start,end=ctx.starts[row],ctx.ends[row]
+            visible=mask[...,row:row+1,start:end]
+            additive=torch.zeros_like(visible,dtype=query.dtype).masked_fill(~visible,float('-inf')) if visible.dtype==torch.bool else visible
+            qgrad,kgrad,vgrad=torch.ops.aten._scaled_dot_product_flash_attention_for_cpu_backward.default(
+                gradient[:,:,row:row+1],query[:,:,row:row+1],key[:,:,start:end],value[:,:,start:end],
+                output[:,:,row:row+1],lse[...,row:row+1],0.,False,attn_mask=additive,scale=ctx.scale)
+            dq[:,:,row:row+1]=qgrad
+            dk[:,:,start:end].add_(kgrad);dv[:,:,start:end].add_(vgrad)
+        return dq,dk,dv,None,None,None,None
+
+
+def cpu_flash_rows(query,key,value,*,mask,starts,ends,scale):
+    # Respect explicit SDPA backend selection, including callers requesting
+    # MATH for higher derivatives or platform qualification.
+    if not torch.backends.cuda.flash_sdp_enabled():
+        import torch.nn.functional as F
+        return torch.cat([
+            F.scaled_dot_product_attention(query[:,:,row:row+1],key[:,:,start:end],value[:,:,start:end],
+                attn_mask=mask[...,row:row+1,start:end],scale=scale,enable_gqa=True)
+            for row,(start,end) in enumerate(zip(starts,ends))
+        ],dim=2)
+    return _CPUFlashRows.apply(query,key,value,mask,tuple(starts),tuple(ends),scale)

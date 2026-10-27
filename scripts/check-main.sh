@@ -48,6 +48,11 @@ for dir in . ts-host $(cd "$MAIN" && ls -d applications/*/ 2>/dev/null | sed 's#
   fi
 done
 export PATH="$HOME/.local/bin:$PATH"
+# Most numerical fixtures use tiny cached-query/FFN rows. Large default BLAS
+# thread pools add substantial overhead and caused CPU harness timeouts on the
+# shared DGX. Keep test CPU parallelism explicit; operator settings win.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 # Python tests must not depend on a warm Hugging Face cache (the ts-host Neuralese tests do use the local tiny model).
 HF_EMPTY=$(mktemp -d)
 trap 'rm -rf "$HF_EMPTY"' EXIT

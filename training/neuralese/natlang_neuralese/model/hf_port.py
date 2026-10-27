@@ -295,7 +295,7 @@ class QwenPortBackbone(PortBackbone):
         expanded-width and expert-dispatch temporaries of long sequences."""
         from .native_gradient_partitions import token_local_chunks
         return token_local_chunks(h, self.ffn_chunk_tokens,
-            lambda part: part + layer.mlp(layer.post_attention_layernorm(part)))
+            lambda part: part + layer.mlp(layer.post_attention_layernorm(part)), cpu_rowwise=True)
 
     def _run_checkpointed(self, h, layers, cache, positions, padding, left_pad):
         """`run_layers` with each layer under activation checkpointing (as the LFM2 port): only the layer's own
