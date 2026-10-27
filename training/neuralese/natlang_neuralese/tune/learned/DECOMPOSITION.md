@@ -28,6 +28,7 @@ it calls through services: exact tensor math, data custody, execution, storage a
 | Target records (one schema, three tiers) and tuner export | crisp | `assemble.py`, `targets.py` | Custody, lineage and exposure; free tunes on the bank basis are exact targets |
 | Corpus: tuner fits on the bank basis per program, then labels | crisp | `__main__.corpus` | Operations over existing tune plans; resumable |
 | Program supply (typed decision programs with exact oracles) | crisp generator | `tune/supply.py` | Exact oracles and grouped worlds; function texts are model-facing and measured in tuning |
+| Meta-tuning examples for the optimizer's own stages | crisp labels | `meta.py`, `__main__.meta_examples` | Counterfactual operator scores and hindsight stop/focus are exact measurements; the stages themselves stay NL |
 | Meta-RL estimators (paired reward, shaping, filtered BC, joint ratio) | crisp | `meta_rl.py` | Exact policy math, reused from `rl/policy_math.py` |
 | Ceiling ladder, evaluation power, planted controls | crisp | `ladder.py`, `controls.py` | Exact measurements |
 | Outer training step and resumable state | crisp | `trainer.py` | One snapshot, cotangent replay, FP32/AdamW, exposure |

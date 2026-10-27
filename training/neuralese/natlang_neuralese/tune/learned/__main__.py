@@ -9,6 +9,7 @@
     python -m natlang_neuralese.tune.learned collect   --spec SPEC   sampled proposal groups with paired rewards (policy records)
     python -m natlang_neuralese.tune.learned corpus    --spec SPEC   tuner fits on the bank basis + their targets, per program
     python -m natlang_neuralese.tune.learned controls  --spec SPEC   planted-mixture recovery (optimizer vs in-bank fit)
+    python -m natlang_neuralese.tune.learned meta-examples --spec SPEC   exact tuning examples for the optimizer's own stages
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -296,6 +297,47 @@ def controls(spec):
     return summary['meanSupportRecall']
 
 
+def meta_examples(spec):
+    """Examples for tuning the meta-learner itself (`meta.py`): one counterfactual-best, full-budget episode per
+    program plan (each an `apply` plan with ``learned`` settings), written in the tuner's ``tune.examples.jsonl``
+    format to ``out``; a rerun skips finished programs. Spec: ``{programs: [{plan, group?}], work, out, steps?,
+    refine_steps?, focus?, fit?, learned?}``; ``learned`` (bank, state, store, scopes, ...) is added to plans that do
+    not carry it, so corpus plans can be used directly. Tune the optimizer program with them: ``natlang tune <learned-optimizer copy>
+    --examples out``."""
+    from .apply import Context
+    from .meta import episode_examples, write_examples
+    out, done_path = Path(spec['out']), Path(str(spec['out']) + '.done.json')
+    out.parent.mkdir(parents=True, exist_ok=True)
+    done = json.loads(done_path.read_text()) if done_path.exists() else {}
+    for index, program in enumerate(spec['programs']):
+        key = str(Path(program['plan']).resolve())
+        if key in done:
+            continue
+        plan_path, work = program['plan'], Path(spec['work']) / f'program-{index}'
+        if spec.get('learned'):
+            from ..build import load_plan
+            source, manifest, _, _ = load_plan(plan_path)
+            if 'learned' not in source:
+                rows = source['rows'] if Path(source['rows']).is_absolute() else str((Path(plan_path).parent / source['rows']).resolve())
+                work.mkdir(parents=True, exist_ok=True)
+                plan_path = str(work / 'plan.json')
+                _write(plan_path, {**source, 'manifest': manifest, 'rows': rows, 'learned': spec['learned']})
+        context = Context(plan_path, work)
+        try:
+            group = program.get('group') or f"meta:{context.pc.program['id']}"
+            examples, receipt = episode_examples(context, steps=spec.get('steps', 4), group=group,
+                                                 refine_steps=spec.get('refine_steps', 10), focus=spec.get('focus', True),
+                                                 fit=spec.get('fit'))
+        finally:
+            context.close()
+        write_examples(out, examples)
+        with Path(str(out) + '.receipts.jsonl').open('a') as stream:
+            stream.write(json.dumps(receipt, sort_keys=True, default=_jsonable) + '\n')
+        done[key] = len(examples)
+        _write(done_path, done)
+    return sum(done.values())
+
+
 def train(spec):
     from .bank import load_bank
     from .trainer import OuterRecipe, OuterTrainer
@@ -406,7 +448,7 @@ def service(spec):
 
 
 COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder,
-            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls}
+            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples}
 
 
 def main(argv=None):

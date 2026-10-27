@@ -1,5 +1,12 @@
 # Model-facing changes and their measurement
 
+### 2026-10-27 — learned optimizer `chooseFocus` stage
+
+`applications/learned-optimizer/adapt/chooseFocus.nl` now holds the focus rule that was step 1 of `interpretEvidence`
+(which calls it), with added wording: bindings whose demonstrations show missing behavior also count, and names are
+returned in alphabetical order (exact-match tuning labels). Status: **unmeasured**, like the other optimizer stages;
+measure against the hindsight focus labels of `meta-examples` on the live executor.
+
 ### 2026-10-27 — program supply catalog function texts
 
 `training/neuralese/natlang_neuralese/tune/supply.py` renders the function texts of 18 decision-program families (51

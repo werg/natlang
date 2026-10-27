@@ -100,9 +100,9 @@ def placeholder_adapters(engine, bank, scopes, owner=None):
 
 
 def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, learning_rate=5e-2,
-                state_learning_rate=1e-3, refine_steps=30, beta=.5, init=None, train_states=True):
+                state_learning_rate=1e-3, refine_steps=30, beta=.5, init=None, train_states=True, fixed_states=()):
     """Fit in the learner's parameterization. ``arrays``: list of `ScopeArray`; ``soft_states``: ``{soft key: state
-    id}`` trained jointly when ``train_states``; ``init``: scope -> (K,) initial mean strengths. Returns labels and
+    id}`` trained jointly when ``train_states`` (except ``fixed_states``, held at their incoming value); ``init``: scope -> (K,) initial mean strengths. Returns labels and
     history.
 
     Phase 1 trains a per-slot mean strength ``m`` (in grid-free units) and the head's bounded centered modulation
@@ -121,7 +121,7 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
     states = {}
     for key, state_id in (soft_states or {}).items():
         block, values = _leaf_block(engine.store.get_native_state(state_id).block)
-        if not train_states:
+        if not train_states or key in fixed_states:
             for value in values.values():
                 value.requires_grad_(False)
         states[key] = (block, state_id, values)
@@ -174,7 +174,8 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
                       'delta': modulation(v[scope], shares, beta).detach(), 'u': u[scope].detach(), 'v': v[scope].detach(),
                       'executed': final[scope].detach(), 'saturated': labels[scope]['saturated'],
                       'roundedToZero': labels[scope]['roundedToZero'], 'means': means[scope].detach()}
-    new_states = {key: _updated_block(block, values) for key, (block, _, values) in states.items()} if train_states else {}
+    new_states = {key: _updated_block(block, values) for key, (block, _, values) in states.items()
+                  if key not in fixed_states} if train_states else {}
     return {'schema': FIT_SCHEMA, 'bank': bank.snapshot, 'arrays': out, 'states': new_states,
             'loss': {'continuous': history, 'refined': refined, 'final': fitted_loss}, 'beta': beta}
 

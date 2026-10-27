@@ -1,0 +1,19 @@
+{
+ "checkpoint": "/mnt/external/natlang-program-tuning-20261026/parents/lfm-fe6740d1cda334e83d27c65f105e1ba1ea01c4c8b08345699f5bad1dbb9e375b.pt",
+ "store": "/mnt/external/natlang-learned-optimizer-20261027/store",
+ "device": "cuda",
+ "dtype": "float32",
+ "bank": "/mnt/external/natlang-learned-optimizer-20261027/bank.json",
+ "targets": "/mnt/external/natlang-learned-optimizer-20261027/corpus/targets.jsonl",
+ "state": "/mnt/external/natlang-learned-optimizer-20261027/optimizer/state.json",
+ "receipt": "/mnt/external/natlang-learned-optimizer-20261027/optimizer/receipt.json",
+ "steps": 400,
+ "recipe": {
+  "writer": {
+   "kind": "free-lora",
+   "rank": 16,
+   "alpha": 16.0
+  },
+  "batch_targets": 4
+ }
+}

@@ -15,6 +15,7 @@ implementations behind one interface; the setting selects).
 | One adaptation episode | fn (root) | `adapt.nl` | Orchestrates analysis, revision and selection; `iterateOn` with the measure `remainingSteps` gives structural termination |
 | One episode step | fn | `adapt/adaptStep.nl` | Revises the complete prompt/skill/LoRA collection jointly every iteration |
 | Interpret evidence: focus, key evidence, digests | fn | `adapt/interpretEvidence.nl` | Semantic judgement over exact failure facts; `digest` is a native producer span the writer consumes |
+| Choose focus | fn | `adapt/chooseFocus.nl` | Its own stage so tuning has exact hindsight labels (`tune/learned/meta.py`); the meta-learner is tuned like any program |
 | Choose revision operations per binding | fn | `adapt/chooseRevision.nl` | Policy over contracts, dependencies and failures |
 | Choose operator (learned proposal, retrieval, local refinement, keep) | pluggable fn | `adapt/chooseOperator.nl` | The memetic strategy learns; the crisp baseline is `apply.episode` |
 | Stop | fn behind the structural measure | `adapt/shouldStop.nl` | Benefit/cost judgement; the host measures cost exactly |

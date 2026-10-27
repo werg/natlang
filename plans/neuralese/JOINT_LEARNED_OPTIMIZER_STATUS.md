@@ -64,6 +64,23 @@ outcome, ladder gap or lift has been measured. Saved artifacts and passing tests
   ts-host compiler). Prepared at `/home/werg/data/program-supply-20261027/programs`. They need the ordinary split,
   teacher collection and import before they supply tune rows; no teacher action exists yet.
 
+## Tuning the meta-learner itself (2026-10-27)
+
+The optimizer's policy is the Natlang program `applications/learned-optimizer`, tuned like any program. Its focus
+decision is now its own stage, `adapt/chooseFocus` (used by `interpretEvidence`), so three stages have exact expected
+values: `chooseFocus` (leave-one-binding-out hindsight over in-bank fits; `fit.fit_in_bank(fixed_states=...)`),
+`chooseOperator` (every operator run from the same state and scored; the best one when it beats the incumbent, else
+`keep`) and `shouldStop` (hindsight over a full-budget episode). `python -m natlang_neuralese.tune.learned
+meta-examples` writes them in the tuner's `tune.examples.jsonl` format from counterfactual-best episodes, grouped by
+program (`tune/learned/meta.py`). `natlang tune <copy of the program> --examples ...` then tunes the stages (teacher
+SFT, RL). With teacher rows, the optimizer program's plan joins the corpus, so the optimizer also adapts itself.
+Not covered by exact labels yet: `chooseRevision` (its operations need per-operation counterfactual services),
+`interpretEvidence` digests (native spans; trained through the writer's whole-graph gradients) and
+`scheduleTraining`. The writer adapter, head and keys are the trained part of the meta-learner already (outer
+training).
+
+Lane declaration and runbook: `training/neuralese/learned-optimizer/README.md`, held until LFM main training is done.
+
 ## Not yet done (next work, in rough priority)
 
 1. **Run it — on hold until LFM main training is done (owner, 2026-10-27).** Prepared, not running: specs and

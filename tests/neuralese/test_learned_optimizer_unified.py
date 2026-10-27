@@ -180,3 +180,28 @@ def test_corpus_rebinds_an_earlier_students_plan_and_labels_targets(tmp_path):
     assert plan['recipe']['basis'] and plan['emitBoundaries'] is True
     tiers = {json.loads(line)['tier'] for line in (tmp_path / 'corpus' / 'targets.jsonl').read_text().splitlines()}
     assert tiers == {'free-tune', 'in-bank-fit'}
+
+
+def test_meta_examples_label_the_optimizers_own_stages_exactly(tmp_path):
+    from natlang_neuralese.tune.learned.meta import stop_labels
+    assert stop_labels([3., 2., 2., 1.]) == [False, False, False, True]
+    assert stop_labels([3., 3.]) == [True, True]
+    plan, _, _ = operation(tmp_path)
+    spec = write(tmp_path / 'meta-spec.json', {'programs': [{'plan': plan}], 'work': str(tmp_path / 'meta'),
+                                               'out': str(tmp_path / 'meta' / 'tune.examples.jsonl'), 'steps': 2,
+                                               'refine_steps': 1, 'fit': {'steps': 1, 'refine_steps': 1}})
+    assert learned(['meta-examples', '--spec', spec]) == 0
+    rows = [json.loads(line) for line in (tmp_path / 'meta' / 'tune.examples.jsonl').read_text().splitlines()]
+    functions = [row['function'] for row in rows]
+    assert functions == ['adapt/chooseFocus.nl', 'adapt/chooseOperator.nl', 'adapt/chooseOperator.nl',
+                         'adapt/shouldStop.nl', 'adapt/shouldStop.nl']
+    assert {row['group'] for row in rows} == {'meta:p'}
+    assert rows[0]['expected'] == sorted(rows[0]['expected']) and set(rows[0]['expected']) <= {'bx', 'by'}
+    receipts = [json.loads(line) for line in (tmp_path / 'meta' / 'tune.examples.jsonl.receipts.jsonl').read_text().splitlines()]
+    for row, step in zip(rows[1:3], receipts[0]['steps']):
+        losses = step['losses']
+        best = min(losses, key=losses.get)
+        assert row['expected'] == (best if losses[best] < step['incumbentLoss'] else 'keep')
+    assert rows[-1]['expected'] is True and rows[-1]['input']['state']['remainingSteps'] == 0
+    assert learned(['meta-examples', '--spec', spec]) == 0  # finished programs are skipped
+    assert len((tmp_path / 'meta' / 'tune.examples.jsonl').read_text().splitlines()) == len(rows)

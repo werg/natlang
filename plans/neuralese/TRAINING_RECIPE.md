@@ -58,6 +58,19 @@ establish task capability. Measure task outcomes on distinct development and
 confirmation invocations and retain the exact serving actor and checkpoint
 provenance.
 
+## Joint learned optimizer lane (after LFM main training)
+
+Owner decision 2026-10-27: the joint learned optimizer (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md) and the tunes of
+its 51 supplied programs run after the LFM production recipe is done, on its final checkpoint. Everything is
+prepared: the lane declaration, specs and runbook in `training/neuralese/learned-optimizer/` (README there),
+persisted program splits in `/home/werg/data/program-supply-20261027`, and the operation directory
+`/mnt/external/natlang-learned-optimizer-20261027`. It is a lane beside the recipe, not a stage in the production
+recipe JSON: it trains no backbone weights and never advances production lineage exposure. Its order is case export
+and teacher collection for the supplied programs, their program tunes, then `run-after-lfm-main.sh <final
+checkpoint>` (bank, corpus of bank-basis fits and joint targets, outer training, meta-examples), then tuning the
+optimizer program itself on exact hindsight/counterfactual labels of its own stages. Mellum follows with its own
+exact checkpoint once its production recipe is done.
+
 ## Individual-program adaptation lane
 
 The [tuning operations handoff](../TUNING_OPERATIONS_HANDOFF_20261026.md) is an

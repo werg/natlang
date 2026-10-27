@@ -1,0 +1,34 @@
+{
+ "work": "/mnt/external/natlang-learned-optimizer-20261027/meta",
+ "out": "/mnt/external/natlang-learned-optimizer-20261027/meta/tune.examples.jsonl",
+ "steps": 6,
+ "refine_steps": 10,
+ "fit": {
+  "steps": 10,
+  "refine_steps": 4
+ },
+ "learned": {
+  "bank": "/mnt/external/natlang-learned-optimizer-20261027/bank.json",
+  "state": "/mnt/external/natlang-learned-optimizer-20261027/optimizer/state.json",
+  "store": "/mnt/external/natlang-learned-optimizer-20261027/store",
+  "scopes": {
+   "tree": 32,
+   "folder": 32,
+   "lambda": 32
+  },
+  "steps": 6,
+  "patience": 6,
+  "seed": 0
+ },
+ "programs": [
+  {
+   "plan": "/mnt/external/natlang-learned-optimizer-20261027/corpus/ticket-routing/plan.json"
+  },
+  {
+   "plan": "/mnt/external/natlang-learned-optimizer-20261027/corpus/invoice-review/plan.json"
+  },
+  {
+   "plan": "/mnt/external/natlang-learned-optimizer-20261027/corpus/inventory-routing/plan.json"
+  }
+ ]
+}
