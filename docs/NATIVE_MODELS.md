@@ -28,14 +28,40 @@ format the training supervisors already maintain. Setup:
    `train/checkpoint_offload.py`) as `<data dir>/native-models/<sha256>.pt` (`NATLANG_NATIVE_MODELS` moves it), so a
    learner rewriting its own file never changes what runs, and the pin keeps the training checkpoint's identity, which
    tuned releases and RL receipts bind;
-2. writes the profile (named after the source, or `--profile NAME`): `native.checkpoint`, `sha256`, the source's
-   training checkpoint hash and step, and the checkout's `.venv-neuralese` interpreter;
-3. with `--gguf q8_0|bf16|f32`, exports the same weights for llama.cpp (below) as profile `NAME-gguf`;
-4. removes the superseded pin once no profile names it. `--default` makes the profile (the GGUF one with `--gguf`)
+2. prepares the pin's compact actor view once (`python -m natlang_neuralese.model.native_bundle actor-view`: the exact
+   actor tensors without optimizer, RNG and exposure state, verified by a safe reread) under
+   `native-models/actor-views/<sha256>/`; the server loads it under the complete checkpoint's identity (measured on
+   the LFM tuning base: 13 s and 2.4 GiB host peak instead of about 2 minutes and 8 GiB). The complete pin stays the
+   source for tuning and optimizer endpoints; a missing view falls back to it;
+3. writes the profile (named after the source, or `--profile NAME`): `native.checkpoint`, `sha256`, `actorView`, the
+   source's training checkpoint hash and step, and the checkout's `.venv-neuralese` interpreter;
+4. with `--gguf q8_0|bf16|f32` (or when a `NAME-gguf` profile already exists, in its format), exports the same
+   weights for llama.cpp (below) as profile `NAME-gguf`;
+5. removes the superseded pin (with its view and GGUF export) once no profile names it. `--default` makes the profile (the GGUF one with `--gguf`)
    the default.
 
 Rerun the same command to move to a newer checkpoint. Every run says when the source has a newer one:
 `natlang: lfm-latest has a newer checkpoint (step 40500; profile lfm-latest pins 40128); run natlang setup --native lfm-latest to use it`.
+
+## From a TypeScript host
+
+`natlangRuntime()` from `@natlang/node` gives a host the runtime `natlang run` configures, from the same profiles:
+
+```ts
+import { natlangRuntime } from '@natlang/node';
+import { route } from './triage/route.nl';
+
+const natlang = await natlangRuntime({ programRoot: import.meta.dirname });   // profile: NATLANG_PROFILE or the default
+const lane = await natlang.runtime.run(() => route(ticket));
+await natlang.close();                                                          // stops the servers it started
+```
+
+It runs a tuned program's release on the checkpoint it was tuned on (pinning it when needed), uploads the release to
+the native server, starts and stops natlang-owned servers, wires the profile's `escalate` teacher and its examples,
+and prints the same one-line notices as the CLI on `log`. Options: `profile`, `provider`/`model`, `weights: false`
+(untuned), `escalate: PROFILE | false`, `environment`, `log`, and `runtime` for further runtime options (services,
+trace, refinements). `prepare()` starts the model server ahead of the first call. `createNatlangRuntime` remains for
+hosts that wire the model themselves.
 
 ## The two backends
 
@@ -108,12 +134,46 @@ natlang: classify failed on lfm-latest (model turn limit reached); answered by d
 A wrong but well-typed answer is not a failure; escalation does not catch it. Use only an owner-authorized
 teacher profile (AGENTS.md); escalated answers are teacher outputs with their own actor identity.
 
+When the run ends, the input of each escalated root call of a program function joins that program's
+`tune.examples.jsonl`, without an expected result (the teacher's answer is not a verified oracle), in a group
+`escalations-<day>-<tester>`; an input already listed is left alone (`NATLANG_ESCALATION_EXAMPLES=off`, or
+`escalationExamples: false` in `natlangRuntime`, turns this off). The next `natlang tune` collects and verifies them
+like any other root.
+
 ## Turning test sessions into training data
 
 `natlang traces good CALL`, `natlang traces bad CALL [--expected JSON]` and `natlang traces fix CALL --expected JSON`
 annotate a recorded call and add it as a root example to its program's `tune.examples.jsonl`, grouped per tester
 and day so one session's calls stay on one side of every split (docs/TUNING.md "Examples from testing"). Protected
 examples are never rewritten. `natlang tune --incremental` then refits on them.
+
+Each example records its `producer`: the model that produced the recorded output (`good`), or `tester` (`fix`). Once
+tuning is configured, `good` refuses an output from a model that is neither a tuning teacher (`tune.teacher`,
+`tune.teachers`, or the student profile's `escalate`) nor one of our native profiles' models, so an unauthorized
+model's answers never become training labels; give the answer yourself with `fix --expected JSON`.
+
+## Tuning without configuration
+
+`natlang tune DIR` needs no `tune` block: without a configured student, the student is the native profile natlang
+runs (`NATLANG_PROFILE`, else the default; a `-gguf` export stands for its native profile, else the only native
+profile). Its pinned complete checkpoint is trained with the checkout's `.venv-neuralese` interpreter, releases are
+served through that profile (native backend), and its `escalate` profile is the teacher. The exact base identity is
+what the profile's server reports: `natlang tune` starts the server once and the pin index remembers it. A partial
+`tune` block (recipe, rounds, execution limits, an explicit teacher) still applies.
+
+When the release a program runs is older than its profile's checkpoint, the run says so:
+
+```
+natlang: ticket-routing runs its tuned release b0a4faf8b5e7 on the checkpoint it was tuned on (fe6740d1cda3, step 39495) instead of lfm-latest; --no-weights runs lfm-latest untuned; lfm-latest is at step 40593: natlang tune DIR retunes on it
+```
+
+## Status: natlang doctor
+
+`natlang doctor [--profile P] [--program DIR]` adds to the installation check: the profile's native pin (step, a
+newer checkpoint behind its source, actor view, known identity, whether its server is running), the escalation
+teacher, the tuning setup (or why it is unavailable), and for a program (`--program`, or the current directory when it
+has tuning state) its active release, the base it runs on, examples waiting for `natlang tune` (with expected results,
+from escalations) and when to retune.
 
 ## Tuned programs run on the model they were tuned on
 

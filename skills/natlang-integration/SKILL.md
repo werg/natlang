@@ -80,15 +80,20 @@ Tool-call JSON text is decoded exactly once while building model history. Preser
 
 ## Tuned weight releases
 
-Hosts pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](../../docs/TUNING.md).
+`natlangRuntime({ programRoot })` serves a program's active release on the checkpoint it was tuned on and loads it into the server; prefer it in hosts (see [hosts](references/hosts.md)). Hosts that build the runtime themselves pass `weights: activeWeights(programRoot, { program })` to `createNatlangRuntime`; each new task pins the release active at its creation, so activation never changes a running task. The model driver must serve the release: the managed llama.cpp session takes the release's GGUF exports through `loraAdapters` and every request carries its own call's stack; other backends report the release `degraded` and run the base. Do not pass adapter IDs or wrap calls to select a stack; resolution is per callee. Use strict `WeightBinding` resolution in evaluation so missing artifacts throw (`weights-unavailable`, `weights-incompatible`, `weights-stale`) instead of producing base results labelled as tuned. See [docs/TUNING.md](../../docs/TUNING.md).
 
 ## Trained native models
 
 `natlang setup --native SOURCE [--gguf q8_0]` pins a trained checkpoint and writes its profile; the native profile
 starts its reference server on the first model call (`natlang serve` keeps it loaded), and `NAME-gguf` runs the same
 weights on managed llama.cpp for ordinary tokens. A profile's `escalate: PROFILE` (or `--escalate`) reruns a call the
-student fails on another profile through the tiered engine and says so on stderr. `natlang traces good|bad|fix CALL`
-turns tested calls into `tune.examples.jsonl` roots. See [docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
+student fails on another profile through the tiered engine and says so on stderr; the escalated root call's input
+joins the program's `tune.examples.jsonl` without an expected result. `natlang traces good|bad|fix CALL` turns tested
+calls into roots; `good` refuses outputs of models that are neither a tuning teacher nor one of our native models
+(recovery: `natlang traces fix CALL --expected JSON` with the answer you checked). `natlang tune DIR` needs no
+configuration with a native profile: student, trainer and teacher (`escalate`) come from it. `natlang doctor
+[--program DIR]` shows the pin, newer checkpoints, the server, the tuning setup and pending examples. See
+[docs/NATIVE_MODELS.md](../../docs/NATIVE_MODELS.md).
 
 ## Student prompt rendering
 
