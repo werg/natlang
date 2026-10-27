@@ -496,3 +496,55 @@ worlds are used. Do not claim lift before actual completed arm results. Earlier
 supervisors never started their actors because admission expired; their failed
 requests are not running evaluations. The current actor is
 `natlang-compact-program-evaluation-native-actor-r2-20261027`.
+
+## Mellum replacement and adapter inference repair, 19:50 Berlin
+
+Allocated exactly one replacement learner, sandbox
+`7b142220-d455-46af-bf1d-d90098717970`, with one unspecified GPU and measured
+96GiB host requirement. Actual GPU is RTX PRO6000 Blackwell96GB. Allocation is
+bounded to12h, with a2h final drain/export margin; balance and rates remain
+unknown, so this is not a dollar cap. Operator root is
+`/home/werg/data/mellum-cloud-continuation-20261027-r6`.
+
+The restart is bound to the independently verified final37356 full state
+`e09e40bc...`, never the historical36857 restored only for exact dependencies.
+The workstation mirror has separately advanced to37205. All985 portable indexes
+and the corrected sources/maps have restored; final checkpoint transfer and
+closed-source overlay remain in progress at this entry. Do not claim new
+Mellum updates yet. Preserve R7 numerical runtime, canonical config/plan paths,
+actual optimizer/RNG/exposure, and reserve unused cycle27 or later. R8v3 uses
+pinned host activation inputs and1000-update full-SFT quanta with300s checkpointing;
+normal complete numerical/capacity entry remains mandatory before updates.
+
+The replacement has explicit progress, serialized private full-state/cloud-GET,
+exact owner/lifetime drain, final full-state and closed-controller export workers
+prepared for actual owner adoption. Snapshot scheduling starts only after owner
+adoption; no snapshot or restore is claimed ready. Current restart operators
+already have a quota-independent private capsule:48,959B, SHA
+`97e1ce02593b8905a28f74f03bf3d8f748910d2c518e2e154f01a5b9d3123c77`.
+Later source edits require the next supplement. Historical independently durable
+static/control/source archives remain required; the closed controller alone is
+not the entire recipe corpus.
+
+The owner UX session found a real adapter-serving bottleneck: dense effective
+weights were rebuilt on every token. Commit`b060e2c2f` caches exact immutable
+stacks under a bounded budget and bypasses gradient-only cotangent routing for
+eligible no-grad inference. Their measured decode was2531ms before versus57ms
+after, with bitwise logits. Applied ONLY that patch to a sibling of the actual
+frozen evaluator runtime, retaining its other numerical code. Its35 focused tests
+pass, including both model cache parity and real HTTP learn/score/portable restart.
+An initial missing rendering-fixture dependency was repaired with exact original
+prompt pieces; the original red log is retained.
+
+Stopped the old slow paired evaluator and preserved all partial diagnostics.
+The replacement supervisor is
+`natlang-compact-program-cache-evaluation-supervisor-r5-20261027`; its actor uses
+18GiB with4GiB adapter-cache allowance. Fresh paired development journals carry
+`-adapter-cache-r1` and bind the actual patched runtime; they do not combine old
+slow-timeout outcomes with new results. Confirmation remains untouched. Actual
+complete paired results, rather than cache tests or startup, establish task lift.
+
+A fresh main quick check passed source-review and TypeScript checks but found a
+new machine-path ratchet violation in the concurrent owner's bank test. Reported
+the exact file to that owner. Their newer learned-optimizer commits require their
+own applicable validation; previous full-suite results are not blanket coverage.
