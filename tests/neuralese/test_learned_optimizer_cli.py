@@ -39,13 +39,21 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
     manifest = manifest_for(engine)
     engine.store.close()  # every command opens the operation's durable store itself
     assert main(['bank-init', '--spec', bank_spec]) == 0
-    program = {'manifest': write(tmp_path / 'manifest.json', manifest),
-               'rows': jsonl(tmp_path / 'rows.jsonl', rows), 'contract': 'route tickets',
-               'soft_texts': {key: 't8 t9'}, 'incoming_states': {key: incoming},
-               'scopes': {'lambda:x': {'level': 'lambda', 'size': 2}}, 'episodes': 1}
+    # A tuner plan with already-lowered rows importing the program's initial instruction state (`soft-init.json`).
+    plan = write(tmp_path / 'plan.json', {'schema': 'natlang.tune-plan/v1', 'manifest': manifest, 'rows': 'rows.jsonl',
+                                          'student': {'checkpoint': checkpoint}, 'softStates': True})
+    jsonl(tmp_path / 'rows.jsonl', rows)
+    (tmp_path / 'work' / 'program-0').mkdir(parents=True)
+    write(tmp_path / 'work' / 'program-0' / 'soft-init.json',
+          {key: {'state': incoming, 'binding': 'bx', 'kind': 'instructions', 'target': None, 'textSha256': 'x', 'tokens': 2}})
     targets_spec = write(tmp_path / 'targets-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'out': str(tmp_path / 'targets.jsonl'),
-                                                          'programs': [program], 'fit': {'steps': 2, 'refine_steps': 1}})
+                                                          'work': str(tmp_path / 'work'), 'fit': {'steps': 2, 'refine_steps': 1},
+                                                          'programs': [{'plan': plan, 'scopes': {'lambda': 2}, 'subsets': 2}]})
     assert main(['targets', '--spec', targets_spec]) == 0
+    labeled = [json.loads(line) for line in (tmp_path / 'targets.jsonl').read_text().splitlines()]
+    assert {item['tier'] for item in labeled} == {'in-bank-fit'} and all(item['id'].startswith('njt1:') for item in labeled)
+    assert main(['targets', '--spec', targets_spec]) == 0  # finished episodes are skipped on rerun
+    assert len((tmp_path / 'targets.jsonl').read_text().splitlines()) == len(labeled)
     train_spec = write(tmp_path / 'train-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'targets': str(tmp_path / 'targets.jsonl'),
                                                       'state': str(tmp_path / 'state.json'), 'receipt': str(tmp_path / 'receipt.json'), 'steps': 1,
                                                       'recipe': {'writer': {'kind': 'free-lora', 'rank': 2, 'alpha': 2.}, 'batch_targets': 1}})
@@ -58,13 +66,12 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
                                                           'out': str(tmp_path / 'records.jsonl'), 'summary': str(tmp_path / 'collect.json')})
     assert main(['collect', '--spec', collect_spec]) == 0
     records = [json.loads(line) for line in (tmp_path / 'records.jsonl').read_text().splitlines()]
-    assert len(records) == 2 and all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
+    assert len(records) == 2 * len(labeled) and all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
     policy_spec = write(tmp_path / 'policy-spec.json', {**json.loads((tmp_path / 'train-spec.json').read_text()), 'steps': 0,
                                                         'policy_records': [str(tmp_path / 'records.jsonl')]})
     assert main(['train', '--spec', policy_spec]) == 0
     assert json.loads((tmp_path / 'receipt.json').read_text())['step'] == 3
     context = json.loads((tmp_path / 'targets.jsonl').read_text().splitlines()[0])
-    context['program'] = {'id': 'p', 'buildHash': 'b'}
     propose_spec = write(tmp_path / 'propose-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'),
                                                           'context': write(tmp_path / 'context.json', context), 'out': str(tmp_path / 'proposal.json')})
     assert main(['propose', '--spec', propose_spec]) == 0

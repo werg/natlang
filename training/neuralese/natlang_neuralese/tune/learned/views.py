@@ -141,12 +141,16 @@ def view_recall(view, full_coefficients, bank):
     return inside / total
 
 
-def mixture_encoding(view, integers, head_receipt, executed):
-    """The bundle's `LoRAMixtureEncoding` for one scope."""
-    return {'schema': MIXTURE_SCHEMA, 'bank': view.snapshot, 'view': view.id, 'componentIds': list(view.component_ids),
-            'eligible': list(view.eligible), 'dropoutMask': list(view.retained), 'weights': [int(x) for x in integers],
-            'head': head_receipt,
-            'effective': [[float(x).hex() for x in row] for row in executed.detach().double().tolist()]}
+def mixture_encoding(view, integers, head_receipt, executed, incoming=None):
+    """The bundle's `LoRAMixtureEncoding` for one scope; ``incoming`` names the adapter the mixture revises (its
+    cores are added exactly before the mixture; absent: the scope starts at zero)."""
+    out = {'schema': MIXTURE_SCHEMA, 'bank': view.snapshot, 'view': view.id, 'componentIds': list(view.component_ids),
+           'eligible': list(view.eligible), 'dropoutMask': list(view.retained), 'weights': [int(x) for x in integers],
+           'head': head_receipt,
+           'effective': [[float(x).hex() for x in row] for row in executed.detach().double().tolist()]}
+    if incoming is not None:
+        out['incoming'] = incoming
+    return out
 
 
 def current_weights(view, integers):

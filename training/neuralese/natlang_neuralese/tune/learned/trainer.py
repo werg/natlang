@@ -25,12 +25,10 @@ from dataclasses import dataclass, field
 
 import torch
 
-from ...common.hashing import canonical_json_sha256_hex
 from . import LearnedOptimizerError
 from . import objectives as O
 from .head import CoefficientHead, executed, expected, refinement, modulation, shares_from_norms
 from .numbers import expectation
-from .views import BankView
 from .writer import ArrayWrite, StateWrite, Writer
 
 STATE_SCHEMA = 'natlang.lopt.trainer-state/1'
@@ -79,7 +77,7 @@ def _hex(tensor):
 
 
 class OuterTrainer:
-    """Resumable outer trainer over admitted target tuples (`targets.target_record` plus their training context)."""
+    """Resumable outer trainer over admitted joint target records (`assemble.training_target`, any tier)."""
 
     def __init__(self, engine, bank, grid, recipe, targets, *, state=None, owner=None, extra_token=None):
         self.engine, self.bank, self.grid, self.recipe, self.owner = engine, bank, grid, recipe, owner
@@ -87,6 +85,9 @@ class OuterTrainer:
         for target in self.targets:
             if target['bank'] != bank.snapshot:
                 raise LearnedOptimizerError(f'target {target["id"]} was labeled against another bank snapshot; refit it')
+            if target.get('tier') is None:
+                raise LearnedOptimizerError(f'{target["id"]} is a request context without labels, not a target')
+        self._factors = {}
         width = engine.shared_model.port.embedding_weight.shape[1]
         self.head = CoefficientHead(width, len(bank.group_labels), beta=recipe.beta)
         self.writer = Writer(engine, grid, cue=recipe.cue, extra_token=extra_token)
@@ -151,6 +152,14 @@ class OuterTrainer:
             keys = tuple(self.state['keys'][component] for component in view['componentIds']) if self.recipe.cue else (None,) * len(view['componentIds'])
             arrays.append(ArrayWrite(view['scope'], tuple(view['available']), keys, tuple(item['integers'])))
         return writes, arrays
+
+    def _target_factors(self, adapter):
+        """Exact effective update factors of a target adapter (any basis), loaded once."""
+        if adapter not in self._factors:
+            from ..trainer import adapter_factors
+            self._factors[adapter] = {name: value for name, value in adapter_factors(self.engine, adapter).items()
+                                      if name in self.bank.basis.left}
+        return self._factors[adapter]
 
     def _key_overrides(self, live_keys):
         return {state: block for state, (block, _) in live_keys.items()}
@@ -228,7 +237,7 @@ class OuterTrainer:
         return self._apply(batch, epoch, position, writer_values, live_keys, records)
 
     def _executor_terms(self, target, leaves, shares_all, batch_size):
-        from ...model.native_adapters import run_native, adapter_state_input_receipt
+        from ...model.native_adapters import run_native
         from ...data.native_graph_schema import parse_graph
         recipe, bank, engine = self.recipe, self.bank, self.engine
         cores_by_scope, terms, coefficients = {}, {}, {}
@@ -255,10 +264,9 @@ class OuterTrainer:
             factors = None
             if self.bank_leaves is not None:
                 factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots}
-            cores_by_scope[scope] = bank.composed_cores(slots, coefficient, factors=factors)
+            cores_by_scope[scope] = bank.composed_cores(slots, coefficient, factors=factors, offset=bank.incoming(engine, target, scope))
             rho_delta[scope] = (refinement(u), modulation(v, shares, recipe.beta), item)
         placeholders = target['placeholders']
-        state_blocks = {key: (block, None) for key, (block, _) in leaves['states'].items()}
         distill = []
         for row in target['rows']:
             example = parse_graph(row['graph'], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
@@ -299,9 +307,9 @@ class OuterTrainer:
             terms['skill_state'] = torch.stack(state_terms['skill']).mean()
         core_terms, head_terms = [], []
         for scope, cores in cores_by_scope.items():
-            factors = target.get('target_factors', {}).get(scope)
-            if factors:
-                core_terms.append(O.decoded_weight_loss(bank, cores, factors))
+            adapter = (target.get('target_factors') or {}).get(scope)
+            if adapter:
+                core_terms.append(O.decoded_weight_loss(bank, cores, self._target_factors(adapter)))
             rho, delta, item = rho_delta[scope]
             if recipe.head_mode == 'head' and 'rho' in item:
                 head_terms.append(O.head_regression(rho, delta, torch.tensor(item['rho']), torch.tensor(item['delta']), item['view']['available']))
@@ -418,7 +426,7 @@ class OuterTrainer:
                     coefficient = executed(behavior['arrays'][scope]['integers'], u, v, shares_all[slots],
                                            step=bank.number_format.step, beta=recipe.beta, head=recipe.head_mode == 'head')
                     factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots} if self.bank_leaves is not None else None
-                    cores[scope] = bank.composed_cores(slots, coefficient, factors=factors)
+                    cores[scope] = bank.composed_cores(slots, coefficient, factors=factors, offset=bank.incoming(engine, context, scope))
                 return cores
             def run_rows(weight):
                 total = 0.

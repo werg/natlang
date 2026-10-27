@@ -37,17 +37,45 @@ outcome, ladder gap or lift has been measured. Saved artifacts and passing tests
 | Natlang program: `adapt.nl` (`iterateOn` episode) and `train.nl` (scheduled training), services over the Python services | `applications/learned-optimizer/` | builds with all applications |
 | Improvement records: `joint` references, `joint-bundle` kind, `proposerView` without `after`/target, `jointStep` | `ts-host/src/improvement/step-record.ts` | typecheck |
 
+## One representation from tuner to optimizer (2026-10-27, second pass)
+
+- **Basis.** `tune.trainer.Recipe.basis` names a bank basis artifact: every native-subspace node of a joint fit is then
+  a leading slice of the learned optimizer's shared basis (`bank-basis-slice-v1`, created by the ordinary
+  `create_adapter` nested path). Such a fit's adapters are exact bank coordinates (`ComponentBank.adapter_cores`,
+  capture 1 in `targets.project_adapter`). Fits without `basis` are unchanged (their input identity is unchanged too).
+- **Incoming bundles.** Mixtures revise an incoming adapter exactly (`composed_cores(offset=...)`; the mixture encoding
+  records `incoming`, and `verify_bundle` composes with it). `natlang tune --learned` with `incoming` revises a tuned
+  program and releases it unchanged when nothing improves.
+- **Program input.** `program.ProgramContext` reads the tuner's own `natlang.tune-plan/v1` and build (turns lowered
+  as the tuner lowers them, its `soft-init.json`, scope tree and update history). `apply`, `targets`, `collect`,
+  `controls` and `corpus` all use it.
+- **One target schema.** `assemble.training_target` writes `natlang.joint-target/1` (`njt1:`), with tier, program,
+  incoming states and adapters, target bundle, `target_factors` (adapter IDs resolved through the tuner's exact
+  `adapter_factors`) and lineage. The duplicate `targets.target_record` schema is gone. Free-tune targets come from
+  builds: the final residual from the common incoming bundle, plus each recorded update as a revision of the partly
+  tuned bundle (fits on the bank basis). Older fits on the weight-SVD basis still give final-residual targets
+  (behavior and state targets exact; the decoded weight loss uses their exact effective factors).
+- **Export.** Learned releases and tuner nodes share `tune.trainer.artifact_member` and `build.export_release_nodes`.
+- **Corpus.** `python -m natlang_neuralese.tune.learned corpus` reruns each program's existing tune plan on the bank
+  basis with update boundaries and labels targets (resumable). `controls` measures planted-mixture recovery of the
+  optimizer against the in-bank fit reference.
+- **Program supply.** `python -m natlang_neuralese.tune.supply`: 18 typed decision-program families, 51 programs with
+  variants (64 worlds, two invocations per world, exact oracle values, label-balanced; every program builds with the
+  ts-host compiler). Prepared at `/home/werg/data/program-supply-20261027/programs`. They need the ordinary split,
+  teacher collection and import before they supply tune rows; no teacher action exists yet.
+
 ## Not yet done (next work, in rough priority)
 
-1. **Run it.** `bank-init` on LFM2.5-350M from the admitted task families and the three tuned programs; in-bank target
-   fits on ticket routing and its siblings; outer training; `natlang tune --learned` on development roots; the first
-   ladder. Choose the grid step from fitted coefficients (`numbers.grid_step_for`).
+1. **Run it.** Started 2026-10-27 under `/mnt/external/natlang-learned-optimizer-20261027`: `bank-init` (rank 16,
+   three program sources) on the pinned LFM step-39,495 parent, then `corpus` over the ticket, invoice and inventory
+   plans. Still to come: outer training, `natlang tune --learned` on development roots, the first ladder, and choosing
+   the grid step from fitted coefficients (`numbers.grid_step_for`; 0.05 is a starting value).
 2. **Oracle outcomes in collection.** `collect` uses the shaping reward; per-proposal oracle task outcomes are accepted
    (`outcomes`) but not yet produced by a TS rollout worker that executes proposals on query worlds. The release path
    already executes development roots through `evaluateRelease`.
-3. **Planted controls run continuously** as a scheduled worker (helpers exist; no scheduled job).
-4. **Program supply at scale** (pool milestones, variants, family-level splits through the campaign path) is
-   operations work; `ladder.family_split` and `targets.episode_variants` are the mechanism.
+3. **Planted controls run continuously** as a scheduled worker (`controls` command exists; no scheduled job).
+4. **Teacher collection for the supplied programs** (split, case export, reviewed Luna campaign, import), then tune
+   rounds and `corpus` over them; requested from the program-tuning lane.
 5. **Mellum**: the code is shared and generic over expert axes, but shared hidden-side expert bases are not tied
    (expert bases are per expert); no Mellum run.
 6. **Reachability measurement** of directly tuned state targets (per-target writer context fit) is not implemented.

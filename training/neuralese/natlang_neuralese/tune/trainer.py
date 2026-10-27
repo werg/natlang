@@ -55,6 +55,9 @@ class Recipe:
     - `epochs` (passes over the admitted rows of all objectives) can replace `steps`.
     - `objectives`: logical step k trains objective objectives[k % n] (each with its own cursor), so ["sft", "rl"]
       alternates supervised and policy updates of the same state; one step never mixes objectives.
+    - `basis`: a learned optimizer bank basis artifact (tune/learned/bank.py) for native-subspace nodes instead of the
+      weight-SVD canonical basis. Nodes then slice that shared basis, so a fit's residuals are directly coordinates of
+      the learned optimizer's bank: its free tunes are exact targets and its releases are exact warm starts.
     """
     steps: int = 1
     epochs: float | None = None
@@ -76,6 +79,7 @@ class Recipe:
     state_optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 1e-3})
     schedule: dict = field(default_factory=lambda: {'kind': 'warmup-cosine', 'warmup_ratio': .05, 'min_ratio': .1})
     objectives: list = field(default_factory=lambda: ['sft'])
+    basis: str | None = None
 
     @classmethod
     def from_json(cls, value):
@@ -88,6 +92,8 @@ class Recipe:
             raise TuneMathError('prompt_weight must be a finite number in [0, 1]')
         if recipe.parameterization not in ('native-subspace', 'free-lora'):
             raise TuneMathError('parameterization must be native-subspace or free-lora')
+        if recipe.basis is not None and (recipe.parameterization != 'native-subspace' or not isinstance(recipe.basis, str)):
+            raise TuneMathError('a declared basis is a bank basis artifact ID of a native-subspace fit')
         if set(recipe.ranks) - set(LEVELS) or any(type(rank) is not int or rank < 0 for rank in recipe.ranks.values()):
             raise TuneMathError('ranks map scope levels to nonnegative integers (0: no adapter at that level)')
         if any(not math.isfinite(recipe.depth_penalty.get(level, math.nan)) or recipe.depth_penalty[level] < 0
@@ -133,6 +139,47 @@ def lr_factor(schedule, step, total):
     # The last step of the budget runs at the floor.
     progress = (step - warmup) / max(1, total - warmup - 1)
     return floor + (1 - floor) * .5 * (1 + math.cos(math.pi * min(progress, 1.)))
+
+
+def effective_factors(spec, values, bases):
+    """``{m: (B, A)}`` with ``Delta W_m = B A`` of one resolved adapter (scaling folded once), any parameterization."""
+    factors = {}
+    for name in spec['parameter_names']:
+        if spec['kind'] == 'free-lora':
+            factors[name] = (values['lora_B.'+name] * (spec['alpha'] / spec['rank']), values['lora_A.'+name])
+        else:
+            core = values[name].reshape(*values[name].shape[:-1], spec['rank'], spec['rank'])
+            factors[name] = (bases['left.'+name] @ core, bases['right.'+name].transpose(-2, -1))
+    return factors
+
+
+def artifact_member(engine, artifact, node, level, scale, bases):
+    """One stored adapter (any basis, including a learned bank basis) as a `stack.StackMember`, adding its
+    `bases.CanonicalBasis` views to ``bases``: the exact export path of tuner nodes and learned-optimizer releases."""
+    from .bases import CanonicalBasis, tensor_digest
+    from .parameterization import FreeLoRADelta, SubspaceDelta
+    from .stack import StackMember
+    record = engine.store.get_native_tensor_artifact(artifact).artifact
+    spec = record.provenance['adapter_spec']
+    deltas = {}
+    for name in spec['parameter_names']:
+        if spec['kind'] == 'free-lora':
+            deltas[name] = FreeLoRADelta(record.tensors['lora_B.'+name], record.tensors['lora_A.'+name], spec['alpha'])
+            continue
+        key = f'{record.source_artifact_id}:{name}'
+        if key not in bases:
+            basis = engine.store.get_native_tensor_artifact(record.source_artifact_id).artifact
+            left, right = basis.tensors['left.'+name], basis.tensors['right.'+name]
+            bases[key] = CanonicalBasis(key, name, left.shape[-1], left, right, tensor_digest(left, right))
+        rank = spec['rank']
+        deltas[name] = SubspaceDelta(key, rank, record.tensors[name].reshape(*record.tensors[name].shape[:-1], rank, rank))
+    return StackMember(node, level, scale, deltas)
+
+
+def adapter_factors(engine, artifact_id):
+    """The exact effective update factors of a stored native adapter (`effective_factors`)."""
+    _, _, spec, values, bases = resolve_adapters(engine, [artifact_id])[0]
+    return effective_factors(spec, values, bases)
 
 
 def _tensor_hex(tensor):
@@ -256,7 +303,9 @@ class JointTrainer:
     @property
     def input_sha256(self):
         # The step budget is where to stop, not what a step does: extending it continues the same run.
-        recipe = {key: value for key, value in self.recipe.as_json().items() if key not in ('steps', 'epochs')}
+        # An undeclared bank basis leaves the recipe identity of existing fits unchanged.
+        recipe = {key: value for key, value in self.recipe.as_json().items()
+                  if key not in ('steps', 'epochs') and not (key == 'basis' and value is None)}
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,
             'rows': [[row['binding'], row['occurrence'], row['evidence_weight'], canonical_json_sha256_hex(row['graph'])]
                      for row in self.rows], 'targets': self.target_names,
@@ -302,13 +351,21 @@ class JointTrainer:
             # The basis is a pure function of the base, maximum rank and targets: over every stack node, pinned ones
             # included, it is the same basis the earlier fit sliced, so pinned and warm artifacts compose exactly.
             max_rank = max(recipe.ranks[self.nodes[node]['level']] for node in self._stack_nodes())
-            basis = create_canonical_basis(engine, {'max_rank': max_rank, 'parameter_names': self.target_names}, self.owner)
-            basis_id = basis.id
+            if recipe.basis is not None:
+                record = engine.store.get_native_tensor_artifact(recipe.basis)
+                spec = (record.artifact.provenance or {}).get('adapter_spec') if record else None
+                if spec is None or spec.get('kind') != 'bank-basis':
+                    raise TuneMathError(f'declared basis {recipe.basis} is not an available bank basis; import the bank first')
+                if max_rank > spec['max_rank'] or not set(self.target_names) <= set(spec['parameter_names']):
+                    raise TuneMathError('the fit\'s ranks and target matrices must fit inside the declared bank basis')
+                basis_id = record.id
+            else:
+                basis_id = create_canonical_basis(engine, {'max_rank': max_rank, 'parameter_names': self.target_names}, self.owner).id
             for index, node in enumerate(nodes):
                 # Zero cores of equal rank would otherwise be one content-addressed artifact shared by sibling nodes,
                 # and one graph whose calls run both siblings could not tell their coefficients apart.
                 artifacts[node] = create_adapter(engine, {'kind': 'xs', 'rank': recipe.ranks[self.nodes[node]['level']],
-                    'seed': recipe.seed + index, 'parameter_names': self.target_names, 'basis_id': basis.id}, self.owner).id
+                    'seed': recipe.seed + index, 'parameter_names': self.target_names, 'basis_id': basis_id}, self.owner).id
         else:
             for index, node in enumerate(nodes):
                 rank = recipe.ranks[self.nodes[node]['level']]
@@ -411,14 +468,7 @@ class JointTrainer:
 
     def _node_factors(self, artifact_id, values):
         _, _, spec, _, bases = self._basis(artifact_id)
-        factors = {}
-        for name in spec['parameter_names']:
-            if spec['kind'] == 'free-lora':
-                factors[name] = (values['lora_B.'+name] * (spec['alpha'] / spec['rank']), values['lora_A.'+name])
-            else:
-                core = values[name].reshape(*values[name].shape[:-1], spec['rank'], spec['rank'])
-                factors[name] = (bases['left.'+name] @ core, bases['right.'+name].transpose(-2, -1))
-        return factors
+        return effective_factors(spec, values, bases)
 
     # -- RL admission -------------------------------------------------------------------------------------------
     def _admit_rl(self):
@@ -719,9 +769,6 @@ class JointTrainer:
         return [dataclasses.replace(member, scale=1.) for member in members], bases
 
     def _members(self, items):
-        from .bases import CanonicalBasis, tensor_digest
-        from .parameterization import FreeLoRADelta, SubspaceDelta
-        from .stack import StackMember
         members, bases = [], {}
         for kind, item in items:
             if kind == 'family':
@@ -731,21 +778,7 @@ class JointTrainer:
             else:
                 artifact, node, level = self.state['node_artifacts'][item], item, self.nodes[item]['level']
                 scale = float(self.manifest.get('scales', {}).get(item, 1))
-            record = self.engine.store.get_native_tensor_artifact(artifact).artifact
-            spec = record.provenance['adapter_spec']
-            deltas = {}
-            for name in spec['parameter_names']:
-                if spec['kind'] == 'free-lora':
-                    deltas[name] = FreeLoRADelta(record.tensors['lora_B.'+name], record.tensors['lora_A.'+name], spec['alpha'])
-                    continue
-                basis = self.engine.store.get_native_tensor_artifact(record.source_artifact_id).artifact
-                key = f'{record.source_artifact_id}:{name}'
-                if key not in bases:
-                    left, right = basis.tensors['left.'+name], basis.tensors['right.'+name]
-                    bases[key] = CanonicalBasis(key, name, left.shape[-1], left, right, tensor_digest(left, right))
-                rank = spec['rank']
-                deltas[name] = SubspaceDelta(key, rank, record.tensors[name].reshape(*record.tensors[name].shape[:-1], rank, rank))
-            members.append(StackMember(node, level, scale, deltas))
+            members.append(artifact_member(self.engine, artifact, node, level, scale, bases))
         return members, bases
 
     def manifest_fragment(self):

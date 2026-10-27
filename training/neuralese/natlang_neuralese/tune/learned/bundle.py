@@ -56,7 +56,8 @@ def verify_bundle(engine, bundle, bank):
         mixture = bundle['loraMixtures'][scope]
         slots = [bank.index(component) for component in mixture['componentIds']]
         executed = torch.tensor([[float.fromhex(x) for x in row] for row in mixture['effective']], dtype=torch.float32)
-        expected = bank.adapter_tensors(bank.composed_cores(slots, executed)) if slots else None
+        offset = bank.adapter_cores(engine, mixture['incoming']) if mixture.get('incoming') else None
+        expected = bank.adapter_tensors(bank.composed_cores(slots, executed, offset=offset)) if slots or offset else None
         record = engine.store.get_native_tensor_artifact(adapter)
         if record is None:
             raise LearnedOptimizerError(f'adapter of scope {scope} is not restored: {adapter}')

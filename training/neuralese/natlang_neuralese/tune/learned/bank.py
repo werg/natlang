@@ -199,6 +199,7 @@ class ComponentBank:
     q: dict                    # matrix name -> inverse element count
     parent: str | None = None
     history: list = field(default_factory=list)
+    _offsets: dict = field(default_factory=dict, repr=False, compare=False)
 
     def manifest(self):
         return {'schema': BANK_SCHEMA, 'native_identity': self.basis.native_identity, 'basis': self.basis_artifact,
@@ -227,11 +228,12 @@ class ComponentBank:
                 out[k, self.group_of[name]] += float(value)
         return out
 
-    def composed_cores(self, slots, coefficients, *, factors=None):
+    def composed_cores(self, slots, coefficients, *, factors=None, offset=None):
         """``{m: C_m}`` for view slots ``slots`` (component indices) and executed coefficients (len(slots), G).
 
         ``factors`` (optional) maps component index -> {m: (P, Q)} live leaves; the result is then differentiable in
-        them and in ``coefficients``."""
+        them and in ``coefficients``. ``offset`` (optional, from `adapter_cores`) is the incoming adapter's cores: the
+        mixture then revises an already adapted scope (a tuned program, a partial tune or another program's bundle)."""
         if coefficients.shape != (len(slots), len(self.group_labels)):
             raise LearnedOptimizerError('executed coefficients must be (slots, groups)')
         R = self.basis.rank
@@ -245,6 +247,9 @@ class ComponentBank:
                     continue
                 term = coefficients[row, group] * (pair[0] @ pair[1].transpose(-2, -1))
                 total = term if total is None else total + term
+            if offset is not None and name in offset:
+                base = offset[name].to(coefficients)
+                total = base if total is None else total + base
             if total is None:
                 shape = (*self.basis.left[name].shape[:-2], R, R)
                 total = coefficients.new_zeros(shape)
@@ -265,6 +270,33 @@ class ComponentBank:
         return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
             'adapter-coefficients', engine.native_identity, tensors, self.basis_artifact,
             {'adapter_spec': self.adapter_spec(), 'bank': {'snapshot': self.snapshot, **(provenance or {})}}), owner)
+
+    def adapter_cores(self, engine, adapter_id):
+        """``{m: (..., R, R)}`` cores of any ``xs`` adapter slicing this bank's basis (a tuner node of rank ``r <= R``
+        is its leading block, zero elsewhere: exact). Adapters on another basis are not coordinates of this bank."""
+        record = engine.store.get_native_tensor_artifact(adapter_id)
+        spec = (record.artifact.provenance or {}).get('adapter_spec') if record else None
+        if (spec is None or spec.get('kind') != 'xs' or spec.get('bases') != SLICE_METHOD
+                or record.artifact.source_artifact_id != self.basis_artifact):
+            raise LearnedOptimizerError(f'adapter {adapter_id} does not slice this bank\'s basis; project it instead')
+        R, r = self.basis.rank, spec['rank']
+        cores = {}
+        for name in spec['parameter_names']:
+            value = record.artifact.tensors[name]
+            block = value.reshape(*value.shape[:-1], r, r).float()
+            core = block.new_zeros((*block.shape[:-2], R, R))
+            core[..., :r, :r] = block
+            cores[name] = core
+        return cores
+
+    def incoming(self, engine, context, scope):
+        """The incoming adapter cores of ``scope`` in a target/context (``incoming_adapters``), or None (zero)."""
+        adapter = (context.get('incoming_adapters') or {}).get(scope)
+        if adapter is None:
+            return None
+        if adapter not in self._offsets:
+            self._offsets[adapter] = self.adapter_cores(engine, adapter)
+        return self._offsets[adapter]
 
     def dense_update(self, name, core):
         return self.basis.left[name] @ core @ self.basis.right[name].transpose(-2, -1)

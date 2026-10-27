@@ -107,13 +107,16 @@ def _create_adapter(engine, options, owner=None):
         # A nested slice of one shared canonical basis: stack members then sum in that basis exactly.
         record = engine.store.get_native_tensor_artifact(options['basis_id'])
         basis_spec = (record.artifact.provenance or {}).get('adapter_spec') if record else None
+        # A learned bank basis (tune/learned/bank.py) is sliced the same way under its own declared method, so
+        # tuner nodes and learned-optimizer mixtures share one coordinate system.
         if (record is None or record.artifact.kind != 'adapter-basis' or record.artifact.native_identity != engine.native_identity
-                or not isinstance(basis_spec, dict) or basis_spec.get('kind') != 'canonical-basis'):
-            raise ValueError('nested adapters require an exact canonical basis artifact of this live model')
+                or not isinstance(basis_spec, dict) or basis_spec.get('kind') not in ('canonical-basis', 'bank-basis')):
+            raise ValueError('nested adapters require an exact canonical or bank basis artifact of this live model')
         if rank > basis_spec['max_rank'] or not set(names) <= set(basis_spec['parameter_names']):
             raise ValueError('nested adapter rank/targets must fit its canonical basis')
         spec = {'schema': SCHEMA, 'kind': kind, 'rank': rank, 'seed': seed, 'parameter_names': names,
-                'bases': 'nested-canonical-slice-v1', 'basis_spec': basis_spec}
+                'bases': 'bank-basis-slice-v1' if basis_spec['kind'] == 'bank-basis' else 'nested-canonical-slice-v1',
+                'basis_spec': basis_spec}
         coefficients = {name: torch.zeros((*available[name].shape[:-2], rank * rank), dtype=torch.float32) for name in names}
         return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
             'adapter-coefficients', engine.native_identity, coefficients, record.id, {'adapter_spec': spec}), owner)

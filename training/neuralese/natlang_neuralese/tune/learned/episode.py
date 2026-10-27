@@ -15,7 +15,6 @@ from __future__ import annotations
 import torch
 
 from ...common.hashing import canonical_json_sha256_hex
-from . import LearnedOptimizerError
 from .bundle import bundle_slot, make_bundle, make_proposal
 from .head import executed, receipt as head_receipt, shares_from_norms
 from .views import mixture_encoding, validate_array
@@ -53,11 +52,12 @@ def propose(trainer, context, *, sample=True, seed=0, temperature=None, owner=No
             u, v = trainer.head(out.decision_hidden[scope])
             coefficients = executed(integers, u, v, shares_all[slots], step=bank.number_format.step, beta=recipe.beta,
                                     head=recipe.head_mode == 'head')
-        record = bank.compose_adapter(engine, bank.composed_cores(slots, coefficients), owner,
+        record = bank.compose_adapter(engine, bank.composed_cores(slots, coefficients, offset=bank.incoming(engine, context, scope)), owner,
                                       {'scope': scope, 'writer': trainer.state['writer']})
         adapters[scope] = record.id
         receipt = head_receipt(trainer.head, integers, u, v, coefficients, mode=recipe.head_mode)
-        mixtures[scope] = {**mixture_encoding(_view(view), integers, receipt, coefficients)}
+        mixtures[scope] = mixture_encoding(_view(view), integers, receipt, coefficients,
+                                           (context.get('incoming_adapters') or {}).get(scope))
         behavior_arrays[scope] = {'tokens': out.tokens[scope], 'integers': integers,
                                   'logprobs': [float(x).hex() for x in out.logprobs[scope].tolist()], 'view': view}
     states = {}

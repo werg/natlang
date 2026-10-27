@@ -197,15 +197,27 @@ def export_families(trainer, engine, plan, out, families):
         if membership is None:
             continue  # a family without members in this program is not served by it
         members, bases = trainer._members([('family', membership)])
-        _export_gguf(trainer, engine, plan, out, family, [dataclasses.replace(member, scale=1.) for member in members], bases)
+        _export_gguf(trainer.targets, engine, plan, out, family, [dataclasses.replace(member, scale=1.) for member in members], bases)
 
 
 def export_nodes(trainer, engine, plan, out, artifacts):
     for artifact in artifacts:
-        _export_gguf(trainer, engine, plan, out, artifact, *trainer.node_members(artifact['node']))
+        _export_gguf(trainer.targets, engine, plan, out, artifact, *trainer.node_members(artifact['node']))
 
 
-def _export_gguf(trainer, engine, plan, out, artifact, members, bases):
+def export_release_nodes(engine, plan, out, artifacts):
+    """Per-node GGUF exports of a release fragment's stored adapters (e.g. a learned-optimizer release), through the
+    same exact stack export as tuner nodes."""
+    from .targets import module_map
+    from .trainer import artifact_member
+    for artifact in artifacts:
+        bases = {}
+        member = artifact_member(engine, artifact['artifact'], artifact['node'], 'lambda', 1., bases)
+        targets, _ = module_map(sorted(member.deltas))
+        _export_gguf(targets, engine, plan, out, artifact, [member], bases)
+
+
+def _export_gguf(targets, engine, plan, out, artifact, members, bases):
     """One unscaled GGUF LoRA per scope node or family: llama.cpp sums the loaded residuals of a call's stack with its
     per-request scales, which equals the exported-stack sum exactly (§5.3). Each export binds the base GGUF."""
     from ..common.hashing import sha256_file_hex
@@ -215,12 +227,12 @@ def _export_gguf(trainer, engine, plan, out, artifact, members, bases):
     student = plan['student']
     if not student.get('hfConfigDir') or not student.get('baseGgufSha256'):
         raise ValueError('GGUF export needs student.hfConfigDir and student.baseGgufSha256')
-    shapes = {name: tuple(value.shape) for name, value in target_parameters(engine.shared_model).items() if name in trainer.targets}
+    shapes = {name: tuple(value.shape) for name, value in target_parameters(engine.shared_model).items() if name in targets}
     file = f"exports/{artifact['artifact']}.gguf"
     target = out / file
     if not target.exists():
         peft = out / 'exports' / (artifact['artifact'] + '.peft')
-        export_peft(stack_factors(members, bases, shapes), trainer.targets, peft, base_identity=dict(engine.native_identity),
+        export_peft(stack_factors(members, bases, shapes), targets, peft, base_identity=dict(engine.native_identity),
                     base_model_name_or_path=student['hfConfigDir'], stack_identity=artifact['artifact'])
         export_gguf(peft, student['hfConfigDir'], target)
     artifact['exports'] = {'gguf': {'file': file, 'sha256': sha256_file_hex(target), 'baseGgufSha256': student['baseGgufSha256']}}

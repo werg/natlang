@@ -14,8 +14,6 @@ publication instead of carrying stale labels.
 """
 from __future__ import annotations
 
-import json
-import math
 from dataclasses import dataclass
 
 import torch
@@ -89,6 +87,7 @@ class ScopeArray:
     adapter: str          # placeholder composed adapter whose values the fit overrides
     slots: list           # bank component indices of the view
     available: list
+    offset: dict | None = None   # incoming adapter cores (`ComponentBank.incoming`); None: the scope starts at zero
 
 
 def placeholder_adapters(engine, bank, scopes, owner=None):
@@ -129,7 +128,7 @@ def fit_in_bank(engine, bank, support, arrays, *, soft_states=None, steps=50, le
     soft_blocks = {key: (block, state_id) for key, (block, state_id, _) in states.items()}
     adapters = {array.scope: array.adapter for array in arrays}
     def leaves(values):
-        return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope]))
+        return {array.adapter: bank.adapter_tensors(bank.composed_cores(array.slots, values[array.scope], offset=array.offset))
                 for array in arrays}
     def continuous():
         return {array.scope: (means[array.scope] * masks[array.scope])[:, None]

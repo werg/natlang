@@ -24,7 +24,10 @@ it calls through services: exact tensor math, data custody, execution, storage a
 | Bundle manifest, proposal receipt, release | crisp | `bundle.py` | Atomic, content-addressed, exactly composed |
 | Objectives (distill, state, mixture CE, expectation, decoded weight, head regression, structure) | crisp | `objectives.py` | Exact losses with reported gradient shares |
 | In-bank fits and focus hindsight labels | crisp | `fit.py` | Gradient fits through the exact composition |
-| Target records (three tiers) and tuner export | crisp | `targets.py` | Custody, lineage and exposure |
+| Program context from the tuner's plan and build (rows, soft init, scopes, views, incoming bundle) | crisp | `program.py` | One representation shared with `tune.build`: the same plan, turns, soft states and scope tree |
+| Target records (one schema, three tiers) and tuner export | crisp | `assemble.py`, `targets.py` | Custody, lineage and exposure; free tunes on the bank basis are exact targets |
+| Corpus: tuner fits on the bank basis per program, then labels | crisp | `__main__.corpus` | Operations over existing tune plans; resumable |
+| Program supply (typed decision programs with exact oracles) | crisp generator | `tune/supply.py` | Exact oracles and grouped worlds; function texts are model-facing and measured in tuning |
 | Meta-RL estimators (paired reward, shaping, filtered BC, joint ratio) | crisp | `meta_rl.py` | Exact policy math, reused from `rl/policy_math.py` |
 | Ceiling ladder, evaluation power, planted controls | crisp | `ladder.py`, `controls.py` | Exact measurements |
 | Outer training step and resumable state | crisp | `trainer.py` | One snapshot, cotangent replay, FP32/AdamW, exposure |

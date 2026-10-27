@@ -1,12 +1,14 @@
 """Entrypoint of the joint learned optimizer: every worker resumes from a declared JSON spec.
 
     python -m natlang_neuralese.tune.learned bank-init --spec SPEC   gradient-subspace basis + source components + keys
-    python -m natlang_neuralese.tune.learned targets   --spec SPEC   in-bank fits -> assembled training targets (jsonl)
+    python -m natlang_neuralese.tune.learned targets   --spec SPEC   tuner plans/builds -> joint target records (jsonl)
     python -m natlang_neuralese.tune.learned train     --spec SPEC   resumable outer training (supervised, then policy)
     python -m natlang_neuralese.tune.learned propose   --spec SPEC   apply the trained optimizer: bundle + receipt
     python -m natlang_neuralese.tune.learned ladder    --spec SPEC   ceiling ladder and gaps from measurements
     python -m natlang_neuralese.tune.learned service   --spec SPEC   one adaptation service of the Natlang `adapt` program
     python -m natlang_neuralese.tune.learned collect   --spec SPEC   sampled proposal groups with paired rewards (policy records)
+    python -m natlang_neuralese.tune.learned corpus    --spec SPEC   tuner fits on the bank basis + their targets, per program
+    python -m natlang_neuralese.tune.learned controls  --spec SPEC   planted-mixture recovery (optimizer vs in-bank fit)
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -59,6 +61,17 @@ def _rows(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
+def _source_rows(engine, source):
+    """A bank source's training rows: lowered graph rows (``rows``) or a tuner plan's training turns (``plan``),
+    lowered exactly as the tuner does with reply supervision only."""
+    if source.get('plan'):
+        from ..build import load_plan
+        from ..rows import lower_rows
+        _, _, turns, _ = load_plan(source['plan'])
+        return lower_rows(engine, turns, prompt_weight=0.)
+    return _rows(source['rows'])
+
+
 def _grid(engine, spec):
     from .numbers import GridTokens
     if 'grid_tokens' in spec:
@@ -78,7 +91,7 @@ def bank_init(spec):
     names = sorted(names)
     gradients, descriptors = [], []
     for source in spec['sources']:
-        rows = _rows(source['rows'])
+        rows = _source_rows(engine, source)
         weights = row_loss_weights(row_losses(engine, rows))
         gradients.append(source_gradients(engine, rows, names, weights=weights))
         descriptors.append({'name': source['name'], 'kind': source['kind'], 'rows': len(rows)})
@@ -87,7 +100,7 @@ def bank_init(spec):
     bank = new_bank(engine, basis, NumberFormat(float(spec.get('step', .05))), quarters=spec.get('quarters', 4))
     components, reports = [], {}
     for source in spec['sources']:
-        component, report = source_component(engine, bank, _rows(source['rows']), source={'name': source['name'], 'kind': source['kind']},
+        component, report = source_component(engine, bank, _source_rows(engine, source), source={'name': source['name'], 'kind': source['kind']},
                                              description=source['description'], rank=spec.get('component_rank', 8),
                                              steps=spec.get('component_steps', 20))
         components.append(component)
@@ -99,50 +112,177 @@ def bank_init(spec):
 
 
 def targets(spec):
-    import torch
-    from .assemble import store_fitted_states, training_target
+    """Joint target records from tuner plans and builds (`program.ProgramContext`), appended to ``out`` as they are
+    labeled; a rerun skips finished episodes. Spec: ``{checkpoint, store, bank, out, work, fit?, programs: [{plan,
+    build?, scopes?, tiers?, subsets?, incremental?, seed?}], max_support?, incremental_max?}``. ``free-tune`` targets come from the build (its final
+    residual and, for fits on the bank basis, every recorded update); ``in-bank-fit`` targets from support subsets of
+    the plan's training roots, starting from the base bundle and, when the build sliced the bank basis, from the tuned
+    bundle."""
     from .bank import load_bank
-    from .evidence import build_view
-    from .fit import ScopeArray, SupportSet, fit_in_bank, placeholder_adapters
-    from .views import select_view, with_dropout
+    from .program import ProgramContext, read_build
+    from .targets import episode_variants, fit_labels, free_tune_targets
     engine = _engine(spec)
     bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
-    out = []
+    out, done_path = Path(spec['out']), Path(str(spec['out']) + '.done.json')
+    out.parent.mkdir(parents=True, exist_ok=True)
+    done = json.loads(done_path.read_text()) if done_path.exists() else {}
+    def emit(key, records):
+        with out.open('a') as stream:
+            for record in records:
+                stream.write(json.dumps(record, sort_keys=True, default=_jsonable) + '\n')
+        done[key] = [record['id'] for record in records]
+        _write(done_path, done)
+    work = Path(spec['work'])
+    for index, program in enumerate(spec['programs']):
+        build = program.get('build')
+        tiers = program.get('tiers') or (['free-tune', 'in-bank-fit'] if build else ['in-bank-fit'])
+        context = lambda occurrences=None, suffix='', soft=None: ProgramContext(
+            engine, bank, program['plan'], out=work / f'program-{index}{suffix}', scopes=program.get('scopes'),
+            build=build, occurrences=occurrences, soft=soft)
+        full = context()
+        name = full.program['id']
+        if 'free-tune' in tiers and f'{name}:free-tune' not in done:
+            emit(f'{name}:free-tune', free_tune_targets(full, fit=spec.get('fit'), incremental=program.get('incremental', True),
+                                                       incremental_max=spec.get('incremental_max'),
+                                                       lineage={'plan': str(program['plan'])}))
+        if 'in-bank-fit' not in tiers:
+            continue
+        tuned = None
+        if build:
+            state = read_build(build)['state']
+            try:
+                adapters = {s: a for s, a in state['node_artifacts'].items() if s in full.scopes}
+                for adapter in adapters.values():
+                    bank.adapter_cores(engine, adapter)
+                tuned = {'adapters': adapters, 'states': {**{k: r['state'] for k, r in full.soft.items()}, **state.get('soft_states', {})}}
+            except LearnedOptimizerError:
+                tuned = None  # a fit on another basis is a behavior target, not a start inside this bank
+        roots = sorted({_support_item(turn) for turn in full.turns})
+        problem = {'program': name, 'split': 'train', 'support': roots}
+        episodes = episode_variants(problem, rng_seed=program.get('seed', 0), subsets=program.get('subsets', 3),
+                                    include_empty=False, starts=('base', 'tuned') if tuned else ('base',),
+                                    max_size=spec.get('max_support'))
+        for number, episode in enumerate(episodes):
+            key = f'{name}:in-bank-fit:{number}'
+            if key in done:
+                continue
+            chosen = set(episode['support'])
+            occurrences = {_occurrence(turn) for turn in full.turns if _support_item(turn) in chosen}
+            pc = context(occurrences, f'-episode-{number}', full.soft)
+            incoming_states = tuned['states'] if episode['start'] == 'tuned' else {k: r['state'] for k, r in pc.soft.items()}
+            incoming_adapters = tuned['adapters'] if episode['start'] == 'tuned' else {}
+            labels, report = fit_labels(pc, incoming_states=incoming_states, incoming_adapters=incoming_adapters, fit=spec.get('fit'))
+            pc.persist([*labels['adapters'].values(), *labels['states'].values()])
+            emit(key, [pc.request(tier='in-bank-fit', incoming_states=incoming_states, incoming_adapters=incoming_adapters,
+                                  labels=labels, lineage={'plan': str(program['plan']), 'build': build, 'episode': episode,
+                                                          'fit': report})])
+    return sum(len(ids) for ids in done.values())
+
+
+def _support_item(turn):
+    """Support is sampled by root (a turn's whole invocation world stays together); a lowered row is its own item."""
+    return turn.get('root') or _occurrence(turn)
+
+
+def _occurrence(turn):
+    from .program import _occurrence as occurrence
+    return occurrence(turn)
+
+
+def corpus(spec):
+    """The optimizer's training corpus from tuner work: for each program's existing tune plan (its admitted teacher
+    rows, manifest and student), run the same `tune.build` fit on the bank basis with update boundaries, then label
+    its free-tune and in-bank targets. Resumable: a finished fit resumes as complete and labeled episodes are skipped.
+
+    Spec: ``{checkpoint, store, bank, work, out, recipe?, fit?, subsets?, programs: [{name, plan, recipe?}]}``;
+    ``recipe`` overrides the source plan's recipe (``basis`` is always the bank's basis)."""
+    from ..build import load_plan, main as build, persist_artifacts
+    work = Path(spec['work'])
+    bank_manifest = json.loads(Path(spec['bank']).read_text())['bank']
+    exported = work / 'bank-artifacts'
+    if not exported.is_dir():
+        engine = _engine(spec)
+        persist_artifacts(engine, [bank_manifest['basis']], exported)
+        engine.store.close()
+        _OPEN.remove(engine)
+    programs = []
     for program in spec['programs']:
-        manifest = json.loads(Path(program['manifest']).read_text())
-        rows = _rows(program['rows'])
-        support = SupportSet(engine, manifest, rows)
-        placeholders = placeholder_adapters(engine, bank, sorted(program['scopes']))
-        for episode in range(program.get('episodes', 1)):
-            views = {}
-            for scope, declared in sorted(program['scopes'].items()):
-                view = select_view(bank, scope, declared['level'], declared['size'], policy=declared.get('policy', 'full-bank-v1'))
-                if declared.get('dropout'):
-                    view = with_dropout(view, declared['dropout'], seed=program.get('seed', 0) * 1000 + episode)
-                views[scope] = view
-            arrays = [ScopeArray(scope, placeholders[scope], list(view.slots), list(view.available)) for scope, view in views.items()]
-            result = fit_in_bank(engine, bank, support, arrays, soft_states=program.get('incoming_states'),
-                                 **spec.get('fit', {}))
-            fitted_states = store_fitted_states(engine, result['states'])
-            target_adapters = {scope: bank.compose_adapter(engine, bank.composed_cores(list(views[scope].slots),
-                               result['arrays'][scope]['executed'])).id for scope in views}
-            evidence = build_view(program['contract'], program.get('incoming_bundle', 'incoming'), program.get('evidence', []))
-            target = training_target(engine, bank, manifest=manifest, rows=rows, contract=program['contract'], view=evidence,
-                                     soft_texts=program.get('soft_texts', {}), incoming_states=program.get('incoming_states', {}),
-                                     bank_views=views, target_integers={s: result['arrays'][s]['integers'] for s in views},
-                                     target_adapters=target_adapters, target_states=fitted_states,
-                                     target_rho={s: result['arrays'][s]['rho'].tolist() for s in views},
-                                     target_delta={s: result['arrays'][s]['delta'].tolist() for s in views},
-                                     placeholders=placeholders)
-            target['fit'] = {'loss': result['loss'], 'saturated': {s: result['arrays'][s]['saturated'] for s in views},
-                             'roundedToZero': {s: result['arrays'][s]['roundedToZero'] for s in views}}
-            out.append(target)
-    path = Path(spec['out'])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(''.join(json.dumps(item, sort_keys=True, default=_jsonable) + '\n' for item in out))
-    os.replace(temporary, path)
-    return len(out)
+        source, _, _, _ = load_plan(program['plan'])
+        base = Path(program['plan']).parent
+        directory = work / program['name']
+        directory.mkdir(parents=True, exist_ok=True)
+        plan = {key: value for key, value in source.items() if key not in ('parent', 'learned', 'exports')}
+        plan['rows'] = str((base / source['rows']).resolve())
+        plan['artifacts'] = [str(exported.resolve())]
+        plan['emitBoundaries'], plan['label'], plan['exports'] = True, f"corpus:{program['name']}", []
+        plan['student'] = {**source['student'], 'checkpoint': spec['checkpoint'],
+                           'engine': {**source['student'].get('engine', {}), **{k: spec[k] for k in ('device', 'dtype') if k in spec}}}
+        plan['recipe'] = {**source.get('recipe', {}), **spec.get('recipe', {}), **program.get('recipe', {}),
+                          'basis': bank_manifest['basis']}
+        plan_path = directory / 'plan.json'
+        if plan_path.exists() and json.loads(plan_path.read_text()) != plan:
+            raise LearnedOptimizerError(f'{plan_path} binds another corpus fit; use a new work directory for a changed recipe')
+        _write(plan_path, plan)
+        if build(['--plan', str(plan_path), '--out', str(directory / 'fit')]) != 0:
+            raise LearnedOptimizerError(f'the corpus fit of {program["name"]} failed')
+        programs.append({'plan': str(plan_path), 'build': str(directory / 'fit'), 'subsets': spec.get('subsets', 3),
+                         **({'scopes': program['scopes']} if 'scopes' in program else {})})
+    return targets({**spec, 'programs': programs, 'work': str(work / 'targets')})
+
+
+def controls(spec):
+    """Planted controls as telemetry: plant a known mixture on one scope's view, label support rows by the planted
+    adapter's exact greedy continuations of the program's own prompts, and compare the trained optimizer's greedy
+    proposal and an in-bank fit (the reference) with the planted integers. Spec: ``{checkpoint, store, bank, state,
+    plan, work, out, trials?, components?, prompts?, prompt_tokens?, fit?, seed?}``. A failed control is a fault to
+    localize, not a verdict on the approach."""
+    import torch
+    from .bank import load_bank
+    from .controls import planted_mixture, planted_rows, recovery
+    from .episode import propose as run
+    from .fit import ScopeArray, SupportSet, fit_in_bank
+    from .head import executed, shares_from_norms
+    from .program import ProgramContext
+    from .trainer import OuterRecipe, OuterTrainer
+    engine = _engine(spec)
+    bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
+    state = json.loads(Path(spec['state']).read_text())
+    trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
+    pc = ProgramContext(engine, bank, spec['plan'], out=Path(spec['work']), scopes=spec.get('scopes'))
+    prompts = []
+    for row in pc.rows[:spec.get('prompts', 4)]:
+        node = row['graph']['nodes'][0]
+        first = next((i for i, w in enumerate(node['target_weights']) if w > 0), len(node['token_ids']))
+        prompts.append(node['token_ids'][max(0, first - spec.get('prompt_tokens', 48)):first])
+    shares = shares_from_norms(bank.group_norms())
+    lambdas = [scope for scope in pc.scopes if scope.startswith('lambda:')] or pc.scopes
+    trials = []
+    for trial in range(spec.get('trials', 2)):
+        scope = lambdas[trial % len(lambdas)]
+        view = pc.views[scope]
+        planted = planted_mixture(view, rng_seed=spec.get('seed', 0) * 1009 + trial, components=spec.get('components', 2))
+        slots = list(view.slots)
+        coefficients = executed(planted, torch.zeros(len(slots)), torch.zeros(len(slots), len(bank.group_labels)), shares[slots],
+                                step=bank.number_format.step, beta=.5, head=False)
+        adapter = bank.compose_adapter(engine, bank.composed_cores(slots, coefficients), None, {'control': 'planted', 'trial': trial}).id
+        binding = next(b['id'] for b in pc.manifest['bindings'] if scope in b['ancestry'])
+        rows = planted_rows(engine, adapter, prompts, binding=binding, prefix=f'planted-{trial}')
+        context = pc.request()
+        context['arrays'] = [item for item in context['arrays'] if item['view']['scope'] == scope]
+        _, _, behavior = run(trainer, context, sample=False, seed=trial)
+        proposed = behavior['arrays'][scope]['integers']
+        support = SupportSet(engine, pc.manifest, rows)
+        fitted = fit_in_bank(engine, bank, support, [ScopeArray(scope, pc.placeholders[scope], slots, list(view.available))],
+                             train_states=False, **spec.get('fit', {'steps': 20, 'refine_steps': 5}))
+        trials.append({'scope': scope, 'planted': planted, 'optimizer': proposed, 'inBankFit': fitted['arrays'][scope]['integers'],
+                       'optimizerRecovery': recovery(proposed, planted),
+                       'inBankRecovery': recovery(fitted['arrays'][scope]['integers'], planted)})
+    summary = {'schema': 'natlang.lopt.planted-controls/1', 'bank': bank.snapshot, 'writer': trainer.state['writer'],
+               'trials': trials, 'meanSupportRecall': {
+                   'optimizer': sum(t['optimizerRecovery']['supportRecall'] for t in trials) / max(1, len(trials)),
+                   'inBankFit': sum(t['inBankRecovery']['supportRecall'] for t in trials) / max(1, len(trials))}}
+    _write(spec['out'], summary)
+    return summary['meanSupportRecall']
 
 
 def train(spec):
@@ -195,7 +335,6 @@ def collect(spec):
     trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
     records, groups = [], []
     for index, target in enumerate(_rows(spec['targets'])):
-        target.setdefault('program', {'id': target['manifest']['program']['id'], 'buildHash': target['manifest']['program'].get('buildHash')})
         before = action_logprobs(engine, _incoming_bundle(engine, target), target['manifest'], target['rows'])
         group = []
         for sample in range(spec.get('perContext', 4)):
@@ -235,7 +374,8 @@ def _incoming_bundle(engine, target):
     for soft, state in target.get('incoming', {}).items():
         field, key = bundle_slot(soft)
         (instructions if field == 'instructions' else skills)[key] = state
-    return {'adapters': dict(target['placeholders']), 'instructions': instructions, 'skills': skills}
+    return {'adapters': {**target['placeholders'], **target.get('incoming_adapters', {})}, 'instructions': instructions,
+            'skills': skills}
 
 
 def ladder(spec):
@@ -255,7 +395,7 @@ def service(spec):
 
 
 COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder,
-            'service': service, 'collect': collect}
+            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls}
 
 
 def main(argv=None):

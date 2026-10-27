@@ -216,6 +216,15 @@ including rejected ones, stays in the build receipt. Composed adapters slice the
 exports. The optimizer itself is built and trained with `python -m natlang_neuralese.tune.learned` and the Natlang
 program in `applications/learned-optimizer`.
 
+Optional `incoming` names a joint fit's build directory: the optimizer then revises that tuned bundle (its mixtures add
+exactly to the tuned adapters) and releases it unchanged when no proposal improves on it. This needs a fit on the
+bank's basis: a recipe with `"basis": "<bank basis artifact ID>"` trains every native-subspace node as a leading slice
+of the learned optimizer's shared basis instead of the weight-SVD basis, so its adapters are exact bank coordinates.
+Such fits are also the optimizer's training corpus: `python -m natlang_neuralese.tune.learned corpus` reruns each
+program's existing tune plan on the bank basis with update boundaries and labels its free-tune and in-bank targets.
+New programs for that corpus come from `python -m natlang_neuralese.tune.supply`, a catalog of typed decision programs
+whose examples carry exact oracle values; they enter tuning through the ordinary split, teacher collection and import.
+
 `natlang tune ./my-program --rollback` reactivates the previous coherent release. `--no-weights` on `run`/`call`
 runs the base model.
 

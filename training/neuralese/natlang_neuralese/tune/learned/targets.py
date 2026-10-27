@@ -9,48 +9,11 @@ absent from the recorded optimizer input.
 """
 from __future__ import annotations
 
-import json
 import random
 
-from ...common.hashing import canonical_json_sha256_hex
 from . import LearnedOptimizerError
 
-TARGET_SCHEMA = 'natlang.joint-target/1'
-TIERS = ('free-tune', 'in-bank-fit', 'self-proposal')
 EXPOSURE_SCHEMA = 'natlang.lopt.exposure/1'
-
-
-def target_record(*, tier, program, before, after, evidence, objective, actors, representation, mixtures,
-                  residual=None, outcomes=None, lineage=None, trajectories=None, compute=None, binding_family=None):
-    """``evidence``: the evidence view ID and the ordered support item IDs exactly as the optimizer input holds them.
-    ``mixtures``: scope -> {componentIds, available, integers, rho, delta, fittingRule, numberFormat}."""
-    if tier not in TIERS:
-        raise LearnedOptimizerError(f'unknown target tier {tier}')
-    if not isinstance(evidence, dict) or not evidence.get('view') or not isinstance(evidence.get('items'), list):
-        raise LearnedOptimizerError('a target binds its exact evidence view and ordered support items')
-    for scope, mixture in mixtures.items():
-        if len(mixture['integers']) != len(mixture['componentIds']) or any(
-                not free and n for n, free in zip(mixture['integers'], mixture['available'])):
-            raise LearnedOptimizerError(f'target mixture of {scope} is misaligned or nonzero at unavailable slots')
-    body = {'schema': TARGET_SCHEMA, 'tier': tier, 'program': program, 'bindingFamily': binding_family or program,
-            'before': before, 'after': after, 'evidence': evidence, 'objective': objective, 'actors': actors,
-            'representation': representation, 'mixtures': mixtures, 'residual': residual or {},
-            'outcomes': outcomes or {}, 'lineage': lineage or {}, 'trajectories': trajectories or [],
-            'compute': compute or {}}
-    return {**body, 'id': 'njt1:' + canonical_json_sha256_hex(body)}
-
-
-def require_same_evidence(target, optimizer_input_items):
-    if list(target['evidence']['items']) != list(optimizer_input_items):
-        raise LearnedOptimizerError('the target used support evidence the optimizer input does not hold; label it as a '
-                                    'different conditional problem instead')
-
-
-def node_effective_updates(trainer, node):
-    """``{m: (B, A)}`` of one scope node's effective residual (scaling folded once), from the live tuner state."""
-    artifact = trainer.state['node_artifacts'][node]
-    values = trainer.engine.store.get_native_tensor_artifact(artifact).artifact.tensors
-    return trainer._node_factors(artifact, values)
 
 
 def tuner_boundary(trainer, *, before_state, label):
@@ -71,32 +34,124 @@ def tuner_boundary(trainer, *, before_state, label):
             'exposure': dict(after['exposure'])}
 
 
-def project_tune(bank, trainer, nodes):
-    """Project each tuned node's effective update into the bank: basis coordinates, mixture fit and residual energies
-    (weight-space projection initializes and grows the bank; it is not a mixture-token label)."""
-    out = {}
-    for node in nodes:
-        factors = node_effective_updates(trainer, node)
-        factors = {name: value for name, value in factors.items() if name in bank.basis.left}
-        cores, energy = bank.project_factors(factors)
-        coefficients, residual, target = bank.fit_mixture(cores) if bank.components else (None, None, None)
-        observed = sum(bank.q[name] * total for name, (total, _) in energy.items())
-        captured = sum(bank.q[name] * inside for name, (_, inside) in energy.items())
-        out[node] = {'cores': cores, 'basisCapture': captured / observed if observed else None,
-                     'mixture': None if coefficients is None else coefficients.tolist(),
-                     'bankResidualShare': (residual / target) if target else None}
+def project_adapter(bank, engine, adapter):
+    """Basis coordinates of any adapter's exact effective update, with the share of its relative energy the bank
+    basis captures and (with components) the least-squares mixture and its residual share. Weight-space projection
+    initializes fits and grows the bank; it is never a mixture-token label. An adapter slicing the bank basis is
+    captured exactly."""
+    from ..trainer import adapter_factors
+    factors = {name: value for name, value in adapter_factors(engine, adapter).items() if name in bank.basis.left}
+    cores, energy = bank.project_factors(factors)
+    coefficients, residual, target = bank.fit_mixture(cores) if bank.components else (None, None, None)
+    observed = sum(bank.q[name] * total for name, (total, _) in energy.items())
+    captured = sum(bank.q[name] * inside for name, (_, inside) in energy.items())
+    return {'cores': cores, 'basisCapture': captured / observed if observed else None,
+            'mixture': None if coefficients is None else coefficients.tolist(),
+            'bankResidualShare': (residual / target) if target else None}
+
+
+# -- target builders over `program.ProgramContext` ----------------------------------------------------------------
+def fit_labels(pc, *, incoming_states, incoming_adapters=None, init=None, fit=None, train_states=True):
+    """An in-bank fit of the context's support rows from the incoming bundle: mixture-token and head labels and the
+    fitted states, composed into stored target adapters."""
+    from .assemble import store_fitted_states
+    from .fit import fit_in_bank
+    arrays = pc.scope_arrays(incoming_adapters)
+    result = fit_in_bank(pc.engine, pc.bank, pc.support, arrays, soft_states=incoming_states, init=init,
+                         train_states=train_states, **(fit or {}))
+    states = store_fitted_states(pc.engine, result['states'])
+    adapters = {array.scope: pc.bank.compose_adapter(pc.engine, pc.bank.composed_cores(
+        array.slots, result['arrays'][array.scope]['executed'], offset=array.offset)).id for array in arrays}
+    labels = {'integers': {s: result['arrays'][s]['integers'] for s in pc.scopes}, 'adapters': adapters, 'states': states,
+              'rho': {s: result['arrays'][s]['rho'].tolist() for s in pc.scopes},
+              'delta': {s: result['arrays'][s]['delta'].tolist() for s in pc.scopes}}
+    report = {'loss': result['loss'], 'saturated': {s: result['arrays'][s]['saturated'] for s in pc.scopes},
+              'roundedToZero': {s: result['arrays'][s]['roundedToZero'] for s in pc.scopes}}
+    return labels, report
+
+
+def in_bank_target(pc, *, fit=None, lineage=None):
+    """Tier 2 from the program's own incoming bundle (initial soft states, zero adapters)."""
+    incoming = {key: record['state'] for key, record in pc.soft.items()}
+    labels, report = fit_labels(pc, incoming_states=incoming, fit=fit)
+    target = pc.request(tier='in-bank-fit', labels=labels, lineage={'fit': report, **(lineage or {})})
+    pc.persist([*labels['adapters'].values(), *labels['states'].values()])
+    return target
+
+
+def free_tune_targets(pc, *, fit=None, incremental=True, lineage=None, incremental_max=None):
+    """Tier 1 from the context's tuner build: the final residual from the common incoming bundle and, when the fit
+    sliced this bank's basis and recorded its update boundaries, each committed update as a revision of the partly
+    tuned bundle before it. The tuned bundle is the behavior target (distillation, soft states and exact decoded
+    weights); mixture labels are an in-bank fit of the same support rows started from its weight projection.
+    ``incremental_max`` keeps that many evenly spaced update boundaries (each is one more labeled fit)."""
+    from .program import read_build
+    if pc.build is None:
+        raise LearnedOptimizerError('free-tune targets need the program context of a tuner build')
+    build = read_build(pc.build)
+    state = build['state']
+    initial = {key: record['state'] for key, record in pc.soft.items()}
+    source = {'build': str(pc.build), 'inputSha256': state['input_sha256'], 'step': state['step'],
+              'exposure': state.get('exposure', {}), **(lineage or {})}
+    episodes = [{'kind': 'final-residual', 'incomingStates': initial, 'incomingAdapters': {},
+                 'targetStates': {**initial, **state.get('soft_states', {})}, 'targetAdapters': dict(state['node_artifacts'])}]
+    if incremental and build['boundaries'] and _slices_bank(pc, state['node_artifacts'].values()):
+        nodes, soft = {node: history[0] for node, history in state['node_history'].items()}, dict(initial)
+        for boundary in build['boundaries']:
+            if boundary['inputSha256'] != state['input_sha256']:
+                continue  # a boundary of another fit of this build directory is not this fit's revision
+            before_nodes = {**nodes, **boundary['nodesBefore']}
+            before_soft = {**soft, **{k: v for k, v in boundary['softBefore'].items() if v}}
+            after_nodes, after_soft = {**before_nodes, **boundary['nodesAfter']}, {**before_soft, **boundary['softAfter']}
+            if boundary['stepBefore']:
+                episodes.append({'kind': 'incremental', 'boundary': [boundary['stepBefore'], boundary['stepAfter']],
+                                 'incomingStates': before_soft, 'incomingAdapters': before_nodes,
+                                 'targetStates': after_soft, 'targetAdapters': after_nodes})
+            nodes, soft = after_nodes, after_soft
+    if incremental_max is not None and len(episodes) - 1 > incremental_max:
+        revisions = episodes[1:]
+        keep = sorted({round(i * (len(revisions) - 1) / max(1, incremental_max - 1)) for i in range(incremental_max)})
+        episodes = [episodes[0], *(revisions[i] for i in keep)]
+    out = []
+    for episode in episodes:
+        incoming_adapters = {s: a for s, a in episode['incomingAdapters'].items() if s in pc.scopes}
+        target_adapters = {s: a for s, a in episode['targetAdapters'].items() if s in pc.scopes}
+        init = {}
+        for scope in pc.scopes:
+            if scope in target_adapters and pc.bank.components:
+                projected = project_adapter(pc.bank, pc.engine, target_adapters[scope])
+                previous = project_adapter(pc.bank, pc.engine, incoming_adapters[scope])['mixture'] if scope in incoming_adapters else None
+                mixture = projected['mixture'] if previous is None else [a - b for a, b in zip(projected['mixture'], previous)]
+                init[scope] = [mixture[slot] if free else 0. for slot, free in zip(pc.views[scope].slots, pc.views[scope].available)]
+        labels, report = fit_labels(pc, incoming_states=episode['incomingStates'], incoming_adapters=incoming_adapters,
+                                    init=init or None, fit=fit)
+        # The free tune itself is the behavior and weight target; the in-bank fit supplies the mixture tokens.
+        labels.update(adapters=target_adapters, states=episode['targetStates'], factors=target_adapters)
+        out.append(pc.request(tier='free-tune', incoming_states=episode['incomingStates'], incoming_adapters=incoming_adapters,
+                              labels=labels, lineage={**source, 'episode': {k: v for k, v in episode.items() if k == 'kind' or k == 'boundary'},
+                                                      'labelFit': report}))
     return out
+
+
+def _slices_bank(pc, adapters):
+    try:
+        for adapter in adapters:
+            pc.bank.adapter_cores(pc.engine, adapter)
+    except LearnedOptimizerError:
+        return False
+    return True
 
 
 # -- episode multiplication -------------------------------------------------------------------------------------
 def episode_variants(problem, *, rng_seed, subsets=4, include_empty=True, starts=('base', 'tuned', 'dropped', 'swapped'),
-                     other_bundles=()):
+                     other_bundles=(), max_size=None):
     """Episodes from one problem: support subsets from one world to the full pool, an evidence-free episode, and
     starting bundles (base, partly tuned, another program's bundle, dropped/swapped parts). Every variant of one
     program keeps the program's split."""
     rng = random.Random(rng_seed)
     items = list(problem['support'])
-    sizes = sorted({1, len(items), *[rng.randint(1, max(1, len(items))) for _ in range(max(0, subsets - 2))]}) if items else []
+    largest = min(len(items), max_size or len(items))
+    sizes = sorted({1, largest, *[rng.randint(1, max(1, largest)) for _ in range(max(0, subsets - 2))]}) if items else []
     episodes = []
     for size in sizes:
         subset = sorted(rng.sample(items, size))

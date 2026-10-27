@@ -1,5 +1,14 @@
 # Model-facing changes and their measurement
 
+### 2026-10-27 — program supply catalog function texts
+
+`training/neuralese/natlang_neuralese/tune/supply.py` renders the function texts of 18 decision-program families (51
+programs with variants) from rule data: `main.nl` call sequences, `Apply in order: <record.field op value> -> label;
+...; otherwise -> label.` rule lists and the untrusted-field sentence, in the wording of the three operational tuning
+programs (ticket routing, invoice review, inventory routing). Status: **unmeasured.** These texts are what the student
+and the teacher see when the programs are tuned; measure base and teacher task success per program in the ordinary
+tuning evaluation before treating any family's text as settled, and revise wording that fails for the teacher.
+
 ### 2026-10-27 — joint learned optimizer request, writer template and Natlang stages
 
 New model-facing surfaces of the joint learned optimizer (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md), all on the
