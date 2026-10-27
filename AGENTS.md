@@ -1,5 +1,25 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Individual-program tuning (owner, 2026-10-26)
+
+Operate the tuning lane in `plans/TUNING_OPERATIONS_HANDOFF_20261026.md` and
+`plans/PROGRAM_TUNING_RUNS_20261026.md` alongside production training. Measure
+how far each program improves through hierarchical adapters, native soft states,
+teacher SFT and whole-graph RL. Continue saved adapter/soft-state optimizer
+histories when improving the recipe. Bind round journals to the actual recipe,
+student base, initial parent and execution limits; a changed recipe must not
+silently reuse completed rounds. Check reply/action learning separately from
+loss on long repeated prompts, and adjust prompt supervision when it dominates.
+
+Keep related invocation worlds on one split, select on development and confirm
+on untouched confirmation worlds. Report actual base, teacher, SFT and RL task
+outcomes; saved artifacts and zero-variance rollout groups are not capability
+lift or policy updates. Program fits do not advance production lineage exposure.
+Distill verified training-world executions through ordinary source admission to
+both production recipes, preserving exact actor and split custody. Apply useful
+shared mechanisms to Mellum with its own exact checkpoint, without treating LFM
+adapters or native state as interchangeable.
+
 ## Luna generation resumed (owner, 2026-10-26)
 
 Start and supervise six parallel Luna data-generation workers. This explicit
