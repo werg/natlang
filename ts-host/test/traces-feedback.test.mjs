@@ -73,6 +73,12 @@ test('fix replaces the expected result of the same function and input, and dedup
     assert.equal(examples[0].input.ticket, 'refund please');
     assert.deepEqual(readdirSync(t.root).filter(name => name.endsWith('.tmp')), [], 'temp file renamed away');
     assert.equal(t.annotations('c/1').length, 3);
+    const path = join(t.root, 'tune.examples.jsonl');
+    writeFileSync(path, JSON.stringify({ ...t.examples()[0], protected: true }) + '\n');
+    const held = t.run('fix', 'c/1', '--expected', '"other"');
+    assert.notEqual(held.code, 0);
+    assert.match(held.err, /protected example/);
+    assert.equal(t.examples()[0].expected, 'refunds', 'a protected example is never rewritten');
   } finally { t.cleanup(); }
 });
 

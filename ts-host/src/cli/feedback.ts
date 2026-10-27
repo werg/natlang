@@ -66,6 +66,8 @@ export function upsertExample(path: string, line: Record<string, unknown>): 'add
     let item: Record<string, unknown>;
     try { item = JSON.parse(text); } catch { return text; }
     if (stable([item.function, item.input]) !== key) return text;
+    // Protected examples are held for final reporting; feedback never changes them.
+    if (item.protected === true) throw new Error(`${path} holds this input as a protected example; it is kept unchanged`);
     if ('expected' in item && stable(item.expected) === stable(line.expected)) { found.status = 'unchanged'; return text; }
     found.status = 'updated'; return JSON.stringify({ ...item, expected: line.expected });
   });
