@@ -646,3 +646,71 @@ Current active-R8 capsule and full37357 private export are verified; subsequent
 operator-source v4 includes the fixed programme launcher, frozen TypeScript client,
 frozen training code and authoritative review tables. Check its actual ready
 receipt before claiming that newer supplement complete; v3 remains durable.
+
+
+### Follow-up, 21:26 Berlin
+
+Both production learners continue: LFM40626 and Mellum37567 observed, with finite
+losses. Mellum37427 is independently privately verified; local mirror promotion
+remains separate. Measured Mellum host headroom is61,107,740,672B versus the
+conservative69,497,607,876B snapshot requirement. Background checkpoint copying
+remains off; no memory margin was relaxed. The supplemental snapshot is still
+failed and is not recovery coverage.
+
+The exact fe674 actor view passed tensor extraction/reread and preserves the
+original full-state identity. Actual actor readiness took13s and peak host memory
+was2.4GiB. Invoice continuation is live in job734400062f2d5d0ba670a62b, using the
+actual saved trainable parent and the SFT/RL/SFT/RL schedule. No new policy update
+is credited yet: its startup eagerly imported4053 tensor artifacts(9.93GB) and604
+native states(2.61GB). The latter repeatedly verifies complete optimizer ancestry
+for each historical prefix. A shared batch-admission implementation is under
+focused validation; retain exact numeric/history checks and saved optimizer state.
+
+Verified relocation of audited pin40037 completed, retaining its exact3,107,580,207B
+and original-path symlink. Dead pytest scratch cleanup separately removed
+8,699,052,032 allocated bytes: all eight lock PIDs were gone, no live cwd/fd pointed
+inside, and recent/current scratch was retained. Internal free space reached32GiB;
+this remains below the storage target. Megatoken relocation is still in progress
+and its original is retained. The two gains above are distinct from earlier
+cycle44 archival and cache relocation.
+
+The learned-optimizer owner reports a newer owner hold on teacher collection,
+tuning and corpus generation for the51 supplied programs until main LFM training
+is done. Grouped splits are persisted; confirmation is excluded from future
+training exports. No campaign or teacher call was launched for those programs.
+
+
+### Follow-up, 21:35 Berlin
+
+Shared state batch import is implemented and committed as08d2e1410. It owns private
+CPU tensors and metadata, proves the supplied parent graph acyclic, verifies full
+terminal ancestries through an overlay before publishing anything, then installs
+parents before children. Exact scalar Adam/moment and semantic provenance checks
+are retained. All31 focused cases pass on main; the frozen production derivative
+covers the same31 cases across completed runs after missing test-only fixture
+imports were repaired. This is not a claim of one uninterrupted full-suite pass.
+An independent code-owner review was requested through coordination.
+
+Invoice's old load had not written any state or completed update. It was stopped
+before updates and restarted with the same actual saved parent in job
+8607dcbde4639d68032c5e21, unit
+`natlang-invoice-earned-sft-whole-graph-rl-r4-batch-import-20261027`.
+Frozen trainer `/tmp/natlang-tune-batch-state-import-runtime-20261027` changes only
+the shared store API and import_states caller relative to its previous frozen
+trainer. Current phase is still loading; no new policy update is credited.
+The metadata supervisor is
+`natlang-invoice-batch-import-continuation-supervisor-20261027`.
+
+Before its first save, the empty output and entire28MB job root were placed on the
+external volume with original paths preserved. The actual Node and Python owners
+were briefly paused; source and destination contents and symlink targets were
+verified, copied files/directories fsynced, and owners resumed. All later SFT/RL
+jobs now use that external root as well, avoiding tens of GB of optimizer history
+being written to the nearly full internal filesystem.
+
+Latest observations: LFM40652, Mellum37609, both advancing with finite losses.
+The supplied51-program learned-optimizer lane remains held until LFM main training
+is complete, then uses its final checkpoint. Handoff accepted from
+`dgx-learned-optimizer`; see its prepared README and run-after-lfm-main.sh. It is a
+separate program-adaptation lane, not backbone exposure or a completed production
+stage.
