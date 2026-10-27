@@ -27,6 +27,27 @@ The default `0.1` also supervises prompt tokens at one-tenth weight; repeated in
 dominate the objective. Adjust this on development outcomes. Recipe changes in `--rounds` create a fresh journal;
 set `tune.rounds.initialFitParent` to the saved build directory to continue its adapters and optimizer histories.
 
+## Examples from testing
+
+Testers do not edit the JSONL. Every call is already in the call store; a verdict on it is both an annotation and,
+for a root call of a program function, a root example:
+
+```sh
+natlang traces good CALL                       # the recorded output becomes `expected`
+natlang traces fix CALL --expected '"billing"' # the right answer becomes `expected`
+natlang traces bad CALL [--expected JSON]      # annotation only, unless the right answer is given
+```
+
+Each records `{"kind": "feedback", "value": {"verdict": ..., "expected"?: ...}}` through `natlang traces annotate`'s
+store, then appends `{function, input, expected, group}` to `tune.examples.jsonl` in the call's recorded program root
+(`--program DIR` overrides it; `--dry-run` prints the line and changes nothing). `function` is the definition's `.nl`
+path relative to that root, `input` the call's exact recorded inputs. The same function and input is never added twice:
+a different `expected` replaces the earlier line's (the file is rewritten atomically). A call that ran inside another
+call, has no `.nl` source or program root, or recorded incomplete inputs keeps its annotation and fails with the reason.
+
+`group` is `--group G`, else `NATLANG_FEEDBACK_GROUP`, else `feedback-<YYYYMMDD>-<hash of host and user>`, so one tester's
+feedback on a day shares a split side. Set the variable per session or per customer when finer worlds matter.
+
 ## What a tune does
 
 1. Discovers the program's bound definitions and compiles the lexical scope tree: program root, one folder node per

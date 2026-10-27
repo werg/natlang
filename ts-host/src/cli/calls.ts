@@ -15,7 +15,7 @@ import type { CallRecord, CallStoreSettings, CaseRole, CaseTier } from '../calls
 type Args = { words: string[]; options: Map<string, string | true> };
 function parse(argv: string[]): Args {
   const words: string[] = [], options = new Map<string, string | true>();
-  const flags = new Set(['--json', '--events', '--values', '--all']);
+  const flags = new Set(['--json', '--events', '--values', '--all', '--dry-run']);
   for (let index = 0; index < argv.length; index++) {
     const item = argv[index]!;
     if (item.startsWith('--')) {
@@ -245,6 +245,12 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     try { parsed = JSON.parse(String(parsed)); } catch { /* text */ }
     store.annotate(call, kind, parsed, 'cli'); print(`annotated ${call}`, false); return 0;
   }
+  if (action === 'good' || action === 'bad' || action === 'fix') {
+    if (!words[0]) throw new Error(`usage: natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`);
+    const { recordFeedback } = await import('./feedback.js');
+    print(recordFeedback(store, { verdict: action, call: words[0], expected: text(args, '--expected'), group: text(args, '--group'),
+      program: text(args, '--program'), dryRun: args.options.has('--dry-run') }), false); return 0;
+  }
   if (action === 'config') {
     const changes: Partial<CallStoreSettings> = {};
     for (const pair of words) {
@@ -259,7 +265,7 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined,
       text(args, '--work-limit') ? Number(text(args, '--work-limit')) : undefined)} bytes`, false); return 0;
   }
-  throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|config|evict');
+  throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|good|bad|fix|config|evict');
 }
 
 /** The compilation a word names: an ID, a definition key, name or source. */
