@@ -714,3 +714,64 @@ is complete, then uses its final checkpoint. Handoff accepted from
 `dgx-learned-optimizer`; see its prepared README and run-after-lfm-main.sh. It is a
 separate program-adaptation lane, not backbone exposure or a completed production
 stage.
+
+## Continuation update — 23:20 Berlin
+
+Both production learners are advancing: LFM 40,849 and Mellum 37,937 at the
+latest observation. LFM full-state independent recovery reached 40,757.
+These are actual optimizer steps, not completed source coverage or task lift.
+Mellum's current sandbox remains `7b142220-d455-46af-bf1d-d90098717970`;
+its live heartbeat verifies boot/controller identity and the actual learner.
+The existing drain/expiry remain 05:37/07:37 Berlin on October 28. Keep its
+independent exports and final drain services running; snapshots remain unqualified.
+
+The completed LFM source census contains 1,575,737 rows and 20,660,200,542
+logical forward tokens before prefix reuse. Actual recent batches reused roughly
+half their physical prefix work. A naive extrapolation of the recent mixed
+throughput is about four months for a full logical pass, not a reliable finish
+estimate: remaining source mix differs and training efficiency needs improvement.
+Do not hide this cost by dropping rows. The complete KV-geometry sidecar is
+prepared; those KV-slot counts are not physical forward-token counts.
+`63ab8c785` integrates real pending packed-batch capacity checks and safe source
+append qualification. Current-main focused verification passed 166 tests,
+including actual CUDA backward. Full `check-main` is separately queued; no new
+packing deployment or throughput gain is claimed yet.
+
+Invoice's current shared-graph SFT/RL/RFT job is
+`97f6c79fc5c1c32370c68122`, under
+`natlang-invoice-current-shared-graph-training-20261027`. It continues the
+actual 47-update adapter/soft-state parent `8607dcbde4639d68032c5e21/out`,
+state SHA-256 `5c78cc85fc85d96ca7949189d5b592d57f99ac26215de1debbe1bd0b923db575`.
+The frozen current runtime is
+`/tmp/natlang-current-shared-graph-program-v2-20261027/repo`, revision
+`8b64ab1985c02149be40829b26a7b57822788b40`; compiled client manifest
+`9611b6b3b6709a56f074652679e70e7a524fecf6f039dd1cc19b26be11d1b378`.
+A new saved optimizer update has not yet been observed; initial history import
+is real work but earns no update credit. The actor's measured host peak was
+3,597,848,576 bytes; its hard/ledger reservation was reduced from 14 to 10 GiB,
+retaining its 4 GiB adapter-cache allowance and permitting the 40 GiB fit claim.
+
+This job currently exercises hierarchical LoRA and native soft states, with
+empty learned-bank family memberships. It does not establish execution or
+training of the new component-mixture system. Owner clarified that direct
+mixture fits, shared LoRA bases and component-bank learning belong in the
+operational stage. The integration request is assigned through coordination to
+`dgx-learned-optimizer`: enable `train_basis` and `train_bank`, fit actual mixture
+labels on a named bank, execute the composed adaptations, and rebind/refit
+labels when the bank changes. The separate 51-program hold remains in force.
+
+The bounded joint archive loader (`14f5192dc`) is integrated for review, not
+injected into the live frozen runtime. Its isolated small-fixture checks passed;
+independent review found a serious follow-on performance issue: ordinary archive
+persistence would deserialize the entire cold history on each save. Repair that
+with exact dependency metadata and verify missing-descendant repair before
+production deployment. Default scratch placement also needs explicit measured
+headroom: internal `/tmp` is on the nearly full root filesystem, not RAM-backed.
+At observation internal free space was about 20 GiB; external about 197 GiB.
+The authorized Megatoken relocation is incomplete and originals remain protected.
+
+Owner reduced Luna teacher generation to one worker. No Luna generation worker
+is currently live. Eight declared targets and AGENTS were changed to one;
+previous multi-slot campaigns were marked to drain. Preserve their completed
+sources and actor identities; any resumed generation requires a fresh reviewed
+one-slot plan. Engineering helper concurrency is a separate setting.
