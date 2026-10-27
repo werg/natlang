@@ -30,10 +30,13 @@ def _write(path, value):
 
 def import_artifacts(engine, directory):
     from ..model.native_artifact import decode_native_tensor_artifact
+    from .archive_links import read_archive, remember
     for path in sorted(Path(directory).glob('*.nnt')):
-        artifact, ident = decode_native_tensor_artifact(path.read_bytes())
+        body, reference = read_archive(path)
+        artifact, ident = decode_native_tensor_artifact(body)
         if engine.store.put_native_tensor_artifact(artifact).id != ident or path.stem != ident:
             raise ValueError(f'artifact file {path} does not hold its named content')
+        remember(engine, ident, reference)
 
 
 def persist_artifacts(engine, ids, directory, states=None):
@@ -42,6 +45,7 @@ def persist_artifacts(engine, ids, directory, states=None):
     Native states (`nzs1_`) go to ``states`` with their full derivation closure (parents, gradients, updates and
     optimizer histories), so the tuned soft states and their immutable lineage can be restored and verified."""
     from ..model.native_artifact import encode_native_tensor_artifact
+    from .archive_links import link_verified, remember, signature
     directory.mkdir(parents=True, exist_ok=True)
     pending = [ident for ident in ids if ident]
     seen = set()
@@ -60,20 +64,22 @@ def persist_artifacts(engine, ids, directory, states=None):
                 raise ValueError(f'trainer state references unavailable native state {ident}')
             states.mkdir(parents=True, exist_ok=True)
             path = states / f'{ident}.nzs'
-            if not path.exists():
+            if not path.exists() and not link_verified(engine, ident, path):
                 temporary = path.with_suffix('.tmp')
                 temporary.write_bytes(encode_native_state(record.block))
                 os.replace(temporary, path)
+                remember(engine, ident, (path.resolve(), signature(path)))
             pending.extend(derivation_dependencies(record.block.derivation))
             continue
         path = directory / f'{ident}.nnt'
         record = engine.store.get_native_tensor_artifact(ident)
         if record is None:
             raise ValueError(f'trainer state references unavailable artifact {ident}')
-        if not path.exists():
+        if not path.exists() and not link_verified(engine, ident, path):
             temporary = path.with_suffix('.tmp')
             temporary.write_bytes(encode_native_tensor_artifact(record.artifact))
             os.replace(temporary, path)
+            remember(engine, ident, (path.resolve(), signature(path)))
         if record.artifact.source_artifact_id:
             pending.append(record.artifact.source_artifact_id)
 
@@ -81,15 +87,21 @@ def persist_artifacts(engine, ids, directory, states=None):
 def import_states(engine, directory):
     """Restore complete archived histories with one full verification per terminal."""
     from ..serve.store import decode_native_state
+    from .archive_links import read_archive, remember
     pending = {}
+    references = {}
     for path in sorted(Path(directory).glob('*.nzs')):
-        block, ident = decode_native_state(path.read_bytes())
+        body, reference = read_archive(path)
+        block, ident = decode_native_state(body)
         if path.stem != ident:
             raise ValueError(f'state file {path} does not hold its named content')
         pending[ident] = block
+        references[ident] = reference
     records = engine.store.put_native_states(pending.values())
     if [record.id for record in records] != list(pending):
         raise ValueError('archived native states changed their content IDs')
+    for ident, reference in references.items():
+        remember(engine, ident, reference)
 
 
 def load_plan(path):
