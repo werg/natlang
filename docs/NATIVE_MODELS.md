@@ -101,9 +101,13 @@ Other `native` settings: `device`, `dtype`, `memoryGb`, `contextTokens`, `port`,
 
 **GGUF.** `export/native_gguf.py` merges the learned sparse vocabulary rows (role markers and reasoning boundaries)
 into the backbone's embedding and readout, which is exact for ordinary tokens, and exports the tokenizer's own chat
-template with the backbone's pinned history-reasoning arguments. The low-rank producer adapter only acts inside
-producing spans, which llama.cpp does not run, so the profile bans the producer's opening marker (`logit_bias`) and
-stays in ordinary tokens. Its `manifest.json` records the checkpoint, the merged rows and what is not represented.
+template with the backbone's pinned history-reasoning arguments. The GGUF also carries the low-rank producer adapter
+(`natlang_producer_down/up`), the role markers (`natlang.produce_open` …) and the native identity states carry
+(`natlang.identity.*`: the float32 identity for an f32 file, the bfloat16 one the native server uses on CUDA
+otherwise). The fork applies the adapter inside producing spans and captures their state
+(`scripts/neuralese_data/check_llama_producer_parity.py`); until llama-server serves the native-state protocol the
+profile bans the producer's opening marker (`logit_bias`) and stays in ordinary tokens. `manifest.json` records the
+checkpoint, the merged rows and each file's identity.
 The profile also sets `temperature: 0`: the native server decodes greedily by default, llama-server samples at 0.8.
 `local.server` selects the llama-server executable (for example a CUDA build; the managed default may be a CPU
 build, which takes about 16 s per 4.5k-token natlang turn on the DGX).

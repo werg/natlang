@@ -1,101 +1,13 @@
 {
-  "description": "llama.cpp fork with the Neuralese ports (S4 \u00a76). A separate git checkout, not vendored: core patch = layer-range execution (src/llama-ext.h llama_set_layer_range, LFM2 graph); library + tools in tools/neuralese.",
+  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. A separate git checkout, not vendored. The browser's wllama is built from this branch.",
   "path": "../llama.cpp-neuralese",
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
   "repository": "https://github.com/werg/llama.cpp-neuralese",
-  "working_commit": "1f4e334d5",
-  "working_status": "1f4e334d5: init_body answers 501 neuralese-init-body-unavailable (reference-only). The vendored browser wasm was built from this commit; that build (ts-host/vendor/neuralese-wasm, the retired projected-vector protocol) was removed on 2026-10-26, and the browser's local model is now the patched wllama. Earlier: 76f7af592: max_tokens 0 honoured (no generated token, finish_reason length) and a malformed max_tokens/max_completion_tokens answered 400 bad-max-tokens, streamed or not (SERVER_HARMONIZATION #20, as the reference's http.py completion_limit). The vendored browser wasm (ts-host/vendor/neuralese-wasm, since removed) was built from this commit. Earlier: 8b41aecff: a persistent ggml threadpool per thread count shared by the llama context and the CPU heads (no per-graph thread create/join; the threaded wasm build no longer deadlocks under Node), info.context and view's default window from the served context less the site's prompt, streamed requests cancelled when the client leaves (sink.is_writable() / nzwOnEvent false), decisions cut after the option's own generation prefix (as the reference), tool-call arguments compact JSON on both servers. The vendored browser wasm (ts-host/vendor/neuralese-wasm, since removed) was built from this commit. Earlier: 2d6557813: parity with the reference server (template value_type \"unknown\" and argument_path, parts typed unknown, POST /v1/neuralese/embed, Qwen <tool_call> JSON calls and a lone </think> parsed as the reference's chat.build_message, streamed chat completions in the reference's chunk format: native chunked transfer, wasm through nzw_handle's event hook; info fields aligned, decide_many item errors \"code: detail\", HEAD and other methods 405); only grad, optim and adapter creation/export/projection stay reference-only. The vendored browser wasm (ts-host/vendor/neuralese-wasm, since removed) was built from this commit. Earlier: 43b495c73 POST /v1/neuralese/view replaces /digest; batched decision readout; full-residual-v1 reader adapter in nz_read (raw-token and latent-sketch projectors remain unsupported; this does not qualify the new foundation C++ runtime).",
-  "upstream_base": "1537a0a8b",
-  "build_cpu": "cmake -S . -B build-cpu -G Ninja -DGGML_CUDA=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build-cpu --target llama-neuralese-parity llama-neuralese-server -j2",
-  "commit": "1f4e334d5",
-  "verification": {
-    "host": "dgx",
-    "cuda_architecture": 121,
-    "port_cases_passed": 4,
-    "port_cases_failed": 0,
-    "result": "runs/neuralese-integration-20261003/llama-parity.log",
-    "trained_phase_f_http": {
-      "date": "2026-10-04",
-      "checkpoint_step": 1900,
-      "fork_commit": "023131332",
-      "device": "CPU",
-      "receipt_directory": "runs/neuralese-integration-20261004/phase-f-http-v1",
-      "plain_reply": "ok",
-      "prompt_tokens": 15,
-      "controlled_block_length": 16,
-      "controlled_block_width": 1024,
-      "autonomous_quality_claim": false,
-      "controlled_ts_typed_store_handoff": true
-    },
-    "final_stop_source": {
-      "date": "2026-10-04",
-      "fork_commit": "760da5fdd",
-      "test": "tests/neuralese/test_llamacpp_parity.py::test_final_stop_source_write_matches_reference",
-      "cpu": {
-        "stop_logits_max_diff": 0.000747,
-        "payload_max_diff": 0.00427,
-        "final_max_diff": 0.000573
-      },
-      "cuda": {
-        "stop_logits_max_diff": 0.00207,
-        "payload_max_diff": 0.0187,
-        "final_max_diff": 0.0018
-      },
-      "lengths_and_truncation": "equal to the reference"
-    },
-    "server_conformance": {
-      "date": "2026-10-10",
-      "fork_commit": "76f7af592",
-      "test": "tests/neuralese/test_server_conformance.py",
-      "checks": [
-        "info",
-        "forced write: length, truncation, payload, stop logits",
-        "read of an uploaded block: greedy continuation",
-        "decision readout log-probabilities",
-        "text encoding (with and without a context)",
-        "write at a write site",
-        "digest plan: single site and chunked at window 16",
-        "template readout: written and decoded values",
-        "length hints: position by position and block-wise (1 and all passes)",
-        "rendered prompts (plain, tools, tool calls with results, a reply returning a written value as a block)",
-        "guidance: reply checks on fixed replies (syntax, line repetition, in-line run, redeclaration, unknown tool), guided rollback and retry",
-        "weight adapters: an xs adapter (adapter/2) exported as a GGUF LoRA gives the reference's decision log-probabilities and greedy reply; unloaded adapters fail 409, projection-decoded ones 501",
-        "batched decision scoring (/v1/natlang/score, /v1/neuralese/decide_many): each item equals decide alone, a bad item fails alone",
-        "shared error behaviour: 405 method-not-allowed, 404 not-found, 400 bad-json for a non-object body and for a malformed collect",
-        "batched scoring groups same-prompt items across the request and answers in request order",
-        "one capability model: info.server and sorted info.capabilities on both; every capability the fork lacks (grad, grad.order2, optim, adapters.create, adapters.direct, adapters.lora-export, adapters.projection) answers 501 neuralese-<capability>-unavailable; the reference answers PUT \u2026/lora 501",
-        "fork parity: info fields of the same shape, embed (identical content IDs), template value_type unknown and argument_path (write and decode, refused paths), parts typed unknown render unquoted (given or stored type), Qwen <tool_call> JSON calls and a lone </think>, streamed replies (role, held-back call markup, block parts, tool_calls, x_natlang_message) assembled equal to the non-streamed reply and equal across servers, stream error events, guidance {} on both, batched item errors \"code: detail\", neuralese-bad-block for a block of another width, HEAD/PATCH/OPTIONS 405, collect with a non-list referenced 400",
-        "follow-ups (8b41aecff): view's default window from the served context (info.context, same chunks at -c 1024 on both), tool-call arguments byte-equal canonical compact JSON (streamed and not), a client that leaves a stream stops generation (native), decisions after an assistant turn with reasoning score the generation-time prompt on both",
-        "max_tokens (76f7af592): 0 generates nothing on both (empty message, finish_reason length, plain, streamed and template readout); negative, fractional, string and boolean limits 400 bad-max-tokens on both, before a stream opens"
-      ],
-      "stop_sources": [
-        "shallow",
-        "final"
-      ],
-      "result": "146 passed, 2 skipped on DGX CPU, fork 76f7af592 (shallow, final native build-cpu; final-wasm, final-wasm-mt vendored builds of the same commit; plus test_serve.py, test_serve_streaming.py, test_serve_grad.py, test_runtime_versions.py); final-wasm-mt runs by default",
-      "decide_max_logprob_diff": 0.0041
-    }
-  },
-  "pending_decode_prefix_fix": {
-    "commit": "16de45539",
-    "status": "reference GPU verified; C++ patch pushed but native build/conformance still required",
-    "issue": "Forced value= text prefix split merged =[ token; force common token prefix across JSON starters instead."
-  },
-  "read_adapter_cpu_verification": {
-    "receipt": "runs/neuralese-read-adapter-cpp-port-20261009-v1/verification-receipt-v1.json",
-    "natlang_commit": "d8e505a98838ab74f69cf8e9ca8a8ab861e7af2d",
-    "fork_commit": "8155cff42face11c178d7e3c72988581f75da4d9",
-    "scope": "legacy-rms-v1 sidecar with full-residual-v1 reader adapter; nz_read only",
-    "wasm": "not run; emcc and emcmake were unavailable on Pop",
-    "qualification": false,
-    "receipt_sha256": "0e5a26bf40abc0c08b5c25261f291b31503bc58317225012fe2e56d7dedb7f2b",
-    "remaining_profile_plan": "runs/neuralese-read-adapter-cpp-port-20261009-v1/remaining-raw-latent-port-plan-v1.md",
-    "remaining_profile_plan_sha256": "71f5af8fece7a387faaab36006e76ccda3ebde52c6ee97e7028c44cf67325d1b",
-    "checkpoint_epsilon_restore_receipt": "runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v2.json",
-    "checkpoint_epsilon_restore_receipt_sha256": "49432d84f0a9ee8cdf3860a1ca0c1b70bcaf0565e8cf89dbb7f85297197fce1a",
-    "historical_missing_epsilon": "full-residual-v1 fixed 1e-5 default, resolved by the shared checkpoint config helper; new saves serialize it explicitly",
-    "superseded_receipt_v1": "runs/neuralese-read-adapter-cpp-port-20261009-v1/checkpoint-epsilon-restore-receipt-v1.json",
-    "superseded_receipt_v1_sha256": "d99cd27c5f8f3a526aa8283099e877e937860f6023d577900c39f7551d801847"
-  }
+  "build_cpu": "cmake -S . -B build-cpu && cmake --build build-cpu --target llama-server llama-state-span-dump llama-logits-dump -j16",
+  "build_cuda": "cmake -S . -B build-cuda -DGGML_CUDA=ON && cmake --build build-cuda --target llama-server llama-state-span-dump -j16",
+  "parity": [
+    "scripts/neuralese_data/check_llama_producer_parity.py (native state production against the native engine)",
+    "scripts/neuralese_data/check_tuned_lora_llama_parity.py (tuned LoRA against the native adapted model)"
+  ]
 }

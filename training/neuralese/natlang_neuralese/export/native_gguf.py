@@ -53,13 +53,22 @@ def merged_backbone(model):
 
 
 def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, python=sys.executable):
-    from ..model.native_model import load_native_checkpoint
+    from ..model.native_model import load_native_checkpoint, native_tensor_identity
     checkpoint, out_dir = Path(checkpoint).resolve(strict=True), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     model, tokenizer, roles, config, state = load_native_checkpoint(str(checkpoint), device='cpu', dtype=torch.float32,
                                                                     allow_weights_only=True)
     if config['architecture'] not in ('lfm2', 'lfm2_moe', 'qwen3', 'qwen2'):
         raise ValueError(f"GGUF export supports HF backbones only, not {config['architecture']!r}")
+    checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
+    # The native identity states carry (natlang.identity.* in the GGUF; llama-server declares it and stamps produced
+    # states with it). It names the embedding path's dtype: an f32 file serves the float32 identity, the others the
+    # bfloat16 one the native server uses on CUDA, so states exchange with that server.
+    identities = {'float32': native_tensor_identity(model, config, checkpoint_sha256=checkpoint_sha256)}
+    if any(outtype != 'f32' for outtype in outtypes):
+        reduced = load_native_checkpoint(str(checkpoint), device='cpu', dtype=torch.bfloat16, allow_weights_only=True)
+        identities['bfloat16'] = native_tensor_identity(reduced[0], reduced[3], checkpoint_sha256=checkpoint_sha256)
+        del reduced
     hf, tied = merged_backbone(model)
     # The producer adapter (inside producing spans, e + up(down(e))) as GGUF tensors the llama.cpp fork applies.
     adapter = getattr(model, 'adapter', None)
@@ -98,12 +107,13 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
             partial = target.with_suffix('.gguf.partial')
             subprocess.run([python, str(llama_cpp / 'convert_hf_to_gguf.py'), str(hf_dir), '--outfile', str(partial),
                             '--outtype', outtype], check=True, env=env)
-            _add_natlang(partial, producer or {}, markers, llama_cpp)
+            identity = identities['float32' if outtype == 'f32' else 'bfloat16']
+            _add_natlang(partial, producer or {}, {**markers, **{f'natlang.identity.{key}': str(value) for key, value in identity.items()}},
+                         llama_cpp)
             partial.replace(target)
             files.append({'outtype': outtype, 'file': target.name, 'bytes': target.stat().st_size,
-                          'sha256': sha256_file_hex(target)})
+                          'sha256': sha256_file_hex(target), 'native_identity': dict(identity)})
     produce_open = int(roles.produce_open)
-    checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
     # Files of other tensor types exported earlier from the same checkpoint stay listed.
     try:
         earlier = json.loads((out_dir / 'manifest.json').read_text())
@@ -136,8 +146,8 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
 
 
 def _add_natlang(path, tensors, metadata, llama_cpp):
-    """Rewrite a converted GGUF with natlang's extra F32 tensors and integer metadata (the producer adapter, the role
-    markers). Every original key and tensor is copied unchanged."""
+    """Rewrite a converted GGUF with natlang's extra F32 tensors and metadata (the producer adapter, the role markers as
+    integers, the native identity as strings). Every original key and tensor is copied unchanged."""
     if str(Path(llama_cpp) / 'gguf-py') not in sys.path:
         sys.path.insert(0, str(Path(llama_cpp) / 'gguf-py'))
     import gguf
@@ -151,7 +161,10 @@ def _add_natlang(path, tensors, metadata, llama_cpp):
         kind = field.types[0]
         writer.add_key_value(field.name, field.contents(), kind, sub_type=field.types[-1] if kind == gguf.GGUFValueType.ARRAY else None)
     for key, value in metadata.items():
-        writer.add_uint32(key, value)
+        if isinstance(value, str):
+            writer.add_string(key, value)
+        else:
+            writer.add_uint32(key, value)
     for tensor in reader.tensors:
         writer.add_tensor_info(tensor.name, tensor.data.shape, tensor.data.dtype, tensor.data.nbytes, tensor.tensor_type)
     for name, value in tensors.items():
