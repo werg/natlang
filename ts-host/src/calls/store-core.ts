@@ -231,7 +231,7 @@ export class CallStore {
       for (const hash of new Set(referenced)) if (blobs.has(hash) || kinds.has(hash)) link.run(record.call_id, hash, 'value');
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
-    if (++this.writes % 200 === 0) this.evict();
+    if (++this.writes % 200 === 0) this.evict(this.bound(), 1024);
   }
 
   /** A row for a call that has started, so running calls show in listings; `record` replaces it when the call ends. */
@@ -356,13 +356,19 @@ export class CallStore {
   /**
    * Bring the store under its bound: first the event streams of unpinned calls, oldest first; then whole unpinned calls.
    * A call is pinned when it is marked so, annotated, or linked to a case. Returns the bytes freed.
+   * A finite work limit bounds inspected blob candidates and processed call rows; repeated passes resume the orphan
+   * cursor. Automatic writes use that mode so a large historical store cannot stall the executing model. Explicit
+   * eviction defaults to completing all eligible work needed for the bound.
    */
-  evict(maxBytes = this.bound()): number {
+  evict(maxBytes = this.bound(), workLimit = Infinity): number {
+    if (workLimit !== Infinity && (!Number.isSafeInteger(workLimit) || workLimit < 2))
+      throw new RangeError('eviction work limit must be an integer of at least 2');
     const before = this.totalBytes();
     if (before <= maxBytes) return 0;
     const target = Math.floor(maxBytes * 0.9);
     const unpinned = `pinned = 0 AND call_id NOT IN (SELECT call_id FROM case_calls)`;
     let total = before;
+    let remaining = workLimit;
     // Batch the write lock and candidate query, but stop after each released row
     // reaches the target. Collect only affected hashes, avoiding global scans.
     const chunkSize = 64;
@@ -380,16 +386,31 @@ export class CallStore {
     // Sweep pre-existing unlinked blobs once, rather than scanning the whole
     // store after every evicted row. Record publication holds the same write lock.
     total -= inWriteBatch(() => {
+      if (remaining !== Infinity) {
+        // LIMIT on matching orphans can still scan millions of referenced
+        // blobs. Page the candidate keys first, then check their references.
+        const cursor = (this.db.prepare("SELECT value FROM meta WHERE key = 'orphan_sweep_cursor'").get() as
+          {value:string} | undefined)?.value ?? '';
+        const size = Math.min(256, Math.floor(remaining / 2));
+        const page = (after: string) => this.db.prepare('SELECT hash FROM blobs WHERE hash > ? ORDER BY hash LIMIT ?')
+          .all(after, size) as {hash:string}[];
+        let rows = page(cursor);
+        if (!rows.length && cursor) rows = page('');
+        remaining -= rows.length;
+        this.db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('orphan_sweep_cursor', ?)")
+          .run(rows.at(-1)?.hash ?? '');
+        return this.collectHashes(rows.map(row => row.hash));
+      }
       const rows = this.db.prepare(`SELECT hash FROM blobs WHERE
         NOT EXISTS (SELECT 1 FROM call_blobs WHERE call_blobs.hash = blobs.hash)
         AND NOT EXISTS (SELECT 1 FROM compilation_files WHERE compilation_files.hash = blobs.hash) LIMIT 10000`)
         .all() as { hash: string }[];
       return this.collectHashes(rows.map(row => row.hash));
     });
-    while (total > target) {
+    while (total > target && remaining > 0) {
       const batch = inWriteBatch(() => {
         const rows = this.db.prepare(`SELECT call_id FROM calls WHERE events_hash IS NOT NULL AND ${unpinned}
-          ORDER BY started_at ASC LIMIT ?`).all(chunkSize) as { call_id: string }[];
+          ORDER BY started_at ASC LIMIT ?`).all(Math.min(chunkSize, remaining)) as { call_id: string }[];
         if (!rows.length) return { count: 0, freed: 0 };
         let freed = 0;
         for (const row of rows) {
@@ -403,12 +424,13 @@ export class CallStore {
         return { count: rows.length, freed };
       });
       if (!batch.count) break;
+      remaining -= batch.count;
       total -= batch.freed;
     }
-    while (total > target) {
+    while (total > target && remaining > 0) {
       const batch = inWriteBatch(() => {
         const rows = this.db.prepare(`SELECT call_id FROM calls WHERE ${unpinned} ORDER BY started_at ASC LIMIT ?`)
-          .all(chunkSize) as { call_id: string }[];
+          .all(Math.min(chunkSize, remaining)) as { call_id: string }[];
         if (!rows.length) return { count: 0, freed: 0 };
         let freed = 0;
         for (const row of rows) {
@@ -421,6 +443,7 @@ export class CallStore {
         return { count: rows.length, freed };
       });
       if (!batch.count) break;
+      remaining -= batch.count;
       total -= batch.freed;
     }
     return before - this.totalBytes();

@@ -255,7 +255,10 @@ export async function tracesCommand(argv: string[]): Promise<number> {
     print(Object.keys(changes).length ? store.writeSettings(changes) : store.settings(), true);
     return 0;
   }
-  if (action === 'evict') { print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined)} bytes`, false); return 0; }
+  if (action === 'evict') {
+    print(`freed ${store.evict(text(args, '--bytes') ? Number(text(args, '--bytes')) : undefined,
+      text(args, '--work-limit') ? Number(text(args, '--work-limit')) : undefined)} bytes`, false); return 0;
+  }
   throw new Error('usage: natlang traces status|hot|list|show|occupancy|tiers|export|pin|unpin|annotate|config|evict');
 }
 

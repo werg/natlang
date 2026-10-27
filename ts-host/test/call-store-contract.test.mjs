@@ -231,6 +231,21 @@ for (const variant of variants) {
     assert.equal(store.value(store.call('orphan/kept').definition.instructions), 'Look up the price.');
   });
 
+  scenario('bounded eviction resumes its orphan scan and preserves protected calls', ({ store }) => {
+    store.writeSettings({minFreeBytes:0});
+    for (let index=0; index<20; index++) put(store, `bounded/${index}`, {n:index});
+    store.pin('bounded/0');
+    store.linkCase('bounded-case', 'bounded/1', 'training');
+    const orphan = store.putBlob('orphan beyond a bounded candidate page');
+    store.evict(0, 4);
+    assert.ok(store.calls({limit:100}).length >= 18, 'one bounded pass cannot delete more than its call budget');
+    for (let pass=0; pass<100; pass++) store.evict(0, 4);
+    assert.deepEqual(store.calls({limit:100}).map(row=>row.call_id).sort(), ['bounded/0','bounded/1']);
+    assert.equal(store.blob(orphan), undefined, 'later passes eventually collect an unlinked blob');
+    assert.ok(store.value(store.call('bounded/0').output));
+    assert.ok(store.value(store.call('bounded/1').output));
+  });
+
   scenario('free space lowers the bound', ({ store }) => {
     store.writeSettings({ maxStoreBytes: 1_000_000, minFreeBytes: 1000 });
     put(store, 'f/1', { padding: 5000 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +13,30 @@ import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const base = { architecture: 'lfm2', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 't', embedding_weight_sha256: 'e'.repeat(64) };
+
+test('an uninitialized host aborts evaluation instead of scoring its roots as model failures', () => {
+  const root = project();
+  try {
+    const descriptor = program(root);
+    const descriptorFile = join(root, 'program-descriptor.json');
+    writeFileSync(descriptorFile, JSON.stringify(descriptor));
+    const code = `
+      import assert from 'node:assert/strict';
+      import { readFileSync } from 'node:fs';
+      import { evaluateRoots } from ${JSON.stringify(new URL('../dist/tune/evaluate.js', import.meta.url).href)};
+      const root = process.argv[1];
+      const program = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+      let requests = 0;
+      await assert.rejects(evaluateRoots({ root, program, driver: async () => { requests++; throw new Error('unexpected model request'); },
+        weights: [], examples: [{ id: 'uninitialized', component: 'world', function: 'outer.nl', input: {value:'alpha'},
+          expected: 'ALPHA', partition: 'development' }], arm: 'missing-host', release: null, partition: 'development' }),
+        error => error.code === 'natlang-platform-unavailable');
+      assert.equal(requests, 0);
+    `;
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code, root, descriptorFile], { encoding:'utf8' });
+    assert.equal(child.status, 0, child.stderr);
+  } finally { rmSync(root, {recursive:true, force:true}); }
+});
 const named = body => `---\nargs: { value: string }\nreturns: string\n---\n${body}\n`;
 const respond = opening => opening.includes('Pass value') ? 'return await inner(value)' : 'return value.toUpperCase()';
 

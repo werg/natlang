@@ -166,6 +166,12 @@ export type TaskOptions = { program?: ProgramDescriptor; adaptation?: Adaptation
 
 let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
 let defaultCallStore: (() => CallStoreLike | undefined) | undefined;
+
+/** Host setup failed before a program could execute; this is not a model task outcome. */
+export class NatlangPlatformUnavailableError extends Error {
+  readonly code = 'natlang-platform-unavailable';
+  constructor() { super('no natlang evaluator is installed for this platform'); this.name = 'NatlangPlatformUnavailableError'; }
+}
 /** Installed by the Node entry point: the machine's call record store. */
 export function setDefaultCallStoreFactory(factory: () => CallStoreLike | undefined): void { defaultCallStore = factory; }
 /** Installed by the Node and browser entry points. */
@@ -359,7 +365,7 @@ export class NatlangTask {
   }
   environment(): EvalEnvironment {
     if (this.runtime.options.environment) return this.runtime.options.environment();
-    if (!defaultEnvironment) throw new Error('no natlang evaluator is installed for this platform');
+    if (!defaultEnvironment) throw new NatlangPlatformUnavailableError();
     return defaultEnvironment(this.runtime.options);
   }
   /** Refinement events with no call to carry them (`refine`/`assume` in host code outside any natlang call). */

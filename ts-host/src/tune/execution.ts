@@ -20,5 +20,6 @@ export async function tuneRuntime(driver: ModelDriver, execution?: TuneExecution
   return { model: tuneModel(driver, execution), ...(neuralese ? { neuralese } : {}) };
 }
 export function rethrowInfrastructureFailure(error: unknown): void {
-  if (error && typeof error === 'object' && (error as { code?: unknown }).code === 'neuralese-unsupported-backend') throw error;
+  if (error && typeof error === 'object' && ['neuralese-unsupported-backend', 'natlang-platform-unavailable']
+    .includes(String((error as { code?: unknown }).code))) throw error;
 }
