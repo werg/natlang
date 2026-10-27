@@ -224,7 +224,12 @@ def test_real_native_graph_append_deduplicates_without_changing_old_history_or_c
     assert config_path.read_bytes() == before_config and plan_path.read_bytes() == before_plan
 
     out = Path(descriptor['output_root'])
+    prior_tree = json.loads(old_tree_path.read_text())
+    appended_tree = json.loads((out / 'native-training-sources.json').read_text())
+    assert appended_tree['sources'][:len(prior_tree['sources'])] == prior_tree['sources']
+    assert all(item['training_priority'] == 1 for item in appended_tree['sources'][len(prior_tree['sources']):])
     next_recipe = load_recipe(out / 'recipe.json')
+    assert next_recipe['stages'][0]['parameters']['urgent_cohort_fairness'] is True
     assert next_recipe['input_bindings']['train']['path'] == str((out / 'native-training-sources.json').resolve())
     assert next_recipe['input_bindings']['held'] == old_recipe['input_bindings']['held']
     assert next_recipe['remaining_production_recipe']['private_teacher_append_history'][0]['append'] == \
@@ -247,6 +252,8 @@ def test_real_native_graph_append_deduplicates_without_changing_old_history_or_c
     assert len(json.loads((out / 'ready-source-census.json').read_text())['records']) == 4
 
     next_config = json.loads((out / 'next-config.json').read_text())
+    assert next_config['trainer_parameters']['urgent_cohort_fairness'] is True
+    assert next_config['seed_trainer_parameters']['urgent_cohort_fairness'] is True
     assert next_config['seed_trainer_parameters']['checkpoint_every'] == 50
     assert next_config['seed_trainer_parameters']['native_attention_precision'] == 'ieee'
     assert ('history_reasoning_policy' in next_config['seed_trainer_parameters']) == (role == 'lfm25')

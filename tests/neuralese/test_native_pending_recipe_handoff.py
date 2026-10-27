@@ -92,6 +92,13 @@ def test_drained_priority_revision_binds_exact_same_sources_and_predecessor(tmp_
     old={**inputs(),'native_graphs':old_train}
     new={**old,'native_graphs':new_train,'continued_native_graphs':old_train}
     assert _priority_only_native_source_continuation(old,new)
+    # Train and foundation share one named binding in production recipes.
+    shared_old={**old,'foundation_native_graphs':old_train}
+    shared_new={**new,'foundation_native_graphs':new_train}
+    assert _priority_only_native_source_continuation(shared_old,shared_new)
+    assert not _priority_only_native_source_continuation(shared_old,{**shared_new,'foundation_native_graphs':old_train})
+    independent={**old,'foundation_native_graphs':inputs()['held_native_graphs']}
+    assert _priority_only_native_source_continuation(independent,{**new,'foundation_native_graphs':independent['foundation_native_graphs']})
     recipe={'stages':[{'id':'full','kind':'native_state_sft','inputs':{
         key:value['binding'] for key,value in old.items()},'parameters':{}}],
         'input_bindings':{value['binding']:{'path':value['path'],'sha256':value['sha256']}
@@ -135,6 +142,29 @@ def test_priority_revision_can_follow_nested_source_manifest_closure(tmp_path):
         'path':new_child['path'],'sha256':new_child['sha256'],'training_priority':0}])
     ineffective={**old,'native_graphs':overridden_train,'continued_native_graphs':old_train}
     assert not _priority_only_native_source_continuation(old,ineffective)
+
+
+def test_priority_revision_resolves_authenticated_staged_source_map(tmp_path):
+    leaf=tmp_path/'staged.jsonl';leaf.write_text('{}\n')
+    original=str(tmp_path/'missing-origin'/'source.jsonl')
+    (tmp_path/'.natlang-source-map.json').write_text(json.dumps({
+        'schema':'natlang.staged-source-map/1','paths':{original:str(leaf)}}))
+    binding={'kind':'native-graphs','path':original,'sha256':sha(leaf)}
+    def reference(name, priority):
+        path=tmp_path/name
+        path.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':[
+            {**binding,'training_priority':priority}]}))
+        return {'path':str(path),'sha256':sha(path),'binding':'train'}
+    before=reference('before.json',0);after=reference('after.json',1)
+    old={**inputs(),'native_graphs':before,'foundation_native_graphs':before}
+    new={**old,'native_graphs':after,'foundation_native_graphs':after,'continued_native_graphs':before}
+    assert _priority_only_native_source_continuation(old,new)
+    other=tmp_path/'other.jsonl';other.write_text('{}\n')
+    (tmp_path/'.natlang-source-map.json').write_text(json.dumps({
+        'schema':'natlang.staged-source-map/1','paths':{original:str(other)}}))
+    # A changed staged mapping is visible to normal source verification; it
+    # does not by itself alter declared priority-only source identities.
+    assert _priority_only_native_source_continuation(old,new)
 
 
 def expanded_active(old, pending):

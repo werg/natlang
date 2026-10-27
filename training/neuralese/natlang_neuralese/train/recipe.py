@@ -901,6 +901,10 @@ def _priority_only_native_source_continuation(old, new):
             or new.get('continued_native_graphs', {}).get('sha256') != old_ref.get('sha256')
             or old.get('held_native_graphs') != new.get('held_native_graphs')):
         return False
+    from ..data.native_source_tree import _staged_path
+    def child_path(parent, reference):
+        path = _staged_path(parent, reference)
+        return path if path.is_absolute() else parent.parent / path
     def manifest(reference):
         if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
             return None
@@ -941,10 +945,8 @@ def _priority_only_native_source_continuation(old, new):
             priority_changed = current_priority != prior_priority
             if priority_changed:
                 any_changed = True
-            old_child_path = Path(prior['path'])
-            if not old_child_path.is_absolute(): old_child_path = old_path.parent / old_child_path
-            new_child_path = Path(current['path'])
-            if not new_child_path.is_absolute(): new_child_path = new_path.parent / new_child_path
+            old_child_path = child_path(old_path, prior['path'])
+            new_child_path = child_path(new_path, current['path'])
             identity_fields = {key:value for key,value in prior.items()
                                if key not in {'training_priority', 'path', 'sha256'}}
             current_fields = {key:value for key,value in current.items()
@@ -978,8 +980,7 @@ def _priority_only_native_source_continuation(old, new):
         ancestry=ancestry|{path}
         result={}
         for source in value['sources']:
-            source_path=Path(source['path'])
-            if not source_path.is_absolute(): source_path=path.parent/source_path
+            source_path=child_path(path, source['path'])
             child=manifest({'path':str(source_path),'sha256':source.get('sha256'),'binding':'nested'})
             if child is not None:
                 leaves=effective_leaves(child[0],child[1],ancestry)
@@ -1000,8 +1001,15 @@ def _priority_only_native_source_continuation(old, new):
             or any(new_priorities[key] < priority for key,priority in old_priorities.items())
             or not any(new_priorities[key] > priority for key,priority in old_priorities.items())):
         return False
-    return {key: value for key, value in old.items() if key not in {'native_graphs', 'continued_native_graphs'}} == {
-        key: value for key, value in new.items() if key not in {'native_graphs', 'continued_native_graphs'}}
+    ignored = {'native_graphs', 'continued_native_graphs'}
+    # Roles wired to the same named input move together; an independently
+    # declared foundation remains exactly unchanged.
+    if old.get('foundation_native_graphs') == old_ref:
+        if new.get('foundation_native_graphs') != new_ref:
+            return False
+        ignored.add('foundation_native_graphs')
+    return {key: value for key, value in old.items() if key not in ignored} == {
+        key: value for key, value in new.items() if key not in ignored}
 
 
 def _pending_source_continuation(old, new):

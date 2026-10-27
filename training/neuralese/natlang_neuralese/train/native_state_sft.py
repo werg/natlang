@@ -1420,9 +1420,12 @@ def _main(argv=None, *, requested_refresh):
         if entry.get('producer_consumer', entry.get('communication', False))]
     checkpoint_options['_external_state_consumption_ids'] = [entry['id'] for entry in train.entries
         if entry.get('external_state_consumption')]
-    foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint,
-                                           required_split='train', role_ids=roles.ids)
-                         if args.foundation_native_graphs else train)
+    foundation_source = train
+    if args.foundation_native_graphs:
+        from .native_source_reuse import matching_validated_source
+        foundation_source = (matching_validated_source(train, args.foundation_native_graphs, fingerprint,
+            required_split='train', role_ids=roles.ids) or NativeGraphSource(args.foundation_native_graphs, fingerprint,
+            required_split='train', role_ids=roles.ids))
     # Persist the exact inputs that are actively consumed by this stage. These
     # bindings are part of checkpoint metadata even when the run makes no
     # optimizer update, so provider recovery can reconstruct its full closure.

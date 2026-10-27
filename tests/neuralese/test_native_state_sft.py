@@ -161,6 +161,40 @@ def test_native_graph_source_validates_then_streams_without_retaining_plans(tmp_
     assert all('plan' not in entry for entry in source.entries)
 
 
+def test_foundation_source_reuses_only_current_exact_validated_tree(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    from natlang_neuralese.train.native_source_reuse import matching_validated_source
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    leaf = tmp_path / 'train.jsonl'
+    leaf.write_text(json.dumps(graph('a')) + '\n')
+    manifest = tmp_path / 'sources.json'
+    manifest.write_text(json.dumps({'schema':'natlang.native-graph-sources/1', 'sources':[
+        {'kind':'native-graphs','path':str(leaf),'sha256':hashlib.sha256(leaf.read_bytes()).hexdigest()}]}))
+    roles = (10, 11, 12, 13)
+    source = NativeGraphSource(manifest, 'tokenizer-sha', required_split='train', role_ids=roles)
+    assert matching_validated_source(source, manifest, 'tokenizer-sha', required_split='train', role_ids=roles) is source
+    assert matching_validated_source(source, manifest, 'other', required_split='train', role_ids=roles) is None
+    assert matching_validated_source(source, manifest, 'tokenizer-sha', required_split='test', role_ids=roles) is None
+    assert matching_validated_source(source, manifest, 'tokenizer-sha', required_split='train', role_ids=(1,2,3,4)) is None
+    assert matching_validated_source(source, leaf, 'tokenizer-sha', required_split='train', role_ids=roles) is None
+    alias = tmp_path / 'alias.json'
+    alias.symlink_to(manifest)
+    assert matching_validated_source(source, alias, 'tokenizer-sha', required_split='train', role_ids=roles) is None
+    # A resident append replaces the active object; the fixed foundation keeps its original cohort.
+    appended = tmp_path / 'appended.jsonl'
+    appended.write_text(leaf.read_text() + json.dumps(graph('b')) + '\n')
+    train = NativeGraphSource(appended, 'tokenizer-sha', required_split='train', role_ids=roles)
+    assert train.ordered_ids() == ['a', 'b'] and source.ordered_ids() == ['a']
+    staging = tmp_path / '.natlang-source-map.json'
+    staging.write_text(json.dumps({'schema':'natlang.staged-source-map/1','paths':{str(leaf):str(appended)}}))
+    assert matching_validated_source(source, manifest, 'tokenizer-sha', required_split='train', role_ids=roles) is None
+    staging.unlink()
+    leaf.write_text(json.dumps(graph('changed')) + '\n')
+    with pytest.raises(ValueError, match='source changed'):
+        matching_validated_source(source, manifest, 'tokenizer-sha', required_split='train', role_ids=roles)
+
+
 def test_native_graph_index_reuses_validation_and_rebuilds_on_corruption_or_new_source(tmp_path, monkeypatch):
     import json
     import pickle

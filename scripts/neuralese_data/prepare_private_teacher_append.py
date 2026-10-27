@@ -27,6 +27,9 @@ CENSUS_SCHEMA = 'natlang.private-ready-source-census/1'
 ROW_SELECTION_SCHEMA = 'natlang.exact-native-row-selection/1'
 SOURCE_EQUALITY_SCHEMA = 'natlang.exact-native-source-equality/1'
 SUPPORTED_MODEL_ROLES = frozenset({'lfm25', 'mellum21'})
+# New, independently verified teacher rows enter the existing urgent/debt
+# scheduler; this is scheduling metadata, not an exposure credit.
+NEW_TEACHER_TRAINING_PRIORITY = 1
 
 
 def _file_binding(path: Path) -> dict:
@@ -721,7 +724,8 @@ def prepare(descriptor: dict) -> dict:
         index_additions.extend(resident._source_witness(selected_source, runtime_root / 'training' / 'neuralese' / 'natlang_neuralese'))
         selected_binding = _file_binding(selected_path)
         appended_descriptors.append({'path': selected_binding['path'], 'sha256': selected_binding['sha256'],
-            'kind': 'native-graphs', 'epochs': 1, 'weight': 1.0})
+            'kind': 'native-graphs', 'epochs': 1, 'weight': 1.0,
+            'training_priority': NEW_TEACHER_TRAINING_PRIORITY})
         prepared_sources.append({'corpus_id': corpus_id, 'ready': ready_binding,
             'source': selected_binding, 'original_source': original_source_binding,
             'manifest': manifest_binding, 'role_receipt': role_binding,
@@ -834,6 +838,9 @@ def prepare(descriptor: dict) -> dict:
     # The held role remains its original exact named binding and bytes.
     next_stage = next(item for item in next_recipe['stages'] if item['id'] == descriptor['stage_id'])
     next_stage['parameters']['memory_qualification'] = output_memory_refs if is_memory_list else output_memory_refs[0]
+    if 'urgent_cohort_fairness' not in recipe_api.HANDLERS[next_stage['kind']]['parameters']:
+        raise ValueError('teacher-source priority requires the existing urgent cohort fairness trainer')
+    next_stage['parameters']['urgent_cohort_fairness'] = True
     remaining_recipe = next_recipe.setdefault('remaining_production_recipe', {})
     history = remaining_recipe.setdefault('private_teacher_append_history', [])
     prior_appends = [(key, value) for key, value in remaining_recipe.items()
@@ -886,12 +893,14 @@ def prepare(descriptor: dict) -> dict:
         raise ValueError('active config has no exact preserved recipe lineage')
     next_config['recipe_lineage_sha256'] = lineage
     recipe_binding = recipe_api.native_recipe_binding(next_recipe_path, lineage)
-    next_config['trainer_parameters'] = {**next_config.get('trainer_parameters', {}), 'recipe_binding': recipe_binding}
+    next_config['trainer_parameters'] = {**next_config.get('trainer_parameters', {}), 'recipe_binding': recipe_binding,
+        'urgent_cohort_fairness': True}
     seed_parameters = dict(parameters)
     seed_parameters.update(next_config.get('seed_trainer_parameters', {}))
     seed_parameters['stage_id'] = descriptor['stage_id']
     seed_parameters['recipe_binding'] = recipe_binding
     seed_parameters['memory_qualification'] = next_stage['parameters']['memory_qualification']
+    seed_parameters['urgent_cohort_fairness'] = True
     next_config['seed_trainer_parameters'] = seed_parameters
     seed_sources = _seed_source_bindings(rebound, train=_json_binding(new_tree_path),
         held=held_binding, ce=_json_binding(ce_path))
