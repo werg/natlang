@@ -304,6 +304,11 @@ export function dialectBinding(options: NeuraleseRuntimeOptions | undefined): Di
 export const supportsNeuralese = (driver: unknown): boolean =>
   typeof driver === 'function' && (driver as { neuralese?: unknown }).neuralese === true;
 
+/** A model driver whose backend applies guided generation (the `guidance` request field): natlang's servers. The managed
+ * llama.cpp fork marks itself with `guidance: true`; Neuralese transports are natlang's servers too. */
+export const supportsGuidance = (driver: unknown): boolean =>
+  supportsNeuralese(driver) || (typeof driver === 'function' && (driver as { guidance?: unknown }).guidance === true);
+
 /**
  * Request messages with sentinels turned into content parts: message `content`, and each tool call's `arguments`,
  * become part arrays where they hold blocks. Messages without blocks are unchanged.

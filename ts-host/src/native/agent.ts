@@ -36,7 +36,7 @@ async function pinNativeProgramGuidance(store: NeuraleseStore, id: string): Prom
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
-import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+import { decodeTurnValue, encodeMessages, isContentParts, isNativeAdapterRef, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, nativeStateSentinel, NeuraleseUnsupportedError, supportsGuidance, supportsNeuralese,
   nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import type { NativeStateArtifact, NeuraleseStore } from './neuralese-store.js';
 import { blockInput, graphNode, hasProducerOccurrence, invocationNodeId, producerOccurrences, producerScopeForTrace } from './graph.js';
@@ -1446,7 +1446,7 @@ export class NativeToolAgent {
         const turnRequest: ModelTurnRequest = { ...(callId ? { invocation_id: callId } : {}), ...(adapters.length ? { adapters } : {}),
           ...(session.executionOccurrence() ? { native_execution_occurrence: session.executionOccurrence() } : {}),
           ...(template ? { template } : {}),
-          ...(this.options.guidance && supportsNeuralese(this.driver) ? { guidance: this.options.guidance } : {}),
+          ...(this.options.guidance && supportsGuidance(this.driver) ? { guidance: this.options.guidance } : {}),
           messages: encoded.messages, tools: this.options.promptRendering === 'program-header' ? [] : availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools && this.options.promptRendering !== 'program-header' ? { tool_choice: 'required' as const } : {}),

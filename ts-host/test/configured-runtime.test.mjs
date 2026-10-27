@@ -85,3 +85,12 @@ test('a root call the student fails and the teacher runs adds its input to the p
     assert.equal(readFileSync(join(directory, 'tune.examples.jsonl'), 'utf8').trim().split('\n').length, 1);
   } finally { rmSync(directory, { recursive: true, force: true }); await student.close(); await teacher.close(); }
 });
+
+test('guided generation is on for natlang backends unless the profile says otherwise', async () => {
+  const { runtimeModel } = await import('../dist/configured-runtime.js');
+  const ours = Object.assign(async () => ({}), { guidance: true }), other = async () => ({});
+  assert.equal((await runtimeModel({ kind: 'managed-local', model: 'm' }, ours)).model.guidance, true);
+  assert.equal((await runtimeModel({ kind: 'managed-local', model: 'm', runtime: { guidance: false } }, ours)).model.guidance, false);
+  assert.deepEqual((await runtimeModel({ kind: 'managed-local', model: 'm', runtime: { guidance: { repeat: 3 } } }, ours)).model.guidance, { repeat: 3 });
+  assert.equal('guidance' in (await runtimeModel({ kind: 'external', endpoint: 'http://x', model: 'm', apiKeyEnv: 'K' }, other)).model, false);
+});

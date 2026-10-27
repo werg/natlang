@@ -131,6 +131,15 @@ from its longest stored prefix. The resumed computation is bitwise the one a fre
 it is opt-in for servers whose numerics are bound elsewhere (training actors, RL rollouts). `/metrics` reports hits
 and reused tokens. llama.cpp keeps its own per-slot prompt cache.
 
+## Guided generation
+
+On natlang's own backends (the native server and the managed llama.cpp fork) `natlang run` and `natlangRuntime()`
+turn on guided generation: tool-call names are constrained to the offered tools, and eval code is checked line by
+line for repetition, redeclaration and TypeScript syntax, with rollback and retry. A profile's
+`"runtime": { "guidance": false }` turns it off, and an object (`{ "repeat": 3, "retries": 2 }`) tunes it. Other
+backends ignore the field. Runtimes built directly with `createNatlangRuntime` (evaluators, training actors) keep their
+own explicit setting.
+
 ## When the student fails: escalation
 
 ```json

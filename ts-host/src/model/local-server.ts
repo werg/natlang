@@ -32,6 +32,9 @@ export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   nativeArtifacts?(): import('./neuralese-server.js').HttpNeuraleseStore | undefined;
   /** Requests carry native content parts (native-state imports); wrappers must keep this marker. */
   readonly neuralese?: boolean;
+  /** The backend is one of natlang's servers (the native server or the managed llama.cpp fork): it applies guided
+   * generation (the `guidance` request field). */
+  readonly guidance?: boolean;
   neuraleseRuntime?(): Promise<import('../native/neuralese.js').NeuraleseRuntimeOptions | undefined>;
   vllmStacks?(names: Iterable<string>): void;
   /** One turn; `options` carry the driver's turn options (`onDelta`) and, for a Pi provider backend, `onProgress`. */
@@ -353,6 +356,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
     /** The native reference server's artifact store (uploads of tuned artifacts and states), when this is one. */
     nativeArtifacts() { return external?.neuraleseServer ? nativeDriver().artifacts : undefined; },
     neuralese: !!external?.neuraleseServer,
+    guidance: !!external?.neuraleseServer || choice.kind === 'managed-local',
     async neuraleseRuntime() {
       if (!external?.neuraleseServer) return undefined;
       await start(); return nativeDriver().neuraleseRuntime();

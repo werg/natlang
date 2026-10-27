@@ -31,6 +31,7 @@ import { createNatlangRuntime, type InvocationTrace, type ModelDriver, type Natl
 import { llamaServesRelease, tunedServing, type TunedServing } from './tuned-serving.js';
 import { machineStoreRoot, openCallStore, type CallStore } from './calls/store.js';
 import { recordEscalation } from './calls/feedback.js';
+import { supportsGuidance } from './native/neuralese.js';
 
 export type NatlangRuntimeConfiguration = {
   /** Model selection: a profile name, or a Pi provider / model override (as `--profile`, `--provider`, `--model`). */
@@ -139,6 +140,7 @@ export async function bindTunedModel(selected: LoadedModelConfiguration, program
 export function sessionDriver(session: ManagedModelSession): ModelDriver {
   return Object.assign((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => session.turn(request, signal, options),
     { decide: (request: DecisionRequest, signal?: AbortSignal) => session.decide(request, signal), contextWindow: () => session.contextWindow(),
+      ...(session.guidance ? { guidance: true as const } : {}),
       ...(session.neuralese ? { neuralese: true as const, neuraleseRuntime: () => session.neuraleseRuntime!() } : {}) });
 }
 
@@ -146,7 +148,10 @@ export function sessionDriver(session: ManagedModelSession): ModelDriver {
 export async function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Promise<Pick<NatlangRuntimeOptions, 'model' | 'seed' | 'neuralese'>> {
   const { seed, ...settings } = choice.runtime ?? {};
   const neuralese = await driver.neuraleseRuntime?.();
-  return { ...(neuralese ? { neuralese } : {}), model: { ...settings, promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
+  // Guided generation is on wherever the backend applies it, unless the profile's runtime settings say otherwise.
+  const guidance = settings.guidance ?? (supportsGuidance(driver) || undefined);
+  return { ...(neuralese ? { neuralese } : {}), model: { ...settings, ...(guidance !== undefined ? { guidance } : {}),
+    promptRendering: choice.promptRendering ?? 'full', driver }, ...(seed ? { seed } : {}) };
 }
 
 /**

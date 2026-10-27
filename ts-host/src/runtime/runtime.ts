@@ -41,7 +41,8 @@ export type ModelConfig = { driver: ModelDriver;
    * replies; `declared` (default): only functions whose frontmatter says `readout: decision`. */
   decisionReadout?: 'declared' | 'finite-returns';
   /** Guided generation (the `guidance` request field) on natlang's reference server and the llama.cpp fork (managed and in
-   * the page); off by default. Other backends ignore the field. */
+   * the page). A configured runtime (`natlang run`, natlangRuntime()) turns it on for those backends unless the profile's
+   * `runtime.guidance` says otherwise; set directly, it is off unless given. Other backends ignore the field. */
   guidance?: boolean | { repeat?: number; syntax?: boolean; retries?: number; tools?: string[] };
   review?: NativeReviewOptions };
 
