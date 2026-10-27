@@ -161,7 +161,7 @@ promoted by evidence; a case that fails hands the call back to the function.`;
   natlang packages [--store DIR] [--json]`;
   if (topic === 'runtime' || topic === 'setup') return `Model runtime commands:
   natlang setup [--profile NAME] [--provider ID] [--model ID] [--yes] [--json]
-  natlang setup --native SOURCE [--profile NAME] [--gguf q8_0|bf16|f32] [--default] [--device D] [--port N] [--json]
+  natlang setup --native SOURCE [--profile NAME] [--gguf q8_0|bf16|f32] [--escalate PROFILE|none] [--default] [--device D] [--port N] [--json]
   natlang setup --program DIR [--json]
   natlang serve [--profile NAME]
   natlang runtime status [--json]
@@ -182,7 +182,8 @@ name: the source name, else "native") starts the native server on its first
 model call and stops it with the command; natlang serve keeps it running so
 later commands start at once. --gguf also exports the weights for the managed
 llama.cpp backend as profile NAME-gguf: faster, ordinary tokens only (the
-Neuralese producer runs on the native server). Rerun setup to move to a newer checkpoint; runs
+Neuralese producer runs on the native server). --escalate PROFILE sets the teacher both profiles
+rerun failed calls on (none removes it). Rerun setup to move to a newer checkpoint; runs
 say when the source has one, and an existing NAME-gguf profile is exported again for it. The
 server loads the pin's compact actor view (prepared once at setup: the actor weights without
 optimizer state), a fraction of the full checkpoint's startup time and memory. A tuned program always runs on the checkpoint
@@ -351,7 +352,15 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
   const native: NativeModelSettings = { ...defaultNativePython(), ...previous, checkpoint: pin.checkpoint, sha256: pin.sha256, sourceSha256: pin.sourceSha256,
     source: named ? source : resolve(source), ...(pointer.step !== undefined ? { step: pointer.step } : { step: undefined }), actorView: pin.actorView,
     ...(device ? { device } : {}), ...(port ? { port: Number(port) } : {}) };
-  config.profiles = { ...config.profiles, [name]: { ...existing, native } };
+  // --escalate PROFILE (or none): the teacher both profiles rerun failed calls on; kept from earlier setups otherwise.
+  const escalate = escalateOption(parsed);
+  if (typeof escalate === 'string' && !config.profiles?.[escalate]) throw new Error(`--escalate names no profile ${escalate}`);
+  const withEscalation = <T extends { escalate?: string }>(profile: T): T => {
+    if (escalate === undefined) return profile;
+    const { escalate: _previous, ...rest } = profile;
+    return (escalate === false ? rest : { ...rest, escalate }) as T;
+  };
+  config.profiles = { ...config.profiles, [name]: withEscalation({ ...existing, native }) };
   // --gguf: the same weights as a GGUF for the managed llama.cpp backend (faster; ordinary tokens only).
   // A refresh keeps an existing GGUF sibling current (its export goes with the superseded pin).
   const ggufName = `${name}-gguf`;
@@ -361,11 +370,11 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
     const previousGguf = config.profiles[ggufName] ?? {};
     if (previousGguf.endpoint || previousGguf.provider || previousGguf.native)
       throw new Error(`profile ${ggufName} is not a GGUF profile; rename it first`);
-    config.profiles[ggufName] = { ...previousGguf,
+    config.profiles[ggufName] = withEscalation({ ...previousGguf,
       local: { contextTokens: 16384, ...previousGguf.local, modelPath: gguf.modelPath, template: gguf.template,
         modelId: `native-gguf-${pin.sha256.slice(0, 12)}-${outtype}` },
       // The native server decodes greedily unless asked otherwise; llama-server would sample at 0.8.
-      request: { temperature: 0, ...previousGguf.request, chat_template_kwargs: gguf.templateKwargs, logit_bias: gguf.logitBias } };
+      request: { temperature: 0, ...previousGguf.request, chat_template_kwargs: gguf.templateKwargs, logit_bias: gguf.logitBias } });
   }
   if (parsed.options.has('--default')) config.defaultProfile = gguf ? ggufName : name;
   mkdirSync(dirname(configPath), { recursive: true });
@@ -914,7 +923,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return setupProgram(parsed, option(parsed, '--program')!);
   }
   if (command === 'setup' && option(parsed, '--native')) {
-    acceptOptions(parsed, ['--native', '--profile', '--default', '--device', '--port', '--gguf', '--json']); noTrailingArguments(parsed);
+    acceptOptions(parsed, ['--native', '--profile', '--default', '--device', '--port', '--gguf', '--escalate', '--json']); noTrailingArguments(parsed);
     return setupNative(parsed, option(parsed, '--native')!);
   }
   if (command === 'setup' || command === 'runtime') {
