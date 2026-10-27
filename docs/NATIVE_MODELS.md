@@ -207,6 +207,16 @@ non-native backend (`--profile`, `--provider`, `NATLANG_SERVER`) is kept and run
 and `--no-weights` runs the selected model untuned for comparison. A release whose base is nowhere available runs
 untuned, with a notice naming the missing checkpoint.
 
+On llama.cpp: when the native profile has a GGUF sibling (`setup --native --gguf`), tuning also exports every adapter
+as a GGUF LoRA converted against that export (its manifest's `hf_config`), and a tuned program run on the GGUF profile
+stays on llama.cpp, loading the release's LoRA per request (`--lora-per-sequence`), instead of moving to the native
+server. That holds only when every adapter (and soft state, which needs the fork's `--native-state`) was exported for
+exactly the profile's GGUF file; otherwise the program moves to its native base as above. Checked on the step-40658
+checkpoint with random LoRA factors on an attention, a conv-projection and an MLP target: native execution and
+llama.cpp on the f32 export gave the same greedy tokens with and without the adapter (top-token probabilities within
+0.011), and the adapter changed the output. The Neuralese producer is not represented in GGUF: programs that produce
+native state need the native server.
+
 Tuned turns cost about the same as untuned ones: forward-only adapted execution builds each adapter stack's effective
 weights once and reuses them for every token and call (`model/native_adapters.py` `InferenceReplacementCache`,
 bitwise the uncached actor). Rebuilding them per token had made LFM decode 35x slower (2.5 s instead of 72 ms per
