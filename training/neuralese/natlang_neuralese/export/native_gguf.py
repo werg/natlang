@@ -61,6 +61,12 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
     if config['architecture'] not in ('lfm2', 'lfm2_moe', 'qwen3', 'qwen2'):
         raise ValueError(f"GGUF export supports HF backbones only, not {config['architecture']!r}")
     hf, tied = merged_backbone(model)
+    # The producer adapter (inside producing spans, e + up(down(e))) as GGUF tensors the llama.cpp fork applies.
+    adapter = getattr(model, 'adapter', None)
+    producer = None if adapter is None else {
+        'natlang_producer_down.weight': adapter.down.weight.detach().float().cpu().numpy().copy(),
+        'natlang_producer_up.weight': adapter.up.weight.detach().float().cpu().numpy().copy()}
+    markers = {f'natlang.{name}': int(getattr(roles, name)) for name in ('produce_open', 'produce_close', 'consume_open', 'consume_close')}
     reasoning = dict(getattr(tokenizer, 'natlang_history_reasoning', {}) or {})
     template = tokenizer.chat_template
     if not isinstance(template, str):
@@ -92,6 +98,7 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
             partial = target.with_suffix('.gguf.partial')
             subprocess.run([python, str(llama_cpp / 'convert_hf_to_gguf.py'), str(hf_dir), '--outfile', str(partial),
                             '--outtype', outtype], check=True, env=env)
+            _add_natlang(partial, producer or {}, markers, llama_cpp)
             partial.replace(target)
             files.append({'outtype': outtype, 'file': target.name, 'bytes': target.stat().st_size,
                           'sha256': sha256_file_hex(target)})
@@ -112,7 +119,10 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
         'architecture': config['architecture'], 'tokenizer_fingerprint': config.get('tokenizer_fingerprint'),
         'merged_rows': {'marker_ids': list(config['marker_ids']), 'token_override_ids': list(config.get('token_override_ids', [])),
                         'tied': tied},
-        'not_represented': {'producer_adapter': 'low-rank residual inside producing spans; native server only'},
+        # The producer adapter is in the GGUF (natlang_producer_down/up); state capture and the native-state protocol
+        # are llama-server's (the fork's native state production).
+        'producer_adapter': producer is not None,
+        'role_markers': markers,
         'serving': {'chat_template': 'chat-template.jinja', 'chat_template_sha256': sha256_file_hex(out_dir / 'chat-template.jinja'),
                     'chat_template_kwargs': kwargs, 'history_reasoning': reasoning.get('policy'),
                     # The producer marker would start a span whose adapter llama.cpp does not apply.
@@ -123,6 +133,39 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
     }
     (out_dir / 'manifest.json').write_text(json.dumps(manifest, indent=1) + '\n')
     return manifest
+
+
+def _add_natlang(path, tensors, metadata, llama_cpp):
+    """Rewrite a converted GGUF with natlang's extra F32 tensors and integer metadata (the producer adapter, the role
+    markers). Every original key and tensor is copied unchanged."""
+    if str(Path(llama_cpp) / 'gguf-py') not in sys.path:
+        sys.path.insert(0, str(Path(llama_cpp) / 'gguf-py'))
+    import gguf
+    reader = gguf.GGUFReader(str(path))
+    architecture = reader.fields[gguf.Keys.General.ARCHITECTURE].contents()
+    rewritten = Path(str(path) + '.natlang')
+    writer = gguf.GGUFWriter(str(rewritten), architecture)
+    for field in reader.fields.values():
+        if field.name == gguf.Keys.General.ARCHITECTURE or field.name.startswith('GGUF.') or field.name in metadata:
+            continue
+        kind = field.types[0]
+        writer.add_key_value(field.name, field.contents(), kind, sub_type=field.types[-1] if kind == gguf.GGUFValueType.ARRAY else None)
+    for key, value in metadata.items():
+        writer.add_uint32(key, value)
+    for tensor in reader.tensors:
+        writer.add_tensor_info(tensor.name, tensor.data.shape, tensor.data.dtype, tensor.data.nbytes, tensor.tensor_type)
+    for name, value in tensors.items():
+        writer.add_tensor_info(name, value.shape, value.dtype, value.nbytes, gguf.GGMLQuantizationType.F32)
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_ti_data_to_file()
+    for tensor in reader.tensors:
+        writer.write_tensor_data(tensor.data)
+    for value in tensors.values():
+        writer.write_tensor_data(value)
+    writer.close()
+    del reader
+    os.replace(rewritten, path)
 
 
 def _replication(llama_cpp):
