@@ -92,6 +92,12 @@ never training-data generation. New training data must continue to come from our
 self-hosted teacher in the CoreWeave generation sandbox. These instructions
 supersede earlier requests for parallel non-Luna implementation agents.
 
+Owner update (2026-10-27): GPT-6.1 Terra is also authorized for more demanding
+engineering work. Luna remains available. Keep supervision and operations in
+the primary strand, delegate concrete bounded work sparingly, and independently
+review and integrate helpers' changes. This expands engineering model choice;
+it does not change the separate generation authorization or teacher provenance.
+
 ## Core memetic learning and legacy removal (owner, 2026-10-23)
 
 Memetic learning and soft skills are a core training and user capability. Learn
@@ -510,6 +516,14 @@ comprehensive training on the entire evolving production recipe.
   behavior, update mechanism identities, and test after the complete loader has
   run. A passing default-module test does not prove that the production
   controller executes the fix. This applies to both model lines.
+- **Rebind capacity declarations after runtime changes** (engineering finding,
+  2026-10-27). Even a checkpoint-control-only backport changes the exact Python
+  inventory. Update the affected recipe and seed memory requests to the actual
+  runtime while retaining source, objective, geometry and reference checks; let
+  the real restored entry perform qualification before updates. Retain failed
+  operation records and reserve an unused operation namespace when continuing
+  from the latest earned full state. Do not silently skip comprehensive SFT
+  because a resolved failure remains memoized under an unchanged signature.
 - **Keep recovered work ahead of historical operations.** Restarting the full
   mandatory schedule after an external optimizer continuation must reserve an
   unused operation namespace in the same lineage. Never let a completed bridge
