@@ -2,6 +2,7 @@
 distillation through generated states and composed adapters, exact cotangent replay, resume."""
 import dataclasses
 import json
+import pytest
 
 import torch
 
@@ -37,9 +38,16 @@ def soft_rows(engine, state, count):
     return rows
 
 
-def setup(tmp_path):
-    engine = engine_fixture(tmp_path, 'lfm')
-    bank = _bank(engine)
+def setup(tmp_path, family='lfm'):
+    engine = engine_fixture(tmp_path, family)
+    if family == 'lfm':
+        bank = _bank(engine)
+    else:
+        from natlang_neuralese.model.native_adapters import target_parameters
+        from natlang_neuralese.tune.targets import module_map
+        from natlang_neuralese.tune.learned.bank import new_bank, weight_svd_basis
+        names, _ = module_map(sorted(target_parameters(engine.shared_model)))
+        bank = new_bank(engine, weight_svd_basis(engine, sorted(names)[:6], 4), N.NumberFormat(.5))
     components = []
     for seed in (1, 2, 3):
         component = _component(bank, seed)
@@ -130,3 +138,29 @@ def test_proposal_replays_at_ratio_one_and_joint_ratio_updates(tmp_path):
     policy = result['targets'][0]['policy']
     assert abs(policy['optimizerLogRatio']) < 1e-4 and abs(policy['executorLogRatio']) < 1e-3
     assert not policy['clipped'] and result['updated'].get('writer')
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_bank_and_optimizer_resume_matches_uninterrupted_updates(tmp_path, family):
+    from natlang_neuralese.tune.learned.trainer import _bank_tensor_map
+    engine, bank, target = setup(tmp_path, family)
+    recipe = OuterRecipe(steps=3, batch_targets=1, train_keys=False, train_bank=True, train_basis=True,
+        publish_every=99, writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.},
+        bank_optimizer={'learning_rate': .001, 'weight_decay': 0.})
+    trainer = OuterTrainer(engine, bank, GRID, recipe, [target])
+    initial = {k: v.detach().clone() for k, v in _bank_tensor_map(trainer.bank_leaves).items()}
+    trainer.step()
+    saved = json.loads(json.dumps(trainer.state))
+    assert saved['bank_tensors'] and saved['bank_optimizer']
+    assert any(not torch.equal(initial[k], v) for k, v in _bank_tensor_map(trainer.bank_leaves).items())
+    trainer.step()
+    expected = {k: v.detach().clone() for k, v in _bank_tensor_map(trainer.bank_leaves).items()}
+    resumed = OuterTrainer(engine, bank, GRID, recipe, [target], state=saved)
+    resumed.step()
+    for name, tensor in _bank_tensor_map(resumed.bank_leaves).items():
+        torch.testing.assert_close(tensor, expected[name], rtol=0, atol=0)
+    assert resumed.state['bank_optimizer'] == trainer.state['bank_optimizer']
+    assert resumed.state['writer'] == trainer.state['writer']
+    assert resumed.state['head'] == trainer.state['head']
+    assert resumed.state['exposure'] == trainer.state['exposure']
+    engine.store.close()

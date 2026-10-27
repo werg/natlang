@@ -44,7 +44,13 @@ def test_publication_reexpresses_components_without_changing_updates(tmp_path, f
     assert published.parent == bank.snapshot
     assert published.history[-1]['parent'] == bank.snapshot
     assert trainer.state['labels_stale'] is True
+    from natlang_neuralese.tune.learned import LearnedOptimizerError
+    with pytest.raises(LearnedOptimizerError, match='refitted labels'):
+        trainer.step()
     assert trainer.state['published'] == [published.snapshot]
+    from natlang_neuralese.tune.learned.bank import load_bank
+    restored = load_bank(engine, trainer.state['published_banks'][0])
+    assert restored.snapshot == published.snapshot
     for key, value in trainer.bank_leaves['basis'].items():
         torch.testing.assert_close(value, before[key], rtol=0, atol=0)
     for index, component in enumerate(published.components):

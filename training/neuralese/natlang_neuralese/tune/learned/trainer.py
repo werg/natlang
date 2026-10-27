@@ -94,7 +94,13 @@ class OuterTrainer:
         self.state = state or self._initial_state()
         if self.state['schema'] != STATE_SCHEMA or self.state['bank'] != bank.snapshot:
             raise LearnedOptimizerError('trainer state belongs to another bank snapshot or schema')
+        previous_recipe = self.state.get('recipe', {})
+        for key in ('train_bank', 'train_basis'):
+            if previous_recipe.get(key, False) != getattr(recipe, key):
+                raise LearnedOptimizerError(f'resuming with a changed {key} requires an explicit optimizer transition')
         self._restore()
+        if self.state.get('rng') is not None:
+            _restore_rng(self.state['rng'])
 
     # -- state ---------------------------------------------------------------------------------------------------
     def _initial_state(self):
@@ -108,7 +114,7 @@ class OuterTrainer:
                 'writer': writer.id, 'writer_optimizer': None, 'writer_history': [writer.id],
                 'head': None, 'head_optimizer': None, 'keys': {c.id: c.key for c in self.bank.components},
                 'key_optimizers': {}, 'bank_tensors': None, 'bank_optimizer': None, 'labels_stale': False,
-                'exposure': {}, 'losses': [], 'recipe': self.recipe.as_json()}
+                'exposure': {}, 'losses': [], 'recipe': self.recipe.as_json(), 'rng': _capture_rng()}
 
     def _restore(self):
         store = self.engine.store
@@ -122,6 +128,10 @@ class OuterTrainer:
         self.bank_leaves = None
         if self.recipe.train_bank or self.recipe.train_basis:
             self.bank_leaves = _bank_leaves(self.bank, self.recipe)
+            if self.state.get('bank_tensors'):
+                _restore_bank_leaves(self.engine, self.bank, self.bank_leaves, self.state['bank_tensors'], self.state['step'])
+            elif self.state.get('bank_optimizer'):
+                raise LearnedOptimizerError('bank optimizer history has no saved parameter snapshot; exact resume is unavailable')
             params = [v for v in self.bank_leaves['factors'].values() for v in v] + list(self.bank_leaves['basis'].values())
             self.bank_optimizer = torch.optim.AdamW([p for p in params if p.requires_grad],
                                                     lr=self.recipe.bank_optimizer['learning_rate'],
@@ -168,6 +178,8 @@ class OuterTrainer:
     def step(self):
         from ...model.native_adapters import run_native
         from ...serve.native_grad import _leaf_block
+        if self.state.get('labels_stale'):
+            raise LearnedOptimizerError('published bank needs freshly refitted labels before another update')
         engine, recipe, store = self.engine, self.recipe, self.engine.store
         batch, epoch, position = self._next_batch()
         writer_values = {k: v.detach().clone().requires_grad_(True)
@@ -369,11 +381,13 @@ class OuterTrainer:
             None, {'scope': 'natlang.lopt.coefficient-head/1', 'config': self.head.config(), 'step': self.state['step']}), self.owner).id
         self.state['head_optimizer'] = _save_optimizer(engine, self.head_optimizer, 'head', self.owner)
         if self.bank_leaves is not None:
+            self.state['bank_tensors'] = _save_bank_leaves(engine, self.bank, self.bank_leaves, self.state['step'], self.owner)
             self.state['bank_optimizer'] = _save_optimizer(engine, self.bank_optimizer, 'bank', self.owner)
             if self.state['step'] % recipe.publish_every == 0:
                 self.publish_bank()
         record = {'step': self.state['step'], 'targets': records, 'updated': updated, 'head': self.head.identity()}
         self.state['losses'].append(record)
+        self.state['rng'] = _capture_rng()
         return record
 
     def policy_step(self, records, *, clip_low=.2, clip_high=.28):
@@ -387,6 +401,8 @@ class OuterTrainer:
         from ...data.native_graph_schema import parse_graph
         from .episode import _labels
         from .meta_rl import check_replay
+        if self.state.get('labels_stale'):
+            raise LearnedOptimizerError('published bank needs freshly refitted labels before another update')
         engine, recipe, store, bank = self.engine, self.recipe, self.engine.store, self.bank
         writer_values = {k: v.detach().clone().requires_grad_(True)
                          for k, v in store.get_native_tensor_artifact(self.state['writer']).artifact.tensors.items()}
@@ -511,6 +527,11 @@ class OuterTrainer:
         if basis is not None:
             record = basis.to_artifact(self.engine, self.owner)
             published = replace(published, basis=basis, basis_artifact=record.id)
+        from .bank import save_bank, load_bank
+        manifest = save_bank(self.engine, published, self.owner)
+        if load_bank(self.engine, manifest).snapshot != published.snapshot:
+            raise LearnedOptimizerError('published bank failed its manifest readback')
+        self.state['published_banks'] = self.state.get('published_banks', []) + [manifest]
         self.state['published'] = self.state.get('published', []) + [published.snapshot]
         self.state['labels_stale'] = True
         return published
@@ -523,7 +544,8 @@ class OuterTrainer:
                 'writer': self.state['writer'], 'head': self.state['head'], 'keys': self.state['keys'],
                 'exposure': {'targets_seen': sum(self.state['exposure'].values()), 'distinct_targets': len(self.state['exposure'])},
                 'recipe': self.recipe.as_json(), 'labels_stale': self.state['labels_stale'],
-                'published': self.state.get('published', []), 'losses': self.state['losses']}
+                'published': self.state.get('published', []), 'published_banks': self.state.get('published_banks', []),
+                'losses': self.state['losses']}
 
 
 def _identities(engine, blocks):
@@ -557,6 +579,57 @@ def _bank_leaves(bank, recipe):
              for name in bank.basis.names for side in ('left', 'right')}
     return {'factors_by_component': factors_by_component, 'factors': factors_by_component and
             {k: [t for pair in v.values() for t in pair] for k, v in factors_by_component.items()}, 'basis': basis}
+
+
+def _bank_tensor_map(leaves):
+    tensors = {'basis.' + key: value for key, value in leaves['basis'].items()}
+    for index, factors in leaves['factors_by_component'].items():
+        for name, (p, q) in factors.items():
+            tensors[f'component.{index}.P.{name}'] = p
+            tensors[f'component.{index}.Q.{name}'] = q
+    return tensors
+
+
+def _save_bank_leaves(engine, bank, leaves, step, owner):
+    from ...model.native_artifact import NativeTensorArtifact
+    tensors = {name: value.detach().cpu().contiguous().clone() for name, value in _bank_tensor_map(leaves).items()}
+    return engine.store.put_native_tensor_artifact(NativeTensorArtifact(
+        'parameter-set', engine.native_identity, tensors, bank.basis_artifact,
+        {'scope': 'natlang.lopt.bank-parameters/1', 'bank': bank.snapshot, 'step': step}), owner).id
+
+
+def _restore_bank_leaves(engine, bank, leaves, artifact_id, step):
+    record = engine.store.get_native_tensor_artifact(artifact_id)
+    if record is None:
+        raise LearnedOptimizerError('saved bank parameter snapshot is unavailable')
+    artifact = record.artifact
+    if (artifact.kind != 'parameter-set' or artifact.native_identity != engine.native_identity
+            or artifact.source_artifact_id != bank.basis_artifact
+            or artifact.provenance != {'scope': 'natlang.lopt.bank-parameters/1', 'bank': bank.snapshot, 'step': step}):
+        raise LearnedOptimizerError('saved bank parameter snapshot has a different identity, basis or step')
+    expected = _bank_tensor_map(leaves)
+    if set(expected) != set(artifact.tensors):
+        raise LearnedOptimizerError('saved bank parameter inventory differs from the bank')
+    with torch.no_grad():
+        for name, value in expected.items():
+            saved = artifact.tensors[name]
+            if saved.shape != value.shape or saved.dtype != value.dtype:
+                raise LearnedOptimizerError('saved bank parameter shape or dtype differs from the bank')
+            value.copy_(saved.to(value.device))
+
+
+def _capture_rng():
+    return {'cpu': bytes(torch.get_rng_state().tolist()).hex(),
+            'cuda': [bytes(value.tolist()).hex() for value in torch.cuda.get_rng_state_all()]
+                    if torch.cuda.is_initialized() else None}
+
+
+def _restore_rng(state):
+    torch.set_rng_state(torch.tensor(list(bytes.fromhex(state['cpu'])), dtype=torch.uint8))
+    if state.get('cuda') is not None:
+        if not torch.cuda.is_available() or torch.cuda.device_count() != len(state['cuda']):
+            raise LearnedOptimizerError('saved CUDA RNG requires the same available device count')
+        torch.cuda.set_rng_state_all([torch.tensor(list(bytes.fromhex(value)), dtype=torch.uint8) for value in state['cuda']])
 
 
 def _save_optimizer(engine, optimizer, scope, owner):
