@@ -72,6 +72,21 @@ def test_equivalent_path_preserves_actual_upload_and_full_get_history():
     with pytest.raises(ValueError):receipt_for_source(original,source='/different/pin.pt',identity={**IDENTITY,'bytes':1})
 
 
+@pytest.mark.parametrize('location',['receipt','independent_verification'])
+def test_declared_identity_pending_target_readback_is_not_verified(tmp_path,location):
+    from private_export_guard import validate_receipt,receipt_for_source
+    pending=receipt()
+    target=pending if location=='receipt' else pending['independent_verification']
+    target['status']='awaiting_target_readback'
+    with pytest.raises(ValueError,match='full independent verification'):
+        validate_receipt(pending,IDENTITY)
+    with pytest.raises(ValueError,match='full independent verification'):
+        receipt_for_source(pending,source='/another/pin.pt',identity=IDENTITY)
+    with export_lease(tmp_path,scope='owner',identity=IDENTITY,object_exists=lambda _:True) as lease:
+        with pytest.raises(ValueError,match='full independent verification'):lease.record(pending)
+        assert not lease.path.exists(),'Expected identity fields must never become a verified-cache entry before actual target GET'
+
+
 def test_cache_bounded_reader_preserves_read_seek_and_readinto(tmp_path, monkeypatch):
     import os
     from private_export_guard import CacheBoundedReader

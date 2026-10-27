@@ -85,6 +85,8 @@ def validate_receipt(receipt, identity):
     if (not isinstance(receipt, dict) or receipt.get('private') is not True
             or _identity(receipt.get('identity')) != identity
             or not isinstance(receipt.get('independent_verification'), dict)
+            or receipt['independent_verification'].get('status') == 'awaiting_target_readback'
+            or receipt.get('status') == 'awaiting_target_readback'
             or any(receipt['independent_verification'].get(key) != value for key,value in identity.items())
             or not isinstance(receipt.get('run'), str) or not receipt['run']
             or not isinstance(receipt.get('name'), str) or not receipt['name']
