@@ -366,6 +366,54 @@ def _effective_replacements(parameters, resolved, gradient_precision):
     return replacement, storage_dtypes
 
 
+class InferenceReplacementCache:
+    """Effective adapter weights for no-grad inference, reused across the tokens and calls of one adapter stack.
+
+    Adapters and bases are immutable, content-addressed artifacts, so a stack's resolved adapters and effective
+    weights are the same on every decode round; rebuilding them per token cost about 26x a plain decode step
+    (LFM2.5, 92 matrices, three stacked adapters). Entries are keyed by the exact adapter entries and the version
+    counters of the base parameters, and bounded by the bytes of the effective weights they hold.
+    """
+    def __init__(self, budget_bytes: int):
+        from collections import OrderedDict
+        self.budget, self.bytes, self.hits, self.misses = int(budget_bytes), 0, 0, 0
+        self.entries = OrderedDict()
+
+    @staticmethod
+    def key(entries, parameters):
+        return (canonical_json_sha256_hex(entries), tuple(value._version for value in parameters.values()))
+
+    def get(self, key):
+        value = self.entries.get(key)
+        if value is None:
+            self.misses += 1
+            return None
+        self.entries.move_to_end(key)
+        self.hits += 1
+        return value[0]
+
+    def put(self, key, value, size):
+        if size > self.budget:
+            return
+        self.entries[key] = (value, size)
+        self.bytes += size
+        while self.bytes > self.budget:
+            _, (_, old) = self.entries.popitem(last=False)
+            self.bytes -= old
+
+
+def inference_replacement_cache(engine):
+    """The engine's cache (`native_adapter_cache_gb`, default 4; 0 disables it)."""
+    cache = getattr(engine, 'native_adapter_cache', None)
+    if cache is None:
+        import os
+        gb = float(getattr(engine, 'native_adapter_cache_gb', os.environ.get('NATLANG_ADAPTER_CACHE_GB', 4)))
+        if gb <= 0:
+            return None
+        cache = engine.native_adapter_cache = InferenceReplacementCache(int(gb * 2**30))
+    return cache
+
+
 def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None,
                track_adapter_cotangents=True, adapter_cotangent_target_ids=None,
                cotangent_parameter_ids=None):
@@ -385,14 +433,26 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             if gradient_precision is not None and gradient_precision != active[6]:
                 raise ValueError('nested native execution cannot change its coefficient gradient precision')
             return callback()
-        try:
-            resolved = resolve_adapters(engine, entries, leaves)
-        except (ValueError, TypeError, KeyError) as error:
-            raise NativeAdapterError(str(error)) from error
-        identity = effective_identity(engine, resolved)
-        binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
         from ..common.native_higher_order import active_reference_arithmetic
         reference=active_reference_arithmetic()
+        # Forward-only inference of an adapted actor: nothing is differentiated, so the stack's effective weights
+        # are computed once and reused; no cotangent routing is needed (anchors only route gradients).
+        cache = (inference_replacement_cache(engine) if entries and leaves is None and gradient_precision is None
+                 and reference is None and not torch.is_grad_enabled() else None)
+        cached = cache_key = None
+        if cache is not None:
+            parameters = target_parameters(engine.shared_model)
+            cache_key = InferenceReplacementCache.key(entries, parameters)
+            cached = cache.get(cache_key)
+        if cached is not None:
+            resolved, identity, binding, cached_replacement, cached_storage = cached
+        else:
+            try:
+                resolved = resolve_adapters(engine, entries, leaves)
+            except (ValueError, TypeError, KeyError) as error:
+                raise NativeAdapterError(str(error)) from error
+            identity = effective_identity(engine, resolved)
+            binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
         lifecycle = reference.lifetime if reference is not None else {'active': True}
         token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
         try:
@@ -423,6 +483,16 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                     return result
             parameters = target_parameters(engine.shared_model)
             from .native_weight_carrier import ParameterCotangentScope, carrier_linear_modules
+            if cache is not None:
+                if cached is None:
+                    cached_replacement, cached_storage = _effective_replacements(parameters, resolved, gradient_precision)
+                    cache.put(cache_key, (resolved, identity, binding, cached_replacement, cached_storage),
+                              sum(value.numel() * value.element_size() for value in cached_replacement.values()))
+                _ACTIVE.get()[-1][5].update(cached_storage)
+                _ACTIVE.get()[-1][4].update(id(value) for value in cached_replacement.values())
+                selected = [parameters[key.removeprefix('model.')] for key in cached_replacement]
+                with carrier_linear_modules(engine.shared_model, selected):
+                    return torch.func.functional_call(_Operation(engine.shared_model, callback), cached_replacement, ())
             scope_parameters = [(name, parameter) for name, parameter in parameters.items()
                                 if cotangent_parameter_ids is None or id(parameter) in cotangent_parameter_ids]
             cotangent_scope = ParameterCotangentScope(scope_parameters, mode='vjp',

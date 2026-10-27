@@ -133,6 +133,12 @@ non-native backend (`--profile`, `--provider`, `NATLANG_SERVER`) is kept and run
 and `--no-weights` runs the selected model untuned for comparison. A release whose base is nowhere available runs
 untuned, with a notice naming the missing checkpoint.
 
+Tuned turns cost about the same as untuned ones: forward-only adapted execution builds each adapter stack's effective
+weights once and reuses them for every token and call (`model/native_adapters.py` `InferenceReplacementCache`,
+bitwise the uncached actor). Rebuilding them per token had made LFM decode 35x slower (2.5 s instead of 72 ms per
+token with three stacked adapters). The cache holds about 1 GiB per stack for LFM2.5; `NATLANG_ADAPTER_CACHE_GB`
+(default 4, 0 off) bounds it.
+
 ## Mellum
 
 The same commands work for Mellum (`mellum-latest`); the GGUF export supports HF backbones only, so Mellum runs on
