@@ -36,7 +36,7 @@ function setup(...calls) {
   for (const [id, options] of calls) record(store, id, root, options);
   const run = (...argv) => {
     const result = spawnSync(process.execPath, [bin, 'traces', ...argv, '--store', storeRoot],
-      { encoding: 'utf8', env: { ...process.env, NATLANG_FEEDBACK_GROUP: '' } });
+      { encoding: 'utf8', env: { ...process.env, NATLANG_FEEDBACK_GROUP: '', NATLANG_CONFIG_HOME: dir } });
     return { code: result.status, out: result.stdout, err: result.stderr };
   };
   const examples = () => { const path = join(root, 'tune.examples.jsonl'); return existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : []; };
@@ -50,7 +50,8 @@ test('good appends the recorded input and output with a per-day group and annota
     assert.equal(result.code, 0, result.err);
     const [example, ...rest] = t.examples();
     assert.equal(rest.length, 0);
-    assert.deepEqual({ ...example, group: undefined }, { function: 'triage/label-ticket.nl', input: { ticket: 'refund please' }, expected: 'billing', group: undefined });
+    assert.deepEqual({ ...example, group: undefined }, { function: 'triage/label-ticket.nl', input: { ticket: 'refund please' }, expected: 'billing', group: undefined,
+      producer: 'model-a' });
     assert.match(example.group, /^feedback-20260304-[0-9a-f]{8}$/);
     assert.deepEqual(t.annotations('c/1').map(item => [item.kind, item.value, item.source]), [['feedback', { verdict: 'good' }, 'cli']]);
     assert.match(result.out, /appended to/);
@@ -132,5 +133,32 @@ test('a nested call or a call without a program root fails with a reason and sti
     assert.equal(override.code, 0, override.err);
     assert.equal(t.examples().length, 1);
     assert.notEqual(t.run('good', 'nope').code, 0);
+  } finally { t.cleanup(); }
+});
+
+test('good refuses outputs of models that are neither a tuning teacher nor our own; fix records the tester', () => {
+  const t = setup(['c/1'], ['c/2', { input: 'invoice missing', output: 'billing' }]);
+  try {
+    const sha = 'ab'.repeat(32), models = join(t.dir, 'models');
+    mkdirSync(models);
+    writeFileSync(join(models, 'pins.json'), JSON.stringify({ [sha]: { identity: { architecture: 'lfm2', checkpoint_sha256: sha,
+      embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) } } }));
+    // Our native profile escalates to a hosted model: that model is the tuning teacher, so its outputs are labels.
+    const config = escalate => writeFileSync(join(t.dir, 'config.json'), JSON.stringify({ defaultProfile: 'ours', profiles: {
+      ours: { native: { checkpoint: join(models, `${sha}.pt`), sha256: sha }, ...(escalate ? { escalate: 'hosted' } : {}) },
+      hosted: { endpoint: 'http://127.0.0.1:9', model: 'model-a' }, other: { endpoint: 'http://127.0.0.1:9', model: 'model-b' } },
+      tune: escalate ? {} : { teacher: 'other' } }));
+    const run = (...argv) => spawnSync(process.execPath, [bin, 'traces', ...argv, '--store', join(t.dir, 'calls')],
+      { encoding: 'utf8', env: { ...process.env, NATLANG_FEEDBACK_GROUP: '', NATLANG_CONFIG_HOME: t.dir, NATLANG_NATIVE_MODELS: models } });
+    config(true);
+    assert.equal(run('good', 'c/1').status, 0);
+    config(false);
+    const refused = run('good', 'c/2');
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /came from model-a, which is not a tuning teacher or one of our models/);
+    assert.match(refused.stderr, /natlang traces fix c\/2 --expected JSON/);
+    assert.equal(t.examples().length, 1);
+    assert.equal(run('fix', 'c/2', '--expected', '"billing"').status, 0);
+    assert.deepEqual(t.examples().map(item => item.producer), ['model-a', 'tester']);
   } finally { t.cleanup(); }
 });

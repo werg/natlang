@@ -1,0 +1,54 @@
+// Zero-config tuning: without a tune block, the native profile natlang runs is the student and its escalate the teacher.
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { deriveStudent, loadTuneSettings } from '../dist/tune/settings.js';
+
+const sha = 'ab'.repeat(32);
+const identity = { architecture: 'lfm2', checkpoint_sha256: sha, embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) };
+
+test('the default native profile (or the native pin behind a GGUF default) is the student, with its escalate teacher', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-tune-derived-')), models = join(directory, 'models');
+  const environment = { ...process.env, NATLANG_CONFIG_HOME: directory, NATLANG_NATIVE_MODELS: models, NATLANG_PROFILE: '' };
+  delete environment.NATLANG_PROFILE;
+  const write = config => writeFileSync(join(directory, 'config.json'), JSON.stringify(config));
+  const native = { checkpoint: join(models, `${sha}.pt`), sha256: sha, python: '/venv/python', pythonPath: ['/repo/training', '/repo'], device: 'cuda', dtype: 'float32' };
+  try {
+    mkdirSync(models);
+    write({ defaultProfile: 'lfm-latest-gguf', profiles: {
+      'lfm-latest': { native, escalate: 'teacher' }, teacher: { endpoint: 'http://127.0.0.1:9', model: 'qwen' },
+      'lfm-latest-gguf': { local: { modelPath: '/x.gguf', modelId: `native-gguf-${sha.slice(0, 12)}-q8_0` } } } });
+    assert.equal(deriveStudent(environment).profile, 'lfm-latest');
+    assert.equal(deriveStudent(environment).student, undefined, 'no identity before its server has reported one');
+    assert.throws(() => loadTuneSettings(environment), /base identity of native profile lfm-latest is not known/);
+    writeFileSync(join(models, 'pins.json'), JSON.stringify({ [sha]: { checkpoint: native.checkpoint, sha256: sha, identity } }));
+    const { settings, student } = loadTuneSettings(environment);
+    assert.equal(student.name, 'lfm-latest');
+    assert.deepEqual(student.base, identity);
+    assert.equal(student.checkpoint, native.checkpoint);
+    assert.deepEqual(student.trainer, ['/venv/python', '-m', 'natlang_neuralese.tune.build']);
+    assert.deepEqual(student.env, { PYTHONPATH: '/repo/training:/repo' });
+    assert.deepEqual(student.engine, { device: 'cuda', dtype: 'float32' });
+    assert.equal(student.moduleMap, 'lfm2');
+    assert.equal(settings.backend, 'native');
+    assert.equal(settings.servingProfile, 'lfm-latest');
+    assert.equal(settings.teacher, 'teacher');
+    // A partial tune block still applies; an explicit teacher wins over escalate.
+    write({ defaultProfile: 'lfm-latest', tune: { recipe: { epochs: 2 }, teacher: 'other' }, profiles: {
+      'lfm-latest': { native, escalate: 'teacher' }, teacher: { endpoint: 'http://127.0.0.1:9' }, other: { endpoint: 'http://127.0.0.1:9' } } });
+    const partial = loadTuneSettings(environment).settings;
+    assert.equal(partial.teacher, 'other');
+    assert.deepEqual(partial.recipe, { epochs: 2 });
+    // No teacher anywhere is an actionable error.
+    write({ defaultProfile: 'lfm-latest', profiles: { 'lfm-latest': { native } } });
+    assert.throws(() => loadTuneSettings(environment), /give profile lfm-latest an "escalate" profile, or set tune.teacher/);
+    // A configured student is used as configured.
+    write({ defaultProfile: 'lfm-latest', profiles: { 'lfm-latest': { native }, t: { endpoint: 'http://127.0.0.1:9' } },
+      tune: { student: 's', teacher: 't', backend: 'native', students: { s: { base: identity, checkpoint: '/c.pt', trainer: ['py'], moduleMap: 'lfm2' } } } });
+    const configured = loadTuneSettings(environment);
+    assert.equal(configured.student.name, 's');
+    assert.equal(configured.settings.servingProfile, undefined);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

@@ -29,6 +29,8 @@ import { defaultNatlangConfigDirectory } from './package/store.js';
 import { createNatlangRuntime, type InvocationTrace, type ModelDriver, type NatlangRuntime, type NatlangRuntimeOptions,
   type TraceSink } from './runtime/runtime.js';
 import { tunedServing, type TunedServing } from './tuned-serving.js';
+import { machineStoreRoot, openCallStore, type CallStore } from './calls/store.js';
+import { recordEscalation } from './calls/feedback.js';
 
 export type NatlangRuntimeConfiguration = {
   /** Model selection: a profile name, or a Pi provider / model override (as `--profile`, `--provider`, `--model`). */
@@ -46,6 +48,9 @@ export type NatlangRuntimeConfiguration = {
   /** Installs a managed llama.cpp runtime when none is compatible (the CLI asks first); default: none is installed. */
   ensureRuntime?: (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null>;
   environment?: NodeJS.ProcessEnv;
+  /** A root program call the model fails and the escalation teacher runs adds its input to the program's
+   * tune.examples.jsonl when the runtime closes (recordEscalation); default true, NATLANG_ESCALATION_EXAMPLES=off. */
+  escalationExamples?: boolean;
   /** One-line notices (tuned binding, newer checkpoints, escalations, server starts). Default: stderr. */
   log?: NodeJS.WritableStream;
   /** Further runtime options (services, trace, programRoot, refinements, ...). */
@@ -121,8 +126,10 @@ export async function bindTunedModel(selected: LoadedModelConfiguration, program
   const profile: ModelProfile = { ...(native ? selected.profile : {}), native: { ...defaultNativePython(environment), ...settings,
     checkpoint: pin.checkpoint, sha256, sourceSha256: sha256, ...(step !== undefined ? { step } : {}), ...(pin.actorView ? { actorView: pin.actorView } : {}) },
     ...(selected.profile.escalate ? { escalate: selected.profile.escalate } : {}) };
+  const current = native?.step !== undefined && step !== undefined && native.step > step
+    ? `; ${selected.name} is at step ${native.step}: natlang tune ${programRoot} retunes on it` : '';
   log.write(`natlang: ${program} runs its tuned release ${release.manifest.digest.slice(0, 12)} on the checkpoint it was tuned on ` +
-    `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned\n`);
+    `(${sha256.slice(0, 12)}${step !== undefined ? `, step ${step}` : ''}) instead of ${selected.name}; --no-weights runs ${selected.name} untuned${current}\n`);
   return { ...selected, name: `${program}-tuned`, profile, choice: resolveModelChoice(profile) };
 }
 
@@ -154,16 +161,23 @@ async function escalation(name: string | undefined, selected: LoadedModelConfigu
   const session = createResolvedModelSession(teacher.choice, environment, log,
     configuration.ensureRuntime ? { ensureRuntime: configuration.ensureRuntime } : {});
   const { model } = await runtimeModel(teacher.choice, sessionDriver(session));
+  // The tier engine's own trace names no attempt; the recorded root call is the task's latest attempt of the function.
+  const roots: string[] = [], attempts = new Map<string, string>();
   const notice: TraceSink = (trace: InvocationTrace) => {
     const deopt = trace.events.find(event => event.kind === 'tier_deopt' && event.tier === 'tier1' && event.reason_kind !== 'guard');
-    if (!deopt) return;
+    if (!deopt) {
+      if (trace.parentCallId === null) attempts.set(`${trace.taskId}\0${trace.name}`, trace.callId);
+      return;
+    }
+    const attempt = trace.parentCallId === null ? attempts.get(`${trace.taskId}\0${String(deopt.function)}`) : undefined;
+    if (attempt) roots.push(attempt);
     const served = trace.events.some(event => event.kind === 'tier_served' && event.tier === 'tier0');
     log.write(`natlang: ${String(deopt.function)} failed on ${selected.name} (${String(deopt.reason ?? deopt.reason_kind).split('\n')[0]!.slice(0, 160)}); ` +
       `${served ? `answered by ${name}` : `${name} failed too`}. Record the right answer with natlang traces good|fix\n`);
   };
   return { options: { models: { student, teacher: model! },
     tiers: new TierEngine({ functions: { '*': { tier1: { model: 'student' }, tier0: { model: 'teacher' } } } }) },
-    notice, close: () => session.close() };
+    notice, roots, close: () => session.close() };
 }
 
 const traceSinks = (...sinks: (TraceSink | undefined)[]): Pick<NatlangRuntimeOptions, 'trace'> => {
@@ -204,7 +218,10 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
     const escalating = await escalation(escalateTo === 'none' ? undefined : escalateTo, selection, student.model, configuration, log);
     if (escalating) closers.push(escalating.close);
     const adaptation = configuration.adaptation && program ? bindAdaptation(configuration.adaptation, program, executorIdentity) : null;
-    const runtime = createNatlangRuntime({ ...configuration.runtime, ...student, ...(program ? { program } : {}), adaptation, executorIdentity,
+    // An explicit environment chooses the call store too (NATLANG_CALL_STORE), not this process's.
+    const calls = configuration.runtime?.calls !== undefined || !configuration.environment ? undefined : machineStoreRoot(environment);
+    const runtime = createNatlangRuntime({ ...(calls !== undefined ? { calls: calls === null ? false as const : openCallStore(calls) } : {}),
+      ...configuration.runtime, ...student, ...(program ? { program } : {}), adaptation, executorIdentity,
       ...(root ? { programRoot: configuration.runtime?.programRoot ?? root } : {}),
       ...traceSinks(configuration.runtime?.trace, escalating?.notice), ...escalating?.options,
       ...(tuned.weights ? { weights: tuned.weights } : {}) });
@@ -214,6 +231,13 @@ export async function natlangRuntime(configuration: NatlangRuntimeConfiguration 
       close: async () => {
         if (closed) return;
         closed = true;
+        const store = runtime.callStore();
+        if (escalating?.roots.length && configuration.escalationExamples !== false && environment.NATLANG_ESCALATION_EXAMPLES !== 'off'
+          && store && 'call' in store && 'value' in store)
+          for (const call of escalating.roots) {
+            const line = recordEscalation(store as unknown as CallStore, call, root);
+            if (line) log.write(`natlang: ${line}\n`);
+          }
         runtime.close();
         for (const close of closers) await close();
       } };

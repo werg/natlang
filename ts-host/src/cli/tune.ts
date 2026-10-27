@@ -34,7 +34,8 @@ import { createResolvedModelSession, executorIdentityForChoice, loadModelConfigu
 import { activateRelease, currentManifest, currentRelease, readActive, readRelease, rollbackRelease, tuneDirectory, tuneStatus } from '../adaptation/weights/release.js';
 import type { ModelDriver } from '../runtime/runtime.js';
 import type { DecisionRequest, ModelTurnRequest, ModelTurnOptions } from '../contracts.js';
-import { loadTuneSettings } from '../tune/settings.js';
+import { loadTuneSettings, prepareDerivedStudent } from '../tune/settings.js';
+import { ensureNativeServer } from '../model/native-managed.js';
 import { loadVllmStacks, uploadRelease } from '../tuned-serving.js';
 import { invalidation } from '../tune/keys.js';
 import { scaffoldManifest } from '../tune/collect.js';
@@ -110,6 +111,8 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       formatOverview(overview)].join('\n'));
     return 0;
   }
+  // Without a configured student the native profile natlang runs is the student; its server reports its exact identity.
+  await prepareDerivedStudent(process.env, { student: value('--student') }, process.stderr);
   const withOptions = async <T>(fn: (options: TuneOptions) => Promise<T>, programRoot = root): Promise<T> => {
     const { settings, student } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
     const inventory = buildProject({ project: programRoot, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
@@ -123,9 +126,10 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     try {
       const assertStudentBase = async () => {
         if (settings.backend !== 'native') return;
-        const serving = loadModelConfiguration(undefined);
+        const serving = loadModelConfiguration(settings.servingProfile);
         if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
           throw new Error('natlang tune: native backend requires a default neuraleseServer profile');
+        if (serving.choice.managedNative) await ensureNativeServer(serving.choice.managedNative, process.env, process.stderr);
         await requireNativeReaderIdentity(serving.choice.endpoint, student.base, {
           apiKey: process.env[serving.choice.apiKeyEnv], headers: serving.choice.headers });
       };
@@ -135,7 +139,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
             await assertStudentBase();
-            const serving = loadModelConfiguration(undefined);
+            const serving = loadModelConfiguration(settings.servingProfile);
             if (serving.choice.kind !== 'external' || !serving.choice.neuraleseServer)
               throw new Error('natlang tune: the native backend needs a default profile with neuraleseServer: true');
             const session = createResolvedModelSession(serving.choice, process.env, process.stderr, { rlCapture: !!capture });
@@ -146,7 +150,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             return { driver: driverOf(session), loaded, nativeState: true, close: () => session.close() };
           }
           if (settings.backend === 'vllm') {
-            const serving = loadModelConfiguration(undefined);
+            const serving = loadModelConfiguration(settings.servingProfile);
             if (serving.choice.kind !== 'external' || !serving.choice.vllm)
               throw new Error('natlang tune: the vllm backend needs a default profile with vllm: true');
             const session = createResolvedModelSession(serving.choice, process.env, process.stderr);
@@ -156,7 +160,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
             return { driver: driverOf(session), loaded: loaded.available, close: () => session.close() };
           }
           const adapters = [...manifest.artifacts, ...manifest.families].filter(item => item.exports?.gguf).map(item => ({ id: item.artifact, path: join(directory, item.exports!.gguf!.file) }));
-          const serving = loadModelConfiguration(undefined);
+          const serving = loadModelConfiguration(settings.servingProfile);
           if (serving.choice.kind !== 'managed-local') throw new Error('natlang tune: the default profile must use the managed local model to serve tuned weights');
           // Soft states as exact native state spans on the llama.cpp fork (`--native-state`); refused by other servers.
           const states = manifest.softStates.filter(item => item.exports?.gguf).map(item => ({ id: item.state, path: join(directory, item.exports!.gguf!.file) }));

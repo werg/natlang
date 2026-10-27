@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, defaultNatlangConfigDirectory, satisfiesVersion } from '../package/store.js';
+import { modelStatus, programForStatus } from './status.js';
 import { defaultNativePython, ensureNativeServer, ownsNativeServer, pinNativeCheckpoint, readCheckpointPointer, removeNativePin, exportNativeGguf, findNativeCheckpoint,
   stopNativeServer, type NativeModelSettings } from '../model/native-managed.js';
 import { parsePackageManifest, type NatlangTarget } from '../package/manifest.js';
@@ -182,7 +183,9 @@ model call and stops it with the command; natlang serve keeps it running so
 later commands start at once. --gguf also exports the weights for the managed
 llama.cpp backend as profile NAME-gguf: faster, ordinary tokens only (the
 Neuralese producer runs on the native server). Rerun setup to move to a newer checkpoint; runs
-say when the source has one. A tuned program always runs on the checkpoint
+say when the source has one, and an existing NAME-gguf profile is exported again for it. The
+server loads the pin's compact actor view (prepared once at setup: the actor weights without
+optimizer state), a fraction of the full checkpoint's startup time and memory. A tuned program always runs on the checkpoint
 its active release was tuned on, pinned on first use; setup --program DIR pins
 it ahead of time. See docs/NATIVE_MODELS.md.`;
   if (topic === 'models') return `List Pi providers and models:
@@ -196,7 +199,10 @@ it ahead of time. See docs/NATIVE_MODELS.md.`;
 
 API-key providers can also use their documented environment variables.`;
   if (topic === 'doctor') return `Check the natlang installation and model configuration:
-  natlang doctor [--profile NAME] [--provider ID] [--model ID] [--store DIR] [--json]`;
+  natlang doctor [--profile NAME] [--provider ID] [--model ID] [--program DIR] [--store DIR] [--json]
+Reports the profile's native checkpoint (step, newer checkpoints, actor view, whether its server is running), the
+escalation teacher, the tuning setup, and for a program (--program, or the current directory when it has tuning
+state) its active release, the base it runs on, examples waiting for natlang tune and when to retune.`;
   throw new Error(`unknown help topic ${topic}`);
 }
 type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
@@ -347,7 +353,9 @@ async function setupNative(parsed: Parsed, source: string): Promise<number> {
     ...(device ? { device } : {}), ...(port ? { port: Number(port) } : {}) };
   config.profiles = { ...config.profiles, [name]: { ...existing, native } };
   // --gguf: the same weights as a GGUF for the managed llama.cpp backend (faster; ordinary tokens only).
-  const outtype = option(parsed, '--gguf'), ggufName = `${name}-gguf`;
+  // A refresh keeps an existing GGUF sibling current (its export goes with the superseded pin).
+  const ggufName = `${name}-gguf`;
+  const outtype = option(parsed, '--gguf') ?? /^native-gguf-[0-9a-f]{12}-(\w+)$/.exec(config.profiles[ggufName]?.local?.modelId ?? '')?.[1];
   const gguf = outtype ? await exportNativeGguf(native, outtype) : undefined;
   if (gguf) {
     const previousGguf = config.profiles[ggufName] ?? {};
@@ -462,6 +470,8 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
   }
   const modelOkay = choice.kind === 'pi-provider' ? piReady : choice.kind === 'external' || Boolean(local?.available);
   const okay = Boolean(modelOkay);
+  // Native models, tuning and the program (cli/status.ts): pin, newer checkpoints, server, release base, pending examples.
+  const status = await modelStatus(selected, readConfigFile().profiles ?? {}, programForStatus(option(parsed, '--program')));
   return { okay, report: { ok: okay, node: process.version, packageStore: store.root,
     installedPackages: store.list().length, config: selected.configPath, profile: selected.name,
     modelSource: choice.kind, endpoint: choice.kind === 'external' ? choice.endpoint : null,
@@ -475,7 +485,7 @@ async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise
     kvBudgetSource: slotPlan?.budgetSource ?? null, slotPlan: slotPlan ?? null,
     batching: choice.kind === 'pi-provider' ? null : { mode: choice.batching?.mode ?? 'server-continuous',
       maxConcurrent: choice.batching?.maxConcurrent ?? choice.concurrency ?? slotPlan?.slots ?? null,
-      coalesceMs: choice.batching?.coalesceMs ?? null, scoreEndpoint: choice.batching?.scoreEndpoint ?? null } } };
+      coalesceMs: choice.batching?.coalesceMs ?? null, scoreEndpoint: choice.batching?.scoreEndpoint ?? null }, ...status } };
 }
 
 function applicationSpecifier(store: NatlangPackageStore, query: string, requestedTarget?: string): string {
@@ -980,7 +990,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     throw new Error('usage: natlang package pack|verify|install ...');
   }
   if (command === 'doctor') {
-    acceptOptions(parsed, ['--store', '--profile', '--provider', '--model', '--json']); noTrailingArguments(parsed);
+    acceptOptions(parsed, ['--store', '--profile', '--provider', '--model', '--program', '--json']); noTrailingArguments(parsed);
     const { report, okay } = await doctorReport(parsed, new NatlangPackageStore(option(parsed, '--store')));
     output(report, json); return okay ? 0 : 1;
   }

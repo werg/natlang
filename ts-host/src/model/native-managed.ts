@@ -106,14 +106,40 @@ export function nativeServerCommand(native: NativeModelSettings, environment: No
   return { command, env };
 }
 
-type Served = { checkpointSha256?: string; reachable: boolean };
+/** The exact base a native checkpoint serves as (what tuned adapters bind): the server reports it. */
+export type NativeIdentity = { architecture: string; checkpoint_sha256: string; embedding_weight_sha256: string; tokenizer_fingerprint: string };
+type Served = { checkpointSha256?: string; identity?: NativeIdentity; reachable: boolean };
 async function servedCheckpoint(endpoint: string): Promise<Served> {
   try {
     const response = await fetch(endpoint + '/v1/neuralese/info', { signal: AbortSignal.timeout(5000) });
     if (!response.ok) return { reachable: true };
-    const info = await response.json() as { native_state?: { checkpoint_sha256?: string } };
-    return { reachable: true, checkpointSha256: info.native_state?.checkpoint_sha256 };
+    const state = (await response.json() as { native_state?: Partial<NativeIdentity> }).native_state;
+    const identity = state && (['architecture', 'checkpoint_sha256', 'embedding_weight_sha256', 'tokenizer_fingerprint'] as const)
+      .every(key => typeof state[key] === 'string') ? { architecture: state.architecture!, checkpoint_sha256: state.checkpoint_sha256!,
+        embedding_weight_sha256: state.embedding_weight_sha256!, tokenizer_fingerprint: state.tokenizer_fingerprint! } : undefined;
+    return { reachable: true, checkpointSha256: state?.checkpoint_sha256, ...(identity ? { identity } : {}) };
   } catch { return { reachable: false }; }
+}
+
+/** Whether a server at the profile's port is serving its exact checkpoint now. */
+export async function nativeServing(native: NativeModelSettings): Promise<'serving' | 'other' | 'stopped'> {
+  const served = await servedCheckpoint(nativeEndpoint(native));
+  return served.checkpointSha256 === native.sha256 ? 'serving' : served.reachable ? 'other' : 'stopped';
+}
+
+/** The identity a pin's server reported (recorded in the pin index when the server is first seen serving it). */
+export function nativeIdentity(sha256: string, environment: NodeJS.ProcessEnv = process.env): NativeIdentity | undefined {
+  try { return (JSON.parse(readFileSync(join(nativeModelsDirectory(environment), 'pins.json'), 'utf8')) as Record<string, { identity?: NativeIdentity }>)[sha256]?.identity; }
+  catch { return undefined; }
+}
+function rememberIdentity(served: Served, environment: NodeJS.ProcessEnv): void {
+  const identity = served.identity;
+  if (!identity || nativeIdentity(identity.checkpoint_sha256, environment)) return;
+  const index = join(nativeModelsDirectory(environment), 'pins.json');
+  try {
+    const pins = JSON.parse(readFileSync(index, 'utf8')) as Record<string, Omit<Pin, 'reused'>>;
+    if (pins[identity.checkpoint_sha256]) recordPin(index, identity.checkpoint_sha256, { ...pins[identity.checkpoint_sha256]!, identity });
+  } catch { /* no pin index: nothing to remember it in */ }
 }
 
 type Owned = { child: ChildProcess | null; native: NativeModelSettings; stderr: string };
@@ -140,7 +166,7 @@ function mismatch(native: NativeModelSettings, endpoint: string, served: Served)
 
 async function start(native: NativeModelSettings, endpoint: string, environment: NodeJS.ProcessEnv, error: NodeJS.WritableStream): Promise<void> {
   const current = await servedCheckpoint(endpoint);
-  if (current.checkpointSha256 === native.sha256) return;
+  if (current.checkpointSha256 === native.sha256) { rememberIdentity(current, environment); return; }
   if (current.reachable) throw mismatch(native, endpoint, current);
   if (!existsSync(native.checkpoint)) throw new Error(`native checkpoint ${native.checkpoint} is missing; run natlang setup --native ${native.source ?? 'SOURCE'}`);
   if (native.actorView && !existsSync(native.actorView.path)) {
@@ -162,7 +188,7 @@ async function start(native: NativeModelSettings, endpoint: string, environment:
     while (Date.now() < deadline) {
       if (spawnError) throw new Error(`could not start the native server (${command[0]}): ${spawnError.message}`);
       const served = await servedCheckpoint(endpoint);
-      if (served.checkpointSha256 === native.sha256) return;
+      if (served.checkpointSha256 === native.sha256) { rememberIdentity(served, environment); return; }
       if (served.reachable && served.checkpointSha256) throw mismatch(native, endpoint, served);
       // A launcher that hands the server to a service manager exits 0 while the server keeps loading.
       if (child.exitCode !== null && (child.exitCode !== 0 || !native.launcher)) {
@@ -219,7 +245,8 @@ export function readCheckpointPointer(source: string): CheckpointPointer {
 export const nativeModelsDirectory = (environment: NodeJS.ProcessEnv = process.env) =>
   environment.NATLANG_NATIVE_MODELS ? resolve(environment.NATLANG_NATIVE_MODELS) : join(defaultNatlangDataDirectory(environment), 'native-models');
 
-type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; step?: number; actorView?: ActorView; reused: boolean };
+type Pin = { checkpoint: string; sha256: string; bytes: number; sourceSha256: string; step?: number; actorView?: ActorView;
+  identity?: NativeIdentity; reused: boolean };
 
 // An exact byte copy through the trainers' verified copy (train/checkpoint_offload.py: the opened file's identity, size
 // and SHA-256 are checked, written through a partial name and fsynced). The pin keeps the training checkpoint's own

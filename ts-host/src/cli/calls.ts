@@ -3,7 +3,7 @@
  * compilations stored beside it (plans/TRACE_SPECIALIZATION.md §3.5, §7.4). `natlang specialize ...` runs the
  * specializer application on the store.
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CallStore, machineStoreRoot } from '../calls/store.js';
@@ -247,9 +247,9 @@ export async function tracesCommand(argv: string[]): Promise<number> {
   }
   if (action === 'good' || action === 'bad' || action === 'fix') {
     if (!words[0]) throw new Error(`usage: natlang traces ${action} CALL${action === 'fix' ? ' --expected JSON' : action === 'bad' ? ' [--expected JSON]' : ''} [--group G] [--program DIR] [--dry-run]`);
-    const { recordFeedback } = await import('./feedback.js');
+    const { recordFeedback } = await import('../calls/feedback.js');
     print(recordFeedback(store, { verdict: action, call: words[0], expected: text(args, '--expected'), group: text(args, '--group'),
-      program: text(args, '--program'), dryRun: args.options.has('--dry-run') }), false); return 0;
+      program: text(args, '--program'), dryRun: args.options.has('--dry-run'), authorizedProducers: await authorizedProducers() }), false); return 0;
   }
   if (action === 'config') {
     const changes: Partial<CallStoreSettings> = {};
@@ -417,3 +417,22 @@ export function specializeArguments(argv: string[]): string[] {
   }
   return ['run', directory, ...run, '--', ...rest];
 }
+
+/** The models whose outputs may become tune labels: the tuning teachers (configured, or a native student's `escalate`)
+ * and every native profile's model (our own checkpoints). Without any tuning configuration nothing is restricted. */
+async function authorizedProducers(): Promise<ReadonlySet<string> | undefined> {
+  const { loadModelConfiguration } = await import('../model/config.js');
+  const { loadTuneSettings } = await import('../tune/settings.js');
+  let teachers: string[];
+  try { const { settings } = loadTuneSettings(); teachers = [settings.teacher, ...(settings.teachers ?? [])]; }
+  catch { return undefined; }
+  const models = new Set<string>();
+  const add = (profile: string) => { try { models.add(loadModelConfiguration(profile).choice.model); } catch { /* unusable profile */ } };
+  teachers.forEach(add);
+  const { defaultNatlangConfigDirectory } = await import('../package/store.js');
+  const path = join(defaultNatlangConfigDirectory(), 'config.json');
+  const profiles = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as { profiles?: Record<string, { native?: unknown }> }).profiles ?? {} : {};
+  for (const [name, profile] of Object.entries(profiles)) if (profile.native) add(name);
+  return models;
+}
+
