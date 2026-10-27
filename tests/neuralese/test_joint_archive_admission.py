@@ -57,7 +57,8 @@ def test_program_state_archive_cold_restore(tmp_path, family, objective_kind):
             assert target.store.get_native_state(continued['outputs']['a2']) is not None
             from natlang_neuralese.model.native_state_derivation import optimize_state
             gradient = target.store.get_native_tensor_artifact(continued['outputs']['g0'])
-            update, _, _ = optimize_state(engine, gradient, source['nodes'][1]['optimizer'], result['optimizer_states']['a2'])
+            update, _, _ = optimize_state(engine, gradient, source['nodes'][1]['optimizer'], result['optimizer_states']['a2'],
+                program_id=gradient.artifact.provenance['derivative_program_id'])
             assert target.store.get_native_state(update['native_state_id']).block.derivation['optimizer_state_parent_id'] == result['optimizer_states']['a2']
         finally:
             engine.store = original_store
