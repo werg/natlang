@@ -15,6 +15,8 @@
  *   natlang tune <program> --sweep <spec>  resumable rank/penalty/data-size sweep journal (sweep.ts)
  *   natlang tune <program> --distill       export the active release's verified training outputs for base SFT (§5.7)
  *   natlang tune <program> --rounds        SFT then RL rounds (tune.rounds), best development release activates (§5.1a)
+ *   natlang tune <program> --learned <spec> the trained joint learned optimizer proposes prompts, skills and LoRA
+ *                                          mixtures (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md); validated as usual
  *   natlang tune <program> --calibrate     measure the configured teachers on development roots and route one (§4.2)
  *   natlang tune <program> --export-cases <dir> [--include-confirmation]
  *                                          case list of roots needing data, for the reviewed generation pool (pool.ts)
@@ -46,6 +48,7 @@ import { runPlacement } from '../tune/placement.js';
 import { runSweep, type SweepSpec } from '../tune/sweep.js';
 import { formatOverview, loadOverview } from '../tune/report.js';
 import { roundsSelector } from '../tune/schedule.js';
+import { learnedSelector, readLearnedSettings } from '../tune/learned.js';
 import { exportDistillation } from '../tune/distill.js';
 import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
@@ -80,7 +83,7 @@ function formatReport(report: TuneReport): string {
 
 export async function tuneCommand(argv: readonly string[], io: { out: (text: string) => void; err: (text: string) => void } =
   { out: text => process.stdout.write(text + '\n'), err: text => process.stderr.write(text + '\n') }): Promise<number> {
-  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held'];
+  const valuedNames = ['--examples', '--student', '--teacher', '--evaluate', '--sweep', '--learned', '--partition', '--export-cases', '--import-cases', '--import-campaign', '--held'];
   const flags = new Set(argv.filter(arg => arg.startsWith('--') && !valuedNames.includes(arg)));
   const value = (name: string) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
   const valued = new Set(valuedNames.flatMap(name => { const i = argv.indexOf(name); return i >= 0 ? [i, i + 1] : []; }));
@@ -164,7 +167,10 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
         } });
     } finally { await teacherSession.close(); }
   };
-  const once = () => withOptions(options => tuneProgram(options, flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined));
+  const learnedSpec = value('--learned');
+  if (learnedSpec && flags.has('--rounds')) throw new Error('--learned and --rounds select the release differently; pass one');
+  const once = () => withOptions(options => tuneProgram(options, learnedSpec ? learnedSelector(options, readLearnedSettings(learnedSpec))
+    : flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined));
   const partition = value('--evaluate');
   if (partition !== undefined) {
     if (!['development', 'confirmation', 'protected'].includes(partition)) throw new Error('--evaluate takes development, confirmation or protected');

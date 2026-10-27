@@ -17,7 +17,7 @@ export type Visibility = typeof VISIBILITY_CLASSES[number];
 
 /** Artifact kinds (§3). Crisp artifacts are named by the digest of their source, soft ones by block content ID. */
 export const ARTIFACT_KINDS = ['crisp-source', 'crisp-skill', 'instruction', 'soft-skill', 'soft-value', 'adapter',
-  'adapter-code', 'program', 'system-prompt'] as const;
+  'adapter-code', 'program', 'system-prompt', 'joint-bundle'] as const;
 export type ArtifactKind = typeof ARTIFACT_KINDS[number];
 
 /** Signal regimes (§4) and operator families (§7.1). */
@@ -74,6 +74,13 @@ export type ImprovementStep = {
       readonly seconds?: number; readonly tokens?: number };
   } | null;
   readonly trajectory: { readonly id: string; readonly step: number };
+  /** References of a joint learned-optimizer step (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md): the complete bundle
+   * and proposal, the bank snapshot, the permitted evidence view and, for training records, the versioned joint
+   * target. Tensors stay in native artifact storage; `target` is never part of the proposer's view. */
+  readonly joint?: {
+    readonly bundle: string; readonly proposal?: string; readonly bank: string; readonly evidenceView?: string;
+    readonly target?: string; readonly behavior?: string;
+  };
   /** Where a converted record came from. */
   readonly provenance?: { readonly converter?: string; readonly file?: string; readonly sha256?: string; readonly legacy?: boolean };
 };
@@ -93,6 +100,17 @@ export function improvementStep(fields: Omit<ImprovementStep, 'schema' | 'id'>):
   const errors = validateImprovementStep(record);
   if (errors.length) throw new Error(`invalid improvement step: ${errors.join('; ')}`);
   return record;
+}
+
+const JOINT_PREFIXES = { bundle: 'nja1:', proposal: 'njp1:', bank: 'nbank1:', evidenceView: 'nevv1:', target: 'njt1:' } as const;
+
+/** The learned optimizer's proposer input: no outcome, no resulting artifacts and no supervised target. A record
+ * serializer that keeps `after` or `joint.target` would leak the answer into the proposer's view. */
+export function proposerView(record: ImprovementStep): Omit<ImprovementStep, 'outcome' | 'after' | 'joint'> & { joint?: Omit<NonNullable<ImprovementStep['joint']>, 'target'> } {
+  const { outcome: _outcome, after: _after, joint, ...view } = record;
+  if (!joint) return view;
+  const { target: _target, ...visible } = joint;
+  return { ...view, joint: visible };
 }
 
 /** What an operator may be trained to see and produce: the record without its outcome. */
@@ -140,6 +158,20 @@ export function validateImprovementStep(value: unknown): string[] {
   if (record.outcome !== null && (typeof record.outcome !== 'object' || record.outcome === undefined)) errors.push('outcome must be an object or null');
   if (!record.trajectory?.id || !Number.isSafeInteger(record.trajectory?.step) || record.trajectory.step < 0)
     errors.push('trajectory needs id and a nonnegative step');
+  if (record.joint !== undefined) {
+    if (!record.joint || typeof record.joint !== 'object') errors.push('joint must be an object of references');
+    else {
+      for (const [key, prefix] of Object.entries(JOINT_PREFIXES)) {
+        const value = (record.joint as Record<string, unknown>)[key];
+        if ((key === 'bundle' || key === 'bank') && typeof value !== 'string') errors.push(`joint.${key} is required`);
+        if (value !== undefined && (typeof value !== 'string' || !value.startsWith(prefix))) errors.push(`joint.${key} must be a ${prefix} content ID`);
+      }
+    }
+  }
+  for (const where of ['before', 'after'] as const)
+    for (const ref of (Array.isArray(record[where]) ? record[where] : []) as ArtifactRef[])
+      if (ref?.kind === 'joint-bundle' && typeof ref.id === 'string' && !ref.id.startsWith('nja1:'))
+        errors.push(`${where} joint-bundle id must be an nja1: content ID`);
   return errors;
 }
 
@@ -176,5 +208,25 @@ export function authoringStep(result: Record<string, any>, provenance?: Improvem
       compute: { operator_requests: result.authorExchanges?.length ?? 0, model_calls: calls(result.query) + calls(result.transfer) } },
     trajectory: { id: `authoring:${result.identity ?? result.episode}`, step: 0 },
     ...(provenance ? { provenance } : {}),
+  });
+}
+
+/** One step of a learned-optimizer adaptation episode (`natlang.lopt.apply-receipt/1` history) as an improvement
+ * record. The learned optimizer generates at application time (no training signal), so its regime is `none`. */
+export function jointStep(receipt: { bank: string; writer: string; head: string | null; history: readonly Record<string, any>[] },
+  item: Record<string, any>, episode: { id: string; family: string; split?: string }, parentBundle: string | null): ImprovementStep {
+  return improvementStep({
+    episode, facets: [`family:${episode.family}`, 'operator:learned-joint-proposal'],
+    before: parentBundle ? [{ kind: 'joint-bundle', id: parentBundle }] : [],
+    operator: { kind: 'learned-joint-proposal', version: 'natlang.lopt/1', regime: 'none',
+      hyper: { sampled: item.behavior?.sampled ?? null, temperature: item.behavior?.temperature ?? null, seed: item.behavior?.seed ?? null },
+      context: receipt.writer, model: receipt.head },
+    view: { visibility: 'reward-blind-observations', evidence: [] },
+    proposal: { deltas: [{ artifact: { kind: 'joint-bundle', id: item.bundle }, delta: null, scale: 1 }] },
+    after: [{ kind: 'joint-bundle', id: item.accepted ? item.bundle : parentBundle ?? item.bundle }],
+    outcome: { disposition: item.accepted ? 'accepted' : 'rejected',
+      support: { before: -item.incumbentLoss, after: -item.supportLoss, effect: item.incumbentLoss - item.supportLoss } },
+    trajectory: { id: `learned:${episode.id}`, step: item.step },
+    joint: { bundle: item.bundle, proposal: item.proposal, bank: receipt.bank },
   });
 }

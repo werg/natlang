@@ -73,9 +73,13 @@ async function timed<T>(timings: StageTiming[], stage: string, log: (line: strin
   try { return await fn(); } finally { timings.push({ stage, ms: Date.now() - started, ...(reused ? { reused } : {}) }); }
 }
 
-function runTrainer(student: StudentSettings, plan: string, out: string, log: (line: string) => void): Promise<void> {
+function runTrainer(student: StudentSettings, plan: string, out: string, log: (line: string) => void, module?: string): Promise<void> {
   return new Promise((resolveRun, reject) => {
-    const [command, ...args] = student.trainer;
+    // A variant may run another entry with the same plan/result contract (the learned optimizer's `apply`).
+    const argv = module ? (() => { const index = student.trainer.indexOf('-m');
+      if (index < 0) throw new Error(`${module} derives its Python entry from a \`-m\` trainer argv`);
+      return [...student.trainer.slice(0, index + 1), module]; })() : student.trainer;
+    const [command, ...args] = argv;
     const child = spawn(command!, [...args, '--plan', plan, '--out', out], { cwd: student.workdir ?? process.cwd(),
       env: { ...process.env, ...student.env }, stdio: ['ignore', 'pipe', 'pipe'] });
     let tail = '';
@@ -242,7 +246,10 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   /** Soft states of bindings this fit does not train, carried from an earlier release directory unchanged. */
   readonly carrySoftStates?: { readonly states: readonly SoftState[]; readonly directory: string; readonly receipts?: readonly unknown[] };
   /** Extra release receipts (build kind, pinned parents and the semantics they saw). */
-  readonly receipts?: Readonly<Record<string, unknown>> };
+  readonly receipts?: Readonly<Record<string, unknown>>;
+  /** Another Python entry with the `tune.build` plan/result contract, and its extra plan settings (the learned
+   * optimizer, plans/neuralese/JOINT_LEARNED_OPTIMIZER.md). */
+  readonly module?: string; readonly learned?: Readonly<Record<string, unknown>> };
 
 function remapSoftStateExport(state: SoftState, targetId: string, sourceDirectory: string,
     outputs: { file: string; bytes: Uint8Array; sha256: string }[]): SoftState {
@@ -325,6 +332,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
   const recipe = { seed: 0, ...options.settings.recipe, ...variant.recipe };
   const trainKey = sha(['natlang.tune-train/v3', data.dataKey, trainingScaffoldKey(variant.manifest), student, recipe,
     variant.rows ? rows.map(row => [row.root, row.call, row.turn]) : null, variant.parent ?? null,
+    ...(variant.module ? [variant.module, variant.learned ?? null] : []),
     variant.rollouts ? sha(readFileSync(variant.rollouts, 'utf8')) : null,
     ...(variant.pinned || variant.warm ? [variant.pinned ?? {}, variant.warm ?? {}] : [])]).slice(0, 24);
   const jobDir = join(tuneDirectory(root), 'jobs', trainKey), out = join(jobDir, 'out');
@@ -343,8 +351,9 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
         softStates: softStatesServed(options.settings), recipe, ...(variant.label ? { label: variant.label } : {}),
         ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
         ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
-        ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}) }, null, 2));
-      await runTrainer(student, plan, out, log);
+        ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}),
+        ...(variant.learned ? { learned: variant.learned } : {}) }, null, 2));
+      await runTrainer(student, plan, out, log, variant.module);
     }
     return JSON.parse(readFileSync(join(out, 'result.json'), 'utf8')) as TrainerResult;
   }, reused);

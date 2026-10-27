@@ -5,6 +5,7 @@
     python -m natlang_neuralese.tune.learned train     --spec SPEC   resumable outer training (supervised, then policy)
     python -m natlang_neuralese.tune.learned propose   --spec SPEC   apply the trained optimizer: bundle + receipt
     python -m natlang_neuralese.tune.learned ladder    --spec SPEC   ceiling ladder and gaps from measurements
+    python -m natlang_neuralese.tune.learned service   --spec SPEC   one adaptation service of the Natlang `adapt` program
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -185,7 +186,17 @@ def ladder(spec):
     return len(ladders)
 
 
-COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder}
+def service(spec):
+    from .apply import service as run
+    result = run(spec)
+    if spec.get('result'):
+        _write(spec['result'], result)
+        return spec['result']
+    return result
+
+
+COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder,
+            'service': service}
 
 
 def main(argv=None):
