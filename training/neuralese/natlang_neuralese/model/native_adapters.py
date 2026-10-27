@@ -174,13 +174,17 @@ def resolve_adapters(engine, entries, leaves=None):
             if basis_record is None:
                 raise ValueError('native adapter is missing its exact frozen basis artifact')
             basis = basis_record.artifact.validate()
-            nested = method == 'nested-canonical-slice-v1'
+            # A learned bank basis (tune/learned/bank.py) is its own declared method, never a weight-SVD basis.
+            bank = method == 'bank-basis-slice-v1'
+            nested = method == 'nested-canonical-slice-v1' or bank
             expected_spec = spec.get('basis_spec') if nested else spec
             if (basis.kind != 'adapter-basis' or basis.native_identity != engine.native_identity
                     or expected_spec != (basis.provenance or {}).get('adapter_spec')
-                    or method not in ('weight-svd-sign-canonical-v2', 'nested-canonical-slice-v1') or kind != 'xs'
-                    or (nested and (expected_spec.get('kind') != 'canonical-basis'
-                                    or expected_spec.get('bases') != 'weight-svd-sign-canonical-v2'))):
+                    or method not in ('weight-svd-sign-canonical-v2', 'nested-canonical-slice-v1', 'bank-basis-slice-v1') or kind != 'xs'
+                    or (nested and not bank and (expected_spec.get('kind') != 'canonical-basis'
+                                    or expected_spec.get('bases') != 'weight-svd-sign-canonical-v2'))
+                    or (bank and (expected_spec.get('kind') != 'bank-basis'
+                                  or expected_spec.get('bases') != 'bank-shared-basis-v1'))):
                 raise ValueError('native adapter/basis must bind the exact live checkpoint, architecture and declared specification')
         if (not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names)
                 or len(set(names)) != len(names) or set(adapter.tensors) != adapter_tensor_keys(spec)
@@ -194,7 +198,13 @@ def resolve_adapters(engine, entries, leaves=None):
             if set(basis.tensors) != expected_basis:
                 raise ValueError('native adapter basis inventory differs from its specification')
             # Exact leading-slice views: nested members share one basis and sum in it.
-            basis_tensors = {prefix+name: basis.tensors[prefix+name][..., :rank] for name in names for prefix in ('left.', 'right.')}
+            source_tensors = basis.tensors
+            if bank and leaves and adapter.source_artifact_id in leaves:
+                # Live trainable bank bases: the same geometry, checked below like the stored tensors.
+                source_tensors = leaves[adapter.source_artifact_id]
+                if set(source_tensors) != expected_basis:
+                    raise ValueError('live bank basis leaves differ from the basis inventory')
+            basis_tensors = {prefix+name: source_tensors[prefix+name][..., :rank] for name in names for prefix in ('left.', 'right.')}
         values = leaves.get(adapter_id, adapter.tensors) if leaves else adapter.tensors
         if isinstance(entry, dict) and entry.get('stop_gradient'):
             values = {name: value.detach() for name, value in values.items()}
