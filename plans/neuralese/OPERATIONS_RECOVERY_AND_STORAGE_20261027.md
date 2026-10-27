@@ -548,3 +548,81 @@ A fresh main quick check passed source-review and TypeScript checks but found a
 new machine-path ratchet violation in the concurrent owner's bank test. Reported
 the exact file to that owner. Their newer learned-optimizer commits require their
 own applicable validation; previous full-suite results are not blanket coverage.
+
+## Both learners advancing and completed paired Invoice result, 20:46 Berlin
+
+R6 resumed the actual37356 full state in unused cycle27. Complete native memory
+and gradient proofs passed for pinned host activation inputs; real optimizer
+progress reached37449 with finite loss and changed sparse coordinates. The first
+new full-state export37357 is now independently verified:48,347,032,657B, SHA
+`4950e0d5dbe10bddf01359b4da5fcc588e44c114b49c8e553f34290dbac24955`.
+The workstation mirror still names37205; do not relabel it as a newer local copy.
+Actual optimizer progress, committed rolling state, private verification and local
+mirror are separate cursors. Keep following the current supervised child rather
+than canonical production's still-published37356 parent.
+
+Active recipe is R8v3, SHA
+`6bbc1b99dd2a15ad444921f94e03badec41976e13152659b90d5739ee2b7bc60`;
+SFT capacity request is
+`96c95825cc0fb0053a29d907d519d831b24f062c4bd7872b4b2aba3b78df3c54`.
+R7 numerical runtime remains unchanged. Exact live recipe/config/plan, sealed
+operation, source alias repairs and passed capacity proofs have their own
+independently downloadable439,076B capsule, SHA
+`34c199bd1fa1b0144ce71754e0db2bc83692d329c52368f50a7be867e13af72d`.
+Current operator/frozen-evaluator source capsule v3 is3,461,750B, SHA
+`508053d49a5a54718e59741c7131f6e763965ddba4e3e8b9c4655f7a25286bc6`.
+Both have verified private receipts under the R6 operator root. Large full-state
+PUT serialization temporarily delayed the small control archive; the original
+queued export completed successfully. The attempted fast small-read helper then
+found that completed unit already unloaded; no backup was lost.
+
+Two registered-package directories were exact subsets materialized by early
+small-file recovery. Verified every subset byte against its complete privately
+restored package, preserved the original directories and installed the exact
+package aliases. A resumed metadata tail omitted its old local counter; fixed it
+after freshly verifying all926 historical overlay files. No source or earned
+numeric state was replaced. Administrative full numeric decode was removed in
+favor of exact downloaded-byte/save/readiness custody; the real learner still
+performed its complete restore and checks. Retired the full-SFT capacity request
+from generic RL parameters through the existing live-schedule reload, retaining
+all exact SFT seed/stage requests and the immutable active operation.
+
+R6 filesystem snapshot again FAILED (ad6f238e-c586-45f8-abeb-48c5af859917);
+no snapshot restore is qualified. Independent exports remain primary. Existing
+lifetime, final full-state/control export and strict same-owner verified closure
+workers are live; drain is05:37 Berlin2026-10-28, expiry07:37. Close only after
+actual final recovery/control obligations pass.
+
+LFM continued through40559, with40500 independently exported. Its full packed
+geometry builder remains incomplete (1,469,855/1,575,737 last observed), so do not
+activate an incomplete sidecar. Mellum background checkpoint writing remains
+separate work: assess actual host snapshot admission before enabling a48GB copy;
+do not infer eligibility from GPU free memory or relax the shared memory margins.
+
+Invoice's COMPLETE paired development result is teacher-SFT39/60 versus base0/60,
+using the same exact39495/fe674... reader and related-world split. All60 tuned
+invocations completed; most base failures are typed-action/repair failures.
+This is program-specific development lift, not a production-lineage update or
+confirmation result. Confirmation remains untouched. Inventory's comparison is
+running. The cached actor normally completes tuned calls in~10-12s after warmup.
+
+Prepared and queued the existing complete SFT/whole-graph-RL program pipeline for
+Invoice after the comparisons. Supervisor:
+`natlang-invoice-whole-graph-rl-supervisor-r2-20261027`. It continues the actual
+saved Invoice build, overrides the stale Ticket initial-parent setting, retains
+all verified teacher rows, samples whole training-world graphs and uses normal
+validation/activation. Do not seed training from a compact inference release:
+its soft-state identities differ from the trainable parent's. No RL update is
+claimed from this waiting supervisor. Owner learned-optimizer edits remain
+separate and must not be staged or deployed accidentally.
+
+Fixed the continuous-storage monitor's rejection of externally relocated active
+LFM checkpoints. Explicit external roots now require actual mount UUID/device
+custody, and undeclared paths/symlink escapes remain rejected. All32 relevant
+checks pass; commitbb2fec978. The timer actually resumed verified archival and
+moved2,982,770,735B from old cycle44 to the external volume, preserving its path.
+One more audited internal pin40037 is queued for verified relocation with both
+numeric copies preserved. Its first0.5GiB worker hit its own cgroup cap because
+the shared copier syncs512MiB windows; original bytes stayed intact and the
+partial is496MB. Replacement worker uses2GiB. Do not repeat that low allowance or
+claim its3.1GB freed before its actual verified link-swap receipt.
