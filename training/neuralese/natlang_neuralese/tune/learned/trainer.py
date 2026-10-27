@@ -83,9 +83,7 @@ class OuterTrainer:
 
     def __init__(self, engine, bank, grid, recipe, targets, *, state=None, owner=None, extra_token=None):
         self.engine, self.bank, self.grid, self.recipe, self.owner = engine, bank, grid, recipe, owner
-        self.targets = list(targets)
-        if not self.targets:
-            raise LearnedOptimizerError('the outer trainer needs admitted target tuples')
+        self.targets = list(targets)  # empty when the trainer only applies the optimizer (`episode.propose`)
         for target in self.targets:
             if target['bank'] != bank.snapshot:
                 raise LearnedOptimizerError(f'target {target["id"]} was labeled against another bank snapshot; refit it')
@@ -132,6 +130,8 @@ class OuterTrainer:
 
     # -- batches -------------------------------------------------------------------------------------------------
     def _next_batch(self):
+        if not self.targets:
+            raise LearnedOptimizerError('supervised outer training needs admitted target tuples')
         size = min(self.recipe.batch_targets, len(self.targets))
         batch, epoch, position = [], self.state['epoch'], self.state['position']
         order = torch.randperm(len(self.targets), generator=torch.Generator().manual_seed(self.recipe.seed * 7919 + epoch)).tolist()

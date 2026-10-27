@@ -82,7 +82,8 @@ def state_loss(captured, target, scales, *, robust=None):
             raise LearnedOptimizerError('state target and captured span differ in layer layout')
         for name in STATE_FIELDS:
             if name in ours:
-                error = (ours[name].float() - theirs[name].detach().float().to(ours[name].device)) / scales[(index, name)]
+                scale = scales[(index, name)] if (index, name) in scales else scales[f'{index}.{name}']
+                error = (ours[name].float() - theirs[name].detach().float().to(ours[name].device)) / scale
                 value = (error ** 2 if robust is None else robust(error)).mean()
                 terms.append(value)
                 report[f'{index}.{name}'] = float(value.detach())

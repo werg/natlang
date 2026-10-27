@@ -17,7 +17,8 @@ One incremental native computation (`native_step`, `splice_block`, the same laye
 With gradients enabled every output is a live function of the writer adapter's leaves, the coefficient head (applied
 by the caller) and any live imported states (trainable keys, digests). Run it inside `run_native` with the writer's
 entries. Sampling uses the grammar-restricted law and records each free token's log probability; forced tokens have
-no sampling score.
+no sampling score. Without targets or sampling the arrays are decoded greedily: a declared deterministic reference run,
+not a policy sample.
 """
 from __future__ import annotations
 
@@ -161,8 +162,7 @@ class Writer:
     def _array(self, array, cache, result, imports, overrides, *, sample, generator, branch):
         grid = self.grid
         K = len(array.available)
-        if array.targets is None and not sample:
-            raise LearnedOptimizerError(f'scope {array.scope} has neither teacher-forced targets nor sampling')
+        greedy = array.targets is None and not sample  # a deterministic reference run, not a policy sample
         if self.cue and len(array.keys) != K:
             raise LearnedOptimizerError('cued decoding needs one key per slot')
         out = self._step(self._text(f' {array.scope}=') + [grid.open], cache)
@@ -189,7 +189,9 @@ class Writer:
             else:
                 value = None
             sign_lp = torch.log_softmax(torch.stack([sign_logits[grid.positive], sign_logits[grid.negative]]).float() / self.temperature, 0)
-            if value is None:
+            if value is None and greedy:
+                negative = bool(sign_lp[1] > sign_lp[0])
+            elif value is None:
                 negative = bool(torch.multinomial(sign_lp.exp().detach().cpu(), 1, generator=generator).item() == 1)
             else:
                 negative = value < 0
@@ -201,7 +203,8 @@ class Writer:
             if negative:
                 digit_lp = torch.log_softmax(torch.cat([digit_lp.new_full((1,), -torch.inf), digit_logits[index[1:]].float() / self.temperature]), 0)
             if value is None:
-                magnitude = int(torch.multinomial(digit_lp.exp().detach().cpu(), 1, generator=generator).item())
+                magnitude = (int(digit_lp.argmax()) if greedy else
+                             int(torch.multinomial(digit_lp.exp().detach().cpu(), 1, generator=generator).item()))
                 value = -magnitude if negative else magnitude
             magnitude = abs(value)
             if magnitude >= len(grid.digits):
