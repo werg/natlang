@@ -117,7 +117,7 @@ def test_batch_can_continue_exact_external_parent(tmp_path):
 
 def test_saved_fit_import_uses_verified_batch_and_checks_file_names(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from natlang_neuralese.tune.build import import_states
+    from natlang_neuralese.tune.build import import_archive
     engine, records = _history(tmp_path, 'lfm', 'adam')
     target = TensorStore()
     directory = tmp_path / 'archive'
@@ -126,21 +126,21 @@ def test_saved_fit_import_uses_verified_batch_and_checks_file_names(tmp_path, mo
         _artifacts(engine.store, target)
         for record in records:
             (directory / f'{record.id}.nzs').write_bytes(encode_native_state(record.block))
-        batch = target.put_native_states
+        batch = target.put_native_archive
         sizes = []
 
-        def checked(blocks):
+        def checked(blocks, artifacts):
             values = list(blocks)
             sizes.append(len(values))
-            return batch(values)
+            return batch(values, artifacts)
 
-        monkeypatch.setattr(target, 'put_native_states', checked)
-        import_states(SimpleNamespace(store=target), directory)
+        monkeypatch.setattr(target, 'put_native_archive', checked)
+        import_archive(SimpleNamespace(store=target), state_directories=[directory])
         assert sizes == [5]
         assert encode_native_state(target.get_native_state(records[-1].id).block) == encode_native_state(records[-1].block)
         (directory / 'wrong.nzs').write_bytes(encode_native_state(records[0].block))
         with pytest.raises(ValueError, match='named content'):
-            import_states(SimpleNamespace(store=target), directory)
+            import_archive(SimpleNamespace(store=target), state_directories=[directory])
         assert sizes == [5]
     finally:
         target.close()

@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 from . import LearnedOptimizerError
-from ..build import import_artifacts, import_states, load_plan, persist_artifacts, _write
+from ..build import import_archive, load_plan, persist_artifacts, _write
 
 PROGRAM_SCHEMA = 'natlang.lopt.program-context/1'
 
@@ -44,13 +44,11 @@ class ProgramContext:
         self.out = Path(out)
         self.out.mkdir(parents=True, exist_ok=True)
         self.build = Path(build) if build else None
-        for directory in [*(self.plan_path.parent / item for item in self.plan.get('artifacts', [])),
-                          *([self.build / 'artifacts'] if self.build else []), self.out / 'artifacts']:
-            if directory.is_dir():
-                import_artifacts(engine, directory)
-        for directory in [*([self.build / 'states'] if self.build else []), self.out / 'states']:
-            if directory.is_dir():
-                import_states(engine, directory)
+        import_archive(engine,
+            [*(self.plan_path.parent / item for item in self.plan.get('artifacts', [])),
+             *([self.build / 'artifacts'] if self.build else []), self.out / 'artifacts'],
+            [*((self.plan_path.parent / item).parent / 'states' for item in self.plan.get('artifacts', [])),
+             *([self.build / 'states'] if self.build else []), self.out / 'states'])
         self.soft = soft if soft is not None else self._soft_initialization()
         initial = {key: record['state'] for key, record in self.soft.items()}
         turns = [turn for turn in self.turns if occurrences is None or _occurrence(turn) in occurrences]

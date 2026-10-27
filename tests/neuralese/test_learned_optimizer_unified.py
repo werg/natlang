@@ -72,8 +72,8 @@ def test_tuner_on_the_bank_basis_yields_exact_bank_coordinates_and_targets(tmp_p
     state = json.loads((tmp_path / 'fit' / 'state.json').read_text())
     engine = open_engine(tmp_path, store)
     try:
-        from natlang_neuralese.tune.build import import_artifacts
-        import_artifacts(engine, tmp_path / 'fit' / 'artifacts')
+        from natlang_neuralese.tune.build import import_archive
+        import_archive(engine, [tmp_path / 'fit' / 'artifacts'], [tmp_path / 'fit' / 'states'])
         bank = load_bank(engine, json.loads((tmp_path / 'bank.json').read_text())['bank'])
         for node, adapter in state['node_artifacts'].items():
             record = engine.store.get_native_tensor_artifact(adapter).artifact

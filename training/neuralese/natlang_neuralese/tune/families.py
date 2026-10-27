@@ -183,9 +183,8 @@ def fit(plan, out):
     recipe = Recipe.from_json({**recipe, 'ranks': {'tree': rank, 'folder': 0, 'lambda': 0}})
     manifest = family_manifest(dict(engine.native_identity), members)
     state_path = out / 'state.json'
-    from .build import import_artifacts
-    if (out / 'artifacts').is_dir():
-        import_artifacts(engine, out / 'artifacts')
+    from .build import import_archive
+    import_archive(engine, [out / 'artifacts'], [out / 'states'])
     state = json.loads(state_path.read_text()) if state_path.exists() else None
     trainer = JointTrainer(engine, manifest, rows, recipe, state=state)
     save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(),

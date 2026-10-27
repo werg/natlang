@@ -28,15 +28,25 @@ def _write(path, value):
     os.replace(temporary, path)
 
 
-def import_artifacts(engine, directory):
+def import_archive(engine, artifact_directories=(), state_directories=()):
+    """Admit all archive directories as one verified mixed dependency closure."""
     from ..model.native_artifact import decode_native_tensor_artifact
+    from ..serve.store import decode_native_state
     from .archive_links import read_archive, remember
-    for path in sorted(Path(directory).glob('*.nnt')):
-        body, reference = read_archive(path)
-        artifact, ident = decode_native_tensor_artifact(body)
-        if engine.store.put_native_tensor_artifact(artifact).id != ident or path.stem != ident:
-            raise ValueError(f'artifact file {path} does not hold its named content')
-        remember(engine, ident, reference)
+    tensors, states, references = {}, {}, {}
+    for directories, suffix, decoder, output in (
+        (artifact_directories, 'nnt', decode_native_tensor_artifact, tensors),
+        (state_directories, 'nzs', decode_native_state, states)):
+        for directory in directories:
+            for path in sorted(Path(directory).glob(f'*.{suffix}')):
+                body, reference = read_archive(path)
+                value, ident = decoder(body)
+                if path.stem != ident:
+                    raise ValueError(f'archive file {path} does not hold its named content')
+                output[ident] = value
+                references[ident] = reference
+    engine.store.put_native_archive(states.values(), tensors.values())
+    for ident, reference in references.items(): remember(engine, ident, reference)
 
 
 def persist_artifacts(engine, ids, directory, states=None):
@@ -44,7 +54,7 @@ def persist_artifacts(engine, ids, directory, states=None):
 
     Native states (`nzs1_`) go to ``states`` with their full derivation closure (parents, gradients, updates and
     optimizer histories), so the tuned soft states and their immutable lineage can be restored and verified."""
-    from ..model.native_artifact import encode_native_tensor_artifact
+    from ..model.native_artifact import encode_native_tensor_artifact, native_tensor_dependencies
     from .archive_links import link_verified, remember, signature
     directory.mkdir(parents=True, exist_ok=True)
     pending = [ident for ident in ids if ident]
@@ -57,7 +67,7 @@ def persist_artifacts(engine, ids, directory, states=None):
         if ident.startswith('nzs1_'):
             if states is None:
                 continue  # a state-gradient's parent; persisted by the caller that owns states
-            from ..model.native_derivative_contract import derivation_dependencies
+            from ..model.state_block import native_state_dependencies
             from ..serve.store import encode_native_state
             record = engine.store.get_native_state(ident)
             if record is None:
@@ -69,7 +79,7 @@ def persist_artifacts(engine, ids, directory, states=None):
                 temporary.write_bytes(encode_native_state(record.block))
                 os.replace(temporary, path)
                 remember(engine, ident, (path.resolve(), signature(path)))
-            pending.extend(derivation_dependencies(record.block.derivation))
+            pending.extend(native_state_dependencies(record.block))
             continue
         path = directory / f'{ident}.nnt'
         record = engine.store.get_native_tensor_artifact(ident)
@@ -80,28 +90,9 @@ def persist_artifacts(engine, ids, directory, states=None):
             temporary.write_bytes(encode_native_tensor_artifact(record.artifact))
             os.replace(temporary, path)
             remember(engine, ident, (path.resolve(), signature(path)))
+        pending.extend(native_tensor_dependencies(record.artifact))
         if record.artifact.source_artifact_id:
             pending.append(record.artifact.source_artifact_id)
-
-
-def import_states(engine, directory):
-    """Restore complete archived histories with one full verification per terminal."""
-    from ..serve.store import decode_native_state
-    from .archive_links import read_archive, remember
-    pending = {}
-    references = {}
-    for path in sorted(Path(directory).glob('*.nzs')):
-        body, reference = read_archive(path)
-        block, ident = decode_native_state(body)
-        if path.stem != ident:
-            raise ValueError(f'state file {path} does not hold its named content')
-        pending[ident] = block
-        references[ident] = reference
-    records = engine.store.put_native_states(pending.values())
-    if [record.id for record in records] != list(pending):
-        raise ValueError('archived native states changed their content IDs')
-    for ident, reference in references.items():
-        remember(engine, ident, reference)
 
 
 def load_plan(path):
@@ -130,13 +121,11 @@ def main(argv=None):
                                 dtype=getattr(torch, config.get('dtype', 'float32')))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    for directory in [*(Path(args.plan).parent / item for item in plan.get('artifacts', [])),
-                      *([parent_dir / 'artifacts'] if parent_dir else []), out / 'artifacts']:
-        if directory.is_dir():
-            import_artifacts(engine, directory)
-    for directory in [*([parent_dir / 'states'] if parent_dir else []), out / 'states']:
-        if directory.is_dir():
-            import_states(engine, directory)
+    import_archive(engine,
+        [*(Path(args.plan).parent / item for item in plan.get('artifacts', [])),
+         *([parent_dir / 'artifacts'] if parent_dir else []), out / 'artifacts'],
+        [*((Path(args.plan).parent / item).parent / 'states' for item in plan.get('artifacts', [])),
+         *([parent_dir / 'states'] if parent_dir else []), out / 'states'])
     state_path = out / 'state.json'
     # Published family versions are part of the release: archived beside the fit's own residuals.
     family_artifacts = [item['artifact'] for item in manifest.get('families', [])]

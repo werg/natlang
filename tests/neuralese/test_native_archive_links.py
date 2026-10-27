@@ -7,7 +7,7 @@ import pytest
 
 from test_native_state_batch_import import _history
 from natlang_neuralese.serve.store import TensorStore
-from natlang_neuralese.tune.build import import_artifacts, import_states, persist_artifacts
+from natlang_neuralese.tune.build import import_archive, persist_artifacts
 
 
 def _archive(tmp_path):
@@ -15,8 +15,7 @@ def _archive(tmp_path):
     source = tmp_path / 'source'
     persist_artifacts(engine, [records[-1].id], source / 'artifacts', source / 'states')
     target = SimpleNamespace(store=TensorStore())
-    import_artifacts(target, source / 'artifacts')
-    import_states(target, source / 'states')
+    import_archive(target, [source / 'artifacts'], [source / 'states'])
     return engine, records, source, target
 
 

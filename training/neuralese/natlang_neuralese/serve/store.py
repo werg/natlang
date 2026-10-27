@@ -333,6 +333,70 @@ class TensorStore:
                      for ident in publication_order}
         return [published[ident] for ident in order]
 
+    def put_native_archive(self, blocks, artifacts, owner: str | None = None):
+        """Verify a complete mixed archive against private copies before admission."""
+        from ..model.native_artifact import (encode_native_tensor_artifact, decode_native_tensor_artifact,
+                                             native_tensor_dependencies)
+        from ..model.state_block import native_state_dependencies
+        from ..model.native_derivative_contract import verify_derivative_gradient_origin
+        from ..model.native_state_derivation import verify_state_derivation
+        states, tensors = {}, {}
+        for block in blocks:
+            copy, ident = decode_native_state(encode_native_state(block))
+            states[ident] = NativeStateRecord(ident, copy)
+        for artifact in artifacts:
+            copy, ident = decode_native_tensor_artifact(encode_native_tensor_artifact(artifact))
+            tensors[ident] = NativeTensorRecord(ident, copy)
+        store = self
+        class Overlay:
+            def get_native_state(self, ident):
+                return states[ident] if ident in states else store.get_native_state(ident)
+            def get_native_tensor_artifact(self, ident):
+                return tensors[ident] if ident in tensors else store.get_native_tensor_artifact(ident)
+        overlay = Overlay()
+        records = {**states, **tensors}
+        dependencies = {ident: (native_state_dependencies(record.block) if ident in states
+                       else native_tensor_dependencies(record.artifact)) for ident, record in records.items()}
+        done, active, order = set(), set(), []
+        for root in records:
+            stack = [(root, False)]
+            while stack:
+                ident, exiting = stack.pop()
+                if exiting:
+                    active.remove(ident)
+                    done.add(ident)
+                    order.append(ident)
+                    continue
+                if ident in done: continue
+                if ident in active: raise ValueError('archived native artifacts have a cyclic dependency')
+                active.add(ident)
+                stack.append((ident, True))
+                for dep in dependencies[ident]:
+                    if dep in records: stack.append((dep, False))
+                    elif dep.startswith('nzs1_'):
+                        if overlay.get_native_state(dep) is None: raise ValueError(f'missing native dependency {dep}')
+                    elif dep.startswith('nnt1_'):
+                        if overlay.get_native_tensor_artifact(dep) is None: raise ValueError(f'missing native dependency {dep}')
+                    else: raise ValueError(f'invalid native dependency {dep}')
+        for record in tensors.values(): verify_derivative_gradient_origin(overlay, record.artifact)
+        parents = {record.block.derivation['parent_state_id'] for record in states.values()
+                   if record.block.derivation is not None}
+        for ident in states.keys() - parents: verify_state_derivation(overlay, states[ident].block)
+        # Check collisions across the entire batch before publishing any record.
+        for ident, record in records.items():
+            with store._lock:
+                existing = store._load(ident)
+            if existing is not None:
+                if type(existing) is not type(record):
+                    raise ValueError('native archive content ID collision')
+                old = encode_native_state(existing.block) if ident in states else encode_native_tensor_artifact(existing.artifact)
+                new = encode_native_state(record.block) if ident in states else encode_native_tensor_artifact(record.artifact)
+                if old != new: raise ValueError('native archive content ID collision')
+        for ident in order:
+            if ident in states: self._put_verified_native_state(states[ident], owner)
+            else: self._put_verified_native_tensor(tensors[ident], owner)
+        return [*states.values(), *tensors.values()]
+
     def _put_verified_native_state(self, record, owner):
         block = record.block
         with self._lock:
@@ -373,6 +437,10 @@ class TensorStore:
         stored_artifact = NativeTensorArtifact(artifact.kind, dict(artifact.native_identity), cpu_tensors,
             artifact.source_artifact_id, dict(artifact.provenance or {}), artifact.canonical_metadata).validate()
         record = NativeTensorRecord(native_tensor_artifact_id(stored_artifact), stored_artifact)
+        return self._put_verified_native_tensor(record, owner)
+
+    def _put_verified_native_tensor(self, record, owner):
+        stored_artifact = record.artifact
         with self._lock:
             found = self._load(record.id)
             if found is not None:
