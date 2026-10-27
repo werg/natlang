@@ -73,6 +73,10 @@ class PrefixCache:
     def store(self, digest: str, cache, h_last):
         storages = _storages((cache, h_last), {})
         with self.lock:
+            # A snapshot that cannot fit alone must not evict useful shorter
+            # prefixes, especially the final grid block of a long prompt.
+            if sum(storages.values()) > self.budget:
+                return
             if digest in self.entries:
                 self.entries.move_to_end(digest)
                 return
@@ -82,7 +86,7 @@ class PrefixCache:
                     self.bytes += size
                 held[1] += 1
             self.entries[digest] = (cache, h_last, storages)
-            while self.bytes > self.budget and len(self.entries) > 1:
+            while self.bytes > self.budget and self.entries:
                 _, (_, _, old) = self.entries.popitem(last=False)
                 for ref in old:
                     held = self.refs[ref]

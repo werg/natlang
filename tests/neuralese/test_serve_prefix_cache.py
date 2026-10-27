@@ -76,3 +76,15 @@ def test_budget_evicts_least_recent_and_counts_shared_storage_once(tmp_path):
     digests = cache.digests({'k': 1}, list(range(10)))
     assert sorted(digests) == [4, 8, 10]
     assert cache.digests({'k': 2}, list(range(10)))[4] != digests[4]
+
+
+def test_oversized_snapshot_does_not_exceed_budget_or_leave_storage_refs():
+    cache = PrefixCache(100, 4)
+    cache.store('small', (torch.zeros(10),), None)
+    cache.store('oversized', (torch.zeros(100),), None)
+    assert cache.bytes <= cache.budget
+    assert 'oversized' not in cache.entries
+    assert list(cache.entries) == ['small'] and cache.bytes == 40
+    assert len(cache.refs) == 1 and next(iter(cache.refs.values())) == [40, 1]
+    cache.store('next', (torch.zeros(10),), None)
+    assert cache.bytes == 80 and list(cache.entries) == ['small', 'next']
