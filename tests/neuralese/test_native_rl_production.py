@@ -192,7 +192,7 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     assert state['training']['options']['resident_data_directory'] is None
     assert state['training']['options']['foundation_communication_batches'] is None
     assert state['training']['options']['refresh_foundation_readiness'] is False
-    assert state['training']['options']['foundation_readiness_policy'] == 'at-boundary'
+    assert state['training']['options']['foundation_readiness_policy'] == 'on-shared-request'
     assert state['training']['options']['foundation_qualification_request'] is None
     assert state['training']['options']['resident_geometry_qualification'] is None
     assert state['training']['options']['memory_qualification'] is None
@@ -217,6 +217,24 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         # idempotence run has zero new updates and is not an RL credit source.
         (tmp_path/'learner/report.json').write_bytes(first_report)
         (tmp_path/'learner/native-training-receipt.json').write_bytes(first_receipt)
+
+
+def test_completed_raw_round_defers_full_runtime_until_shared_request(tmp_path, monkeypatch):
+    from natlang_neuralese.eval import native_backend
+
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError('ordinary completed policy round requested a full runtime comparison')
+    monkeypatch.setattr(native_backend, 'qualify_complete_runtime', forbidden)
+    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path, False)
+    report = json.loads((tmp_path/'learner/report.json').read_text())
+    certificate = json.loads((tmp_path/'learner/native-runtime-certificate.json').read_text())
+    assert report['completed'] is True
+    assert report['progress_numerics']['passed'] is True
+    assert certificate['deferred'] is True and certificate['passed'] is False
+    assert certificate['reason'] == 'shared qualification request pending'
+    assert not calls
 
 
 def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,monkeypatch):

@@ -113,6 +113,8 @@ def main(argv=None):
     parser.add_argument('--foundation-native-graphs', type=Path)
     parser.add_argument('--foundation-communication-batches', type=int)
     parser.add_argument('--refresh-foundation-readiness', action='store_true')
+    # Scheduling policy remains applicable to policy rounds; unlike the parent's
+    # cohort and qualification request, it must reach the actual nested trainer.
     parser.add_argument('--foundation-readiness-policy', choices=('at-boundary', 'on-shared-request'))
     parser.add_argument('--foundation-qualification-request', type=Path)
     parser.add_argument('--resident-data-directory', type=Path)
@@ -165,6 +167,8 @@ def _admit_and_train(args,trainer):
             '--objective',str(objective_path),'--continue-from',str(args.continue_from),
             '--held-native-graphs',str(args.held_native_graphs),'--out',str(args.out),*trainer]
         return train_coefficients(coefficient_args)
+    if args.foundation_readiness_policy is not None:
+        trainer += ['--foundation-readiness-policy', args.foundation_readiness_policy]
     from ..data.native_sources import NativeGraphSource
     from .native_replay import NativePolicyObjective
     from ..eval.native_memory import policy_capacity_request

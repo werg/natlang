@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import * as host from '../dist/index.js';
 import { activeNativeAdapters } from '../dist/native/model-recording.js';
 import { tuneProgram } from '../dist/tune/pipeline.js';
-import { collect, splitExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
+import { collect, splitExamples, protectedExamples, scaffoldManifest, readRootExamples } from '../dist/tune/collect.js';
 import { openAICompatibleModelTurn } from '../dist/model/openai-compatible.js';
 import { scriptedModel } from './support/natlang.mjs';
 
@@ -63,6 +63,19 @@ test('splits happen per component before expansion and protected roots are exclu
   const extended = splitExamples(more, split.receipt);
   for (const item of split) assert.equal(extended.find(other => other.id === item.id).partition, item.partition);
   assert.ok(new Set(extended.map(item => item.partition)).size >= 2);
+});
+
+test('identical inputs in distinct worlds keep separate root records and protected identities', () => {
+  const shared = { function: 'f.nl', input: { value: 1 }, expected: 'one' };
+  const examples = [{ ...shared, group: 'train-world' }, { ...shared, group: 'held-world' }];
+  const receipt = { schema: 'natlang.tune-split/v1', components: { 'train-world': 'train', 'held-world': 'confirmation' } };
+  const split = splitExamples(examples, receipt);
+  assert.notEqual(split[0].id, split[1].id, 'world-specific teacher records must never collide');
+  assert.deepEqual(split.map(row => row.partition), ['train', 'confirmation']);
+  const extended = splitExamples([...examples, { ...shared, group: 'new-world' }], receipt);
+  assert.deepEqual(extended.slice(0, 2).map(row => row.id), split.map(row => row.id), 'adding a sibling world keeps existing IDs');
+  assert.equal(protectedExamples([{ ...examples[1], protected: true }])[0].id, split[1].id);
+  assert.notEqual(protectedExamples([{ ...shared, group: 'protected-world', protected: true }])[0].id, split[0].id);
 });
 
 test('natlang tune collects per-binding trajectories, trains, validates through the engine and activates', async () => {

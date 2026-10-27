@@ -65,6 +65,12 @@ export function readRootExamples(root: string, path = join(root, 'tune.examples.
 /** A persisted split receipt: component -> partition. Once assigned, a component never moves (plan §4.1). */
 export type SplitReceipt = { readonly schema: 'natlang.tune-split/v1'; readonly components: Readonly<Record<string, Partition>> };
 
+const componentOf = (example: RootExample) => example.group ?? digest([example.function, example.input]);
+// Identical arguments in distinct captured worlds are distinct invocations. Their
+// records, teacher custody and evaluation caches must not share a root key.
+const rootExampleId = (example: RootExample) => digest(['natlang.tune-root/v2', componentOf(example),
+  example.function, example.input, example.expected ?? null]).slice(0, 16);
+
 /**
  * Partition by connected component before expansion: the component is the declared group, else the example itself.
  * Components already in `receipt` keep their partition, so adding examples never moves a development root into
@@ -74,7 +80,6 @@ export type SplitReceipt = { readonly schema: 'natlang.tune-split/v1'; readonly 
  */
 export function splitExamples(examples: readonly RootExample[], receipt?: SplitReceipt): SplitExample[] & { receipt: SplitReceipt } {
   const usable = examples.filter(example => !example.protected);
-  const componentOf = (example: RootExample) => example.group ?? digest([example.function, example.input]);
   const assigned: Record<string, Partition> = { ...(receipt?.components ?? {}) };
   const fresh = [...new Set(usable.map(componentOf))].filter(component => !(component in assigned))
     .sort((a, b) => digest(['natlang.tune-split/v1', a]).localeCompare(digest(['natlang.tune-split/v1', b])));
@@ -84,7 +89,7 @@ export function splitExamples(examples: readonly RootExample[], receipt?: SplitR
     const anyOther = Object.keys(assigned).length > 0;
     assigned[component] = !hasDevelopment && anyOther ? 'development' : draw < 0.7 ? 'train' : draw < 0.9 ? 'development' : 'confirmation';
   }
-  const split = usable.map(example => ({ ...example, id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16),
+  const split = usable.map(example => ({ ...example, id: rootExampleId(example),
     component: componentOf(example), partition: assigned[componentOf(example)]! }));
   return Object.assign(split, { receipt: { schema: 'natlang.tune-split/v1' as const, components: assigned } });
 }
@@ -92,7 +97,7 @@ export function splitExamples(examples: readonly RootExample[], receipt?: SplitR
 /** Protected roots for final reporting only (never collected, trained on or used for selection). */
 export function protectedExamples(examples: readonly RootExample[]): SplitExample[] {
   return examples.filter(example => example.protected).map(example => ({ ...example, partition: 'confirmation' as const,
-    component: example.group ?? digest([example.function, example.input]), id: digest([example.function, example.input, example.expected ?? null]).slice(0, 16) }));
+    component: componentOf(example), id: rootExampleId(example) }));
 }
 
 /** A manifest with the program's bindings and no artifacts: every call resolves its binding, all run the base. */

@@ -2494,7 +2494,11 @@ def _main(argv=None, *, requested_refresh):
                                                checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request' and not completed and not foundation_boundary and not active_stage_complete)
+    # Completing an ordinary SFT/RL operation is not a shared qualification request.
+    # In particular a short RL round must not repeat the complete-model derivative
+    # comparison before the next production operation can start.
+    deferred_qualification = (args.foundation_readiness_policy == 'on-shared-request'
+                              and qualification_request is None and not foundation_boundary)
     if policy.signaled or deferred_qualification or (not completed and not foundation_boundary and not refresh_boundary and not active_stage_complete):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
