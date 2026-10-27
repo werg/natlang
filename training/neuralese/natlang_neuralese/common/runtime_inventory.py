@@ -92,7 +92,7 @@ def _dependency_receipt(path, static_inventory):
                           '@dependency-source-links': receipt['source_links']})
     reconstructed.update(receipt['source_inventory_extras'])
     if canonical_json_sha256_hex(reconstructed) != source_identity:
-        raise ValueError('frozen task runtime dependency receipt differs from its snapshot identity')
+        raise ValueError('task runtime closure changed: dependency receipt differs from its snapshot identity')
     actual = _dependency_tree(path)
     if actual['files'] != receipt['tree'].get('files'):
         raise ValueError('frozen task runtime dependency contents changed')
