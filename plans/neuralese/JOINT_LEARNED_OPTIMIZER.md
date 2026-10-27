@@ -6,11 +6,12 @@ Owner-directed implementation plan, 2026-10-27.
 
 All three output types belong to the implementation and its training from the outset. Target generation, shared-basis learning, component mixing and dropout, supervised writer training, meta-RL, memetic search, evaluation and deployment are cooperating parts of one system. The primary LoRA interface is an ordinary token-generated `number[]`, positionally aligned with an array of soft component descriptions. The change in training emphasis from supervised imitation toward reward optimization is an optimization schedule within that system. It is not a sequence of partial feature releases.
 
-This document specifies the complete intended implementation. Statements about existing code are grounded in repository revision [`085f8075632b9398933c17923e5867a53aed8185`](https://github.com/werg/natlang/commit/085f8075632b9398933c17923e5867a53aed8185). Proposed types, modules and interfaces below are explicitly design work; their presence in this plan does not claim they are already implemented or trained.
+This document specifies the complete intended implementation. Statements about existing code are grounded in repository revision [`085f8075632b9398933c17923e5867a53aed8185`](https://github.com/werg/natlang/commit/085f8075632b9398933c17923e5867a53aed8185). Proposed types, modules and interfaces below are explicitly design work; their presence in this plan does not claim they are already implemented or trained. Operational measurements and external findings cited in [Making the integrated system likely to succeed](#making-the-integrated-system-likely-to-succeed) come from the linked records and papers as of 2026-10-27.
 
 ## Contents
 
 - [Motivation and intended result](#motivation-and-intended-result)
+- [Making the integrated system likely to succeed](#making-the-integrated-system-likely-to-succeed)
 - [Existing machinery and the integration to build](#existing-machinery-and-the-integration-to-build)
 - [Actors, state and the unit of adaptation](#actors-state-and-the-unit-of-adaptation)
 - [Natlang-native program decomposition](#natlang-native-program-decomposition)
@@ -52,6 +53,171 @@ The ambition includes:
 - Applying the same machinery to the optimizer's own Natlang instructions, skills and adapters, with separately controlled outer evaluation.
 
 Success is better task performance and/or less adaptation work for a given level of performance on programs and worlds that did not train the optimizer. Tensor reconstruction, successful serialization and nonzero gradients are useful diagnostics; they do not establish that result by themselves. No numerical improvement is assumed in advance.
+
+## Making the integrated system likely to succeed
+
+The scope stays complete: every output route, objective, controller and serving path in this plan is built, trained and exercised together. Within that scope, success depends on a few choices about learning signals, representations and operations. These choices give every trainable part a dense signal, keep the number of genuinely distinct adaptation problems growing, and make each failure attributable to a specific part. This section states the choices and the evidence behind them; later sections specify them in detail.
+
+### What the evidence says
+
+| Observation | Source | Consequence for this design |
+| --- | --- | --- |
+| Program tuning can produce real lift. Ticket routing went from 0/20 (base) to 12/20 (teacher SFT) and 17/20 (mixed SFT/RL) on the same development roots and invocation limits. Each tuned program needed a teacher campaign of roughly 100–300 roots and hours of tuning; three programs have saved fits | [Program tuning runs](../PROGRAM_TUNING_RUNS_20261026.md) | The target generator works but is expensive. Distinct adaptation problems, not tuner checkpoints, are the scarce resource |
+| Median prompts of 4.6–5.2k tokens against 81–98-token replies; reply-focused SFT preceded the measured lift | Same | Repeated context must not dominate the optimizer's inputs or losses |
+| The retired projected adapter code reached 0.0023 held-out relative round-trip error on 33 adapters; its planned end-to-end stage reported no task result before retirement | [Learning continuum](LEARNING_CONTINUUM.md) | Reconstruction accuracy is not evidence of usefulness |
+| In the earlier memetic runs, gradient refinement of soft states and adapters produced the gains, 8-case support and validation sets overfit, and proposals authored by LFM2.5-2.6B lowered fitness every time | Same | Gradient refinement is the reliable operator; analysis written by a small model is weak; selection sets must be large |
+| Text-to-LoRA, trained on 479 tasks: hypernetworks trained to reconstruct task LoRAs failed to generalize to unseen tasks, while SFT-trained ones did. The authors attribute this to functionally similar LoRAs not lying near each other in parameter space | [Text-to-LoRA](https://arxiv.org/abs/2506.06105) | Downstream behavior must be the primary supervised signal; independently tuned weights are weak labels. Zero-shot transfer needed hundreds of distinct tasks |
+| SEAL rewards self-generated adaptations by their downstream result. It found GRPO and PPO unstable for that outer loop and used filtered behavior cloning (ReST-EM) | [SEAL](https://arxiv.org/abs/2506.10943) | Begin reward learning with a low-variance estimator and add joint-ratio policy optimization as the measured signal permits |
+| Both students' tokenizers spell `[3, 0, -2]` as `[`, `3`, `,`, `Ġ`, `0`, `,`, `Ġ-`, `2`, `]`: one sign-bearing space token and one digit token per value. LFM groups up to three digits and Mellum splits every digit, so `0.125` costs four LFM tokens and six Mellum tokens | `tokenizer.json` of `LiquidAI/LFM2.5-350M` and `JetBrains/Mellum2.1-12B-A2.5B-Thinking`, checked 2026-10-27 | A single-digit signed integer grid gives both lines the same structure per weight: a sign choice, then a magnitude choice |
+
+### Risks and responses
+
+| Risk | Why it would defeat the system | Response |
+| --- | --- | --- |
+| Too few distinct adaptation problems | Meta-learning generalizes across problems. A few programs with thousands of correlated checkpoints are still a few problems | [Many problems from each program](#many-problems-from-each-program), [tiered targets](#comparable-and-plentiful-targets) and a program-supply worker steered by the learning curve over program count |
+| Weight labels that do not transfer | Independent tunes reach arbitrary equivalent solutions | [Behavior-first supervision](#behavior-first-supervision), behaviorally fitted mixture targets, tunes from a common start and replicate seeds that measure label noise |
+| A sparse signal for the weight route | Token cross-entropy against noisy labels plus score-function credit over digit strings learns slowly | [Learnable weight arrays](#weight-arrays-the-token-head-can-learn): a small integer grid, forced structure, slot cues and a declared token-expectation estimator |
+| Unreachable state targets and misaligned spans | Directly tuned tensors can lie off the writer's manifold; sampled spans change length | [Contextual re-encoding](#native-states-the-writer-can-reach) as the default writing mode, with measured reachability |
+| Weak analysis by a small writer base | `interpretEvidence` and `chooseRevision` running on a 350M model | [Declared actors](#declared-actors-for-analysis), with recorded teacher analysis supplied as evidence |
+| Context and losses dominated by repeated prompts | Each support trajectory renders thousands of shared prompt tokens | [Compact evidence views](#compact-evidence-views) and output-only optimizer token losses |
+| Sparse, noisy reward | Binary success on a few query worlds rarely contrasts | [Dense, contrastive reward](#dense-and-contrastive-reward), beginning with filtered imitation |
+| Integration faults that look like an inability to learn | Many interacting parts and one end-to-end number | [Planted controls](#planted-controls) alongside the existing exact references |
+| Unattributable outcomes | Bank, writer, evidence and optimizer failures look alike | [The ceiling ladder](#the-ceiling-ladder), with named gaps and decision rules |
+| Moving shared targets | Bank, basis, keys and optimizer co-adapt | [Two-timescale publication](#scale-and-cadence), refitting labels at each publication |
+| Underpowered evaluation | A 20-world cohort cannot resolve useful effects | [Evaluation power](#evaluation-power) targets, clustered by program |
+
+### Behavior-first supervision
+
+Make the executor's behavior under the target bundle the primary supervised signal. For a target tuple with bundle `A*` and the optimizer's generated bundle `Â`, teacher-force the same executor histories from training roles and add
+
+$$
+\mathcal L_{\text{distill}}
+=\operatorname{mean}_{\text{turns}}
+\sum_{t\in\text{reply/action}}
+\operatorname{KL}\!\left(p_{\text{exec}}(\cdot\mid h_t,A^*)\,\middle\|\,p_{\text{exec}}(\cdot\mid h_t,\widehat A)\right).
+$$
+
+This loss is dense, with a complete distribution at every supervised position. It is indifferent to which of several equivalent parameterizations produces the behavior. It reaches the writer's states, the shared bank and bases by ordinary backpropagation, and the weight-token probabilities through the [token-expectation estimator](#weight-arrays-the-token-head-can-learn). Apply it at reply/action positions with the recipe's prompt weight, which defaults to zero on long repeated context. Gold-action cross-entropy on verified actions remains alongside it, so the learner can exceed a target that is itself wrong.
+
+State-tensor and decoded-weight losses remain auxiliaries. Start them with weights that keep them a minority of each trainable group's gradient norm, report that share, and reduce them where replicate seeds show inconsistent labels. They speed early learning and help localize faults; they do not define success.
+
+### Comparable and plentiful targets
+
+Produce targets in three tiers, all recorded through the same target schema:
+
+1. **Free joint tunes.** The existing SFT/RL tuner, with instruction states, skill states and adapters enabled together. Start each tune from the common incoming bundle in the shared bank coordinates, plus a free residual with a declared penalty. Related problems then reach comparable solutions, and the residual shows what the bank lacks. These tunes supply bank growth, complete target tuples and the full-tune ceiling. Run replicate seeds on a sample of problems to measure each output route's label noise.
+2. **In-bank fits.** With a pinned bank snapshot, fit each scope's coefficient vector and the program's soft states directly on the support evidence, by gradient through the exact composition, with optional short RL. A fit trains a few dozen coefficients per scope plus the states, so it is cheap, and its result is exactly representable with no projection residual. These fits supply the mixture-token targets and the support-fitted ceiling. Refit them after each bank publication instead of carrying stale labels.
+3. **The learner's own proposals.** Sampled proposals whose paired outcome clears a declared threshold, together with their short in-bank refinements, supply targets near the learner's own state distribution.
+
+Weight-space projection of free-tune updates still initializes and grows the bank. Mixture labels for the token head come from the second and third tiers.
+
+### Many problems from each program
+
+Count independent problems by program and binding family, not by episodes or checkpoints, and report that count with every result. Within that accounting, derive many episodes from each program:
+
+- Every bound Natlang function is an adaptation problem at its own scope as well as part of its program. Ticket routing already has 187 standalone training invocations of its leaf functions.
+- Vary the support evidence: different subsets, sizes from a single world to the full support pool, and evidence-free episodes in which a useful default should be kept.
+- Vary the starting bundle: base, partly tuned, another program's bundle, and tuned bundles with dropped or swapped parts. Revision and recovery are then learned alongside creation.
+- Vary dropout masks under the existing rules.
+
+Choose training problems by measured tuner headroom. A program that no tune improves teaches only the no-op; keep a measured share of such problems, not a majority.
+
+Run program supply as a worker of the same operation. It adds programs with deterministic oracles, grouped world splits and teacher demonstrations through the existing reviewed campaign path, favoring new Natlang domains over more worlds of familiar ones. Track the held-out learned-proposal gain against the number of distinct training programs. While that curve still rises, program supply receives compute before further passes over existing problems. Text-to-LoRA's zero-shot transfer used hundreds of tasks; plan for program supply on that order over the life of the operation. Start from the three current programs and from existing applications once each has an oracle and a split.
+
+### A useful bank from the first run
+
+Initialize components from the effective updates of existing free tunes, one per tuned program or binding family, compressed jointly into shared bases as in Compress-then-Serve, plus leading directions of the pooled residual. Normalize each component's effective update. Initialize each component's key by writing a short text description of its source in context (program, binding and improved behavior) through the existing `native_init_body` path. Retrieval and gradient-free mixing over this bank, in the manner of LoraHub and Arrow, are then baselines from the first run, and the learned optimizer is measured against them.
+
+At publication boundaries, add components for residual directions that recur across several independent programs. Merge or retire components whose utilization or distinct effect stays negligible. Each change is a new snapshot whose labels are refit.
+
+### Native states the writer can reach
+
+Use contextual re-encoding as the default writing mode. The writer re-encodes the binding's current text tokens as forced tokens, as `native_init_body` does, in a context that contains the evidence view and the current bundle, with the writer adapter active. The captured tensors change through that context and adapter, while their positions and length remain those of the target state. State targets therefore align slot for slot, and downstream gradients reach the writer without passing through sampled tokens. A binding may add a declared number of forced extra slot positions for capacity, as gist tokens do, recorded in its layout.
+
+Rewriting a binding's text is a separate operator. Its sampled tokens are credited by the score function, and its states are supervised by behavior only.
+
+Measure reachability on a sample of targets: fit a per-target writer context or adapter toward each directly tuned target, and record the best attainable state error and behavior gap. Where directly tuned targets prove unreachable, lower their state-loss weight and rely on behavior distillation.
+
+### Weight arrays the token head can learn
+
+The default number format is single-digit signed integers in `[-9, 9]`, multiplied by a step recorded in the bank snapshot's number-format contract. In both tokenizers each value is a sign-bearing space token (`Ġ` or `Ġ-`) followed by one digit token. The template fixes spacing so that every slot, including the first, has this form. Each slot is therefore a binary sign choice followed by a magnitude choice, and negative zero is excluded by the grammar. Component normalization makes integer strengths comparable across components. Widen the grid only when its measured precision effect on composed-adapter behavior warrants it, and record the change as a new format contract.
+
+Force the structure. Brackets, separators and each unavailable slot's zero are forced tokens with no sampling score. Only available slots are sampled.
+
+Cue each slot. Before each slot's free tokens, the decoding template re-imports that component's key span as forced context; the typed `number[]` is built from the free tokens only. Plain positional generation is the alternative arm. Choose between them by live measurement of alignment accuracy on the planted controls, as the standing rule for model-facing changes requires.
+
+Train with a declared token-expectation estimator, `token-expectation-v1`. In supervised and distillation objectives, the coefficient used for slot `k` is the exact expectation of the grid value under the grammar-restricted token distribution at that slot, given the realized earlier tokens:
+
+$$
+\bar a_k = s\left(p(\text{Ġ})\sum_{d=0}^{9}d\,p(d\mid\text{Ġ})\;-\;p(\text{Ġ-})\sum_{d=1}^{9}d\,p(d\mid\text{Ġ-})\right).
+$$
+
+The branch not taken by the realized token costs one extra decoding step. Distillation and downstream losses then differentiate into the optimizer's logits and, through them, into its context, including the keys. Parsing remains non-differentiable: realized tokens define the executed adapter in rollouts, rewards and serving. Measure the behavior gap between expected and realized coefficients, and reduce it through token cross-entropy and a declared entropy schedule. Never combine this estimator with a score-function term for the same tokens within one objective.
+
+### Declared actors for analysis
+
+Every Natlang function of the optimizer declares its actor. Native state writing and weight arrays run on the writer for the executor's exact base. Evidence interpretation and revision analysis may run on the self-hosted teacher when it is available. Its text output is recorded with its own actor identity and becomes part of the optimizer's input. Train the writer both with and without that analysis, so application still works when only the native actor is available. The teacher's analysis receives no student policy gradient; improve it through memetic search over its instructions. On the larger Mellum base, measure whether native analysis suffices.
+
+### Compact evidence views
+
+Render the program contract and the current bundle once. Each evidence item then carries its distinct inputs, the actions and observations of the bindings under revision, its verdict and its exact source links, instead of a complete multi-thousand-token rendered prompt. The optimizer's own token losses cover its outputs; its long input context carries zero prompt weight by default.
+
+### Dense and contrastive reward
+
+Oracle task outcomes remain the reward. Add a declared shaping term: the mean change in log-likelihood, under the new bundle versus the incoming one, of query actions that the task contract makes uniquely correct, such as oracle-determined tool arguments. It needs only forward passes, so score every available outer-training query world this way, and execute a rotating subset end to end for task outcomes. Exclude actions that admit valid alternatives, under the existing reward-validity rule. Report task-outcome and shaping components separately.
+
+Sample groups of proposals for each context against shared query worlds and common random numbers. Report each group's outcome contrast.
+
+Begin reward learning with filtered behavior cloning: imitate proposals whose paired reward clears a declared threshold, together with their in-bank refinements. Enable the joint-ratio estimator of the [meta-RL section](#meta-rl-for-the-complete-adapted-program) as measured advantage signal-to-noise and replay compatibility support it. Both are reward optimization within the same system; moving between them is part of the optimization schedule.
+
+### Planted controls
+
+Run inexpensive fixtures with known answers alongside training, as telemetry rather than gates:
+
+- **Planted mixtures.** Components trained for separately checkable behaviors on Natlang program variants, with problems whose support evidence demonstrates a known subset at known strengths. The learner must recover them. These fixtures exercise alignment, masks, number format, composition and export.
+- **Planted states.** Problems whose correct instruction or skill state is a known tuned state.
+- **Perturbation recovery.** Tuned bundles with dropped or swapped parts, which the learner must restore.
+- **Negative controls.** Shuffled or irrelevant evidence must not yield query gains. Permuting the descriptions alone must break planted recovery; permuting descriptions together with their tensors and weights must not.
+
+A failed control is a fault to localize against the existing exact references before any conclusion about the approach.
+
+### The ceiling ladder
+
+For each development problem, measure the following on the same query worlds and limits:
+
+1. The incoming bundle.
+2. Retrieval and gradient-free mixing over the bank.
+3. The learned proposal, after one step and after its `iterateOn` episode.
+4. An in-bank fit on the same support evidence.
+5. A free joint tune on the same support evidence.
+6. An in-bank fit on the development query worlds themselves. This is a diagnostic ceiling only: never a reported result, and never computed on confirmation worlds.
+
+The differences name the limiting part. The amortization gap (4 minus 3) belongs to the optimizer and its training data. The representation gap (5 minus 4) belongs to the bank, rank and state capacity. The evidence gap (6 minus 4) measures how much the support evidence leaves undetermined. The headroom (5 minus 1) belongs to the program, its oracle and the executor base. Direct effort to the largest gap: more programs and optimizer training for amortization; bank growth or refitting for representation; better evidence selection, quantity or analysis for evidence; different problems or a stronger base for headroom.
+
+Also report the warm-start effect: the free-tune work needed to reach the tuner's selected development quality from the learned proposal, compared with the work from the incoming bundle. Cheaper targets yield more problems, and more problems yield a better optimizer. That flywheel is the operation's main economy.
+
+### Scale and cadence
+
+Begin with every route active at small scale: LFM, one or two programs, a few components, a low rank, one- or two-step episodes and the planted controls. Then increase programs, components, rank, episode length and reward share as the ladder justifies. A route at small scale is still the real route; nothing is stubbed. Mellum runs the same implementation with its own bank once the LFM integration passes its planted controls.
+
+Publish shared bank, basis and key snapshots on a slower cadence than optimizer updates, and refit in-bank labels at each publication. Labels and replays then stay valid between publications, while task outcomes still reshape the shared representation.
+
+Starting settings, to be changed by measurement (they are not limits):
+
+| Setting | Starting value | Changed by |
+| --- | --- | --- |
+| Component bank | 16–32 whole-model components per exact base; shared rank-8 basis | Representation gap and utilization |
+| Scopes that emit arrays | Program/tree and bound-function scopes | Ladder results at folder and family scopes |
+| Number format | Integers in `[-9, 9]` times a recorded step | Measured precision effect |
+| State writing | Contextual re-encoding with up to eight extra slots | Reachability and representation gap |
+| Proposals per context | 4 | Measured outcome contrast |
+| Executed query worlds per proposal | 8, with shaping scores on every available query world | Reward variance |
+| Episode length | 1–2 steps | Measured gain per additional step |
+| Reward estimator | Filtered behavior cloning, then joint-ratio optimization | Advantage signal-to-noise |
+
+### Evaluation power
+
+For paired binary outcomes, detecting a 10-point gain when about 30% of world pairs disagree needs roughly `(1.96 + 0.84)^2 × 0.29 / 0.1^2 ≈ 230` independent worlds at 80% power, before the design effect of clustering by program. A 20-world development cohort is a selection signal; it cannot establish an effect of that size. Build development and confirmation pools of a few hundred independent worlds across at least 20 programs for claims about unseen programs. Use the shaping score alongside task success for faster development selection.
 
 ## Existing machinery and the integration to build
 
@@ -245,6 +411,8 @@ The optimizer is authored as typed natural-language functions with callable fold
 | Persist a candidate, compare it and install a release | Existing store/release mechanism | Atomicity, parent comparison and dependency identity are exact requirements |
 | Select training work and adapt the loss mixture | NL policy with recorded metrics and a pluggable deterministic baseline | A learning/operations decision; the actual scheduler, quotas and receipts remain crisp |
 
+Each function declares its actor. Native writing and weight arrays run on the writer for the executor's exact base; analysis functions may run on the self-hosted teacher, whose recorded output then becomes optimizer input (see [declared actors](#declared-actors-for-analysis)).
+
 Place the application with the tuner/improvement code and reuse the existing policy interfaces. Proposed public names must be checked against the runtime's existing surface before being adopted. Authoring and integration guidance must describe any new model-facing interface and its recovery errors in the same implementation change.
 
 The program's algorithm is:
@@ -324,7 +492,7 @@ The mixture weights are finite signed numbers, not necessarily probabilities or 
 
 Associate each component with a short `Neuralese<ComponentDescription>` value occupying a few native token positions. It has the actual KV/hybrid-state representation, native identity, positional handling and derivation requirements of other Neuralese values. Supply the ordered array of descriptions, availability and current weights to the optimizer. Keep the exact component IDs and bank version bound by the host, so the model only has to return the aligned weights.
 
-The soft descriptions are learned keys for useful adaptations. Initialize them from descriptions where useful, then directly train their native-state tensors as shared parameters using the existing state-gradient machinery. Updating those tensors need not change their original token text; the text remains provenance. Their use in the optimizer's token probabilities and native writes provides training signals. Keep the key-to-component association explicit and versioned. The term "key" here describes a component descriptor; it is distinct from the per-layer attention `raw_k` field.
+The soft descriptions are learned keys for useful adaptations. Initialize each by writing a short description of its component's source program, binding and improved behavior in context, then directly train their native-state tensors as shared parameters using the existing state-gradient machinery. Updating those tensors need not change their original token text; the text remains provenance. Their use in the optimizer's token probabilities and native writes provides training signals. Keep the key-to-component association explicit and versioned. The term "key" here describes a component descriptor; it is distinct from the per-layer attention `raw_k` field.
 
 A few native positions help the learner recognize a component; they do not serialize its full weight change. The numerical bank contains the actual values. One description can identify a component spanning many matrices, and the shared descriptions need not be regenerated on each application. Report their actual tensor storage and context cost. This uses native Neuralese communication and exact coefficient artifacts, not the retired projected-vector adapter-code transport.
 
@@ -364,7 +532,7 @@ $$
 
 This projection is a coordinate computation, not proof that the compressed adapter preserves the teacher's behavior. Record its residual and execute the complete compressed bundle. Jointly refine its states and coefficients when compression changes the useful solution.
 
-Fit the reusable component cores and target mixture arrays in these coordinates, using the same weighted effective-update loss with `C_{j,m}` replaced by the masked component sum. Use declared regularization and component normalization to resolve scale/selection ambiguity. Preserve both the basis projection residual and the additional component-bank residual. Learn the soft descriptions and weight-token policy against these targets and their actual task utility.
+Fit the reusable component cores and target mixture arrays in these coordinates, using the same weighted effective-update loss with `C_{j,m}` replaced by the masked component sum. Use declared regularization and component normalization to resolve scale/selection ambiguity. Preserve both the basis projection residual and the additional component-bank residual. These projection fits initialize and grow the bank. The weight-token policy's mixture labels come from behaviorally fitted in-bank targets and from the learner's own verified proposals (see [comparable and plentiful targets](#comparable-and-plentiful-targets)), and the soft descriptions and token policy are trained against those labels and actual task utility.
 
 Refine the shared bases and component cores with downstream supervised loss and the valid reward-gradient path described below. Weight reconstruction supplies an initialization and an auxiliary signal; task outcomes determine whether the directions and their combinations are useful. The descriptions and mixture policy should learn to allocate that capacity to the actual task distribution.
 
@@ -430,7 +598,7 @@ The current inner GRPO path needs reward contrast within groups. Equal-reward gr
 
 ### Joint target generation
 
-For each training episode, initialize or load a coherent bundle and run the existing joint tuner on its support evidence. Enable instruction states, relevant skill states and weight adaptations together. The optimization can combine verified SFT, on-policy correction, RL and memetic refinement according to the declared recipe.
+For each training episode, initialize or load a coherent bundle and run the existing joint tuner on its support evidence. Enable instruction states, relevant skill states and weight adaptations together. The optimization can combine verified SFT, on-policy correction, RL and memetic refinement according to the declared recipe. Start free tunes from the common incoming bundle in shared bank coordinates, and produce cheap in-bank fits and verified self-proposals as the second and third [target tiers](#comparable-and-plentiful-targets).
 
 Capture before/after records at actual logical update boundaries and useful search/refinement transitions. Retain intermediate improvements as well as final outcomes. The learned optimizer needs examples of both creating an adaptation and revising one that is already useful.
 
@@ -485,9 +653,9 @@ The primary model-facing boundary is already expressible with Neuralese fields, 
 
 Validate each returned array against the bank view bound to that invocation: exact length, positional component mapping, scope, version, availability, finite values and any explicitly declared numerical bounds. Require zero weights for unavailable entries and preserve no-op behavior. Resolve state outputs against their semantic type, dialect, binding and layout. The host constructs the complete manifest and corresponding adapter artifacts only from validated values. Existing tool/syntax guidance helps generation; a declared `number[]` type alone does not enforce all these cross-value constraints.
 
-Use a versioned number serialization for supervised targets, with precision selected from measured effect on the composed adapter. Canonicalize equivalent forms such as negative zero; support only declared finite numeric syntax. Preserve the actual generated tokens and parsed values in policy receipts, even when several spellings yield the same number. Do not round, clamp, normalize or remap sampled output silently. Contract failures and repairs are recorded parts of the learner trajectory, including their cost and sampling likelihood.
+Use a versioned number serialization for supervised targets, with precision selected from measured effect on the composed adapter. The default is the single-digit signed integer grid with forced structure described in [weight arrays the token head can learn](#weight-arrays-the-token-head-can-learn). Canonicalize equivalent forms such as negative zero; support only declared finite numeric syntax. Preserve the actual generated tokens and parsed values in policy receipts, even when several spellings yield the same number. Do not round, clamp, normalize or remap sampled output silently. Contract failures and repairs are recorded parts of the learner trajectory, including their cost and sampling likelihood.
 
-For training, historical evidence and detached targets are constants. Current writer outputs, generated recurrent memory and trainable shared keys/components/bases retain their graph ownership through all consumers. Parsed numerical tokens are fixed actions during differentiation; their learning signal comes from token supervision and policy likelihoods. Serialization creates durable detached copies without replacing live values that still have a valid continuous training path. Across service boundaries, an execution-scoped tensor binding or exact cotangent replay reconnects those values to their producer. Expired graph handles fail explicitly.
+For training, historical evidence and detached targets are constants. Current writer outputs, generated recurrent memory and trainable shared keys/components/bases retain their graph ownership through all consumers. Parsed numerical tokens are fixed actions during differentiation; their learning signal comes from token supervision, the declared token-expectation estimator over their grammar-restricted probabilities, and policy likelihoods. Serialization creates durable detached copies without replacing live values that still have a valid continuous training path. Across service boundaries, an execution-scoped tensor binding or exact cotangent replay reconnects those values to their producer. Expired graph handles fail explicitly.
 
 If an explicitly selected representation also consumes arbitrary core/gradient tensors or emits full residual cores, give it named native-tensor slots and a trained numerical encoder/readout. Such slots bind artifact kind, scope, matrix/field, shape, dtype, masks, representation and actor identity, plus live gradient ownership. They are an optional richer interface; they are not needed to output the compact weight array and must not be represented as already supported by ordinary `native_state` content parts. Local internal numerical features do not replace the native Neuralese communication format.
 
@@ -507,7 +675,7 @@ $$
 
 Use squared error or a declared robust loss, with scale statistics computed from training data only. Normalize across blocks, layers and field sizes so a long skill, high-width layer or hybrid field does not overwhelm all other targets. Keep K, V and every supported hybrid field separate in reporting. Match the native pre-rotary representation and preserve exact target geometry and valid-slot masks.
 
-The initial alignment for a target is supplied by its retained producer tokens and state layout. Teacher-force/replay those tokens while matching the captured state. This teaches the evidence-conditioned writer's continuous computation to produce the target representation. Auxiliary token/structure supervision teaches the sequence and its complete typed return, including producer boundaries and sibling fields.
+The initial alignment for a target is supplied by its retained producer tokens and state layout. Teacher-force/replay those tokens while matching the captured state. This teaches the evidence-conditioned writer's continuous computation to produce the target representation. Contextual re-encoding, the [default writing mode](#native-states-the-writer-can-reach), makes this alignment exact by construction. Auxiliary token/structure supervision teaches the sequence and its complete typed return, including producer boundaries and sibling fields.
 
 A tensor loss does not differentiate through sampled token IDs. Free token choices use token likelihood objectives and the policy-gradient terms below. If span lengths differ, use an explicitly trained alignment or behavior-only supervision for that candidate. Do not pad, truncate or compare unrelated positions and call that exact target matching.
 
@@ -526,7 +694,7 @@ $$
      {\|\Delta W_m^*\|_F^2+\epsilon}.
 $$
 
-For fixed or teacher-forced numerical weights, this loss differentiates into trainable component cores and bases. It does not differentiate through a parsed sampled number into the token generator. Train that generator with token supervision and the policy-gradient objective below. A full-core numerical output variant, if explicitly selected, has its own continuous regression path; do not assume that path for ordinary `number[]` token generation.
+For fixed or teacher-forced numerical weights, this loss differentiates into trainable component cores and bases. It does not differentiate through a parsed sampled number into the token generator. Train that generator with token supervision, the declared token-expectation estimator and the policy-gradient objective below. A full-core numerical output variant, if explicitly selected, has its own continuous regression path; do not assume that path for ordinary `number[]` token generation.
 
 When bases or components are being learned, the decoded loss remains meaningful while stale mixture labels do not. Include retained basis and bank projection residuals; a correctly predicted compressed mixture can still miss useful directions of the original free adapter.
 
@@ -534,7 +702,7 @@ Supervise actual structural decisions and complete return contracts: which bindi
 
 ### Downstream supervised behavior
 
-Install the generated bundle in the executor and compute supervised action/reply loss on appropriate outer-training examples. Backpropagate through generated native states and through composed adapters into any trainable shared component cores/bases. The executor's base weights can remain fixed while its computation still provides derivatives with respect to these inputs and adaptations. The numerical-token policy receives its separate supervised or reward learning signal; parsing its weights is not a differentiable connection.
+Install the generated bundle in the executor and compute supervised action/reply loss on appropriate outer-training examples. Backpropagate through generated native states and through composed adapters into any trainable shared component cores/bases. The executor's base weights can remain fixed while its computation still provides derivatives with respect to these inputs and adaptations. The numerical-token policy receives this behavioral signal only through the declared token-expectation estimator, in addition to its token supervision and reward terms; parsing its weights is not a differentiable connection. Compute the [distillation loss](#behavior-first-supervision) against the target bundle's executor distributions on the same histories.
 
 Use the shared native graph execution path. The optimizer's writes and actual executor consumers must remain connected in the live gradient computation. Persisting an artifact for durability does not justify detaching its producing tensor when that producer is being trained.
 
@@ -544,7 +712,8 @@ An overall supervised loss is
 
 $$
 \mathcal L_{\text{sup}}
-=\lambda_P\mathcal L_{\text{instruction state}}
+=\lambda_D\mathcal L_{\text{distill}}
++\lambda_P\mathcal L_{\text{instruction state}}
 +\lambda_S\mathcal L_{\text{skill state}}
 +\lambda_M\mathcal L_{\text{mixture tokens}}
 +\lambda_C\mathcal L_{\text{core/weight}}
@@ -552,7 +721,7 @@ $$
 +\lambda_B\mathcal L_{\text{downstream behavior}}.
 $$
 
-Balance by program/binding and report the raw terms, weights, gradient norms and actual parameter changes. Use disjoint token masks for mixture-token and other structural-token terms so the same digit is not silently counted twice. Record which trainable parameters each term can actually reach. The downstream behavior term prevents numerical resemblance from becoming the sole goal. Keep supervision from SFT-derived and RL-derived targets identifiable, while allowing both to teach the same optimizer.
+Balance by program/binding and report the raw terms, weights, gradient norms and actual parameter changes. Use disjoint token masks for mixture-token and other structural-token terms so the same digit is not silently counted twice. Record which trainable parameters each term can actually reach. The distillation and downstream behavior terms carry the primary signal. The state, mixture-token and core terms are auxiliaries; report their gradient shares and keep them a minority. The behavior terms prevent numerical resemblance from becoming the goal. Keep supervision from SFT-derived and RL-derived targets identifiable, while allowing both to teach the same optimizer.
 
 ## Meta-RL for the complete adapted program
 
@@ -569,7 +738,7 @@ R = \operatorname{quality}(A_{\text{new}},Q)
   - \lambda_{\text{run}}\operatorname{executionCost}.
 $$
 
-Use the same worlds and suitable common random seeds for paired comparisons. Keep task quality and each cost separately visible. Cost weights express a declared user/workload tradeoff; they must not silently replace correctness. Storage, latency and model-call costs can be reported as a frontier as well as a scalar objective.
+Use the same worlds and suitable common random seeds for paired comparisons. Keep task quality and each cost separately visible. Cost weights express a declared user/workload tradeoff; they must not silently replace correctness. The declared shaping term of [dense and contrastive reward](#dense-and-contrastive-reward) is reported as its own component and never replaces the oracle outcome. Storage, latency and model-call costs can be reported as a frontier as well as a scalar objective.
 
 The pre-update baseline depends only on the incoming context and independent baseline execution, not on the proposal whose advantage it estimates. Detach it in score-function losses. For multi-step adaptation, use terminal and intermediate gains with a declared return definition; avoid counting the same improvement once at each step and again in the terminal total.
 
@@ -621,7 +790,7 @@ Use the exact same dropout mask, positional mapping and action spellings in old/
 
 Require replay-compatible inputs, tokenizer, action support, native layout and graph topology. Record all sampling distributions, temperatures, masks and forced choices. Environment/tool observations are replayed with their exact action/result custody. Changes that cannot score the same sampled actions require fresh rollouts. Clipping a ratio does not repair an omitted likelihood term or an incompatible replay.
 
-The equation defines the joint objective. Any per-token, clipped or group-relative surrogate used for efficiency is an explicit estimator choice, with its normalization and approximation recorded. Reuse existing policy math rather than building an unexamined second RL implementation.
+The equation defines the joint objective. Any per-token, clipped or group-relative surrogate used for efficiency is an explicit estimator choice, with its normalization and approximation recorded. Reuse existing policy math rather than building an unexamined second RL implementation. The default schedule begins with filtered behavior cloning on proposals with verified paired gains and enables the joint-ratio update as measured advantage signal-to-noise supports it.
 
 For a backend that cannot provide differentiable native execution, a supported alternative is a stochastic compact proposal code decoded by a pinned writer/basis snapshot. Train its sampling policy from black-box reward and retain supervised training for the writer. Recollect when that decoder changes. This route must not be mislabeled as reward training of every deterministic decoder parameter. The native whole-graph path is the intended complete mechanism.
 
@@ -709,8 +878,12 @@ The following are responsibilities to implement together. Suggested new module n
 | Natlang optimizer application | Add typed evidence interpretation, joint revision, operator-choice and stopping functions, with adaptation and outer-training `iterateOn` controllers; expose exact execution/tuning services through callable folders |
 | Typed return and composition | Return `Neuralese` prompt/skill fields and per-scope `number[]` weights; validate bank order, masks, finite values and scope; compose and persist complete native adapters and bundle manifests |
 | Mixing and base dropout | Implement combination target fitting, mask sampling, same-mask target refitting, stable positional arrays, zero unavailable weights, full-bank application and actual mask/exposure receipts |
-| Numerical token supervision | Add canonical array serialization, explicit precision, token CE, numerical/decoded diagnostics and ambiguity-aware complete-mixture targets; reuse the model's token head |
-| State target objective | Extend native graph training with detached optimized-state targets, producer token/slot alignment, field-wise masks and normalized regression through actual capture |
+| Numerical token supervision | Add the integer-grid array serialization, forced structure and slot cues, token CE, the declared token-expectation estimator, numerical/decoded diagnostics and ambiguity-aware complete-mixture targets; reuse the model's token head |
+| Behavior distillation | Add the executor-distribution distillation objective against target bundles on shared histories, with reply/action weighting and reported gradient shares for every auxiliary |
+| State target objective | Add the contextual re-encoding writer mode with optional forced extra slots; extend native graph training with detached optimized-state targets, producer token/slot alignment, field-wise masks, normalized regression through actual capture and reachability measurement |
+| In-bank fitting | Fit coefficient vectors and soft states against support evidence through a pinned bank by exact differentiable composition; refit labels at each bank publication |
+| Problem supply and accounting | Run program supply through the reviewed campaign path; generate binding-level, support-subset, starting-bundle and mask episodes; report independent program and binding-family counts with every result |
+| Controls and ladder | Maintain planted mixture, state, perturbation and negative-control fixtures, and compute the ceiling ladder, its gaps and the warm-start effect continuously on development problems |
 | Composition gradients | Keep generated native states and trainable shared component/basis/key parameters connected through whole-graph execution, including repeated consumers; parsed numerical actions remain fixed for differentiation |
 | Outer RL | Extend [native replay](../../training/neuralese/natlang_neuralese/rl/native_replay.py), [policy math](../../training/neuralese/natlang_neuralese/rl/policy_math.py) and [native gradient service](../../training/neuralese/natlang_neuralese/serve/native_grad.py) with numerical-token actions, complete sequence likelihoods, old/current bank and mask receipts, and critics/advantages |
 | Joint memetic execution | Generalize the [program search loop](../../training/neuralese/natlang_neuralese/rl/memetic_program.py) and batch runner to coherent bundle candidates, learned operator policies, local refinement and recurrent proposal histories |
@@ -734,9 +907,12 @@ Compare the following on the same declared task worlds, using paired measurement
 - Incoming/base bundle without additional adaptation.
 - Existing joint SFT/RL tuning.
 - Current native guidance search.
-- Retrieval/reuse of a compatible existing adaptation.
+- Retrieval/reuse of a compatible existing adaptation, and gradient-free mixing over the bank.
+- In-bank fits on the same support evidence.
 - Learned joint proposals.
 - Learned joint proposals followed by local joint refinement and memetic selection.
+
+Arrange these with the diagnostic query-fitted ceiling as the [ceiling ladder](#the-ceiling-ladder), and report its amortization, representation, evidence and headroom gaps together with the warm-start effect.
 
 Report quality at matched adaptation cost and the cost needed for matched quality. Include task success, semantic correctness, required effects, failure/budget-stop rates, model calls, tokens, latency, training/refinement work and artifact size. Charge proposal search and failed candidates to the learned optimizer's cost. Report shared basis/component/key/optimizer training cost separately and describe how often it is reused.
 
@@ -759,6 +935,8 @@ These checks protect concrete failure modes of this implementation:
 | Adapter encoding | Compare weighted component sums, decoded updates and exported factors; verify signed/zero weights, scaling once, expert axes, scope composition and coordinate transforms |
 | Array contract and dropout | Reject wrong lengths/banks, nonfinite values and nonzero unavailable slots; preserve exact positional mapping under masks/permutations; verify full-bank application and same-mask target/replay behavior |
 | Numerical-token learning | Verify canonical SFT targets and disjoint token masks; retain actual sampled number spellings, parsed values, forced zeros and all repair attempts in policy receipts |
+| Token-expectation estimator | Compare its expectation against exact enumeration over the grammar on fixtures; verify that no score-function term is added for the same tokens in the same objective; report the expected/realized behavior gap |
+| Planted controls | Planted mixtures, planted states and perturbations are recovered; shuffled evidence yields no query gain; permuting descriptions alone breaks recovery while permuting complete aligned entries does not |
 | Basis/bank refresh | Old arrays and targets cannot resolve under an incompatible or reordered bank; basis/bank projection residuals and changed runtime behavior are visible |
 | Outer RL | Joint old/current log probabilities and ratios include every trained stochastic action, including numerical tokens, and the regenerated bundle's effect on executor actions; replay whole episodes with their actual bank snapshots and dropout masks |
 | Data leakage | Proposer view excludes targets/future outcomes; source/world/family splits remain closed through expansion, repairs, basis fitting and target refresh |
@@ -786,6 +964,10 @@ Repository contracts and implementations are linked where used. The following re
 - [Compress then Serve: Serving Thousands of LoRA Adapters with Little Overhead](https://arxiv.org/abs/2407.00066): representing collections of LoRA updates using shared bases and adapter-specific small matrices. Here that representation becomes the learned optimizer's weight-output space and is refined for adaptation utility.
 - [Prefix-Tuning: Optimizing Continuous Prompts for Generation](https://aclanthology.org/2021.acl-long.353/): directly optimized continuous prefixes as useful model adaptations.
 - [LoRA-XS: Low-Rank Adaptation with Extremely Small Number of Parameters](https://arxiv.org/abs/2405.17604): small trainable cores between frozen weight-derived factors. This plan learns reusable factors from adaptation experience rather than relying solely on a base-weight SVD.
+- [Text-to-LoRA: Instant Transformer Adaption](https://arxiv.org/abs/2506.06105): a hypernetwork trained on 479 tasks; reconstruction training of task LoRAs failed to generalize to unseen tasks, while end-to-end SFT training did. This motivates behavior-first supervision here.
+- [Self-Adapting Language Models (SEAL)](https://arxiv.org/abs/2506.10943): rewards self-generated adaptations by downstream results; GRPO and PPO were unstable for that outer loop, and filtered behavior cloning (ReST-EM) was used instead.
+- [LoraHub: Efficient Cross-Task Generalization via Dynamic LoRA Composition](https://arxiv.org/abs/2307.13269) and [Towards Modular LLMs by Building and Reusing a Library of LoRAs](https://arxiv.org/abs/2405.11157): mixing and routing over a library of task adapters, the retrieval baselines and bank initialization used here.
+- [Learning to Compress Prompts with Gist Tokens](https://arxiv.org/abs/2304.08467): fixed forced positions whose computed state carries learned context, the basis for optional extra writer slots.
 - [Learning to learn by gradient descent by gradient descent](https://papers.neurips.cc/paper_files/paper/2016/hash/fb87582825f9d28a8d42c5e5e5e8b23d-Abstract.html): learning improvement rules across optimization problems.
 
 The combined proposal is specifically to turn Natlang's own whole-program SFT/RL improvements into supervision for a native-state and adapter writer, then optimize that writer through the reward of the complete programs it changes.
