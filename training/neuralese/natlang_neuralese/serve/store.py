@@ -685,6 +685,11 @@ class TensorStore:
                     self._path(block_id).unlink(missing_ok=True)
             return removed
 
+    def contains(self, block_id: str) -> bool:
+        """Check the stored inventory without loading tensor payloads."""
+        with self._lock:
+            return self._known(block_id)
+
     def holders(self, block_id: str) -> set[str]:
         with self._lock:
             return {row[0] for row in self._db.execute("SELECT owner FROM holds WHERE id = ?", (block_id,))}

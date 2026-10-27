@@ -13,7 +13,8 @@ from test_native_state_derivation import engine_fixture
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 @pytest.mark.parametrize('objective_kind', ['ce', 'query'])
-def test_program_state_archive_cold_restore(tmp_path, family, objective_kind):
+@pytest.mark.parametrize('bounded', [False, True])
+def test_program_state_archive_cold_restore(tmp_path, family, objective_kind, bounded):
     engine = engine_fixture(tmp_path, family, service_template=True)
     adapter, _ = nonzero_adapter(engine)
     source = program(engine, adapter, 'sgd')
@@ -35,7 +36,7 @@ def test_program_state_archive_cold_restore(tmp_path, family, objective_kind):
             objective['request']['objective'] = query_spec(graph, [{'kind': 'nll', 'reduction': 'mean', 'readout': readout, 'actions': [
                 {'query': index - 1, 'token_id': token} for index, (token, weight) in
                 enumerate(zip(node['token_ids'], node['target_weights'])) if weight]}])
-    target = SimpleNamespace(store=TensorStore())
+    target = SimpleNamespace(store=TensorStore(tmp_path / 'target', 1) if bounded else TensorStore())
     try:
         result = execute_derivative_program(engine, source)
         root = result['outputs']['a2']
@@ -64,7 +65,7 @@ def test_program_state_archive_cold_restore(tmp_path, family, objective_kind):
             engine.store = original_store
         missing = tmp_path / 'states' / f'{ident}.nzs'
         missing.unlink()
-        empty = SimpleNamespace(store=TensorStore())
+        empty = SimpleNamespace(store=TensorStore(tmp_path / 'empty-target', 1) if bounded else TensorStore())
         try:
             with pytest.raises(ValueError):
                 import_archive(empty, [tmp_path / 'artifacts'], [tmp_path / 'states'])
@@ -149,10 +150,12 @@ def test_object_admission_copies_inputs_and_rejects_mutable_payload(tmp_path):
         engine.store.close()
 
 
-def test_bounded_archive_preserves_history_and_rejects_missing_before_publication(tmp_path):
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('algorithm', ['adam', 'sgd'])
+def test_bounded_archive_preserves_history_and_rejects_missing_before_publication(tmp_path, family, algorithm):
     from test_native_state_batch_import import _history
     from natlang_neuralese.model.native_state_derivation import verify_state_derivation
-    engine, records = _history(tmp_path, 'lfm', 'adam')
+    engine, records = _history(tmp_path, family, algorithm)
     target = SimpleNamespace(store=TensorStore(tmp_path / 'bounded', resident_bytes=1))
     try:
         persist_artifacts(engine, [records[-1].id], tmp_path / 'artifacts', tmp_path / 'states')
@@ -207,3 +210,92 @@ def test_fit_store_owns_disposable_scratch(tmp_path):
     assert not directory.exists()
     with pytest.raises(ValueError):
         fit_store({'store_resident_bytes': -1})
+
+
+def test_bounded_malformed_and_collision_leave_existing_store_unchanged(tmp_path):
+    from test_native_state_batch_import import _history
+    from natlang_neuralese.serve.store import encode_native_state
+    engine, records = _history(tmp_path, 'lfm', 'adam')
+    target = TensorStore(tmp_path / 'target-errors', resident_bytes=1)
+    try:
+        root = records[0]
+        body = encode_native_state(root.block)
+        with pytest.raises(ValueError):
+            target.put_native_archive_payloads([(root.id, body), (records[-1].id, b'bad')], bounded=True)
+        assert len(target) == 0
+        assert not list(target.directory.glob('archive-*'))
+        target.put_native_archive_payloads([(root.id, body)], bounded=True)
+        # Existing bytes are compared before any new archive item is admitted.
+        target._path(root.id).write_bytes(b'collision')
+        with pytest.raises(ValueError, match='collision'):
+            target.put_native_archive_payloads([(root.id, body)], bounded=True)
+        assert len(target) == 1
+        assert not list(target.directory.glob('archive-*'))
+    finally:
+        target.close()
+        engine.store.close()
+
+
+def test_fit_store_context_cleans_on_exception(tmp_path):
+    from natlang_neuralese.tune.build import fit_store_context
+    with pytest.raises(RuntimeError, match='failure'):
+        with fit_store_context({'store_scratch': str(tmp_path)}) as store:
+            directory = store.directory
+            assert directory.exists()
+            raise RuntimeError('failure')
+    assert not directory.exists()
+
+
+def test_bounded_rejects_forged_gradient_origin_without_publication(tmp_path):
+    from dataclasses import replace
+    from natlang_neuralese.model.native_artifact import encode_native_tensor_artifact, native_tensor_artifact_id
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    target = SimpleNamespace(store=TensorStore(tmp_path / 'target-gradient', resident_bytes=1))
+    try:
+        adapter, _ = nonzero_adapter(engine)
+        result = execute_derivative_program(engine, program(engine, adapter, 'sgd'))
+        gradient_id = result['gradients']['a']['id']
+        gradient = engine.store.get_native_tensor_artifact(gradient_id).artifact
+        persist_artifacts(engine, [gradient_id, result['outputs']['a2']], tmp_path / 'artifacts', tmp_path / 'states')
+        import_archive(target, [tmp_path / 'artifacts'], [tmp_path / 'states'])
+        count = len(target.store)
+        provenance = copy.deepcopy(gradient.provenance)
+        provenance['evaluation_inputs']['a']['value_id'] = adapter.id
+        forged = replace(gradient, provenance=provenance)
+        with pytest.raises(ValueError):
+            target.store.put_native_archive_payloads([(native_tensor_artifact_id(forged), encode_native_tensor_artifact(forged))], bounded=True)
+        assert len(target.store) == count
+        assert not list(target.store.directory.glob('archive-*'))
+    finally:
+        target.store.close()
+        engine.store.close()
+
+
+def test_repeat_persist_uses_dependency_metadata_and_repairs_missing_descendant(tmp_path, monkeypatch):
+    from test_native_state_batch_import import _history
+    engine, records = _history(tmp_path, 'mellum', 'adam')
+    target = SimpleNamespace(store=TensorStore(tmp_path / 'persist-store', resident_bytes=1))
+    try:
+        persist_artifacts(engine, [records[-1].id], tmp_path / 'source-artifacts', tmp_path / 'source-states')
+        import_archive(target, [tmp_path / 'source-artifacts'], [tmp_path / 'source-states'])
+        output, states = tmp_path / 'out-artifacts', tmp_path / 'out-states'
+        persist_artifacts(target, [records[-1].id], output, states)
+        target.store._resident.clear()
+        target.store._resident_size = 0
+        loads = []
+        original = target.store._load
+        def count_load(ident):
+            loads.append(ident)
+            return original(ident)
+        monkeypatch.setattr(target.store, '_load', count_load)
+        persist_artifacts(target, [records[-1].id], output, states)
+        assert loads == []
+        descendant = states / f'{records[0].id}.nzs'
+        descendant.unlink()
+        persist_artifacts(target, [records[-1].id], output, states)
+        assert descendant.exists()
+        assert set(loads) <= {records[0].id}
+        assert target.store.get_native_state(records[-1].id) is not None
+    finally:
+        target.store.close()
+        engine.store.close()

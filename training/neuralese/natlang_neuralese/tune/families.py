@@ -165,57 +165,58 @@ def normalized_family(trainer, *, rho=None, absent_below=1e-12):
 def fit(plan, out):
     """One family fit from a plan: ``{family, members, rows, student|engine, recipe, rho?, exports?}``."""
     from ..serve import load_native_engine
-    from .build import persist_artifacts, export_nodes, fit_store
+    from .build import persist_artifacts, export_nodes, fit_store_context
     from .rows import lower_rows
     from .trainer import JointTrainer, Recipe
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     config = plan.get('engine') or {'checkpoint': plan['student']['checkpoint'], **plan['student'].get('engine', {})}
-    engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
-                                dtype=getattr(torch, config.get('dtype', 'float32')), store=fit_store(config))
-    members = sorted(set(plan['members']))
-    turns = [json.loads(line) for line in Path(plan['rows']).read_text().splitlines() if line.strip()]
-    if {turn['binding'] for turn in turns} - set(members):
-        raise TuneMathError('family rows name bindings outside the family')
-    rows = balance_rows(lower_rows(engine, turns, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1)))
-    recipe = {key: value for key, value in plan.get('recipe', {}).items() if key != 'prompt_weight'}
-    rank = recipe.pop('rank', 8)
-    recipe = Recipe.from_json({**recipe, 'ranks': {'tree': rank, 'folder': 0, 'lambda': 0}})
-    manifest = family_manifest(dict(engine.native_identity), members)
-    state_path = out / 'state.json'
-    from .build import import_archive
-    import_archive(engine, [out / 'artifacts'], [out / 'states'])
-    state = json.loads(state_path.read_text()) if state_path.exists() else None
-    trainer = JointTrainer(engine, manifest, rows, recipe, state=state)
-    save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(),
-                                               *trainer.state['optimizer_states'].values()], out / 'artifacts'),
-                    _write(state_path, trainer.state))
-    save()
-    while trainer.state['step'] < trainer.total_steps:
-        record = trainer.step()
+    with fit_store_context(config) as store:
+        engine = load_native_engine(config['checkpoint'], device=config.get('device', 'cpu'),
+                                    dtype=getattr(torch, config.get('dtype', 'float32')), store=store)
+        members = sorted(set(plan['members']))
+        turns = [json.loads(line) for line in Path(plan['rows']).read_text().splitlines() if line.strip()]
+        if {turn['binding'] for turn in turns} - set(members):
+            raise TuneMathError('family rows name bindings outside the family')
+        rows = balance_rows(lower_rows(engine, turns, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1)))
+        recipe = {key: value for key, value in plan.get('recipe', {}).items() if key != 'prompt_weight'}
+        rank = recipe.pop('rank', 8)
+        recipe = Recipe.from_json({**recipe, 'ranks': {'tree': rank, 'folder': 0, 'lambda': 0}})
+        manifest = family_manifest(dict(engine.native_identity), members)
+        state_path = out / 'state.json'
+        from .build import import_archive
+        import_archive(engine, [out / 'artifacts'], [out / 'states'])
+        state = json.loads(state_path.read_text()) if state_path.exists() else None
+        trainer = JointTrainer(engine, manifest, rows, recipe, state=state)
+        save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(),
+                                                   *trainer.state['optimizer_states'].values()], out / 'artifacts'),
+                        _write(state_path, trainer.state))
         save()
-        print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}),
-              flush=True)
-    rho = plan.get('rho')
-    artifact, rho = normalized_family(trainer, rho=float.fromhex(rho) if isinstance(rho, str) else rho)
-    receipt = trainer.receipt()
-    if artifact is None:
-        _write(out / 'result.json', {'schema': 'natlang.tune-family-fit/v1', 'family': plan['family'], 'absent': True,
-                                     'norm': rho, 'receipt': receipt})
-        return None
-    persist_artifacts(engine, [artifact], out / 'artifacts')
-    from ..common.hashing import canonical_json_sha256_hex
-    version = 'v' + canonical_json_sha256_hex({'artifact': artifact, 'amplitude': rho.hex()})[:12]
-    result = {'schema': 'natlang.tune-family-fit/v1', 'family': plan['family'], 'version': version, 'artifact': artifact,
-              'amplitudeHex': rho.hex(), 'members': members, 'rank': rank, 'receipt': receipt}
-    if 'gguf' in plan.get('exports', []):
-        # The published family is served like any scope residual: one unscaled GGUF, its gate is the request scale.
-        exported = [{'node': FAMILY_NODE, 'artifact': artifact}]
-        trainer.state['node_artifacts'][FAMILY_NODE] = artifact
-        export_nodes(trainer, engine, plan, out, exported)
-        result['exports'] = exported[0]['exports']
-    _write(out / 'result.json', result)
-    return result
+        while trainer.state['step'] < trainer.total_steps:
+            record = trainer.step()
+            save()
+            print(json.dumps({'step': record['step'], 'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}),
+                  flush=True)
+        rho = plan.get('rho')
+        artifact, rho = normalized_family(trainer, rho=float.fromhex(rho) if isinstance(rho, str) else rho)
+        receipt = trainer.receipt()
+        if artifact is None:
+            _write(out / 'result.json', {'schema': 'natlang.tune-family-fit/v1', 'family': plan['family'], 'absent': True,
+                                         'norm': rho, 'receipt': receipt})
+            return None
+        persist_artifacts(engine, [artifact], out / 'artifacts')
+        from ..common.hashing import canonical_json_sha256_hex
+        version = 'v' + canonical_json_sha256_hex({'artifact': artifact, 'amplitude': rho.hex()})[:12]
+        result = {'schema': 'natlang.tune-family-fit/v1', 'family': plan['family'], 'version': version, 'artifact': artifact,
+                  'amplitudeHex': rho.hex(), 'members': members, 'rank': rank, 'receipt': receipt}
+        if 'gguf' in plan.get('exports', []):
+            # The published family is served like any scope residual: one unscaled GGUF, its gate is the request scale.
+            exported = [{'node': FAMILY_NODE, 'artifact': artifact}]
+            trainer.state['node_artifacts'][FAMILY_NODE] = artifact
+            export_nodes(trainer, engine, plan, out, exported)
+            result['exports'] = exported[0]['exports']
+        _write(out / 'result.json', result)
+        return result
 
 
 def main(argv=None):
