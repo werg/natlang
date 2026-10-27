@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import type { ProgramDescriptor } from './adaptation/types.js';
 import { WeightBinding } from './adaptation/weights/binding.js';
 import { currentRelease } from './adaptation/weights/release.js';
-import { managedModelSha256, supportsNativeStates } from './model/local-server.js';
+import { managedModelSha256, profileEnvironment, supportsNativeStates } from './model/local-server.js';
 import { discoverLlamaRuntime } from './model/llama-runtime.js';
 import type { ResolvedModelChoice } from './model/config.js';
 import { nativeReleaseObjectClosure, verifyNativeInferenceSnapshotReceipt, type NativeInferenceMaterializationReceipt } from './native/release-artifact-closure.js';
@@ -36,8 +36,29 @@ async function fileSha256(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
+/**
+ * Whether the selected managed llama.cpp profile serves this release as tuned: every adapter (and soft state) has a
+ * GGUF export bound to exactly the profile's base GGUF, and soft states need the fork's `--native-state`.
+ */
+type Exported = { exports?: { gguf?: { baseGgufSha256?: string } } };
+export async function llamaServesRelease(manifest: { artifacts: readonly Exported[]; families?: readonly Exported[];
+  softStates: readonly Exported[] }, choice: ResolvedModelChoice,
+  environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if (choice.kind !== 'managed-local' || !manifest.artifacts.length) return false;
+  environment = profileEnvironment(choice, environment);
+  let base: string;
+  try { base = await managedModelSha256(environment); } catch { return false; }
+  const bound = (item: { exports?: { gguf?: { baseGgufSha256?: string } } }) => item.exports?.gguf?.baseGgufSha256 === base;
+  // Families without members in this program are not exported; every exported one must bind the same base.
+  if (!manifest.artifacts.every(bound) || !manifest.softStates.every(bound)
+    || !(manifest.families ?? []).filter(item => item.exports?.gguf).every(bound)) return false;
+  const executable = discoverLlamaRuntime(environment).selected?.path;
+  return !manifest.softStates.length || (!!executable && supportsNativeStates(executable));
+}
+
 export async function tunedServing(root: string, program: ProgramDescriptor | undefined, choice: ResolvedModelChoice,
   environment: NodeJS.ProcessEnv = process.env): Promise<TunedServing> {
+  environment = profileEnvironment(choice, environment);
   const release = currentRelease(root);
   if (!release) return {};
   const compact = materializeExistingInferenceRelease(root, release.manifest, release.directory);

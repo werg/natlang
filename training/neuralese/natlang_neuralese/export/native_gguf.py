@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -77,6 +78,14 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
             tokenizer.apply_chat_template = apply
         tokenizer.save_pretrained(hf_dir)
         del model, hf
+        # The merged backbone's config and tokenizer without weights: what GGUF LoRA conversion of tuned adapters
+        # for this base reads (`tune.students.*.hfConfigDir`).
+        config_dir = out_dir / 'hf-config'
+        shutil.rmtree(config_dir, ignore_errors=True)
+        config_dir.mkdir()
+        for item in hf_dir.iterdir():
+            if item.is_file() and item.suffix not in ('.safetensors', '.bin') and not item.name.endswith('.index.json'):
+                shutil.copy2(item, config_dir / item.name)
         env = {**os.environ, 'PYTHONPATH': os.pathsep.join([str(llama_cpp / 'gguf-py'), os.environ.get('PYTHONPATH', '')])}
         for outtype in outtypes:
             target = out_dir / f'model-{outtype}.gguf'
@@ -109,6 +118,7 @@ def export(checkpoint, out_dir, *, outtypes=('bf16',), llama_cpp=LLAMA_CPP, pyth
                     # The producer marker would start a span whose adapter llama.cpp does not apply.
                     'logit_bias': {str(produce_open): -100}},
         'files': files,
+        'hf_config': 'hf-config',
         'converter': {'llama_cpp': str(llama_cpp), 'replication': _replication(llama_cpp)},
     }
     (out_dir / 'manifest.json').write_text(json.dumps(manifest, indent=1) + '\n')

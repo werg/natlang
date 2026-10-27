@@ -26,7 +26,7 @@ import { activateRelease, readActive, storeRelease, tuneDirectory } from '../ada
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { pluggable, type PluggableSetting } from '../runtime/pluggable.js';
 import { rootSuccess, type ArmResult } from './evaluate.js';
-import { evaluateRelease, runStudentModule, saveArm, trainRelease, type TuneData, type TuneOptions } from './pipeline.js';
+import { evaluateRelease, ggufExports, runStudentModule, saveArm, trainRelease, type TuneData, type TuneOptions } from './pipeline.js';
 import { pairedComparison } from './stats.js';
 import { copyNativeReleaseClosure } from '../native/release-artifact-closure.js';
 
@@ -171,7 +171,7 @@ export async function runFamilies(programs: readonly FamilyProgram[], settings: 
       writeJson(join(job, 'plan.json'), { family: proposal.name, members, rows: join(job, 'rows.jsonl'), recipe,
         student: { name: student.name, checkpoint: student.checkpoint, engine: student.engine ?? {}, moduleMap: student.moduleMap,
           ...(student.hfConfigDir ? { hfConfigDir: student.hfConfigDir } : {}), ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
-        exports: programs[0]!.options.settings.backend === 'managed-local' ? ['gguf'] : [],
+        exports: ggufExports(programs[0]!.options.settings, programs[0]!.options.student),
         // A name already published keeps its fixed amplitude (§5.4): the new version is normalized to it.
         ...(previous ? { rho: previous.amplitudeHex } : {}) });
       log(`natlang tune: fitting family ${proposal.name} on ${rows.length} training turns of ${members.length} bindings`);

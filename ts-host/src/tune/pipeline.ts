@@ -276,7 +276,7 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
       writeFileSync(plan, JSON.stringify({ schema: 'natlang.tune-plan/v1', manifest: variant.manifest, base: student.base, rows: rowsPath,
         student: { name: student.name, moduleMap: student.moduleMap, checkpoint: student.checkpoint, engine: student.engine ?? {}, ...(student.hfConfigDir ? { hfConfigDir: student.hfConfigDir } : {}),
           ...(student.baseGgufSha256 ? { baseGgufSha256: student.baseGgufSha256 } : {}) },
-        exports: options.settings.backend === 'managed-local' ? ['gguf'] : [],
+        exports: ggufExports(options.settings, options.student),
         // Soft instruction/skill states only where the backend can import native state (plan §3.3).
         softStates: softStatesServed(options.settings), recipe, ...(variant.label ? { label: variant.label } : {}),
         ...(variant.parent ? { parent: variant.parent } : {}), ...(variant.rollouts ? { rollouts: variant.rollouts } : {}),
@@ -369,6 +369,11 @@ async function exportVllmStacks(options: TuneOptions, manifest: WeightManifest):
   await runStudentModule(student, 'natlang_neuralese.tune.stack_export',
     ['--release', directory, '--stacks', stacksPath, '--module-map', student.moduleMap, '--hf-config', student.hfConfigDir, '--out', out]);
 }
+
+/** GGUF LoRA exports (llama.cpp serving): always on the managed backend, and on the others whenever the student's
+ * llama.cpp base is known (its GGUF file and HF config), so a release tuned natively also runs on llama.cpp. */
+export const ggufExports = (settings: { backend: string }, student: { baseGgufSha256?: string; hfConfigDir?: string }): string[] =>
+  settings.backend === 'managed-local' || (student.baseGgufSha256 && student.hfConfigDir) ? ['gguf'] : [];
 
 /** Run another module of the student's Python entry (the trainer argv with its `-m` module replaced). */
 export async function runStudentModule(student: TuneOptions['student'], module: string, args: readonly string[]): Promise<void> {

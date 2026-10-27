@@ -186,14 +186,20 @@ export function createManagedModelSession(profile: ModelProfile,
   return createResolvedModelSession(resolveModelChoice(profile), environment, error, runtimeOptions);
 }
 
-export function createResolvedModelSession(choice: ResolvedModelChoice,
-  environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
-  runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
-  // A profile's own GGUF and template stand where NATLANG_MODEL_PATH/NATLANG_TEMPLATE would; those still override.
+/** The environment a managed local profile runs in: its own GGUF, template and server stand where NATLANG_MODEL_PATH,
+ * NATLANG_TEMPLATE and NATLANG_LLAMA_SERVER would; those still override. */
+export function profileEnvironment(choice: ResolvedModelChoice, environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const profileModel = choice.kind === 'managed-local' ? choice.local : undefined;
   if (profileModel?.modelPath && !environment.NATLANG_MODEL_PATH) environment = { ...environment, NATLANG_MODEL_PATH: profileModel.modelPath,
     ...(profileModel.template && !environment.NATLANG_TEMPLATE ? { NATLANG_TEMPLATE: profileModel.template } : {}) };
   if (profileModel?.server && !environment.NATLANG_LLAMA_SERVER) environment = { ...environment, NATLANG_LLAMA_SERVER: profileModel.server };
+  return environment;
+}
+
+export function createResolvedModelSession(choice: ResolvedModelChoice,
+  environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
+  runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
+  environment = profileEnvironment(choice, environment);
   const external = choice.kind === 'external' ? choice : null;
   const localSettings = choice.kind === 'managed-local' ? choice.local : undefined;
   type PiBackend = ReturnType<(typeof import('./pi-provider.js'))['createPiModelBackend']>;

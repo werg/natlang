@@ -35,6 +35,18 @@ test('the default native profile (or the native pin behind a GGUF default) is th
     assert.equal(settings.backend, 'native');
     assert.equal(settings.servingProfile, 'lfm-latest');
     assert.equal(settings.teacher, 'teacher');
+    assert.equal(student.baseGgufSha256, undefined, 'no llama.cpp base without an export manifest');
+    // The GGUF sibling's export manifest gives the llama.cpp base: tuned adapters then also export for llama.cpp.
+    const exportDir = join(models, `gguf-${sha.slice(0, 12)}`);
+    mkdirSync(join(exportDir, 'hf-config'), { recursive: true });
+    writeFileSync(join(exportDir, 'manifest.json'), JSON.stringify({ checkpoint_sha256: sha, hf_config: 'hf-config',
+      files: [{ outtype: 'q8_0', file: 'model-q8_0.gguf', sha256: '12'.repeat(32) }] }));
+    write({ defaultProfile: 'lfm-latest-gguf', profiles: {
+      'lfm-latest': { native, escalate: 'teacher' }, teacher: { endpoint: 'http://127.0.0.1:9', model: 'qwen' },
+      'lfm-latest-gguf': { local: { modelPath: join(exportDir, 'model-q8_0.gguf'), modelId: `native-gguf-${sha.slice(0, 12)}-q8_0` } } } });
+    const withGguf = loadTuneSettings(environment).student;
+    assert.equal(withGguf.baseGgufSha256, '12'.repeat(32));
+    assert.equal(withGguf.hfConfigDir, join(exportDir, 'hf-config'));
     // A partial tune block still applies; an explicit teacher wins over escalate.
     write({ defaultProfile: 'lfm-latest', tune: { recipe: { epochs: 2 }, teacher: 'other' }, profiles: {
       'lfm-latest': { native, escalate: 'teacher' }, teacher: { endpoint: 'http://127.0.0.1:9' }, other: { endpoint: 'http://127.0.0.1:9' } } });

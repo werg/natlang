@@ -20,7 +20,7 @@ import type { TuneExecution } from './execution.js';
  * profile's `escalate` as the teacher. The rest of the tune block (recipe, rounds, ...) still applies.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { defaultNativePython, ensureNativeServer, nativeIdentity, type NativeModelSettings } from '../model/native-managed.js';
 import type { NativeModelIdentity } from '../native/neuralese-store.js';
@@ -91,7 +91,25 @@ export class TuneSetupError extends Error {
 const configPath = (environment: NodeJS.ProcessEnv = process.env) => join(defaultNatlangConfigDirectory(environment), 'config.json');
 
 type ConfigFile = { defaultProfile?: string; tune?: Partial<TuneSettings>;
-  profiles?: Record<string, { native?: NativeModelSettings; local?: { modelId?: string }; escalate?: string }> };
+  profiles?: Record<string, { native?: NativeModelSettings; local?: { modelId?: string; modelPath?: string }; escalate?: string }> };
+
+/** The llama.cpp base of a native pin: its GGUF sibling's export (`setup --native --gguf`), whose manifest gives the
+ * file's SHA-256 and the HF config GGUF LoRA conversion reads. Tuned adapters then also export for llama.cpp. */
+function ggufBase(config: ConfigFile, native: NativeModelSettings): Pick<StudentSettings, 'baseGgufSha256' | 'hfConfigDir'> {
+  for (const profile of Object.values(config.profiles ?? {})) {
+    const match = /^native-gguf-([0-9a-f]{12})-(\w+)$/.exec(profile.local?.modelId ?? '');
+    if (!match || !native.sha256.startsWith(match[1]!) || !profile.local?.modelPath) continue;
+    try {
+      const directory = dirname(profile.local.modelPath);
+      const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')) as { checkpoint_sha256?: string; hf_config?: string;
+        files?: { file: string; sha256: string }[] };
+      const file = manifest.files?.find(item => join(directory, item.file) === profile.local!.modelPath);
+      if (manifest.checkpoint_sha256 !== native.sha256 || !file || !manifest.hf_config || !existsSync(join(directory, manifest.hf_config))) continue;
+      return { baseGgufSha256: file.sha256, hfConfigDir: join(directory, manifest.hf_config) };
+    } catch { /* no readable export manifest */ }
+  }
+  return {};
+}
 const readConfig = (environment: NodeJS.ProcessEnv): ConfigFile => {
   const path = configPath(environment);
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as ConfigFile : {};
@@ -129,7 +147,7 @@ export function deriveStudent(environment: NodeJS.ProcessEnv = process.env, name
   return { profile, native, ...(teacher ? { teacher } : {}), student: { base, checkpoint: native.checkpoint,
     engine: { device: derivedDevice(native), ...(native.dtype ? { dtype: native.dtype } : {}) },
     trainer: [python, '-m', 'natlang_neuralese.tune.build'], ...(pythonPath.length ? { env: { PYTHONPATH: pythonPath.join(':') } } : {}),
-    moduleMap: base.architecture } };
+    moduleMap: base.architecture, ...ggufBase(config, native) } };
 }
 
 /** A derived student's exact base identity is what its server reports: start the profile's server once to learn it. */

@@ -28,7 +28,7 @@ import { defaultNativePython, ensureNativeServer, findNativeCheckpoint, newerNat
 import { defaultNatlangConfigDirectory } from './package/store.js';
 import { createNatlangRuntime, type InvocationTrace, type ModelDriver, type NatlangRuntime, type NatlangRuntimeOptions,
   type TraceSink } from './runtime/runtime.js';
-import { tunedServing, type TunedServing } from './tuned-serving.js';
+import { llamaServesRelease, tunedServing, type TunedServing } from './tuned-serving.js';
 import { machineStoreRoot, openCallStore, type CallStore } from './calls/store.js';
 import { recordEscalation } from './calls/feedback.js';
 
@@ -107,6 +107,8 @@ export async function bindTunedModel(selected: LoadedModelConfiguration, program
   const sha256 = release.manifest.base.checkpoint_sha256, choice = selected.choice;
   const native = choice.kind === 'external' ? choice.managedNative : undefined;
   if (native?.sha256 === sha256) return selected;
+  // A llama.cpp profile whose base GGUF the release's adapters were exported for serves it as tuned, much faster.
+  if (await llamaServesRelease(release.manifest, choice, environment)) return selected;
   const explicit = options.explicit || environment.NATLANG_SERVER || environment.NATLANG_PROVIDER || environment.NATLANG_PROFILE;
   // An unmanaged native server checks its own identity in weight binding; an explicit other backend is the user's call.
   if (!native && (explicit || (choice.kind === 'external' && choice.neuraleseServer))) return selected;

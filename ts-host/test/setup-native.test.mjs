@@ -16,7 +16,7 @@ test('setup pins with an actor view, writes escalation to both profiles and keep
 if [ "$1" = -c ]; then cp "$3" "$4"; sha=$(sha256sum "$3" | cut -c1-64); echo "{\\"sha256\\":\\"$sha\\",\\"bytes\\":$(stat -c %s "$3"),\\"source_sha256\\":\\"$sha\\"}"; exit 0; fi
 if [ "$2" = natlang_neuralese.model.native_bundle ]; then mkdir -p "$7"; echo r > "$7/r.json"; echo "{\\"path\\":\\"$7/r.json\\",\\"sha256\\":\\"${'e'.repeat(64)}\\",\\"bytes\\":2}"; exit 0; fi
 if [ "$2" = natlang_neuralese.export.native_gguf ]; then mkdir -p "$4"; echo gguf > "$4/model-$6.gguf"; echo t > "$4/template.jinja"
-  echo "{\\"checkpoint_sha256\\":\\"$(sha256sum "$3" | cut -c1-64)\\",\\"files\\":[{\\"outtype\\":\\"$6\\",\\"file\\":\\"model-$6.gguf\\",\\"sha256\\":\\"${'f'.repeat(64)}\\"}],\\"serving\\":{\\"chat_template\\":\\"template.jinja\\",\\"chat_template_kwargs\\":{},\\"logit_bias\\":{}}}" > "$4/manifest.json"; exit 0; fi
+  mkdir -p "$4/hf-config"; echo "{\\"hf_config\\":\\"hf-config\\",\\"checkpoint_sha256\\":\\"$(sha256sum "$3" | cut -c1-64)\\",\\"files\\":[{\\"outtype\\":\\"$6\\",\\"file\\":\\"model-$6.gguf\\",\\"sha256\\":\\"${'f'.repeat(64)}\\"}],\\"serving\\":{\\"chat_template\\":\\"template.jinja\\",\\"chat_template_kwargs\\":{},\\"logit_bias\\":{}}}" > "$4/manifest.json"; exit 0; fi
 exit 3
 `);
   chmodSync(python, 0o755);

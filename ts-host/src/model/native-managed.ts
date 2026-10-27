@@ -366,10 +366,12 @@ export async function exportNativeGguf(native: Pick<NativeModelSettings, 'checkp
   environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr): Promise<NativeGguf> {
   if (!['f32', 'bf16', 'f16', 'q8_0'].includes(outtype)) throw new Error('--gguf must be f32, bf16, f16 or q8_0');
   const directory = join(dirname(native.checkpoint), `gguf-${native.sha256.slice(0, 12)}`), manifestPath = join(directory, 'manifest.json');
-  type Manifest = { checkpoint_sha256: string; files: { outtype: string; file: string; sha256: string }[];
+  type Manifest = { checkpoint_sha256: string; hf_config?: string; files: { outtype: string; file: string; sha256: string }[];
     serving: { chat_template: string; chat_template_kwargs: Record<string, unknown>; logit_bias: Record<string, number> } };
   const read = (): Manifest | undefined => { try { return JSON.parse(readFileSync(manifestPath, 'utf8')) as Manifest; } catch { return undefined; } };
-  const found = (manifest: Manifest | undefined) => manifest?.checkpoint_sha256 === native.sha256 ?
+  // An export without its HF config (written since tuned adapters export for llama.cpp) is made again.
+  const found = (manifest: Manifest | undefined) => manifest?.checkpoint_sha256 === native.sha256 && manifest.hf_config
+    && existsSync(join(directory, manifest.hf_config)) ?
     manifest.files.find(item => item.outtype === outtype && existsSync(join(directory, item.file))) : undefined;
   let manifest = read(), file = found(manifest), reused = true;
   if (!file) {
