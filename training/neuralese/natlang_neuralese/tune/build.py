@@ -79,7 +79,7 @@ def persist_artifacts(engine, ids, directory, states=None):
 
 
 def import_states(engine, directory):
-    """Restore archived states parents first (each one's derivation names its parent)."""
+    """Restore complete archived histories with one full verification per terminal."""
     from ..serve.store import decode_native_state
     pending = {}
     for path in sorted(Path(directory).glob('*.nzs')):
@@ -87,14 +87,9 @@ def import_states(engine, directory):
         if path.stem != ident:
             raise ValueError(f'state file {path} does not hold its named content')
         pending[ident] = block
-    while pending:
-        ready = [ident for ident, block in pending.items()
-                 if block.derivation is None or block.derivation.get('parent_state_id') not in pending]
-        if not ready:
-            raise ValueError('archived native states have a cyclic derivation')
-        for ident in sorted(ready):
-            if engine.store.put_native_state(pending.pop(ident)).id != ident:
-                raise ValueError(f'archived state {ident} changed its content ID')
+    records = engine.store.put_native_states(pending.values())
+    if [record.id for record in records] != list(pending):
+        raise ValueError('archived native states changed their content IDs')
 
 
 def load_plan(path):

@@ -269,6 +269,72 @@ class TensorStore:
         cpu_tensors = {name: tensor.detach().to("cpu").contiguous().clone() for name, tensor in block.tensors().items()}
         stored_block = NativeStateBlock.from_tensors(block.metadata(), cpu_tensors)
         record = NativeStateRecord(native_state_id(stored_block), stored_block)
+        return self._put_verified_native_state(record, owner)
+
+    def put_native_states(self, blocks, owner: str | None = None) -> list[NativeStateRecord]:
+        """Verify an archived batch before publishing any of its states.
+
+        Every supplied state belongs to the ancestry of a terminal state in this
+        batch. Checking those complete ancestries preserves the scalar optimizer
+        and moment checks without checking every prefix of a long chain again.
+        Inputs are copied first: verification and publication use the same values.
+        Existing store records remain available as external dependencies.
+        """
+        from ..model.state_block import NativeStateBlock
+        from ..model.native_state_derivation import verify_state_derivation
+
+        pending = {}
+        order = []
+        for block in blocks:
+            block.validate()
+            tensors = {name: tensor.detach().to('cpu').contiguous().clone()
+                       for name, tensor in block.tensors().items()}
+            # Metadata includes nested derivation bindings; own those as well.
+            metadata = json.loads(json.dumps(block.metadata()))
+            copied = NativeStateBlock.from_tensors(metadata, tensors)
+            ident = native_state_id(copied)
+            pending[ident] = NativeStateRecord(ident, copied)
+            order.append(ident)
+
+        parents = {ident: record.block.derivation['parent_state_id']
+                   for ident, record in pending.items() if record.block.derivation is not None}
+        # Prove that terminal coverage is complete, including disconnected cycles.
+        done = set()
+        publication_order = []
+        for root in pending:
+            path = set()
+            lineage = []
+            current = root
+            while current in pending and current not in done:
+                if current in path:
+                    raise ValueError('archived native states have a cyclic derivation')
+                path.add(current)
+                lineage.append(current)
+                current = parents.get(current)
+            done.update(path)
+            publication_order.extend(reversed(lineage))
+
+        store = self
+
+        class Overlay:
+            def get_native_state(self, ident):
+                return pending[ident] if ident in pending else store.get_native_state(ident)
+
+            def get_native_tensor_artifact(self, ident):
+                return store.get_native_tensor_artifact(ident)
+
+        overlay = Overlay()
+        terminals = pending.keys() - set(parents.values())
+        for ident in sorted(terminals):
+            verify_state_derivation(overlay, pending[ident].block)
+        # No state from a failing batch has been admitted above. Publication uses
+        # the already verified private copies, with normal collisions and holds.
+        published = {ident: self._put_verified_native_state(pending[ident], owner)
+                     for ident in publication_order}
+        return [published[ident] for ident in order]
+
+    def _put_verified_native_state(self, record, owner):
+        block = record.block
         with self._lock:
             found = self._load(record.id)
             if found is not None:
