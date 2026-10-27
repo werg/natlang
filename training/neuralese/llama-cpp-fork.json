@@ -1,5 +1,5 @@
 {
-  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. A separate git checkout, not vendored. The browser's wllama is built from this branch.",
+  "description": "llama.cpp fork serving natlang's native models: native state spans (consume), native state production (producer adapter and capture) and the native-state protocol (/v1/neuralese/info, /v1/neuralese/native-states), decision readout (/v1/natlang/score), guided generation (guidance) and per-sequence LoRA in llama-server; parity dumps in tools/neuralese. A separate git checkout, not vendored. The browser's wllama is built from this branch.",
   "path": "../llama.cpp-neuralese",
   "branch": "neuralese",
   "upstream": "https://github.com/ggml-org/llama.cpp",
@@ -8,6 +8,7 @@
   "build_cuda": "cmake -S . -B build-cuda -DGGML_CUDA=ON && cmake --build build-cuda --target llama-server llama-state-span-dump -j16",
   "parity": [
     "scripts/neuralese_data/check_llama_producer_parity.py (native state production against the native engine)",
-    "scripts/neuralese_data/check_tuned_lora_llama_parity.py (tuned LoRA against the native adapted model)"
+    "scripts/neuralese_data/check_tuned_lora_llama_parity.py (tuned LoRA against the native adapted model)",
+    "scripts/neuralese_data/check_llama_native_state_protocol.py (llama-server native-state protocol: store, consumption receipts, production, exact reference encoding)"
   ]
 }

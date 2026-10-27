@@ -105,9 +105,12 @@ template with the backbone's pinned history-reasoning arguments. The GGUF also c
 (`natlang_producer_down/up`), the role markers (`natlang.produce_open` …) and the native identity states carry
 (`natlang.identity.*`: the float32 identity for an f32 file, the bfloat16 one the native server uses on CUDA
 otherwise). The fork applies the adapter inside producing spans and captures their state
-(`scripts/neuralese_data/check_llama_producer_parity.py`); until llama-server serves the native-state protocol the
-profile bans the producer's opening marker (`logit_bias`) and stays in ordinary tokens. `manifest.json` records the
-checkpoint, the merged rows and each file's identity.
+(`scripts/neuralese_data/check_llama_producer_parity.py`), and llama-server speaks the native-state protocol: it
+declares the identity at `/v1/neuralese/info`, stores states at `/v1/neuralese/native-states/<id>` in the reference
+server's exact encoding, consumes `native_state` parts (receipts in `native_state.imports`) and returns produced states
+as parts (`scripts/neuralese_data/check_llama_native_state_protocol.py`). Until natlang's llama.cpp driver archives
+produced states, the profile still bans the producer's opening marker (`logit_bias`) and stays in ordinary tokens.
+`manifest.json` records the checkpoint, the merged rows and each file's identity.
 The profile also sets `temperature: 0`: the native server decodes greedily by default, llama-server samples at 0.8.
 `local.server` selects the llama-server executable (for example a CUDA build; the managed default may be a CPU
 build, which takes about 16 s per 4.5k-token natlang turn on the DGX).
