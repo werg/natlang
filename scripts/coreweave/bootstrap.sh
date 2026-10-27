@@ -51,6 +51,7 @@ CW="$WORK/.coreweave"; mkdir -p "$CW/inbox"
 if [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then
   log waiting-for-inputs
   until [ -f "$CW/inputs-ready" ]; do sleep 2; done
+  if [ -d "$CW/secrets" ]; then chmod -R go-rwx "$CW/secrets"; fi
   log inputs-pushed
 fi
 if [ -n "${NATLANG_CW_BUNDLE:-}" ] || [ "${NATLANG_CW_TRANSPORT:-bucket}" = api ]; then

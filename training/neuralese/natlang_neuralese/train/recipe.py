@@ -41,7 +41,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'native_attention_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'held_final_policy', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens', 'ffn_chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'native_ordinary_precision', 'native_norm_execution', 'native_shared_execution', 'history_reasoning_policy', 'seed', 'task_eval', 'objective_continuation',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'sft_packed_geometry', 'communication_foundation', 'foundation_communication_batches', 'urgent_cohort_fairness', 'refresh_at_checkpoint', 'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'learn_reasoning_boundaries', 'share_causal_prefixes', 'cotangent_accumulator_backend', 'optimizer_state_storage', 'diloco'}, 'result': 'checkpoint.pt'},
 
 }
 
@@ -83,6 +83,11 @@ def validate_stage_parameters(kind, parameters):
             from ..model.shared_execution import NATIVE_SHARED_EXECUTIONS
             if parameters['native_shared_execution'] not in NATIVE_SHARED_EXECUTIONS:
                 raise ValueError('unsupported native shared execution profile')
+        if 'diloco' in parameters:
+            if kind != 'native_state_sft' or not isinstance(parameters['diloco'], dict):
+                raise ValueError('a diloco block is a native_state_sft learner settings object')
+            from .diloco.worker import DilocoSettings
+            DilocoSettings.from_dict(parameters['diloco'])
         if 'history_reasoning_policy' in parameters and parameters['history_reasoning_policy'] != 'keep':
             raise ValueError('history_reasoning_policy currently supports the explicit keep profile only')
         from ..model.native_parameter_precision import ORDINARY_PRECISION_PROFILES
@@ -696,7 +701,7 @@ def write_json(path, value):
 
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
-OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory'})
+OPERATIONAL_STAGE_PARAMETERS = frozenset({'refresh_foundation_readiness', 'foundation_readiness_policy', 'refresh_after_updates', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'async_checkpoint', 'sdpa_backend', 'deterministic_training', 'fp8_training', 'checkpoint_layers', 'checkpoint_direct_token_limit', 'task_eval', 'task_eval_every', 'qualify_training_backend', 'memory_qualification', 'refresh_at_checkpoint', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'diloco'})
 OPERATIONAL_STAGE_PARAMETERS |= {'held_final_policy','optimizer_state_storage'}
 
 def native_stage_parameter_handoffs(old_recipe, new_recipe, out):

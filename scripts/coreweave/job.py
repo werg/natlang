@@ -31,6 +31,7 @@ KINDS = ('smoke', 'eval', 'render', 'train', 'probe')
 _ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}$')
 _QUANTITY = re.compile(r'^(\d+(?:\.\d+)?)(m|Ki|Mi|Gi|Ti)?$')
 _BUCKET = re.compile(r'^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
+SERVICE_TIMEOUT_SECONDS = 900  # the platform maximum for one HTTPS request
 _SECRETISH = re.compile(r'(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)', re.I)
 
 
@@ -134,6 +135,10 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
                        'through the sandbox file API)')
     if job.get('resume') and job['transport'] != 'bucket':
         raise JobError('resume fetches published outputs from the bucket: use transport "bucket"')
+    service = job.get('service')
+    if service is not None and (not isinstance(service, dict) or set(service) != {'port'}
+                                or type(service['port']) is not int or not 1024 <= service['port'] <= 65535):
+        raise JobError('service: {"port": an unprivileged TCP port} served over HTTPS behind the sandbox share token')
     job.setdefault('placement_mode', 'serverless')
     job.setdefault('tags', [])
     return job
@@ -150,6 +155,8 @@ def bootstrap_env(job: dict[str, Any]) -> dict[str, str]:
         'NATLANG_CW_JOB': job['id'],
         'NATLANG_CW_WORK': job['scratch']['path'],
         'NATLANG_CW_TRANSPORT': job['transport'],
+        # Secret files cwctl delivers with the inputs (push_inputs); never environment values.
+        'NATLANG_CW_SECRETS': f"{job['scratch']['path']}/.coreweave/secrets",
         'PYTHONUNBUFFERED': '1',
         'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
     }
@@ -207,6 +214,11 @@ def sandbox_request(job: dict[str, Any], bootstrap: str) -> dict[str, Any]:
         request['object_storage_access'] = {'buckets': [job['bucket']], 'permission': 'read_write'}
     if job.get('runner_ids'):
         request['runner_ids'] = list(job['runner_ids'])
+    if job.get('service'):
+        # One public HTTPS port; the gateway admits only holders of the sandbox's create-only share token.
+        request['services'] = [{'port': job['service']['port'], 'visibility': 'public',
+                                'endpoint': {'kind': 'https', 'auth': 'share_token',
+                                             'request_timeout_seconds': SERVICE_TIMEOUT_SECONDS}}]
     return request
 
 

@@ -80,7 +80,7 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
                              foundation_ids=None, foundation_communication_batches=1, minimum_visits=None,
-                             schedule_offset=0, cohort_ids=None):
+                             schedule_offset=0, cohort_ids=None, shard=None):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -90,7 +90,8 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     Preserve source order within each class. Completed visits remain credits
     across changed packing and appended sources; fractional epochs cover the
     declared source prefix. The checkpoint's actual row counts determine what
-    remains.
+    remains. A DiLoCo ``shard`` (learner, learners) schedules only that
+    learner's rows; quotas then cover the shard alone.
     """
     if type(foundation_communication_batches) is not int or foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
@@ -112,9 +113,12 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         if type(value) is not int or value < 0:
             raise ValueError('preserved row quotas must be nonnegative integers')
         if key in quotas:quotas[key] = max(quotas[key], value)
+    if shard is not None:
+        from .diloco.protocol import data_shard
+        quotas = {key: value for key, value in quotas.items() if data_shard(key, shard[1]) == shard[0]}
     batches = []
     pending = {visit: [index for index, entry in enumerate(entries)
-                       if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
+                       if entry['id'] in quotas and exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
                for visit in range(max(quotas.values(), default=0))}
     for rank in sorted({scheduling_rank(entry) for entry in entries}):
         for visit, remaining in pending.items():
@@ -200,10 +204,9 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     return quotas, batches
 
 
-def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True, learned_row_lr=None, interface_row_lr=None):
-    """Reuse the production port optimizer and its in-backward MuonSR memory path."""
+def native_trainable_parameters(model):
+    """The exact named parameters native training updates (optimizer and DiLoCo share them)."""
     from .backbone_policy import configure_backbone_training
-    from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
 
     backbone_named = [('backbone.' + name, parameter)
                       for name, parameter in configure_backbone_training(model.port, 'latent')]
@@ -212,7 +215,14 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
     # existing shared full-layer backbone policy.
     interface_named = [('interface.' + name, parameter) for name, parameter in model.named_parameters()
                        if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.')) and parameter.requires_grad]
-    named = backbone_named + interface_named
+    return backbone_named + interface_named
+
+
+def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True, learned_row_lr=None, interface_row_lr=None):
+    """Reuse the production port optimizer and its in-backward MuonSR memory path."""
+    from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
+
+    named = native_trainable_parameters(model)
     latent, ordinary = latent_split(named, 'muonsr')
     if not latent:
         raise ValueError('native SFT found no MuonSR backbone/interface matrices')
@@ -786,6 +796,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
         'raw_ce_best_export':not bool(options.get('ce_supervision_active')),
         'quality_policy':'supervisor-task-and-declared-target-evidence' if options.get('ce_supervision_active')
             else 'legacy-raw-ce-optional-export'}
+    diloco = options.get('_diloco_learner')
+    options = {key: value for key, value in options.items() if key != '_diloco_learner'}
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -796,6 +808,8 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
                           'cursor': cursor, 'source_hash': source_hash, 'source_receipts': source_receipts,
                           'optimizer': optimizer.state_dict(), 'rng': rng, 'metrics': metrics,
                           'options': options, 'fp8': fp8_state, 'sft_progress': sft_progress or {}}}
+    if diloco is not None:
+        state['training']['diloco'] = diloco.state_dict()
     state['training']['sft_progress'] = collect_sft_progress(state['training'])
     if sft_progress is not None:
         sft_progress.clear()
@@ -1026,6 +1040,8 @@ def build_parser():
     parser.add_argument('--fp8-amax-history-len', type=int, default=16)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--task-eval', default=None)
+    parser.add_argument('--diloco', default=None,
+        help='JSON DiLoCo learner block: train this learner\'s shard against a coordinator (train/native_diloco.py)')
     parser.add_argument('--task-eval-every', type=int, default=0)
     parser.add_argument('--forward-atol', type=float, default=None)
     parser.add_argument('--gradient-atol', type=float, default=None)
@@ -1909,6 +1925,10 @@ def _main(argv=None, *, requested_refresh):
     if optimizer.latent is None or not callable(getattr(optimizer.latent,'set_state_storage',None)):
         raise ValueError('native MuonSR optimizer omitted its explicit history storage mechanism')
     optimizer.latent.set_state_storage(args.optimizer_state_storage)
+    from .native_diloco import attach_learner
+    diloco = attach_learner(args, named, parent_continuation=parent_continuation,
+                            saved_state=None if parent_continuation else (resume or {}).get('diloco'))
+    checkpoint_options['_diloco_learner'] = diloco
     saved_options = ce_prior_options = class_migration = None
     saved_training = resume = shared_resume = continuation_training = restored_frame = None
     source_resume = foundation_frame = old_frame = old_options = None
@@ -1976,7 +1996,7 @@ def _main(argv=None, *, requested_refresh):
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-        cohort_ids=urgent_cohort_ids)
+        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None)
     if args.memory_qualification and objective is None:
         from .native_packed_capacity import qualify_pending
         from ..eval.native_memory import capacity_identity
@@ -2184,7 +2204,7 @@ def _main(argv=None, *, requested_refresh):
                         foundation_ids=foundation_priority_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
                         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step,
-                        cohort_ids=urgent_cohort_ids)
+                        cohort_ids=urgent_cohort_ids, shard=diloco.shard if diloco else None)
                     if args.memory_qualification and objective is None:
                         packed = resident.packed_capacity_update
                         if packed is not None: checkpoint_options['sft_packed_capacity'] = packed
@@ -2284,6 +2304,9 @@ def _main(argv=None, *, requested_refresh):
                             'objective_weight': sum(item['boundary_targets'][token]['weight'] / item['weight']
                                                     for item in details) / len(details)}
                     for token in details[0]['boundary_targets']}
+            if diloco is not None:
+                diloco.after_step(tokens=batch_tokens, report={'loss': train_loss, 'global_step': global_step})
+                progress['diloco'] = diloco.metrics()
             if str(args.device).startswith('cuda'):
                 progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                     'reserved': torch.cuda.memory_reserved(args.device),
@@ -2403,6 +2426,14 @@ def _main(argv=None, *, requested_refresh):
     except BaseException as error:
         loop_error = error
         loop_error_tb = error.__traceback__
+    if diloco is not None:
+        try:
+            if loop_error is None and step == total_end:
+                diloco.finish()
+        except BaseException as error:
+            loop_error, loop_error_tb = error, error.__traceback__
+        finally:
+            diloco.close()
     try:
         schedule.close()
     except BaseException as close_error:
