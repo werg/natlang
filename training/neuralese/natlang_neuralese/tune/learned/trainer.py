@@ -192,6 +192,10 @@ class OuterTrainer:
             local = {k: v for k, v in terms.items() if v.requires_grad and recipe.weights.get(k, 0)}
             if local:
                 (O.combine(local, recipe.weights) / len(batch)).backward()
+            routes = {kind: math.sqrt(sum(float(leaf.grad.float().pow(2).sum()) for leaf in leaves[kind].values()
+                                          if leaf.grad is not None)) for kind in ('hidden', 'sign', 'digit', 'other')}
+            routes['states'] = math.sqrt(sum(float(v.grad.float().pow(2).sum()) for _, values in leaves['states'].values()
+                                             for v in values.values() if v.grad is not None))
             # C: replay the writer with gradients and push the cotangents into its producers.
             def replay():
                 live = self.writer.run(target['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None,
@@ -219,7 +223,8 @@ class OuterTrainer:
                     torch.autograd.backward(outputs, grads)
                 return float(local.detach())
             mixture = run_native(engine, replay, writer_entries, leaves={self.state['writer']: writer_values}, gradient_precision='fp32')
-            records.append({'target': target['id'], **{k: float(v.detach()) for k, v in terms.items()}, 'mixture_tokens': mixture})
+            records.append({'target': target['id'], **{k: float(v.detach()) for k, v in terms.items()}, 'mixture_tokens': mixture,
+                            'cotangents': routes})
         return self._apply(batch, epoch, position, writer_values, live_keys, records)
 
     def _executor_terms(self, target, leaves, shares_all, batch_size):
