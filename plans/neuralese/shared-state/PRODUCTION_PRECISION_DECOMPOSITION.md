@@ -1,5 +1,14 @@
 # Native production throughput and precision
 
+**Owner decision (2026-10-28): production uses tensor-core arithmetic.** Stock FP32 matmuls and convolutions run
+TF32 (`configure_native_precision`, `NATLANG_STOCK_ARITHMETIC=tf32` default). Native projections/readout use
+single-pass `bf16` and attention single-pass `tf32`, all with FP32 accumulation, masters and optimizer state.
+Rounding differences from FP32 are ordinary training arithmetic, not defects, and do not block a transition.
+Strict IEEE stays available (`NATLANG_STOCK_ARITHMETIC=ieee`, `ieee` modes). The test suite pins it so parity tests
+can compare execution paths at FP32 tolerances and keep catching logic bugs. Production transition tolerances
+are sized for the declared arithmetic. The earlier rejection of coarse TF32/BF16 below was based on parity
+against FP32 tolerances; it is superseded.
+
 Policy: use the fastest measured arithmetic that preserves useful training,
 valid consumer-to-producer gradients and working cached/shared-state inference.
 Keep strict arithmetic as an explicit diagnostic reference. Source precision and

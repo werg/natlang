@@ -59,17 +59,24 @@ def upgrade_reasoning_tokens(model, tokenizer, config, *, dtype=torch.float32, s
 
 
 def configure_native_precision():
-    """Shared process policy: stock FP32 torch operations remain IEEE.
+    """Shared process policy: stock FP32 matmuls and convolutions use TF32 tensor cores.
 
-    NGC enables TF32 by default, which changed real LFM graph/reference CE and
-    gradients on H100. Faster native GEMM modes are selected per model via
-    native_linear_precision, never by letting the last model loader change a
-    different participant's math. BF16 source tensor cores retain their dtype.
+    Training and serving use tensor-core arithmetic (owner, 2026-10-28): TF32 rounding is ordinary training
+    arithmetic, not a defect. FP32 parameters, gradients, accumulation and optimizer state are unchanged.
+    Native projections/readout and attention select their own arithmetic per model
+    (native_linear_precision / native_attention_precision). BF16 source tensor cores retain their dtype.
+    ``NATLANG_STOCK_ARITHMETIC=ieee`` selects strict FP32 for exact-equivalence checks (the test suite's parity
+    tests compare execution paths at FP32 tolerances to catch logic bugs).
     """
-    torch.set_float32_matmul_precision('highest')
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    return {'float32_matmul': 'highest', 'cuda_matmul_tf32': False, 'cudnn_tf32': False}
+    import os
+    mode = os.environ.get('NATLANG_STOCK_ARITHMETIC', 'tf32')
+    if mode not in ('tf32', 'ieee'):
+        raise ValueError('NATLANG_STOCK_ARITHMETIC must be tf32 or ieee')
+    tf32 = mode == 'tf32'
+    torch.set_float32_matmul_precision('high' if tf32 else 'highest')
+    torch.backends.cuda.matmul.allow_tf32 = tf32
+    torch.backends.cudnn.allow_tf32 = tf32
+    return {'float32_matmul': 'high' if tf32 else 'highest', 'cuda_matmul_tf32': tf32, 'cudnn_tf32': tf32}
 
 
 def native_identity(model, config, *, checkpoint_sha256):

@@ -11,8 +11,10 @@ from __future__ import annotations
 import torch
 
 NATIVE_LINEAR_PRECISIONS = ('ieee', 'tf32', 'tf32x3', 'bf16', 'bf16x6')
-PRODUCTION_NATIVE_LINEAR_PRECISIONS = ('ieee', 'bf16x6')
-NATIVE_ATTENTION_PRECISIONS = ('ieee', 'tf32x3')
+# Production uses tensor-core arithmetic (owner, 2026-10-28): single-pass BF16/TF32 with FP32 accumulation,
+# masters and optimizer state. IEEE and the multi-pass emulations remain selectable.
+PRODUCTION_NATIVE_LINEAR_PRECISIONS = ('ieee', 'bf16x6', 'tf32', 'bf16')
+NATIVE_ATTENTION_PRECISIONS = ('ieee', 'tf32x3', 'tf32')
 
 
 def set_native_attention_precision(model, mode):
@@ -83,6 +85,6 @@ def resolve_native_training_precision(previous, requested=None):
     """Diagnostic checkpoint arithmetic needs an explicit production transition."""
     selected = previous if requested is None else requested
     if selected not in PRODUCTION_NATIVE_LINEAR_PRECISIONS:
-        raise ValueError('native production training requires ieee or bf16x6 arithmetic; '
+        raise ValueError('native production training requires ieee, bf16x6, tf32 or bf16 arithmetic; '
                          'explicitly transition a diagnostic checkpoint before training')
     return selected

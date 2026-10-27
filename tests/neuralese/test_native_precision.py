@@ -219,7 +219,7 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     before = torch.load(out/'checkpoint.pt', weights_only=False)
     # Saved diagnostic modes must not evade production argparse choices through
     # an omitted option. Restoration is real, but no update may execute.
-    for diagnostic_mode in ('tf32', 'tf32x3', 'bf16'):
+    for diagnostic_mode in ('tf32x3',):
         diagnostic = copy.deepcopy(before)
         diagnostic['model_config']['native_linear_precision'] = diagnostic_mode
         diagnostic['interface_state']['native_linear_precision'] = diagnostic_mode
@@ -264,7 +264,7 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     assert after['model_config']['dtype'] == 'torch.float32'
     assert after['model_config']['base_inventory_sha256'] == before['model_config']['base_inventory_sha256']
     assert after['model_config']['native_linear_precision'] == 'bf16x6'
-    assert after['training']['options']['native_precision_transition']['from'] == 'bf16'
+    assert after['training']['options']['native_precision_transition']['from'] == 'tf32x3'
 
 
 def test_failed_destination_transition_restores_rng_before_rejecting(monkeypatch):
@@ -280,3 +280,17 @@ def test_failed_destination_transition_restores_rng_before_rejecting(monkeypatch
             previous_precision='ieee', checkpoint_sha256='a'*64,
             forward_atol=1e-4, gradient_atol=1e-5, device='cpu')
     assert torch.equal(before, torch.random.get_rng_state())
+
+
+def test_production_stock_arithmetic_uses_tf32_tensor_cores(monkeypatch):
+    from natlang_neuralese.model.native_model import configure_native_precision
+    monkeypatch.delenv('NATLANG_STOCK_ARITHMETIC', raising=False)
+    try:
+        assert configure_native_precision() == {'float32_matmul': 'high', 'cuda_matmul_tf32': True, 'cudnn_tf32': True}
+        assert torch.backends.cuda.matmul.allow_tf32 and torch.backends.cudnn.allow_tf32
+        monkeypatch.setenv('NATLANG_STOCK_ARITHMETIC', 'fp64')
+        with pytest.raises(ValueError):
+            configure_native_precision()
+    finally:
+        monkeypatch.setenv('NATLANG_STOCK_ARITHMETIC', 'ieee')
+        configure_native_precision()
