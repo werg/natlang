@@ -8,7 +8,7 @@ import stat
 
 
 def signature(path):
-    value = Path(path).stat()
+    value = Path(path).lstat()
     if not stat.S_ISREG(value.st_mode):
         raise ValueError(f'native archive is not a regular file: {path}')
     return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
@@ -46,6 +46,9 @@ def link_verified(engine, ident, target):
             references.pop(ident, None)
             return False
         os.link(source, target)
+    except ValueError:
+        references.pop(ident, None)
+        return False
     except OSError as error:
         if error.errno in {errno.ENOENT, errno.EXDEV, errno.EPERM, errno.EACCES,
                           errno.EMLINK, errno.EOPNOTSUPP, errno.EEXIST}:

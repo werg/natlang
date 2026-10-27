@@ -44,7 +44,7 @@ def test_all_history_files_link_without_reencoding(tmp_path, monkeypatch):
         engine.store.close()
 
 
-@pytest.mark.parametrize('change', ['removed', 'replaced', 'edited', 'cross-device'])
+@pytest.mark.parametrize('change', ['removed', 'replaced', 'edited', 'symlink', 'directory', 'cross-device'])
 def test_unavailable_or_changed_archive_uses_original_admitted_values(tmp_path, monkeypatch, change):
     engine, records, source, target = _archive(tmp_path)
     try:
@@ -62,6 +62,13 @@ def test_unavailable_or_changed_archive_uses_original_admitted_values(tmp_path, 
                     continue
                 if change == 'removed':
                     path.unlink()
+                elif change in ('symlink', 'directory'):
+                    alternate = path.with_suffix('.preserved')
+                    path.rename(alternate)
+                    if change == 'symlink':
+                        path.symlink_to(alternate)
+                    else:
+                        path.mkdir()
                 elif change == 'replaced':
                     temporary = path.with_suffix('.changed')
                     temporary.write_bytes(b'changed source bytes')
