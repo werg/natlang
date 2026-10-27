@@ -135,3 +135,165 @@ Shared `trainRelease`/native policy mechanisms perform the updates. Continue fre
 cohorts and the expanded teacher curriculum from earned children; a tranche is
 not whole-program or production-recipe completion. Report actual RL optimizer
 steps and subsequent task outcomes separately from a successful collection.
+
+The first informative tranche's original four-episode batch exceeded its 16 GiB
+job envelope after saving one SFT update. It saved no RL optimizer update. The
+continuation retains that actual child (`8f134e15f4e21eebdb65e0c6/out`), uses a
+32 GiB envelope and batches one complete episode at a time; group-relative reward
+statistics still come from the complete four-sample groups. It schedules 24 mixed
+SFT/RL updates, with reduced learning rates, without detaching any graph turn.
+The profiler attributed about 683 of 868 sampled seconds to native ancestry
+verification. Shared bounded proof reuse authenticates every transitive member's
+bytes on reuse and returns freshly decoded state; it retains no mutable KV.
+Corruption, disabled-cache, cross-objective reuse and real LFM/Mellum gradient
+checks pass. The current continuation uses the exact frozen cache runtime and a
+direct trainer process so a killed child cannot be hidden by a profiler's exit
+status. Record actual saved policy steps and fresh development outcomes before
+crediting RL. Its native evaluator actor is restored after the fit exits.
+
+The archive builder also now verifies complete ancestry from the forest's heads,
+rather than numerically replaying every intermediate state as another root.
+Every archived state must belong to a covered chain; cycles/missing ancestry
+remain errors. The 38-test focused LFM/Mellum replay, policy and derivative run
+passes (two unrelated skips). A zero-update initialization that had performed
+more than 144 GB of repeated cached reads was stopped before its initial state
+was saved; the new frozen runtime continues the same actual earned child. No
+optimizer update was discarded. After the tranche completes, the resident actor
+is restored and a resumable paired development job compares RL, the 12/20 teacher
+SFT release and the base under identical per-invocation limits. It neither reads
+confirmation nor activates an unvalidated release.
+
+The improved tranche reached saved step 3: SFT, **one actual whole-graph RL
+optimizer update**, then SFT. The next episode revealed a routing bug when the
+binding inventory mixed `null` (an invocation of the frozen base) and tuned
+binding IDs. Adapter routing now selects the real tuned bindings; the full
+policy graph still contains the base-only producer and every consumer. A real
+captured producer/consumer regression passes on both architecture ports, checking
+that both graph nodes remain and the consumer's actual adapters update. The
+10-test tuning/archive check passes. Continue this exact fit's saved state and
+RL cursor through the frozen routing fix; do not reset its episode order or
+retrain its completed prefix. The current result is one saved policy update,
+not a completed tranche or an RL capability-lift claim.
+
+The exact continuation completed all 24 updates, **12 whole-graph RL and 12
+SFT**, with RL cursor 12: all twelve admitted episodes were visited once. The
+shared publisher reused that completed numeric build and retained the actual
+routing-fix runtime and resume receipt. Full native artifact/optimizer ancestry,
+sealed rollouts and the exact pinned base are being independently exported on
+the external drive. Development evaluation is queued under the unchanged actor
+and execution contract; no RL task-lift or confirmation result is claimed.
+
+The completed mixed SFT/RL continuation scored **17/20** development roots,
+compared with the preceding SFT release's valid **12/20** on the same exact
+roots and per-invocation limits. This is a longitudinal development result of
+all the continuation updates, not isolated RL attribution. The fresh base arm
+is still running; confirmation remains untouched. The saved 12/20 SFT arm was
+reused after checking its exact release, complete root/component IDs and limits,
+with its original receipt hash recorded rather than spending GPU time repeating
+that measurement.
+
+An initial standalone comparison omitted Node evaluator installation. Its
+zero-request failures are marked invalid infrastructure evidence and excluded
+from capability, RL and distillation. Missing platform setup now carries a typed
+error that every shared tuning execution path propagates. A child-process test
+executes the genuinely uninitialized host and verifies that it aborts before a
+model request. The corrected runner installs its Node host and records all real
+calls in its own bounded program store.
+
+Profiling also found the machine journal's orphan sweep scanning 3.4 million
+blob keys during automatic eviction. Its reference indexes already existed.
+Automatic eviction now bounds candidate and call work, advances a durable
+orphan cursor, and preserves pinned, annotated and case-linked records; explicit
+manual eviction retains full cleanup, with an optional CLI work limit for
+maintenance workers. Both Node and WASM contracts pass the bounded/protected
+cleanup checks. A reviewed worker is freeing old evictable machine-journal data
+without blocking the model. No generation source journals or checkpoints are
+part of that cleanup.
+
+The full 665-case teacher campaign has 551 training roots and 114 development
+roots. Production feedback conversion selects only the 551 original training
+executions under their original closed claims and actor receipts; development
+records stay protected in the full original snapshot. Conversion and admission
+are distinct from subsequent learner exposure.
+
+The matched base arm completed at **0/20**, making the current development
+comparison 0/20 base, 12/20 teacher SFT and 17/20 mixed continuation. The 20-world
+development cohort remains a small selection cohort, not a confirmation result.
+The exact results and execution bindings are retained under
+`/home/werg/data/program-tuning-20261026/paired-ticket-sft-rl-base-native-host-v2-20261027-b0a4faf8b5e7`.
+A separate activation operation reloads the actual native artifacts, runs a
+fresh successful development call with a ready effective stack, and uses the
+shared compare-and-swap activation mechanism. Publishing alone is insufficient.
+
+Both production-feedback conversions passed: 1,075 rows per model, 5,528,930
+LFM tokens and 5,568,087 Mellum tokens. The selected teacher source retains its
+original actor, closed claims, invocation worlds and training splits. Preserve
+the full original snapshot including its 114 protected development cases.
+Registration custody packaging is running; these rows have no exposure credit
+until each learner actually visits them.
+
+The native readiness call passed and release
+`b0a4faf8b5e7dba8467b65bd2b6218e3ad2d97de572a59be4ba308b50cd38c3d`
+was activated through the shared compare-and-swap path at 06:25 Berlin on
+2026-10-27. The pointer records the real backend acknowledgement and exercised
+effective stack. Confirmation remains untouched.
+
+The 551-case feedback package passed exact custody packaging and was registered
+as `luna-program-training-worlds-native-graphs-20261027-v1`; its independent
+private export is running. This does not yet constitute learner adoption.
+Invoice's expanded-world continuation is running on 389 admitted training turns,
+with reply-only supervision, three complete passes and batch size four within
+a 16 GiB envelope. It continues the saved 24-update adapter/soft-state parent;
+inventory follows serially from its saved 12-update parent. Their fresh capability
+results and actual policy updates remain unmeasured.
+
+The LFM append passed with 1,075 new rows, an unchanged existing prefix and held
+source, and preserved capacity checks. Its exact controls have an independently
+verified 10,372,894-byte private capsule. The earned full checkpoint proves the
+prior correction already applied; the future stage keeps that history, retires
+the consumed correction argument and names the actual corrected predecessors.
+The current configuration adopted the append and qualified background snapshots
+at a 600-second cadence. Exposure remains unclaimed until the next full-SFT or
+eligible seed continuation actually visits these rows.
+
+The shared append preparer now resolves the complete future recipe before
+serializing seed roles. Foundation and training roles sharing one named binding
+move together; separately named predecessors remain unchanged. All 20 append
+tests pass for both ports, and all ten asynchronous checkpoint integrity tests
+pass against the effective frozen LFM runtime. Enqueue remains distinct from a
+committed checkpoint or independent backup. Larger Mellum snapshots need their
+own memory assessment.
+
+LFM completed the handoff into DPO and saved global step **39896**, then rejected
+an old round-30 RL collection contract belonging to an earlier policy. The
+supervisor preserved that journal, checkpoint and optimizer/RNG/exposure,
+reserved `round-000030-attempt-1`, and restarted the actual controller. Fresh
+episodes are being captured under that exact earned checkpoint. No new RL
+optimizer update follows merely from collection being live.
+
+Mellum's complete private-ready census found another 570 earlier rows absent
+from its active source, in addition to the 1,075 new program rows. Its prepared
+append therefore adds **1,645 rows**, reaching 1,483,153 active rows. Every
+candidate ID was checked against the active correction/deferred ledger: none
+overlaps it. Existing prefix, held separation and capacity provisions pass;
+the new Mellum configuration still needs final consumed-correction handling,
+private control export and adoption. These rows have no learner-exposure credit.
+
+Validation: all 364 TypeScript files pass (2,305 tests), the completed Neuralese
+CPU phase passed 5,149 tests with 14 skips, and all 25 GPU-marked tests pass.
+The 2,776-pass root Python run had one concurrent-build source-verifier failure;
+all 25 authoring-quality tests passed when rerun after compilation. High-priority
+learner admission preempted the later GPU phase and an automatic restart repeated
+CPU tests; the supervisor stopped that redundant rerun and ran every GPU test
+separately. The observed completed CPU result and its lost-log limitation are
+recorded explicitly in the operator receipt. Eight additional stream-integrity
+tests cover the new private-download recovery helper.
+
+The memory guard also preempted the program RL recovery uploader. The verified
+archive survived and the exact-size private object exists; a protected resumed
+worker is performing the required complete GET/SHA verification. Do not call
+that RL capsule privately ready before its final receipt. Future Mellum exports
+retain the same independently verified GET as a bounded local candidate when
+the external drive has room. The local worker still validates full bytes and
+checkpoint contents before promoting it; optional local write failure preserves
+remote verification and the last recovery parent.

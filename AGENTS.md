@@ -20,6 +20,23 @@ both production recipes, preserving exact actor and split custody. Apply useful
 shared mechanisms to Mellum with its own exact checkpoint, without treating LFM
 adapters or native state as interchangeable.
 
+Source appends follow the declared recipe wiring (engineering finding,
+2026-10-27): roles sharing one named input, such as the full training source
+and its foundation source, move together. Preserve separately named predecessor
+and held inputs exactly, resolve the complete future recipe, and bind its actual
+resolved roles into the seed command. An already-applied source correction is
+historical state, not an executable operation to repeat against an appended
+dataset. Verify its committed proof in the earned full checkpoint, retain its
+history and exact dependencies, and use the actual corrected train/held sources
+as the next append's predecessors when retiring the consumed stage argument.
+
+Checkpoint I/O is part of GPU supervision. Prefer the existing qualified
+immutable background snapshots where measured memory permits, and track actual
+commits and independent exports separately from enqueue acknowledgements. Keep
+cold fixture preparation and cache offload from starving an earned checkpoint
+write; reuse verified current sealed test fixtures and use internal disposable
+scratch when its measured headroom permits.
+
 ## Luna generation resumed (owner, 2026-10-26)
 
 Start and supervise six parallel Luna data-generation workers. This explicit

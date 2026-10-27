@@ -81,6 +81,24 @@ The owner adopted this capability as an operational lane on 2026-10-26.
 earned LFM parent, authorized teacher collection, SFT/whole-graph RL progression, recovery and production feedback.
 Use its actual run receipts for status; the mechanism inventory below does not establish measured capability lift.
 
+The first real LFM ticket-routing lane now has a completed teacher-SFT fit and an
+earned continuation with 12 whole-graph RL updates alternating with 12 SFT
+updates. On the same 20 development worlds and invocation limits, the exact
+pinned base scored 0/20, the preceding SFT release 12/20, and the mixed
+continuation 17/20. The SFT arm reuses its authenticated completed measurement;
+base and mixed-continuation measurements are fresh. This measures the combined
+continuation, not isolated RL attribution. Confirmation remains untouched.
+
+Continue invoice and inventory from their saved optimizer states, introduce the
+new standalone training invocations, and measure their development behavior.
+Select and activate releases through actual backend artifact acknowledgement and
+a normal tuned-call readiness check. Program-world teacher feedback has produced
+1,075 native training rows for each production model from 551 training cases;
+the 114 development cases stay excluded. Packaging, private recovery, admission
+and actual learner exposure remain separate obligations. Do not infer completed
+handoff items such as Mellum program tuning, family transfer or backend parity
+from the ticket result.
+
 ## Runs to perform
 
 1. **First real tune, LFM2.5-350M, GPU.** A program with ≥30 root examples with `expected` and `group`
