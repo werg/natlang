@@ -12,7 +12,8 @@ from ..common.copying import deepcopy_metadata
 
 TRAINING_SCHEMA='natlang.neuralese-native-sft-training/1'
 PROGRESS_SCHEMA='natlang.native-sft-progress/1'
-_TRANSIENT={'optimizer','rng','fp8','sft_progress'}
+# Live learner state, like optimizer history, belongs to the rolling checkpoint, never a stage frame.
+_TRANSIENT={'optimizer','rng','fp8','sft_progress','diloco'}
 
 
 def reject_withdrawn_targets(training,current_bindings):

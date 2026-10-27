@@ -550,3 +550,34 @@ def test_read_sandbox_bounds_sdk_future_by_existing_patience(monkeypatch):
     with pytest.raises(TimeoutError, match='did not complete'):
         cwctl.read_sandbox('existing-id', patience=10)
     assert observed == [10]
+
+
+def test_service_port_becomes_a_share_token_https_endpoint():
+    request = job.sandbox_request(base_job(service={'port': 8080}), '#!/bin/bash')
+    assert request['services'] == [{'port': 8080, 'visibility': 'public', 'endpoint': {
+        'kind': 'https', 'auth': 'share_token', 'request_timeout_seconds': job.SERVICE_TIMEOUT_SECONDS}}]
+    assert request['environment_variables']['NATLANG_CW_SECRETS'] == '/work/.coreweave/secrets'
+    assert 'services' not in job.sandbox_request(base_job(), '#!/bin/bash')
+    with pytest.raises(job.JobError, match='unprivileged'):
+        job.validate(base_job(service={'port': 80}))
+
+
+def test_diloco_run_composes_ordinary_jobs(tmp_path):
+    diloco = load('diloco')
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
+    (tmp_path / 'learner.json').write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    (tmp_path / 'coordinator.json').write_text(json.dumps(base_job(
+        id='coord', resources={'cpu': '8', 'memory': '32Gi'}, transport='api')))
+    run = diloco.validate({'schema': diloco.SCHEMA, 'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 2},
+        'coordinator': {'job': str(tmp_path / 'coordinator.json'), 'bundle_file': 'b.json', 'parent': '/work/in/parent.pt'},
+        'learners': {'job': str(tmp_path / 'learner.json'), 'bundle_file': 'b.json'}})
+    learner = diloco.learner_job(run, 1, 'https://coordinator.example')
+    assert learner['id'] == 'lfm-dl-learner-1' and learner['env']['NATLANG_DILOCO_WORKER_ID'] == '1'
+    assert learner['command'][:-2] == trainer and learner['command'][-2] == '--diloco'
+    assert json.loads(learner['command'][-1]) == {
+        'run_id': 'lfm-dl', 'workers': 2, 'coordinator_url': 'https://coordinator.example'}
+    coordinator = diloco.coordinator_job(run, trainer[3:])
+    assert coordinator['service'] == {'port': diloco.PORT}
+    assert 'native_diloco init' in coordinator['command'][-1] and 'diloco serve' in coordinator['command'][-1]
+    with pytest.raises(diloco.cwctl.ControllerError, match='filled in'):
+        diloco.validate({**run, 'settings': {**run['settings'], 'coordinator_url': 'x'}})

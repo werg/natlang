@@ -28,6 +28,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import subprocess
@@ -41,6 +42,8 @@ import job as jobs  # noqa: E402
 
 VENV = Path(os.environ.get('NATLANG_CW_VENV', Path.home() / '.local/share/natlang/cw-venv'))
 STATE = Path(os.environ.get('NATLANG_CW_STATE', Path.home() / '.local/state/natlang/coreweave'))
+TOKENS = STATE / 'tokens'  # sandbox share tokens, mode 600
+SECRET_NAME = re.compile(r'[a-z0-9][a-z0-9.-]{0,62}')
 ENV_FILE = Path(os.environ.get('NATLANG_CW_ENV_FILE', Path.home() / '.config/natlang/coreweave.env'))
 KEY_NAMES = ('CWSANDBOX_API_KEY', 'COREWEAVE_API_TOKEN', 'WANDB_API_KEY')
 # exec, logs and files are native (gateway data plane): the cwsandbox CLI uses the auto data plane, whose direct
@@ -288,7 +291,8 @@ def run_keywords(request: dict) -> dict:
     return {k: v for k, v in request.items() if k not in ('command', 'args')}
 
 
-def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None) -> dict:
+def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, bundle_file: Path | None = None,
+           secrets: dict[str, bytes] | None = None) -> dict:
     request = jobs.sandbox_request(job, bootstrap_text())
     summary = {'job': job['id'], 'kind': job['kind'], 'placement': job['placement'],
                'cost': jobs.cost_estimate(job, gpu_hour_price), 'request': describe_request(request)}
@@ -320,10 +324,18 @@ def launch(job: dict, dry_run: bool, wait: bool, gpu_hour_price: float | None, b
         entry['status'] = str(sandbox.status)
         entry['seconds_to_running'] = round(time.time() - created, 1)
         record({'event': 'running', 'sandbox_id': entry['sandbox_id'], 'seconds_to_running': entry['seconds_to_running']})
+    if job.get('service'):
+        if not wait:
+            sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
+        keep_share_token(sandbox)
+        entry['service_url'] = service_url(sandbox)
+        record({'event': 'service', 'sandbox_id': entry['sandbox_id'], 'url': entry['service_url']})
+    if secrets and (job['transport'] != 'api' or bundle_file is None):
+        raise ControllerError('secret files are delivered with file-API inputs: use transport "api" and --bundle-file')
     if job['transport'] == 'api' and bundle_file is not None:
         if not wait:
             sandbox.wait(timeout=float(os.environ.get('NATLANG_CW_START_TIMEOUT', '5400')))
-        entry['push'] = push_inputs(sandbox, job, bundle_file)
+        entry['push'] = push_inputs(sandbox, job, bundle_file, secrets=secrets)
         record({'event': 'inputs_pushed', 'sandbox_id': entry['sandbox_id'], **entry['push']})
     return {**entry, 'cost': summary['cost']}
 
@@ -369,9 +381,10 @@ def _chunks(path: Path):
             yield block
 
 
-def push_inputs(sandbox, job: dict, manifest_path: Path, log=print) -> dict:
+def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dict[str, bytes] | None = None) -> dict:
     """File-API transport: push bundle.json, the code snapshot and every entry without a public URL into the
-    sandbox's inbox (named by sha256), then write the inputs-ready marker the bootstrap waits for."""
+    sandbox's inbox (named by sha256), then write the inputs-ready marker the bootstrap waits for. ``secrets``
+    become files under $NATLANG_CW_SECRETS (the bootstrap makes them owner-only) and are never logged."""
     manifest = json.loads(manifest_path.read_text())
     sources = json.loads(manifest_path.with_suffix('.sources.json').read_text())
     inbox = f"{job['scratch']['path']}/.coreweave/inbox"
@@ -389,9 +402,43 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print) -> dict:
         bytes_pushed += item['bytes']
         log(json.dumps({'event': 'pushed', 'path': item.get('path', 'code'), 'bytes': item['bytes'],
                         'seconds': round(time.time() - started, 1)}))
+    for name, value in (secrets or {}).items():
+        if not SECRET_NAME.fullmatch(name):
+            raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')
+        sandbox.write_file(f"{job['scratch']['path']}/.coreweave/secrets/{name}", value).result()
     sandbox.write_file(f"{job['scratch']['path']}/.coreweave/bundle.json", manifest_path.read_bytes()).result()
     sandbox.write_file(f"{job['scratch']['path']}/.coreweave/inputs-ready", b'').result()
     return {'pushed': pushed, 'bytes': bytes_pushed}
+
+
+def keep_share_token(sandbox) -> Path:
+    """Persist a served sandbox's create-only share token (mode 600; the platform never shows it again)."""
+    token = sandbox.endpoint_share_token
+    if token is None:
+        raise ControllerError(f'{sandbox.sandbox_id}: the service has no share token')
+    TOKENS.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = TOKENS / f'{sandbox.sandbox_id}.share'
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'w') as stream:
+        stream.write(token.get_secret_value())
+    return path
+
+
+def share_token(sandbox_id: str) -> bytes:
+    path = TOKENS / f'{sandbox_id}.share'
+    if not path.is_file():
+        raise ControllerError(f'no share token for {sandbox_id}: only the launch that created it keeps one')
+    return path.read_bytes()
+
+
+def service_url(sandbox, timeout: float = 600) -> str:
+    deadline = time.time() + timeout
+    while not sandbox.service_urls:
+        if time.time() > deadline:
+            raise ControllerError(f'{sandbox.sandbox_id}: no service URL assigned')
+        time.sleep(5)
+        sandbox.get_status()
+    return sandbox.service_urls[0][2]
 
 
 def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, str]] = (), timeout: float = 86400,
