@@ -93,3 +93,26 @@ def test_own_link_ctime_does_not_force_next_round_serialization(tmp_path, monkey
     assert link_verified(engine, 'fixture', tmp_path / 'round-one.nnt')
     assert link_verified(engine, 'fixture', tmp_path / 'round-two.nnt')
     assert (tmp_path / 'round-two.nnt').read_bytes() == body
+
+
+def test_same_inode_edit_during_link_cannot_be_published(tmp_path, monkeypatch):
+    from natlang_neuralese.tune.archive_links import read_archive, remember, link_verified
+    source = tmp_path / 'original.nnt'
+    source.write_bytes(b'original')
+    body, reference = read_archive(source)
+    engine = SimpleNamespace()
+    remember(engine, 'fixture', reference)
+    before = source.stat()
+    link = os.link
+
+    def changed_after_precheck(src, dst):
+        source.write_bytes(b'poisoned')  # Same inode and byte length.
+        os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+        link(src, dst)
+
+    monkeypatch.setattr(os, 'link', changed_after_precheck)
+    target = tmp_path / 'continued.nnt'
+    assert not link_verified(engine, 'fixture', target)
+    assert not target.exists()
+    assert 'fixture' not in engine._verified_native_archive_files
+    assert body == b'original'
