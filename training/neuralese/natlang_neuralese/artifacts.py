@@ -4,7 +4,7 @@ An artifact is a `.nz` file (or a small set of files) a run produces or consumes
 weights: system-prompt banks, the standard library of combinator soft bodies, operators, soft skills, data blocks,
 adapters. Like corpora (training/neuralese_corpora.json), artifacts are registered in
 `training/neuralese_artifacts.json` and pinned by an immutable SHA-256 manifest in `training/artifact-manifests/`.
-An entry also pins what an artifact means: its dialect (every block's dialect must equal it), the backbone and
+An entry also pins what an artifact means: its dialect (each `.nz` file's header dialect must equal it), the backbone and
 revision its space belongs to, how it was initialised (text, a parent artifact, conversion), what trained it
 (registered corpora, trainer, commit), and its qualification. A registered artifact is not admitted for use by
 registration: qualification stays explicit.
@@ -37,7 +37,10 @@ KINDS = {"prompt-bank", "standard-library", "operator", "soft-skill", "data-bloc
 INIT_METHODS = {"text", "trained", "converted", "written"}
 QUALIFICATION = {"unqualified", "qualified", "failed", "superseded"}
 ID = re.compile(r"[a-z0-9][a-z0-9.-]{2,127}")
-DIALECT = re.compile(r"nd:[a-z0-9-]+@[0-9]+(\.[0-9]+)*")
+# Native dialects (spec/NEURALESE_DIALECTS.md): raw native state of an architecture, a semantic adapter's codes, or
+# named tensor artifacts of one kind (a file of adapters or optimizer state only).
+DIALECT = re.compile(r"native-state/[A-Za-z0-9._-]+|native-tensor/[a-z-]+|semantic-state/[0-9a-f]{64}")
+NZ_FORMAT = "natlang.neuralese-file/1"
 
 
 class ArtifactError(ValueError):
@@ -85,7 +88,7 @@ def digest(path: Path) -> str:
 
 
 def nz_header(path: Path) -> dict:
-    """The safetensors header of a `.nz` file: its natlang metadata (exports, blocks) and tensor shapes."""
+    """The safetensors header of a `.nz` file: its natlang metadata (spec/NEURALESE_FILES.md) and tensor shapes."""
     with path.open("rb") as stream:
         (length,) = struct.unpack("<Q", stream.read(8))
         if length > 1 << 30:
@@ -99,13 +102,16 @@ def nz_header(path: Path) -> dict:
 
 
 def nz_summary(path: Path) -> dict:
-    header = nz_header(path)
-    blocks = header["natlang"].get("blocks", {})
-    widths = sorted({shape[-1] for shape in header["tensors"].values() if shape})
-    return {"exports": sorted(header["natlang"].get("exports", {})),
-            "blocks": len(blocks),
-            "dialects": sorted({b.get("dialect") for b in blocks.values() if b.get("dialect")}),
-            "widths": widths}
+    """Exports, native artifact counts and dialect of a native `.nz` file. The retired projected-vector format (a flat
+    `blocks` inventory) is refused, as the runtime's loader refuses it (`neuralese-file-format`)."""
+    natlang = nz_header(path)["natlang"]
+    if "blocks" in natlang or natlang.get("format") != NZ_FORMAT:
+        raise ArtifactError(f"{path} is not a native {NZ_FORMAT} file (a projected-vector `blocks` header is retired)")
+    dialect = natlang.get("dialect")
+    return {"exports": sorted(natlang.get("exports", {})),
+            "native_states": len(natlang.get("native_states", {})),
+            "native_tensors": len(natlang.get("native_tensors", {})),
+            "dialects": [dialect] if isinstance(dialect, str) and dialect else []}
 
 
 def safe_relative(value: str) -> str:
@@ -122,7 +128,7 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
     if item.get("kind") not in KINDS:
         raise ArtifactError(f"artifact kind must be one of {sorted(KINDS)}")
     if not DIALECT.fullmatch(item.get("dialect", "")):
-        raise ArtifactError("artifact dialect must look like nd:natlang@1")
+        raise ArtifactError("artifact dialect must be native-state/<architecture>, native-tensor/<kind> or semantic-state/<adapter sha256>")
     backbone = item.get("backbone")
     if not isinstance(backbone, dict) or not backbone.get("model") or not backbone.get("revision"):
         raise ArtifactError("artifact backbone needs model and revision (the space the blocks live in)")
@@ -141,9 +147,8 @@ def validate_entry(item: dict, registry: dict, corpora_ids: set[str] | None = No
         unknown = set(training.get("corpora", [])) - (corpora_ids or set())
         if corpora_ids is not None and unknown:
             raise ArtifactError(f"training corpora are not registered: {sorted(unknown)}")
-    extra = item.get("extra_dialects", [])
-    if not isinstance(extra, list) or any(not isinstance(d, str) or not d.startswith("adapter/") for d in extra):
-        raise ArtifactError("extra_dialects lists adapter dialects (adapter/…) only")
+    if "extra_dialects" in item:
+        raise ArtifactError("extra_dialects is retired: native adapters are named tensor artifacts, which have no dialect")
     qualification = item.get("qualification")
     if not isinstance(qualification, dict) or qualification.get("status") not in QUALIFICATION:
         raise ArtifactError(f"artifact qualification.status must be one of {sorted(QUALIFICATION)}")
@@ -175,14 +180,10 @@ def snapshot(repo: Path, item: dict) -> dict:
         row = {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
         if path.suffix == ".nz":
             row["nz"] = nz_summary(path)
-            # Adapter blocks carry their own dialect (adapter/1;base=…), declared in extra_dialects.
-            allowed = {item["dialect"], *item.get("extra_dialects", [])}
-            wrong = [d for d in row["nz"]["dialects"] if d not in allowed]
-            if wrong or not row["nz"]["dialects"]:
-                raise ArtifactError(f"{name}: block dialects {row['nz']['dialects']} differ from {item['dialect']}")
+            if row["nz"]["dialects"] != [item["dialect"]]:
+                raise ArtifactError(f"{name}: file dialect {row['nz']['dialects']} differs from {item['dialect']}")
         rows.append(row)
     return {"schema": SNAPSHOT_SCHEMA, "id": item["id"], "kind": item["kind"], "dialect": item["dialect"],
-            **({"extra_dialects": item["extra_dialects"]} if item.get("extra_dialects") else {}),
             "backbone": item["backbone"], "path": item["path"], "files": rows,
             "bytes": sum(r["bytes"] for r in rows)}
 
@@ -349,7 +350,7 @@ def register_run(run: Path, identity: str, *, backbone_revision: str | None = No
         raise ArtifactError(f"{run} has no {file} (the run trained no bank)")
     dialects = nz_summary(path)["dialects"]
     if len(dialects) != 1:
-        raise ArtifactError(f"{path} mixes dialects {dialects}")
+        raise ArtifactError(f"{path} declares no dialect")
     inputs = {options[k] for k in ("records", "pieces", "prompts", "text_data") if options.get(k)}
     shas = {digest(Path(p)) for p in inputs if Path(p).exists()}
     corpora = sorted(set(corpora_by_sha(shas, repo).values()))

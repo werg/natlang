@@ -8,10 +8,17 @@ from safetensors.torch import save_file
 from natlang_neuralese import artifacts
 
 
-def nz(path, dialect="nd:test@1", width=8):
-    header = {"exports": {"piece": {"type": "Neuralese<string>", "value": {"$neuralese": {"id": "b1"}}}},
-              "blocks": {"b1": {"dialect": dialect, "dtype": "F32", "length": 3}}}
-    save_file({"b1": torch.zeros(3, width)}, str(path), metadata={"natlang": json.dumps(header)})
+STATE = "nzs1_" + "a" * 52
+
+
+def nz(path, dialect="native-state/test", width=8, tensors=0):
+    """A native `.nz` file (spec/NEURALESE_FILES.md): one state tensor of `width` bytes, `tensors` named tensors."""
+    native_tensors = {f"nnt1_{chr(ord('a') + i) * 52}": {"bytes": 4} for i in range(tensors)}
+    header = {"format": "natlang.neuralese-file/1", "dialect": dialect, "types": "",
+              "exports": {"piece": {"type": "Neuralese<string>", "value": {"$neuralese": {"type": "Neuralese<string>", "id": STATE}}}},
+              "native_states": {STATE: {"bytes": width}}, "native_tensors": native_tensors}
+    payload = {STATE: torch.zeros(width, dtype=torch.uint8), **{name: torch.zeros(4, dtype=torch.uint8) for name in native_tensors}}
+    save_file(payload, str(path), metadata={"natlang": json.dumps(header)})
     return path
 
 
@@ -22,7 +29,7 @@ def repo_with_corpus(tmp_path):
 
 
 def item(identity="bank-test-v1", **extra):
-    return {"id": identity, "kind": "prompt-bank", "owner": "dgx", "dialect": "nd:test@1",
+    return {"id": identity, "kind": "prompt-bank", "owner": "dgx", "dialect": "native-state/test",
             "backbone": {"model": "test/model", "revision": "abc"}, "init": {"method": "text", "source": "x.ts"},
             "training": None, "qualification": {"status": "unqualified", "evidence": []}, **extra}
 
@@ -30,12 +37,13 @@ def item(identity="bank-test-v1", **extra):
 def test_register_verify_resolve_and_refuse_other_spaces(tmp_path):
     repo = repo_with_corpus(tmp_path)
     manifest = artifacts.register(repo, item(), {"bank.nz": nz(tmp_path / "src.nz")})
-    assert manifest["files"][0]["nz"] == {"exports": ["piece"], "blocks": 1, "dialects": ["nd:test@1"], "widths": [8]}
+    assert manifest["files"][0]["nz"] == {"exports": ["piece"], "native_states": 1, "native_tensors": 0,
+                                          "dialects": ["native-state/test"]}
     assert artifacts.verify(repo, "bank-test-v1")["id"] == "bank-test-v1"
-    path, sha = artifacts.resolve("bank-test-v1", repo=repo, dialect="nd:test@1", backbone_model="test/model")
+    path, sha = artifacts.resolve("bank-test-v1", repo=repo, dialect="native-state/test", backbone_model="test/model")
     assert path.name == "bank.nz" and len(sha) == 64
     with pytest.raises(artifacts.ArtifactError, match="dialect"):
-        artifacts.resolve("bank-test-v1", repo=repo, dialect="nd:other@1")
+        artifacts.resolve("bank-test-v1", repo=repo, dialect="native-state/other")
     with pytest.raises(artifacts.ArtifactError, match="belongs to"):
         artifacts.resolve("bank-test-v1", repo=repo, backbone_model="other/model")
     with pytest.raises(artifacts.ArtifactError, match="already registered"):
@@ -52,8 +60,10 @@ def test_tampered_bytes_and_wrong_dialects_are_refused(tmp_path):
         artifacts.verify(repo, "bank-test-v1")
     with pytest.raises(artifacts.ArtifactError, match="hash mismatch"):
         artifacts.resolve("bank-test-v1", repo=repo)
-    with pytest.raises(artifacts.ArtifactError, match="differ from"):
-        artifacts.register(repo, item("bank-test-v2"), {"bank.nz": nz(tmp_path / "other.nz", dialect="nd:other@1")})
+    with pytest.raises(artifacts.ArtifactError, match="differs from"):
+        artifacts.register(repo, item("bank-test-v2"), {"bank.nz": nz(tmp_path / "other.nz", dialect="native-state/other")})
+    with pytest.raises(artifacts.ArtifactError, match="semantic-state"):
+        artifacts.register(repo, item("bank-test-v3", dialect="nd:test@1"), {"bank.nz": nz(tmp_path / "old.nz")})
 
 
 def test_trained_artifacts_need_registered_corpora_parent_and_commit(tmp_path):
@@ -72,18 +82,20 @@ def test_trained_artifacts_need_registered_corpora_parent_and_commit(tmp_path):
         artifacts.register(repo, orphan, {"bank.nz": nz(tmp_path / "o.nz")})
 
 
-def test_bundles_declare_adapter_dialects(tmp_path):
+def test_bundles_hold_native_tensors_and_retired_formats_are_refused(tmp_path):
     repo = repo_with_corpus(tmp_path)
-    path = tmp_path / "bundle.nz"
-    header = {"exports": {}, "blocks": {"a": {"dialect": "nd:test@1"}, "b": {"dialect": "adapter/1;base=x;kind=xs"}}}
-    save_file({"a": torch.zeros(2, 8), "b": torch.zeros(2, 4)}, str(path), metadata={"natlang": json.dumps(header)})
-    with pytest.raises(artifacts.ArtifactError, match="differ from"):
-        artifacts.register(repo, item("bundle-test-v1", kind="bundle"), {"a.nz": path})
-    manifest = artifacts.register(repo, item("bundle-test-v2", kind="bundle", extra_dialects=["adapter/1;base=x;kind=xs"]),
-                                  {"a.nz": path})
-    assert manifest["extra_dialects"] == ["adapter/1;base=x;kind=xs"]
-    with pytest.raises(artifacts.ArtifactError, match="adapter dialects"):
-        artifacts.register(repo, item("bundle-test-v3", kind="bundle", extra_dialects=["nd:other@1"]), {"a.nz": path})
+    manifest = artifacts.register(repo, item("bundle-test-v1", kind="bundle"), {"a.nz": nz(tmp_path / "bundle.nz", tensors=2)})
+    assert manifest["files"][0]["nz"]["native_tensors"] == 2
+    # Native adapters are named tensor artifacts without a dialect, so extra_dialects is retired.
+    with pytest.raises(artifacts.ArtifactError, match="extra_dialects is retired"):
+        artifacts.register(repo, item("bundle-test-v2", kind="bundle", extra_dialects=["adapter/1;base=x;kind=xs"]),
+                           {"a.nz": nz(tmp_path / "b2.nz")})
+    # A projected-vector file (a flat `blocks` inventory) is refused, as the runtime loader refuses it.
+    old = tmp_path / "old.nz"
+    header = {"exports": {}, "blocks": {"a": {"dialect": "native-state/test"}}}
+    save_file({"a": torch.zeros(2, 8)}, str(old), metadata={"natlang": json.dumps(header)})
+    with pytest.raises(artifacts.ArtifactError, match="blocks"):
+        artifacts.register(repo, item("bundle-test-v3", kind="bundle"), {"a.nz": old})
 
 
 def test_trainer_outputs_register_with_their_parent_found_by_content(tmp_path):
@@ -93,11 +105,12 @@ def test_trainer_outputs_register_with_their_parent_found_by_content(tmp_path):
     assert artifacts.find_by_sha(artifacts.digest(source), repo) == ("bank-test-v1", "bank.nz")
     trained = nz(tmp_path / "system-prompts.nz", width=6)
     manifest = artifacts.register_output(trained, identity="bank-test-trained-v1", kind="prompt-bank",
-                                         dialect="nd:test@1", backbone={"model": "test/model", "revision": "abc"},
+                                         dialect="native-state/test", backbone={"model": "test/model", "revision": "abc"},
                                          trainer="natlang_neuralese.train.decision", commit="c0ffee",
                                          corpora=["corpus-a"], parent="bank-test-v1", repo=repo)
     entry = artifacts.entry(artifacts.load_registry(repo), "bank-test-trained-v1")
-    assert entry["init"] == {"method": "trained", "parent": "bank-test-v1"} and manifest["files"][0]["nz"]["widths"] == [6]
+    assert entry["init"] == {"method": "trained", "parent": "bank-test-v1"}
+    assert manifest["files"][0]["nz"]["dialects"] == ["native-state/test"]
     snapshot = tmp_path / "hub/models--x/snapshots/0123abcd"
     assert artifacts.backbone_identity(str(snapshot)) == {"model": str(snapshot), "revision": "0123abcd"}
     with pytest.raises(artifacts.ArtifactError, match="cannot pin"):

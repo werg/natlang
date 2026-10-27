@@ -304,10 +304,12 @@ Native graph learning preserves named tensor artifacts through the normal store.
 publishes a new immutable checkpoint; reload it and restore the returned
 optimizer-state artifact for continuation. SGD supports explicit momentum.
 Refresh semantic adapters for changed participant identities before promotion.
-Do not send second-order/derived requests to a first-order native service:
-`neuralese-native-grad-order` requires removing derived computations or selecting
-a `grad.order2` service. `neuralese-adapters-unavailable` requires loading an
-applied identity-bound checkpoint rather than sending an ignored adapter value.
+Graph gradient requests are first order: `neuralese-native-grad-order` means a
+derived or second-order computation was sent as a graph request; send it as a
+derivative program (`grad(f, a, { order: 2 })` does). `neuralese-native-adapters-unavailable`
+means a call binding weight adapters reached a transport or server that does not
+apply them; route it to a native-state server that lists `native.adapters` instead
+of sending an adapter value that would be ignored.
 For `neuralese-native-gradient-binding` or `neuralese-native-update-binding`,
 restore the exact current checkpoint's gradient/update/optimizer artifacts and
 retry; never change identity metadata to make unrelated tensors appear compatible.
@@ -403,7 +405,7 @@ a consumer must apply that same binding to splice it exactly, or explicitly
 reencode its text. Never reuse a base-bound semantic decoder as if it had been
 qualified for changed weights. For `neuralese-native-adapter-invalid`, restore
 matching coefficients/bases and use actual native matrix names. For
-`neuralese-native-tensor-as-state`, bind the adapter with `withAdapters` instead
+`neuralese-native-tensor-as-state`, bind the adapter with `withNativeAdapters` instead
 of sending it as communication state. Adapted-policy sampling/3 receipts bind
 an effective actor SHA, exact base identity and ordered coefficient IDs/hex
 scales. Retain its recursive RL artifact bundle, then evaluate the admitted
@@ -535,8 +537,8 @@ stored text in order and then use the normal exact return checker. Mixed text
 and state parts preserve their order. This rule does not change explicit
 `return_result` calls or weaken type validation.
 
-For a decision-objective `neuralese-grad-term` or native objective validation
-error, provide finite numeric rewards or nonnegative finite probabilities with
+For a `neuralese-native-grad-invalid` from a decision objective or other native
+objective validation, provide finite numeric rewards or nonnegative finite probabilities with
 positive total mass, exactly one entry per declared option. Keep the recorded
 conditional token queries bound to their actual graph and avoid assigning a
 likelihood to a forced input after an imported state.
@@ -573,7 +575,7 @@ imports need their actual differentiable lowering, not relabeled provenance.
 `stopGradient(value)` preserves native typed values and soft-function bodies as
 constants for that use, including after context snapshots and `.nz` save/load.
 An equal live value remains differentiable. Keep the typed value when passing
-it to another call or `withAdapters`; do not extract its artifact ID to preserve
+it to another call or `withNativeAdapters`; do not extract its artifact ID to preserve
 a constant boundary. No payload is decoded or rewritten by this operation.
 
 Native Neuralese values retain their source-call occurrence through returns,

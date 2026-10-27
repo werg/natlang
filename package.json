@@ -16,7 +16,9 @@
     "test": "npm --workspace @natlang/typescript-host test",
     "pack:node": "npm pack --workspace @natlang/node",
     "pack:browser": "npm pack --workspace @natlang/browser",
-    "pack:cli": "npm pack --workspace @natlang/cli"
+    "pack:cli": "npm pack --workspace @natlang/cli",
+    "website:dev": "node scripts/website-dev/server.mjs",
+    "test:website": "node --test tests/test_website_dev.mjs"
   },
   "devDependencies": {
     "tracing-js-self": "https://codeload.github.com/werg/tracing-js-self/tar.gz/b4fce2bd17490933efccd835d6573a57f2e91a92"

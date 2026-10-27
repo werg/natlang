@@ -1,0 +1,1645 @@
+diff --git a/common/CMakeLists.txt b/common/CMakeLists.txt
+index 2b307c5..c861acb 100644
+--- a/common/CMakeLists.txt
++++ b/common/CMakeLists.txt
+@@ -78,6 +78,8 @@ add_library(${TARGET}
+     download.h
+     fit.cpp
+     fit.h
++    native-state.cpp
++    native-state.h
+     hf-cache.cpp
+     hf-cache.h
+     http.h
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 8b302d5..cd762c2 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3827,6 +3827,14 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             params.lora_init_without_apply = true;
+         }
+     ).set_examples({LLAMA_EXAMPLE_SERVER}));
++    add_opt(common_arg(
++        {"--native-state"}, "FNAME",
++        "load a natlang native state span (GGUF, common/native-state.h; can be repeated); a chat content part "
++        "{\"type\": \"native_state\", \"id\": ID} consumes it exactly, between its consume markers",
++        [](common_params & params, const std::string & value) {
++            params.native_states.push_back(value);
++        }
++    ).set_examples({LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
+         {"--sleep-idle-seconds"}, "SECONDS",
+         string_format("number of seconds of idleness after which the server will sleep (default: %d; -1 = disabled)", params.sleep_idle_seconds),
+diff --git a/common/common.h b/common/common.h
+index 0c2d5e4..881683b 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -533,6 +533,7 @@ struct common_params {
+     std::vector<llama_model_kv_override> kv_overrides;
+     std::vector<llama_model_tensor_buft_override> tensor_buft_overrides;
+ 
++    std::vector<std::string> native_states; // natlang native state span files (common/native-state.h), consumed by ID
+     bool lora_init_without_apply = false; // only load lora to memory, but do not apply it to ctx (user can manually apply lora later using llama_adapter_lora_apply)
+     std::vector<common_adapter_lora_info> lora_adapters; // lora adapter path with user defined scale
+ 
+diff --git a/common/native-state.cpp b/common/native-state.cpp
+new file mode 100644
+index 0000000..142a2ad
+--- /dev/null
++++ b/common/native-state.cpp
+@@ -0,0 +1,104 @@
++#include "native-state.h"
++
++#include "gguf.h"
++#include "ggml.h"
++#include "log.h"
++
++#include <cstring>
++
++static bool get_str(const gguf_context * g, const char * key, std::string & out) {
++    const int64_t i = gguf_find_key(g, key);
++    if (i < 0 || gguf_get_kv_type(g, i) != GGUF_TYPE_STRING) {
++        return false;
++    }
++    out = gguf_get_val_str(g, i);
++    return true;
++}
++
++static bool get_i32(const gguf_context * g, const char * key, int32_t & out) {
++    const int64_t i = gguf_find_key(g, key);
++    if (i < 0) {
++        return false;
++    }
++    switch (gguf_get_kv_type(g, i)) {
++        case GGUF_TYPE_INT32:  out = gguf_get_val_i32(g, i); return true;
++        case GGUF_TYPE_UINT32: out = (int32_t) gguf_get_val_u32(g, i); return true;
++        default: return false;
++    }
++}
++
++bool common_native_state_load(const std::string & path, int32_t n_layer, common_native_state & out) {
++    ggml_context * ctx = nullptr;
++    gguf_init_params params = { /*.no_alloc =*/ false, /*.ctx =*/ &ctx };
++    gguf_context * g = gguf_init_from_file(path.c_str(), params);
++    if (!g) {
++        LOG_ERR("%s: %s is not a GGUF file\n", __func__, path.c_str());
++        return false;
++    }
++    bool ok = true;
++    std::string type;
++    int32_t open = -1, close = -1;
++    ok &= get_str(g, "general.type", type) && type == "natlang.native_state";
++    ok &= get_str(g, "natlang.state.id", out.id);
++    ok &= get_str(g, "natlang.state.text_sha256", out.text_sha256);
++    ok &= get_str(g, "natlang.state.architecture", out.architecture);
++    ok &= get_str(g, "natlang.state.checkpoint_sha256", out.checkpoint_sha256);
++    ok &= get_str(g, "natlang.state.tokenizer_fingerprint", out.tokenizer_fingerprint);
++    ok &= get_str(g, "natlang.state.embedding_weight_sha256", out.embedding_weight_sha256);
++    ok &= get_i32(g, "natlang.state.n_tokens", out.n_tokens) && out.n_tokens > 0;
++    ok &= get_i32(g, "natlang.state.consume_open", open) && get_i32(g, "natlang.state.consume_close", close);
++    if (!ok) {
++        LOG_ERR("%s: %s is not a natlang native state (metadata)\n", __func__, path.c_str());
++        gguf_free(g); ggml_free(ctx);
++        return false;
++    }
++    out.consume_open = open; out.consume_close = close;
++    out.k.assign(n_layer, {}); out.v.assign(n_layer, {}); out.conv.assign(n_layer, {});
++    int64_t found = 0;
++    for (int32_t il = 0; il < n_layer; ++il) {
++        for (const char * name : { "state_k", "state_v", "state_conv" }) {
++            const std::string tn = "blk." + std::to_string(il) + "." + name;
++            ggml_tensor * t = ggml_get_tensor(ctx, tn.c_str());
++            if (!t) {
++                continue;
++            }
++            if (t->type != GGML_TYPE_F32 || ggml_n_dims(t) != 2 || t->ne[1] != out.n_tokens) {
++                LOG_ERR("%s: %s: %s must be F32 [width, n_tokens]\n", __func__, path.c_str(), tn.c_str());
++                gguf_free(g); ggml_free(ctx);
++                return false;
++            }
++            auto & dst = !strcmp(name, "state_k") ? out.k[il] : !strcmp(name, "state_v") ? out.v[il] : out.conv[il];
++            const float * src = (const float *) t->data;
++            dst.assign(src, src + ggml_nelements(t));
++            ++found;
++        }
++    }
++    if ((int64_t) gguf_get_n_tensors(g) != found) {
++        LOG_ERR("%s: %s holds tensors outside %d layers\n", __func__, path.c_str(), n_layer);
++        ok = false;
++    }
++    gguf_free(g); ggml_free(ctx);
++    return ok;
++}
++
++bool common_native_state_register(llama_context * ctx, common_native_state & state) {
++    std::vector<llama_state_span_layer> layers(state.k.size());
++    for (size_t il = 0; il < layers.size(); ++il) {
++        layers[il].k    = state.k[il].empty()    ? nullptr : state.k[il].data();
++        layers[il].v    = state.v[il].empty()    ? nullptr : state.v[il].data();
++        layers[il].conv = state.conv[il].empty() ? nullptr : state.conv[il].data();
++    }
++    state.first = llama_state_span_register(ctx, state.n_tokens, layers.data(), (int32_t) layers.size());
++    return state.first != LLAMA_TOKEN_NULL;
++}
++
++std::vector<llama_token> common_native_state_tokens(const common_native_state & state) {
++    std::vector<llama_token> out;
++    out.reserve(state.n_tokens + 2);
++    out.push_back(state.consume_open);
++    for (int32_t i = 0; i < state.n_tokens; ++i) {
++        out.push_back(state.first + i);
++    }
++    out.push_back(state.consume_close);
++    return out;
++}
+diff --git a/common/native-state.h b/common/native-state.h
+new file mode 100644
+index 0000000..5c7bb07
+--- /dev/null
++++ b/common/native-state.h
+@@ -0,0 +1,37 @@
++#pragma once
++
++#include "llama.h"
++
++#include <string>
++#include <vector>
++
++// A natlang native state span exported as GGUF (natlang tune soft states, `natlang_neuralese.tune.soft_export`):
++//   general.type = "natlang.native_state"
++//   natlang.state.{id, text_sha256, architecture, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256}
++//   natlang.state.{n_tokens, consume_open, consume_close}
++//   tensors blk.{il}.state_k / blk.{il}.state_v (attention layers; F32 [n_embd_k_gqa, n_tokens]: the key after the key
++//   norm and before RoPE, the value) and blk.{il}.state_conv (short-convolution layers; F32 [n_embd, n_tokens]: B*x)
++struct common_native_state {
++    std::string id;
++    std::string text_sha256;
++    std::string architecture;
++    std::string checkpoint_sha256;
++    std::string tokenizer_fingerprint;
++    std::string embedding_weight_sha256;
++    int32_t     n_tokens      = 0;
++    llama_token consume_open  = LLAMA_TOKEN_NULL;
++    llama_token consume_close = LLAMA_TOKEN_NULL;
++    std::vector<std::vector<float>> k, v, conv; // per layer; empty where absent
++
++    // registered virtual tokens (common_native_state_register)
++    llama_token first = LLAMA_TOKEN_NULL;
++};
++
++// load a state file for a model with n_layer layers; false (with a logged reason) on any malformation
++bool common_native_state_load(const std::string & path, int32_t n_layer, common_native_state & out);
++
++// register the state's span with the context; sets out.first; false if the context refuses it
++bool common_native_state_register(llama_context * ctx, common_native_state & state);
++
++// the tokens that consume the state: the consume-open marker, the virtual span, the consume-close marker
++std::vector<llama_token> common_native_state_tokens(const common_native_state & state);
+diff --git a/include/llama.h b/include/llama.h
+index 3af6e22..eb5a051 100644
+--- a/include/llama.h
++++ b/include/llama.h
+@@ -732,6 +732,32 @@ extern "C" {
+             size_t n_adapters,
+             float * scales);
+ 
++    // Native state spans: exact per-layer stored state imported from outside the model (Neuralese shared-state
++    // spans, e.g. tuned soft instructions). Registers n_tokens positions and returns the first of n_tokens
++    // consecutive virtual token IDs (>= llama_vocab_n_tokens) that stand for them in batches. For a virtual token,
++    // a decode stores the registered state instead of computing it: attention layers take layers[il].k (the key
++    // after the key norm and before RoPE; RoPE is applied at the token's batch position) and layers[il].v, float
++    // [n_tokens][n_embd_k_gqa(il)]; recurrent short-convolution layers take layers[il].conv (the gated input B*x),
++    // float [n_tokens][n_embd]. The data is copied. Supported architectures: LFM2. Returns LLAMA_TOKEN_NULL if the
++    // architecture is unsupported or a layer lacks its state.
++    struct llama_state_span_layer {
++        const float * k;
++        const float * v;
++        const float * conv;
++    };
++
++    LLAMA_API llama_token llama_state_span_register(
++            struct llama_context * ctx,
++            int32_t n_tokens,
++            const struct llama_state_span_layer * layers,
++            int32_t n_layers);
++
++    // Release a registered span by its first virtual token ID. Returns false if no span starts there.
++    LLAMA_API bool llama_state_span_unregister(struct llama_context * ctx, llama_token first);
++
++    // Whether token is a registered virtual token of this context.
++    LLAMA_API bool llama_state_span_is_virtual(const struct llama_context * ctx, llama_token token);
++
+     // Apply a loaded control vector to a llama_context, or if data is NULL, clear
+     // the currently loaded vector.
+     // n_embd should be the size of a single layer's control, and data should point
+diff --git a/src/llama-batch.cpp b/src/llama-batch.cpp
+index 321aa9d..512bb38 100644
+--- a/src/llama-batch.cpp
++++ b/src/llama-batch.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-batch.h"
++#include "llama-state-span.h"
+ 
+ #include "llama-impl.h"
+ #include "llama-vocab.h"
+@@ -1161,7 +1162,8 @@ llama_batch_ext::llama_batch_ext(llama_context * ctx) :
+         n_embd_state(llama_batch_ext_select_n_embd_state(ctx->get_cparams().ctx_type, llama_get_model(ctx)->hparams)),
+         n_seq_max(llama_n_seq_max(ctx)),
+         mem(llama_get_memory(ctx)),
+-        n_vocab(llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx)))),
++        // virtual tokens of native state spans follow the vocabulary; decode rejects unregistered ones
++        n_vocab(llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx))) + LLAMA_STATE_SPAN_MAX_TOKENS),
+         n_pos_per_embd(llama_get_model(ctx)->hparams.n_pos_per_embd()) {
+     clear();
+ }
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 9ee64b5..6d99d4d 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -1881,6 +1881,15 @@ int llama_context::decode(const llama_batch_ext & batch_inp) {
+         return -1;
+     }
+ 
++    // a token past the vocabulary must be a registered native state span token
++    for (const auto & t : batch_inp.tokens) {
++        int32_t row = 0;
++        if (t.id >= vocab.n_tokens() && !state_spans.find(t.id, row)) {
++            LLAMA_LOG_ERROR("%s: token %d is neither in the vocabulary nor a registered state span token\n", __func__, t.id);
++            return -1;
++        }
++    }
++
+     const uint32_t n_tokens_all  = balloc->get_n_tokens();
+     const uint32_t n_outputs_all = balloc->get_n_outputs();
+ 
+@@ -2682,6 +2691,69 @@ ggml_cgraph * llama_context::graph_reserve(
+     return gf;
+ }
+ 
++bool llama_context::ubatch_has_virtual(const llama_ubatch & ubatch) const {
++    if (!ubatch.token || state_spans.spans.empty()) {
++        return false;
++    }
++    for (uint32_t i = 0; i < ubatch.n_tokens; ++i) {
++        if (ubatch.token[i] >= state_spans.base) {
++            return true;
++        }
++    }
++    return false;
++}
++
++llama_token llama_context::state_span_register(int32_t n_tokens, const llama_state_span_layer * layers, int32_t n_layers) {
++    const auto & hp = model.hparams;
++    if (model.arch != LLM_ARCH_LFM2) {
++        LLAMA_LOG_ERROR("%s: native state spans are not supported for this architecture\n", __func__);
++        return LLAMA_TOKEN_NULL;
++    }
++    if (n_tokens <= 0 || n_layers != (int32_t) hp.n_layer() || !layers) {
++        LLAMA_LOG_ERROR("%s: a span needs tokens and one state per layer (%u)\n", __func__, hp.n_layer());
++        return LLAMA_TOKEN_NULL;
++    }
++    if (state_spans.base == 0) {
++        state_spans.base = state_spans.next = model.vocab.n_tokens();
++    }
++    if ((int64_t) state_spans.next + n_tokens > (int64_t) state_spans.base + LLAMA_STATE_SPAN_MAX_TOKENS) {
++        LLAMA_LOG_ERROR("%s: virtual token space exhausted\n", __func__);
++        return LLAMA_TOKEN_NULL;
++    }
++    auto span = std::make_unique<llama_state_span>();
++    span->first = state_spans.next;
++    span->n     = n_tokens;
++    span->k.resize(n_layers); span->v.resize(n_layers); span->conv.resize(n_layers); span->width_kv.assign(n_layers, 0);
++    span->width_conv = hp.n_embd;
++    for (int32_t il = 0; il < n_layers; ++il) {
++        if (hp.is_recr(il)) {
++            if (!layers[il].conv) {
++                LLAMA_LOG_ERROR("%s: layer %d is a short convolution and needs its gated inputs\n", __func__, il);
++                return LLAMA_TOKEN_NULL;
++            }
++            span->conv[il].assign(layers[il].conv, layers[il].conv + (size_t) n_tokens*hp.n_embd);
++        } else {
++            if (!layers[il].k || !layers[il].v) {
++                LLAMA_LOG_ERROR("%s: layer %d is attention and needs keys and values\n", __func__, il);
++                return LLAMA_TOKEN_NULL;
++            }
++            const int64_t w = hp.n_embd_k_gqa(il);
++            GGML_ASSERT(hp.n_embd_v_gqa(il) == (uint32_t) w);
++            span->width_kv[il] = w;
++            span->k[il].assign(layers[il].k, layers[il].k + (size_t) n_tokens*w);
++            span->v[il].assign(layers[il].v, layers[il].v + (size_t) n_tokens*w);
++        }
++    }
++    const llama_token first = span->first;
++    state_spans.next += n_tokens;
++    state_spans.spans[first] = std::move(span);
++    return first;
++}
++
++bool llama_context::state_span_unregister(llama_token first) {
++    return state_spans.spans.erase(first) > 0;
++}
++
+ llm_graph_params llama_context::graph_params(
+                         llm_graph_result * res,
+                       const llama_ubatch & ubatch,
+@@ -2700,6 +2772,7 @@ llm_graph_params llama_context::graph_params(
+         /*.mctx        =*/ mctx,
+         /*.cross       =*/ &cross,
+         /*.moe_cache   =*/ moe_cache.get(),
++        /*.state_spans =*/ ubatch_has_virtual(ubatch) ? &state_spans : nullptr,
+         /*.prec_policy =*/ &model.prec_policy,
+         /*.hdmd        =*/ model.hdmd.rot.empty() ? nullptr : &model.hdmd,
+         /*.samplers    =*/ sampling.samplers,
+@@ -4352,6 +4425,23 @@ struct ggml_cgraph * llama_graph_reserve(
+ 
+ // llama adapter API
+ 
++llama_token llama_state_span_register(
++        llama_context * ctx,
++        int32_t n_tokens,
++        const llama_state_span_layer * layers,
++        int32_t n_layers) {
++    return ctx->state_span_register(n_tokens, layers, n_layers);
++}
++
++bool llama_state_span_unregister(llama_context * ctx, llama_token first) {
++    return ctx->state_span_unregister(first);
++}
++
++bool llama_state_span_is_virtual(const llama_context * ctx, llama_token token) {
++    int32_t row = 0;
++    return ctx->state_spans.find(token, row) != nullptr;
++}
++
+ int32_t llama_set_adapters_lora(
+             llama_context * ctx,
+             llama_adapter_lora ** adapters,
+diff --git a/src/llama-context.h b/src/llama-context.h
+index 6938fb1..add7fb8 100644
+--- a/src/llama-context.h
++++ b/src/llama-context.h
+@@ -5,6 +5,7 @@
+ #include "llama-cparams.h"
+ #include "llama-graph.h"
+ #include "llama-adapter.h"
++#include "llama-state-span.h"
+ #include "llama-impl.h"
+ #include "llama-memory.h"
+ #include "llama-moe-cache.h"
+@@ -304,6 +305,15 @@ private:
+     llama_adapter_cvec_ptr  cvec;
+     llama_adapter_loras_ptr loras;
+ 
++public:
++    llama_state_spans state_spans; // registered native state spans (llama_state_span_register)
++
++    llama_token state_span_register(int32_t n_tokens, const llama_state_span_layer * layers, int32_t n_layers);
++    bool        state_span_unregister(llama_token first);
++    bool        ubatch_has_virtual(const llama_ubatch & ubatch) const;
++
++private:
++
+     llama_cross cross; // TODO: tmp for handling cross-attention - need something better probably
+ 
+     llama_memory_ptr memory;
+diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
+index 2bc3a29..2fda9d9 100644
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-graph.h"
++#include "llama-state-span.h"
+ 
+ #include "llama-impl.h"
+ #include "llama-model.h"
+@@ -71,7 +72,22 @@ void llm_graph_input_embd::set_input(const llama_ubatch * ubatch) {
+     if (ubatch->token) {
+         const int64_t n_tokens = ubatch->n_tokens;
+ 
+-        ggml_backend_tensor_set(tokens, ubatch->token, 0, n_tokens*ggml_element_size(tokens));
++        bool has_virtual = false;
++        for (int64_t i = 0; i < n_tokens; ++i) {
++            has_virtual |= ubatch->token[i] >= n_vocab;
++        }
++        if (has_virtual) {
++            // a virtual token's stored state is imported (build_state_span); its embedding row only has to exist
++            std::vector<llama_token> ids(ubatch->token, ubatch->token + n_tokens);
++            for (auto & id : ids) {
++                if (id >= n_vocab) {
++                    id = 0;
++                }
++            }
++            ggml_backend_tensor_set(tokens, ids.data(), 0, n_tokens*ggml_element_size(tokens));
++        } else {
++            ggml_backend_tensor_set(tokens, ubatch->token, 0, n_tokens*ggml_element_size(tokens));
++        }
+     }
+ 
+     if (ubatch->embd && embd && !ubatch->is_mixed()) {
+@@ -89,7 +105,7 @@ void llm_graph_input_embd::set_input(const llama_ubatch * ubatch) {
+         std::vector<int64_t> slots;
+         for (uint32_t i = 0; i < ubatch->n_tokens; ++i) {
+             if (!ubatch->type[i]) {
+-                ids.push_back(ubatch->token[i]);
++                ids.push_back(ubatch->token[i] >= n_vocab ? 0 : ubatch->token[i]);
+                 slots.push_back(i);
+             }
+         }
+@@ -125,6 +141,42 @@ static int64_t llm_graph_n_tok_rows(const llama_ubatch & ubatch) {
+     return n;
+ }
+ 
++void llm_graph_input_state_span::set_input(const llama_ubatch * ubatch) {
++    GGML_ASSERT(ubatch->token);
++    const int64_t n_tokens = ubatch->n_tokens;
++
++    std::vector<const llama_state_span *> span(n_tokens, nullptr);
++    std::vector<int32_t> row(n_tokens, 0);
++    std::vector<float> m(n_tokens, 0.0f), k(n_tokens, 1.0f);
++    for (int64_t i = 0; i < n_tokens; ++i) {
++        span[i] = spans->find(ubatch->token[i], row[i]);
++        if (span[i]) {
++            m[i] = 1.0f;
++            k[i] = 0.0f;
++        }
++    }
++    ggml_backend_tensor_set(mask, m.data(), 0, n_tokens*sizeof(float));
++    ggml_backend_tensor_set(keep, k.data(), 0, n_tokens*sizeof(float));
++
++    std::vector<float> data;
++    for (const auto & e : entries) {
++        data.assign((size_t) e.width*n_tokens, 0.0f);
++        for (int64_t i = 0; i < n_tokens; ++i) {
++            if (!span[i]) {
++                continue;
++            }
++            const auto & src = e.kind == KIND_K ? span[i]->k[e.il] : e.kind == KIND_V ? span[i]->v[e.il] : span[i]->conv[e.il];
++            GGML_ASSERT((int64_t) src.size() == (int64_t) span[i]->n*e.width);
++            std::copy(src.begin() + (size_t) row[i]*e.width, src.begin() + (size_t) (row[i] + 1)*e.width, data.begin() + (size_t) i*e.width);
++        }
++        ggml_backend_tensor_set(e.t, data.data(), 0, data.size()*sizeof(float));
++    }
++}
++
++bool llm_graph_input_state_span::can_reuse(const llm_graph_params & params) {
++    return params.state_spans == spans && mask && mask->ne[1] == params.ubatch.n_tokens;
++}
++
+ bool llm_graph_input_embd::can_reuse(const llm_graph_params & params) {
+     bool res = true;
+ 
+@@ -1571,6 +1623,7 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
+     mctx             (params.mctx),
+     cross            (params.cross),
+     moe_cache        (params.moe_cache),
++    state_spans      (params.state_spans),
+     prec_policy      (params.prec_policy),
+     hdmd             (params.hdmd),
+     samplers         (params.samplers),
+@@ -2571,6 +2624,34 @@ ggml_tensor * llm_graph_context::build_moe_cache_slots(
+     return ggml_reshape_2d(ctx0, slots, selected_experts->ne[0], selected_experts->ne[1]); // [n_expert_used, n_tokens]
+ }
+ 
++ggml_tensor * llm_graph_context::build_state_span(ggml_tensor * cur, int il, llm_graph_input_state_span::kind_t kind) const {
++    if (!state_spans) {
++        return cur;
++    }
++    const int64_t n_tokens = ubatch.n_tokens;
++    GGML_ASSERT(cur->type == GGML_TYPE_F32);
++    GGML_ASSERT(ggml_nelements(cur) % n_tokens == 0);
++    const int64_t width = ggml_nelements(cur) / n_tokens;
++
++    if (!inp_state_span) {
++        auto inp = std::make_unique<llm_graph_input_state_span>(state_spans);
++        inp->mask = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 1, n_tokens);
++        ggml_set_input(inp->mask);
++        inp->keep = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 1, n_tokens);
++        ggml_set_input(inp->keep);
++        inp_state_span = static_cast<llm_graph_input_state_span *>(res->add_input(std::move(inp)));
++    }
++    ggml_tensor * value = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, width, n_tokens);
++    ggml_set_input(value);
++    cb(value, "state_span", il);
++    inp_state_span->entries.push_back({ value, il, kind, width });
++
++    // rows are in ubatch order and contiguous in a 2D view; exact: x*1 + y*0 and x*0 + y*1 for finite x, y
++    ggml_tensor * flat = ggml_reshape_2d(ctx0, ggml_cont(ctx0, cur), width, n_tokens);
++    ggml_tensor * out  = ggml_add(ctx0, ggml_mul(ctx0, flat, inp_state_span->keep), ggml_mul(ctx0, value, inp_state_span->mask));
++    return ggml_reshape(ctx0, out, cur);
++}
++
+ // input embeddings with optional lora
+ ggml_tensor * llm_graph_context::build_inp_embd(ggml_tensor * tok_embd, float tok_scale) const {
+     const int64_t n_embd_inp = hparams.n_embd_inp();
+@@ -2579,6 +2660,7 @@ ggml_tensor * llm_graph_context::build_inp_embd(ggml_tensor * tok_embd, float to
+     assert(n_embd_inp >= n_embd);
+ 
+     auto inp = std::make_unique<llm_graph_input_embd>(n_embd_inp);
++    inp->n_vocab = tok_embd->ne[1];
+ 
+     // mixed path (ubatch.is_mixed()): set_rows the token rows into a copy of the embd rows, with its own inputs as select branches must not share tensors
+     // TODO: use inp->tokens and inp->embd once ggml_build_forward_select allows it
+diff --git a/src/llama-graph.h b/src/llama-graph.h
+index f66bedb..0152e5c 100644
+--- a/src/llama-graph.h
++++ b/src/llama-graph.h
+@@ -149,6 +149,9 @@ public:
+     float scale_tok = 1.0f;
+ 
+     const int64_t n_embd = 0;
++
++    // token IDs at or above this are virtual tokens of native state spans: their (unused) embedding row is row 0
++    int64_t n_vocab = INT64_MAX;
+ };
+ 
+ // similar to llm_graph_input_embd but with an additional hidden state input, fed from ubatch.embd_state
+@@ -169,6 +172,33 @@ public:
+     const int64_t n_embd_state = 0;
+ };
+ 
++struct llama_state_spans;
++
++// native state spans: the registered per-layer state of the ubatch's virtual tokens (llama-state-span.h)
++class llm_graph_input_state_span : public llm_graph_input_i {
++public:
++    llm_graph_input_state_span(const llama_state_spans * spans) : spans(spans) {}
++    virtual ~llm_graph_input_state_span() = default;
++
++    void set_input(const llama_ubatch * ubatch) override;
++
++    bool can_reuse(const llm_graph_params & params) override;
++
++    enum kind_t { KIND_K, KIND_V, KIND_CONV };
++    struct entry {
++        ggml_tensor * t;     // F32 [width, n_tokens]: the registered row for virtual tokens, 0 otherwise
++        int           il;
++        kind_t        kind;
++        int64_t       width;
++    };
++    std::vector<entry> entries;
++
++    ggml_tensor * mask = nullptr; // F32 [1, n_tokens]: 1 for virtual tokens, 0 otherwise
++    ggml_tensor * keep = nullptr; // F32 [1, n_tokens]: 1 - mask
++
++    const llama_state_spans * spans;
++};
++
+ class llm_graph_input_pos : public llm_graph_input_i {
+ public:
+     llm_graph_input_pos(uint32_t n_pos_per_embd, llama_rope_section_order rope_section_order = LLAMA_ROPE_SECTION_ORDER_TYXZ)
+@@ -806,6 +836,9 @@ struct llm_graph_params {
+     const llama_cross            * cross;
+     const llama_moe_cache        * moe_cache;
+ 
++    // non-null when the ubatch holds virtual tokens of native state spans
++    const llama_state_spans       * state_spans;
++
+     const llama_prec_policy * prec_policy = nullptr;
+ 
+     const llama_hadamard * hdmd = nullptr;
+@@ -905,6 +938,7 @@ struct llm_graph_params {
+             gtype == other.gtype &&
+             cvec  == other.cvec  &&
+             loras == other.loras &&
++            state_spans == other.state_spans &&
+             cross == other.cross;
+     }
+ };
+@@ -1059,6 +1093,9 @@ struct llm_graph_context {
+     const llama_cross            * cross;
+     const llama_moe_cache        * moe_cache;
+ 
++    const llama_state_spans       * state_spans;
++    mutable llm_graph_input_state_span * inp_state_span = nullptr;
++
+     const llama_prec_policy * prec_policy;
+ 
+     const llama_hadamard * hdmd;
+@@ -1229,6 +1266,11 @@ struct llm_graph_context {
+ 
+     // tok_scale: applied to token rows only
+     ggml_tensor * build_inp_embd(ggml_tensor * tok_embd, float tok_scale = 1.0f) const;
++
++    // native state spans: cur with the rows of virtual tokens replaced by their registered state. cur holds one row of
++    // `width` floats per ubatch token in ubatch order (any shape whose first dimensions multiply to width); kind
++    // selects the layer's key, value or short-convolution gated input. Without virtual tokens, cur itself.
++    ggml_tensor * build_state_span(ggml_tensor * cur, int il, llm_graph_input_state_span::kind_t kind) const;
+     ggml_tensor * build_inp_pos() const;
+     ggml_tensor * build_inp_attn_scale() const;
+     ggml_tensor * build_inp_out_ids() const;
+diff --git a/src/llama-state-span.h b/src/llama-state-span.h
+new file mode 100644
+index 0000000..23599a9
+--- /dev/null
++++ b/src/llama-state-span.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include "llama.h"
++
++#include <cstdint>
++#include <map>
++#include <memory>
++#include <vector>
++
++// Native state spans (llama_state_span_register): exact per-layer stored state imported from outside the model, for
++// virtual tokens that follow the vocabulary. A virtual token in a batch does not compute what the model stores for it:
++// attention layers store the registered key (after the key norm, before RoPE, rotated at the token's position) and
++// value, and short-convolution layers store the registered gated input B*x. Nothing else a decode persists depends on
++// the virtual token's own embedding or residual stream, so the import is exact.
++
++// virtual token IDs accepted in batches: [n_vocab, n_vocab + LLAMA_STATE_SPAN_MAX_TOKENS)
++constexpr llama_token LLAMA_STATE_SPAN_MAX_TOKENS = 1 << 24;
++
++struct llama_state_span {
++    llama_token first = 0;
++    int32_t     n     = 0;
++    // per layer, row-major [n][width]; empty where the layer stores no such state
++    std::vector<std::vector<float>> k;
++    std::vector<std::vector<float>> v;
++    std::vector<std::vector<float>> conv;
++    std::vector<int64_t> width_kv; // n_embd_k_gqa(il) for attention layers
++    int64_t width_conv = 0;        // n_embd for short-convolution layers
++};
++
++struct llama_state_spans {
++    llama_token base = 0; // n_vocab: the first virtual token ID
++    llama_token next = 0; // the first unallocated virtual token ID
++    std::map<llama_token, std::unique_ptr<llama_state_span>> spans; // by first virtual token
++
++    // the span holding virtual token t and its row, or nullptr
++    const llama_state_span * find(llama_token t, int32_t & row) const {
++        if (t < base) {
++            return nullptr;
++        }
++        auto it = spans.upper_bound(t);
++        if (it == spans.begin()) {
++            return nullptr;
++        }
++        --it;
++        if (t >= it->first + it->second->n) {
++            return nullptr;
++        }
++        row = t - it->first;
++        return it->second.get();
++    }
++};
+diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
+index 05d2527..6c6b3f2 100644
+--- a/src/llama-vocab.cpp
++++ b/src/llama-vocab.cpp
+@@ -4411,6 +4411,9 @@ const std::string & llama_vocab::token_to_piece(llama_token token) const {
+ }
+ 
+ int32_t llama_vocab::token_to_piece(llama_token token, char * buf, int32_t length, int32_t lstrip, bool special) const {
++    if (token >= (llama_token) n_tokens()) {
++        return 0; // a virtual token of a native state span (llama_state_span_register) has no text
++    }
+     return pimpl->token_to_piece(token, buf, length, lstrip, special);
+ }
+ 
+diff --git a/src/models/lfm2.cpp b/src/models/lfm2.cpp
+index 942d8de..c1d2352 100644
+--- a/src/models/lfm2.cpp
++++ b/src/models/lfm2.cpp
+@@ -193,6 +193,10 @@ llama_model_lfm2::graph<iswa>::graph(const llama_model & model, const llm_graph_
+         k = build_norm(k, model.layers[il].attn_k_norm, NULL, LLM_NORM_RMS, il);
+         cb(k, "model.layers.{}.self_attn.k_layernorm", il);
+ 
++        // native state spans: virtual tokens store their imported key (pre-RoPE) and value
++        k = build_state_span(k, il, llm_graph_input_state_span::KIND_K);
++        v = build_state_span(v, il, llm_graph_input_state_span::KIND_V);
++
+         // RoPE
+         q = ggml_rope_ext(ctx0, q, inp_pos, nullptr, n_rot, rope_type, n_ctx_orig, freq_base, freq_scale, ext_factor,
+                           attn_factor, beta_fast, beta_slow);
+@@ -237,7 +241,8 @@ llama_model_lfm2::graph<iswa>::graph(const llama_model & model, const llm_graph_
+         auto *     x          = ggml_view_3d(ctx0, bcx, chunk_size, bcx->ne[1], bcx->ne[2], bcx->nb[1], bcx->nb[2],
+                                              2 * chunk_size * ggml_element_size(bcx));
+ 
+-        auto * bx = ggml_transpose(ctx0, ggml_mul(ctx0, b, x));
++        // native state spans: virtual tokens feed their imported gated input to the convolution and its state
++        auto * bx = ggml_transpose(ctx0, build_state_span(ggml_mul(ctx0, b, x), il, llm_graph_input_state_span::KIND_CONV));
+ 
+         // read conv state
+         auto * conv_state = mctx_cur->get_r_l(il);
+diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
+index c8ad1db..8d85ffa 100644
+--- a/tools/CMakeLists.txt
++++ b/tools/CMakeLists.txt
+@@ -42,4 +42,5 @@ else()
+         add_subdirectory(tuning)
+     endif()
+     add_subdirectory(results)
++    add_subdirectory(neuralese)
+ endif()
+diff --git a/tools/neuralese/CMakeLists.txt b/tools/neuralese/CMakeLists.txt
+new file mode 100644
+index 0000000..f2ce3ff
+--- /dev/null
++++ b/tools/neuralese/CMakeLists.txt
+@@ -0,0 +1,5 @@
++# natlang native state spans: forward-parity dump against natlang's reference engine (scripts/llama_state_span_parity.py)
++
++set(TARGET llama-state-span-dump)
++add_executable(${TARGET} state-span-dump.cpp)
++target_link_libraries(${TARGET} PRIVATE llama-common vendor::nlohmann)
+diff --git a/tools/neuralese/state-span-dump.cpp b/tools/neuralese/state-span-dump.cpp
+new file mode 100644
+index 0000000..702e2c7
+--- /dev/null
++++ b/tools/neuralese/state-span-dump.cpp
+@@ -0,0 +1,84 @@
++// llama-state-span-dump: logits of a token sequence that consumes natlang native state spans (forward-parity checks
++// against the reference engine). The input JSON is a list whose numbers are token IDs and whose strings are native
++// state GGUF files (common/native-state.h); each state expands to its consume-open marker, its virtual span and its
++// consume-close marker. Writes F32 logits [n_out, n_vocab] for expanded positions >= --from to --out.
++//
++//   llama-state-span-dump -m model.gguf --input seq.json --from N --out logits.f32 [--chunk K] [-ctk f32 -ctv f32]
++
++#include "llama.h"
++#include "native-state.h"
++
++#include <nlohmann/json.hpp>
++
++#include <cstdio>
++#include <cstring>
++#include <fstream>
++#include <string>
++#include <vector>
++
++int main(int argc, char ** argv) {
++    std::string model_path, input_path, out_path;
++    int32_t from = 0, chunk = 0, threads = 8;
++    bool f32_cache = false;
++    for (int i = 1; i < argc; ++i) {
++        const std::string a = argv[i];
++        auto next = [&]() { return std::string(argv[++i]); };
++        if (a == "-m") model_path = next();
++        else if (a == "--input") input_path = next();
++        else if (a == "--out") out_path = next();
++        else if (a == "--from") from = std::stoi(next());
++        else if (a == "--chunk") chunk = std::stoi(next());
++        else if (a == "-t") threads = std::stoi(next());
++        else if (a == "--f32-cache") f32_cache = true;
++        else { fprintf(stderr, "unknown argument %s\n", a.c_str()); return 2; }
++    }
++    llama_backend_init();
++    auto mparams = llama_model_default_params();
++    mparams.n_gpu_layers = 0;
++    llama_model * model = llama_model_load_from_file(model_path.c_str(), mparams);
++    if (!model) return 1;
++    auto cparams = llama_context_default_params();
++    cparams.n_ctx = 4096; cparams.n_batch = 4096; cparams.n_ubatch = 4096;
++    cparams.n_threads = cparams.n_threads_batch = threads;
++    if (f32_cache) { cparams.type_k = GGML_TYPE_F32; cparams.type_v = GGML_TYPE_F32; }
++    llama_context * ctx = llama_init_from_model(model, cparams);
++    if (!ctx) return 1;
++
++    std::vector<common_native_state> states;
++    states.reserve(64);
++    std::vector<llama_token> tokens;
++    const auto input = nlohmann::json::parse(std::ifstream(input_path));
++    for (const auto & item : input) {
++        if (item.is_number_integer()) { tokens.push_back(item.get<int>()); continue; }
++        states.emplace_back();
++        auto & st = states.back();
++        if (!common_native_state_load(item.get<std::string>(), llama_model_n_layer(model), st)) return 1;
++        if (!common_native_state_register(ctx, st)) return 1;
++        for (auto t : common_native_state_tokens(st)) tokens.push_back(t);
++    }
++    const int32_t n = (int32_t) tokens.size();
++    const int32_t n_vocab = llama_vocab_n_tokens(llama_model_get_vocab(model));
++    const int32_t step = chunk > 0 ? chunk : n;
++    std::vector<float> logits;
++    for (int32_t start = 0; start < n; start += step) {
++        const int32_t m = std::min(step, n - start);
++        llama_batch batch = llama_batch_init(m, 0, 1);
++        for (int32_t i = 0; i < m; ++i) {
++            batch.token[i] = tokens[start + i]; batch.pos[i] = start + i;
++            batch.n_seq_id[i] = 1; batch.seq_id[i][0] = 0; batch.logits[i] = start + i >= from;
++        }
++        batch.n_tokens = m;
++        if (llama_decode(ctx, batch) != 0) { fprintf(stderr, "decode failed at %d\n", start); return 1; }
++        for (int32_t i = 0; i < m; ++i) if (start + i >= from) {
++            const float * row = llama_get_logits_ith(ctx, i);
++            logits.insert(logits.end(), row, row + n_vocab);
++        }
++        llama_batch_free(batch);
++    }
++    FILE * f = fopen(out_path.c_str(), "wb");
++    fwrite(logits.data(), sizeof(float), logits.size(), f);
++    fclose(f);
++    fprintf(stderr, "positions %d, wrote %zu rows of %d\n", n, logits.size() / n_vocab, n_vocab);
++    llama_free(ctx); llama_model_free(model);
++    return 0;
++}
+diff --git a/tools/server/README.md b/tools/server/README.md
+index ec82db0..ebbb4ed 100644
+--- a/tools/server/README.md
++++ b/tools/server/README.md
+@@ -242,6 +242,7 @@ For the full list of features, please refer to [server's changelog](https://gith
+ | `--prefill-assistant, --no-prefill-assistant` | whether to prefill the assistant's response if the last message is an assistant message (default: prefill enabled)<br/>when this flag is set, if the last message is an assistant message then it will be treated as a full message and not prefilled<br/><br/>(env: LLAMA_ARG_PREFILL_ASSISTANT) |
+ | `-sps, --slot-prompt-similarity SIMILARITY` | how much the prompt of a request must match the prompt of a slot in order to use that slot (default: 0.10, 0.0 = disabled) |
+ | `--lora-init-without-apply` | load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: disabled) |
++| `--native-state FNAME` | load a natlang native state span (GGUF, `common/native-state.h`; can be repeated); a chat content part `{"type": "native_state", "id": ID}` consumes it exactly, between its consume markers |
+ | `--sleep-idle-seconds SECONDS` | number of seconds of idleness after which the server will sleep (default: -1; -1 = disabled) |
+ | `--log-prompts-dir PATH` | Log prompts to directory (auto-created if not present; only used for debugging, default: disabled) |
+ | `--spec-draft-hf, -hfd, -hfrd, --hf-repo-draft <user>/<model>[:quant]` | Same as --hf-repo, but for the draft model (default: unused)<br/>(env: LLAMA_ARG_SPEC_DRAFT_HF_REPO) |
+@@ -1203,6 +1204,19 @@ In *router mode* the query param `?model={model_id}` has to be set. This endpoin
+ }
+ ```
+ 
++### Native state spans (`--native-state`)
++
++A native state span is exact per-layer stored state for a run of positions, exported from natlang's native engine
++(tuned soft instructions and skills): attention keys after the key norm and before RoPE, values, and LFM2
++short-convolution gated inputs. `--native-state FILE` registers it with the context (`llama_state_span_register`) as
++a range of virtual token IDs after the vocabulary. In a chat request, the content part
++`{"type": "native_state", "id": ID}` is rendered as a marker and tokenized as the consume-open marker, the virtual
++span and the consume-close marker; the text around it is tokenized as separate segments. A decode stores the imported
++state for virtual tokens (RoPE applied at their positions) instead of computing it, so consumption is exact:
++on CPU with an F32 cache, logits match natlang's reference engine as closely as plain text does, a plain-text prompt
++is bitwise unchanged, and the prompt cache reuses spans like other tokens. An unloaded ID is a 400 error. Supported:
++LFM2; not combinable with speculative decoding or media in the same request.
++
+ ### GET `/lora-adapters`: Get list of all LoRA adapters
+ 
+ This endpoint returns the loaded LoRA adapters. You can add adapters using `--lora` when starting the server, for example: `--lora my_adapter_1.gguf --lora my_adapter_2.gguf ...`
+@@ -1834,6 +1848,26 @@ curl http://127.0.0.1:9931/v1/systemone \
+ 
+ An invalid request returns the error `400`. A model that is not a decision model returns the error `501`. A request with images returns the error `501` if the model does not support image input, or if no multimodal projector is loaded.
+ 
++## natlang API Endpoints
++
++### POST `/v1/natlang/score`: decision readout
++
++Scores candidate replies to a conversation. For each item, each continuation is rendered as the closed final assistant message after `messages` (the chat template with `add_generation_prompt: false`), and its log-probability is summed over the tokens after the rendered prompt (the same messages with the generation prompt). No token is generated.
++
++*Options:*
++
++`items`: Array of `{ messages, continuations, tools?, lora? }`. `messages` and `tools` are as in `/v1/chat/completions`, including `{"type": "native_state", "id": ...}` content parts for states loaded with `--native-state`; `continuations` is a nonempty array of strings; `lora` selects adapter scales for the item as in a completion request.
++
++`lora`: Default adapter scales for items without their own.
++
++*Result:*
++
++```json
++{ "results": [ { "log_probs": [-0.21, -3.4], "tokens": [3, 3] }, { "error": "each item needs \"messages\"" } ] }
++```
++
++One entry per item: `log_probs[k]` and `tokens[k]` for its `k`-th continuation, or the `error` of an item that could not be rendered (the other items are still scored). The continuations of an item share its prompt prefix: it is computed once and continued in several slots.
++
+ ## Server tools
+ 
+ The server exposes a REST API under `/tools` that allows the Web UI to call server tools. This endpoint is intended to be used internally by the Web UI and subject to change or to be removed in the future.
+diff --git a/tools/server/server-common.cpp b/tools/server/server-common.cpp
+index 5577c33..3f11420 100644
+--- a/tools/server/server-common.cpp
++++ b/tools/server/server-common.cpp
+@@ -734,8 +734,10 @@ void server_tokens::keep_first(size_t n) {
+ std::string server_tokens::detokenize(const llama_context * ctx, bool special) const {
+     llama_tokens text_tokens;
+     text_tokens.reserve(tokens.size());
++    const int32_t n_vocab = llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx)));
+     for (const auto & t : tokens) {
+-        if (t != LLAMA_TOKEN_NULL) {
++        // media chunks and native state spans have no text
++        if (t != LLAMA_TOKEN_NULL && t < n_vocab) {
+             text_tokens.push_back(t);
+         }
+     }
+@@ -829,7 +831,7 @@ bool server_tokens::validate(const struct llama_context * ctx) const {
+             } catch (const std::exception & e) {
+                 return false;
+             }
+-        } else if (t < 0 || t >= n_vocab) {
++        } else if (t < 0 || (t >= n_vocab && !llama_state_span_is_virtual(ctx, t))) {
+             return false;
+         }
+     }
+@@ -1243,12 +1245,55 @@ static void oaicompat_content_load_media(json & content, const server_chat_param
+             p.erase("input_video");
+             p.erase("video_url");
+ 
++        } else if (type == "native_state") {
++            const std::string id = json_value(p, "id", std::string());
++            if (!opt.native_states.count(id)) {
++                throw std::invalid_argument("native state " + id + " is not loaded on this server (--native-state)");
++            }
++            p = json { { "type", "text" }, { "text", native_state_marker(id) } };
++
+         } else if (type != "text") {
+             throw std::invalid_argument("unsupported content[].type");
+         }
+     }
+ }
+ 
++std::string native_state_marker(const std::string & id) {
++    return "<__natlang_native_state:" + id + "__>";
++}
++
++llama_tokens tokenize_native_states(const llama_vocab * vocab, const std::string & prompt, bool add_special, bool parse_special,
++                                    const std::map<std::string, std::vector<llama_token>> & states) {
++    static const std::string open = "<__natlang_native_state:", close = "__>";
++    llama_tokens out;
++    size_t pos = 0;
++    bool first = true;
++    while (true) {
++        const size_t at = prompt.find(open, pos);
++        const std::string text = prompt.substr(pos, at == std::string::npos ? std::string::npos : at - pos);
++        if (!text.empty() || first) {
++            const auto ids = common_tokenize(vocab, text, add_special && first, parse_special);
++            out.insert(out.end(), ids.begin(), ids.end());
++        }
++        first = false;
++        if (at == std::string::npos) {
++            break;
++        }
++        const size_t end = prompt.find(close, at + open.size());
++        if (end == std::string::npos) {
++            throw std::invalid_argument("unterminated native state marker");
++        }
++        const std::string id = prompt.substr(at + open.size(), end - at - open.size());
++        const auto found = states.find(id);
++        if (found == states.end()) {
++            throw std::invalid_argument("native state " + id + " is not loaded on this server (--native-state)");
++        }
++        out.insert(out.end(), found->second.begin(), found->second.end());
++        pos = end + close.size();
++    }
++    return out;
++}
++
+ server_tokens tokenize_oai_content_array(const llama_vocab * vocab, mtmd_context * mctx, const server_chat_params & opt, json content, bool add_special, bool parse_special, const mtmd_helper_init_opt & init_opt) {
+     if (!content.is_array()) {
+         throw std::invalid_argument("\"content\" must be an array");
+@@ -1373,7 +1418,8 @@ json oaicompat_chat_params_parse(
+     inputs.continue_final_message = body.contains("continue_final_message") ?
+         common_chat_continuation_parse(body.at("continue_final_message")) :
+         COMMON_CHAT_CONTINUATION_NONE;
+-    if (inputs.continue_final_message == COMMON_CHAT_CONTINUATION_NONE && opt.prefill_assistant
++    // an explicit "continue_final_message": false renders a final assistant message closed
++    if (!body.contains("continue_final_message") && opt.prefill_assistant
+         && !inputs.messages.empty() && inputs.messages.back().role == "assistant") {
+         if (inputs.messages.size() >= 2 && inputs.messages[inputs.messages.size() - 2].role == "assistant") {
+             throw std::invalid_argument("Cannot have 2 or more assistant messages at the end of the list.");
+diff --git a/tools/server/server-common.h b/tools/server/server-common.h
+index 5bd2ed5..8eb838b 100644
+--- a/tools/server/server-common.h
++++ b/tools/server/server-common.h
+@@ -11,6 +11,8 @@
+ #include "json.h"
+ 
+ #include <atomic>
++#include <map>
++#include <set>
+ #include <chrono>
+ #include <condition_variable>
+ #include <cinttypes>
+@@ -348,8 +350,18 @@ struct server_chat_params {
+     std::string reasoning_budget_message;
+     std::string media_path;
+     bool force_pure_content = false;
++    std::set<std::string> native_states; // IDs of loaded native state spans (--native-state)
+ };
+ 
++// the prompt text a native_state content part renders to; tokenize_native_states() expands it
++std::string native_state_marker(const std::string & id);
++
++// tokenize a prompt whose text may hold native state markers: text runs are tokenized separately (as the reference
++// engine tokenizes the segments around a state) and each marker becomes the state's consume-open marker, virtual
++// span and consume-close marker. `states` maps IDs to their tokens; a marker naming another ID is an error.
++llama_tokens tokenize_native_states(const llama_vocab * vocab, const std::string & prompt, bool add_special, bool parse_special,
++                                    const std::map<std::string, std::vector<llama_token>> & states);
++
+ // used by /completions endpoint
+ json oaicompat_completion_params_parse(const json & body);
+ 
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index a25eb78..ba59e96 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -9,6 +9,7 @@
+ #include "server-stream.h"
+ 
+ #include "build-info.h"
++#include "native-state.h"
+ #include "common.h"
+ #include "fit.h"
+ #include "llama.h"
+@@ -39,6 +40,9 @@
+ 
+ constexpr int HTTP_POLLING_SECONDS = 1;
+ 
++// logits rows reserved per batch for the scored positions of SERVER_TASK_TYPE_SCORE tasks
++constexpr int32_t SERVER_N_SCORE_OUTPUTS = 64;
++
+ static common_speculative_output_limits server_output_limits(const common_params & params) {
+     if (params.embedding ||
+             (params.pooling_type != LLAMA_POOLING_TYPE_UNSPECIFIED && params.pooling_type != LLAMA_POOLING_TYPE_NONE)) {
+@@ -50,6 +54,9 @@ static common_speculative_output_limits server_output_limits(const common_params
+ 
+     result.total   = std::max<int32_t>(1, result.total);
+     result.per_seq = std::max<int32_t>(1, result.per_seq);
++
++    // decision readout (POST /v1/natlang/score) reads several positions of a prompt in one batch
++    result.total = std::min<int32_t>(params.n_batch, result.total + SERVER_N_SCORE_OUTPUTS);
+     return result;
+ }
+ 
+@@ -280,6 +287,10 @@ struct server_slot {
+     int32_t n_keep  = 0;
+     int32_t i_batch = -1;
+ 
++    // SERVER_TASK_TYPE_SCORE: the summed log-probability and the number of the prompt tokens scored so far
++    double  score_log_prob = 0.0;
++    int32_t score_n        = 0;
++
+     // effective generation limit for the current task, -1 means unlimited
+     int32_t n_predict_max = -1;
+ 
+@@ -381,6 +392,8 @@ struct server_slot {
+         spec_is_replay = false;
+ 
+         last_nl_pos    = 0;
++        score_log_prob = 0.0;
++        score_n        = 0;
+         generated      = {};
+         has_new_line   = false;
+         truncated      = false;
+@@ -952,8 +965,15 @@ public:
+     mtmd_helper_init_opt init_opt = mtmd_helper_init_opt_default();
+     const llama_vocab * vocab = nullptr;
+ 
++    // natlang native state spans (--native-state), registered with ctx_tgt, by ID: the tokens that consume each
++    std::vector<common_native_state> native_states;
++    std::map<std::string, std::vector<llama_token>> native_state_tokens;
++
+     server_decision_context decision;
+ 
++    // scored positions in the current batch, at most SERVER_N_SCORE_OUTPUTS
++    int32_t n_score_outputs = 0;
++
+     server_queue    queue_tasks;
+     server_response queue_results;
+ 
+@@ -1000,6 +1020,7 @@ private:
+ 
+     common_speculative_init_result_ptr spec_init;
+ 
++
+     common_context_seq_rm_type ctx_tgt_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
+     common_context_seq_rm_type ctx_dft_seq_rm_type = COMMON_CONTEXT_SEQ_RM_TYPE_NO;
+ 
+@@ -1231,6 +1252,19 @@ private:
+ 
+         vocab = llama_model_get_vocab(model_tgt);
+ 
++        native_states.clear();
++        native_state_tokens.clear();
++        for (const auto & path : params_base.native_states) {
++            common_native_state st;
++            if (!common_native_state_load(path, llama_model_n_layer(model_tgt), st) || !common_native_state_register(ctx_tgt, st)) {
++                SRV_ERR("failed to load native state '%s'\n", path.c_str());
++                return false;
++            }
++            native_state_tokens[st.id] = common_native_state_tokens(st);
++            SRV_INF("native state %s: %d positions\n", st.id.c_str(), st.n_tokens);
++            native_states.push_back(std::move(st));
++        }
++
+         try {
+             decision.init(model_tgt);
+         } catch (const std::exception & e) {
+@@ -1263,6 +1297,12 @@ private:
+                     return false;
+                 }
+ 
++                if (!native_states.empty()) {
++                    // a draft model cannot import the target's native state spans
++                    SRV_ERR("%s", "native states (--native-state) cannot be combined with speculative decoding\n");
++                    return false;
++                }
++
+                 if (ctx_dft == nullptr) {
+                     SRV_ERR("%s", "failed to create MTP context\n");
+                     return false;
+@@ -1643,6 +1683,9 @@ private:
+                 /* media_path            */ params_base.media_path,
+                 /* force_pure_content    */ params_base.force_pure_content_parser
+             };
++            for (const auto & st : native_states) {
++                chat_params.native_states.insert(st.id);
++            }
+ 
+             {
+                 auto caps = common_chat_templates_get_caps(chat_params.tmpls.get());
+@@ -2425,6 +2468,62 @@ private:
+         queue_results.send(std::move(res));
+     }
+ 
++    // add the log-probabilities of the scored tokens predicted in the current sub-batch, false (after an error) on failure
++    bool accumulate_score(server_slot & slot, int32_t n_batch_tokens, int32_t off) {
++        const auto & tokens = slot.task->tokens;
++        const int32_t n_vocab = llama_vocab_n_tokens(vocab);
++        for (int32_t i = off; i < off + n_batch_tokens; i++) {
++            const auto & entry = batch.tokens[i];
++            if (entry.id_slot != slot.id || !entry.output || !entry.is_prompt) {
++                continue;
++            }
++            const int32_t next = entry.pos[0] + 1;
++            if (next < slot.task->n_score_from || next >= slot.task->n_tokens()) {
++                continue;
++            }
++            const llama_token target = tokens[next];
++            if (target < 0 || target >= n_vocab) {
++                send_error(slot, "a scored reply must be text", ERROR_TYPE_INVALID_REQUEST);
++                return false;
++            }
++            const float * logits = llama_get_logits_ith(slot.ctx_tgt, i - off);
++            if (logits == nullptr) {
++                send_error(slot, "failed to get logits", ERROR_TYPE_SERVER);
++                return false;
++            }
++            float max_logit = logits[0];
++            for (int32_t v = 1; v < n_vocab; v++) {
++                max_logit = std::max(max_logit, logits[v]);
++            }
++            double sum = 0.0;
++            for (int32_t v = 0; v < n_vocab; v++) {
++                sum += std::exp((double) logits[v] - max_logit);
++            }
++            slot.score_log_prob += (double) logits[target] - max_logit - std::log(sum);
++            slot.score_n += 1;
++        }
++        return true;
++    }
++
++    void send_score(const server_slot & slot) {
++        auto res = std::make_unique<server_task_result_score>();
++        res->id       = slot.task->id;
++        res->index    = slot.task->index;
++        res->n_tokens = slot.task->n_tokens();
++        res->log_prob = slot.score_log_prob;
++        res->n_scored = slot.score_n;
++
++        const int32_t n_expected = slot.task->n_tokens() - slot.task->n_score_from;
++        if (slot.score_n != n_expected) {
++            send_error(slot, string_format("scored %d of %d reply tokens", slot.score_n, n_expected), ERROR_TYPE_SERVER);
++            return;
++        }
++
++        SLT_DBG(slot, "%s", "sending score result\n");
++
++        queue_results.send(std::move(res));
++    }
++
+     void send_rerank(const server_slot & slot, const common_batch & batch) {
+         auto res = std::make_unique<server_task_result_rerank>();
+         res->id       = slot.task->id;
+@@ -2464,7 +2563,12 @@ private:
+     bool tokenize_cli_input(server_task & task) {
+         try {
+             auto & prompt = task.cli_prompt;
+-            if (mctx != nullptr) {
++            if (!native_state_tokens.empty() && prompt.find("<__natlang_native_state:") != std::string::npos) {
++                if (!task.cli_files.empty()) {
++                    throw std::invalid_argument("native states cannot be combined with media in one request");
++                }
++                task.tokens = server_tokens(tokenize_native_states(vocab, prompt, true, true, native_state_tokens), false);
++            } else if (mctx != nullptr) {
+                 task.tokens = process_mtmd_prompt(mctx, prompt, task.cli_files, init_opt);
+             } else {
+                 task.tokens = std::move(tokenize_input_prompts(vocab, mctx, prompt, true, true, init_opt)[0]);
+@@ -2840,6 +2944,7 @@ private:
+             case SERVER_TASK_TYPE_EMBEDDING:
+             case SERVER_TASK_TYPE_RERANK:
+             case SERVER_TASK_TYPE_DECISION:
++            case SERVER_TASK_TYPE_SCORE:
+                 {
+                     // special case: if input is provided via CLI, tokenize it first
+                     // otherwise, no need to tokenize as it's already done inside the HTTP thread
+@@ -3443,6 +3548,7 @@ private:
+ 
+         // start populating the batch for this iteration
+         batch.clear();
++        n_score_outputs = 0;
+ 
+         // track if given slot can be batched with slots already in the batch
+         auto & slot_batched = batch.slot_batched;
+@@ -3718,6 +3824,11 @@ private:
+                                     n_past = std::min(n_past, n_decision_first);
+                                 }
+ 
++                                // a score reads the logits from the position before its first scored token on
++                                if (slot.task->type == SERVER_TASK_TYPE_SCORE) {
++                                    n_past = std::min(n_past, slot.task->n_score_from - 1);
++                                }
++
+                                 // if there is an alora invoked, don't cache after the invocation start
+                                 if (slot.alora_invocation_start > 0) {
+                                     SLT_DBG(slot, "only caching to alora invocation start (n_past = %d, alora_invocation_start = %d)\n", n_past, slot.alora_invocation_start);
+@@ -4090,10 +4201,17 @@ private:
+                         // embedding requires all tokens in the batch to be output;
+                         // MTP also wants logits at every prompt position so the
+                         // streaming hook can mirror t_h_nextn into ctx_dft.
++                        // a score needs the logits that predict each scored token, up to the outputs reserved per batch
++                        const bool score_out = slot.task->type == SERVER_TASK_TYPE_SCORE &&
++                            slot.prompt.n_tokens() + 1 >= slot.task->n_score_from;
++                        if (score_out && n_score_outputs >= SERVER_N_SCORE_OUTPUTS) {
++                            break;
++                        }
++                        n_score_outputs += score_out;
+                         add_ok &= batch.add(slot.id,
+                             cur_tok,
+                             /* pos       = */ slot.prompt.tokens.pos_next(),
+-                            /* output    = */ slot.need_embd(),
++                            /* output    = */ slot.need_embd() || score_out,
+                             /* is_prompt = */ true);
+                         if (!slot.task->decision.order.empty()) {
+                             batch.set_decision_order(batch.size() - 1, slot.task->decision.order[slot.prompt.n_tokens()]);
+@@ -4424,6 +4542,15 @@ private:
+                 }
+             }
+ 
++            if (slot.task && slot.task->type == SERVER_TASK_TYPE_SCORE &&
++                    (slot.state == SLOT_STATE_PROCESSING_PROMPT || slot.state == SLOT_STATE_DONE_PROMPT)) {
++                if (!accumulate_score(slot, n_batch_tokens, off)) {
++                    slot.release();
++                    slot.i_batch = -1;
++                    return;
++                }
++            }
++
+             if (!is_inside_view(slot.i_batch)) {
+                 // the required token not in this sub-batch, skip
+                 return;
+@@ -4452,6 +4579,13 @@ private:
+                     return;
+                 }
+ 
++                if (slot.task->type == SERVER_TASK_TYPE_SCORE) {
++                    send_score(slot);
++                    slot.release();
++                    slot.i_batch = -1;
++                    return;
++                }
++
+                 GGML_ASSERT(slot.task->need_sampling());
+ 
+                 // prompt evaluated for next-token prediction
+@@ -4837,6 +4971,7 @@ server_context_meta server_context::get_meta() const {
+ 
+         /* chat_params             */ impl->chat_params,
+         /* chat_template_caps      */ common_chat_templates_get_caps(impl->chat_params.tmpls.get()),
++        /* native_state_tokens     */ impl->native_state_tokens,
+ 
+         /* bos_token_str           */ bos_token_str,
+         /* eos_token_str           */ eos_token_str,
+@@ -4927,7 +5062,14 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
+         // process prompt
+         std::vector<server_tokens> inputs;
+ 
+-        if (res_type != TASK_RESPONSE_TYPE_NONE && ctx_server.mctx != nullptr) {
++        if (!ctx_server.native_state_tokens.empty() && prompt.is_string() &&
++                prompt.get<std::string>().find("<__natlang_native_state:") != std::string::npos) {
++            if (!files.empty()) {
++                throw std::invalid_argument("native states cannot be combined with media in one request");
++            }
++            inputs.emplace_back(tokenize_native_states(ctx_server.vocab, prompt.get<std::string>(), true, true,
++                                                       ctx_server.native_state_tokens), false);
++        } else if (res_type != TASK_RESPONSE_TYPE_NONE && ctx_server.mctx != nullptr) {
+             // This is the case used by OAI compatible chat path with MTMD. TODO It can be moved to the path below.
+             inputs.push_back(process_mtmd_prompt(ctx_server.mctx, prompt.get<std::string>(), files, ctx_server.init_opt));
+         } else {
+@@ -5965,6 +6107,33 @@ void server_routes::init_routes() {
+         return res;
+     };
+ 
++    this->post_natlang_score = [this](const server_http_req & req) {
++        auto res = create_response();
++        const json body = json::parse(req.body);
++
++        server_score_batch batch;
++        auto & rd = res->rd;
++        rd.post_tasks(server_score_tasks(*meta, ctx_server.vocab, params, body, rd, batch));
++
++        auto all_results = rd.wait_for_all(req.should_stop);
++        if (all_results.is_terminated) {
++            return res; // connection is closed
++        } else if (all_results.error) {
++            res->error(all_results.error->to_json());
++            return res;
++        }
++        batch.log_probs.resize(all_results.results.size());
++        batch.n_scored.resize(all_results.results.size());
++        for (size_t i = 0; i < all_results.results.size(); i++) {
++            auto * result = dynamic_cast<server_task_result_score *>(all_results.results[i].get());
++            GGML_ASSERT(result != nullptr);
++            batch.log_probs[i] = result->log_prob;
++            batch.n_scored[i]  = result->n_scored;
++        }
++        res->ok(server_score_response(batch));
++        return res;
++    };
++
+     this->get_lora_adapters = [this](const server_http_req & req) {
+         auto res = create_response();
+ 
+@@ -6320,3 +6489,153 @@ void server_routes::update_cached_responses(bool is_sleeping) {
+         should_reset_buckets = false;
+     }
+ }
++
++//
++// natlang decision readout
++//
++
++std::vector<server_task> server_score_tasks(
++        const server_context_meta & meta,
++        const llama_vocab * vocab,
++        const common_params & params,
++        const json & body,
++        server_response_reader & rd,
++        server_score_batch & out) {
++    if (!body.contains("items") || !body.at("items").is_array()) {
++        throw std::invalid_argument("\"items\" must be an array");
++    }
++    const json & items = body.at("items");
++    const size_t n_slots = std::max(params.n_parallel, 1);
++
++    // the rendered chat prompt, tokenized as the chat completions endpoint does
++    auto render = [&](json chat) {
++        std::vector<raw_buffer> files;
++        common_chat_session session;
++        const json parsed = oaicompat_chat_params_parse(vocab, chat, meta.chat_params, files, session);
++        if (!files.empty()) {
++            throw std::invalid_argument("a scored item cannot carry media");
++        }
++        const std::string prompt = parsed.at("prompt").get<std::string>();
++        if (!meta.native_state_tokens.empty() && prompt.find("<__natlang_native_state:") != std::string::npos) {
++            return server_tokens(tokenize_native_states(vocab, prompt, true, true, meta.native_state_tokens), false);
++        }
++        return std::move(tokenize_input_prompts(vocab, nullptr, prompt, true, true, mtmd_helper_init_opt_default())[0]);
++    };
++
++    std::vector<server_task> tasks;
++    size_t n_results = 0;
++    out.errors.assign(items.size(), "");
++    out.results.assign(items.size(), {});
++    for (size_t i_item = 0; i_item < items.size(); i_item++) {
++        const json & item = items[i_item];
++        std::vector<server_task> own;
++        try {
++            if (!item.is_object() || !item.contains("messages") || !item.at("messages").is_array()) {
++                throw std::invalid_argument("each item needs \"messages\"");
++            }
++            const json replies = item.contains("continuations") ? item.at("continuations") : json_value(item, "options", json());
++            if (!replies.is_array() || replies.empty()) {
++                throw std::invalid_argument("each item needs a nonempty \"continuations\" array");
++            }
++            if (item.contains("adapters") && !item.at("adapters").empty()) {
++                throw std::invalid_argument("natlang adapter IDs are not served here; select LoRA adapters with \"lora\"");
++            }
++
++            json chat = { { "messages", item.at("messages") } };
++            if (item.contains("tools")) {
++                chat["tools"] = item.at("tools");
++            }
++            json prompt_chat = chat;
++            prompt_chat["add_generation_prompt"] = true;
++            const server_tokens prompt = render(prompt_chat);
++
++            std::vector<server_tokens> full;
++            size_t n_from = prompt.size();
++            for (const auto & reply : replies) {
++                if (!reply.is_string()) {
++                    throw std::invalid_argument("each continuation must be a string");
++                }
++                json full_chat = chat;
++                full_chat["messages"].push_back({ { "role", "assistant" }, { "content", reply } });
++                full_chat["add_generation_prompt"]  = false;
++                full_chat["continue_final_message"] = false;
++                full.push_back(render(full_chat));
++                n_from = std::min(n_from, prompt.get_common_prefix(full.back()));
++            }
++            // the reply starts where the rendered reply leaves the prompt (a tokenizer may merge across the boundary)
++            if (n_from == 0) {
++                throw std::invalid_argument("the reply does not continue the rendered prompt");
++            }
++
++            json params_json = json::object();
++            if (item.contains("lora")) {
++                params_json["lora"] = item.at("lora");
++            } else if (body.contains("lora")) {
++                params_json["lora"] = body.at("lora");
++            }
++            const task_params task_params = server_schema::eval_llama_cmpl_schema(vocab, params, meta.logit_bias_eog, params_json);
++
++            for (auto & tokens : full) {
++                if (tokens.size() <= n_from) {
++                    throw std::invalid_argument("a continuation rendered no tokens of its own");
++                }
++                server_task task(SERVER_TASK_TYPE_SCORE);
++                task.id           = rd.get_new_id();
++                task.index        = n_results + own.size();
++                task.params       = task_params;
++                task.n_score_from = (int32_t) n_from;
++                task.tokens       = std::move(tokens);
++                own.push_back(std::move(task));
++            }
++        } catch (const std::exception & e) {
++            out.errors[i_item] = e.what();
++            continue;
++        }
++
++        for (size_t k = 0; k < own.size(); k++) {
++            out.results[i_item].push_back(n_results + k);
++        }
++        n_results += own.size();
++
++        // groups of up to n_slots replies: the first computes the shared prompt prefix, the others continue from it
++        for (size_t i = 0; i < own.size(); i += n_slots) {
++            const size_t end = std::min(own.size(), i + n_slots);
++            server_task & parent = own[i];
++            size_t n_shared = parent.n_score_from - 1;
++            for (size_t j = i + 1; j < end; j++) {
++                n_shared = std::min(n_shared, parent.tokens.get_common_prefix(own[j].tokens));
++            }
++            if (end - i < 2 || n_shared == 0) {
++                for (size_t j = i; j < end; j++) {
++                    tasks.push_back(std::move(own[j]));
++                }
++                continue;
++            }
++            parent.n_tokens_shared = (int32_t) n_shared;
++            for (size_t j = i + 1; j < end; j++) {
++                own[j].id_parent = parent.id;
++                parent.child_tasks.push_back(std::move(own[j]));
++            }
++            tasks.push_back(std::move(parent));
++        }
++    }
++    return tasks;
++}
++
++json server_score_response(const server_score_batch & batch) {
++    json results = json::array();
++    for (size_t i = 0; i < batch.errors.size(); i++) {
++        if (!batch.errors[i].empty()) {
++            results.push_back({ { "error", batch.errors[i] } });
++            continue;
++        }
++        json log_probs = json::array();
++        json tokens    = json::array();
++        for (const size_t idx : batch.results[i]) {
++            log_probs.push_back(batch.log_probs.at(idx));
++            tokens.push_back(batch.n_scored.at(idx));
++        }
++        results.push_back({ { "log_probs", log_probs }, { "tokens", tokens } });
++    }
++    return json { { "results", results } };
++}
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+index ed23f7d..b9cd234 100644
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -32,6 +32,9 @@ struct server_context_meta {
+     server_chat_params & chat_params;
+     std::map<std::string, bool> chat_template_caps;
+ 
++    // natlang native state spans (--native-state), by ID: the tokens that consume each
++    const std::map<std::string, std::vector<llama_token>> & native_state_tokens;
++
+     // tokens
+     std::string bos_token_str;
+     std::string eos_token_str;
+@@ -114,6 +117,28 @@ struct server_context {
+ };
+ 
+ 
++// natlang decision readout (POST /v1/natlang/score): for each item, the log-probability of each reply as the closed
++// final assistant message after the item's messages, summed over the reply tokens after the rendered prompt
++//   { items: [{ messages, continuations: [string], tools?, lora? }], lora? }
++//   -> { results: [{ log_probs: [number], tokens: [int] } | { error: string }] }
++// the replies of an item share its prompt prefix (one parent task, the others its children)
++struct server_score_batch {
++    std::vector<std::string>         errors;  // per item, empty if its tasks were made
++    std::vector<std::vector<size_t>> results; // per item, the result index of each reply
++    std::vector<double>              log_probs; // per result index, filled by the caller
++    std::vector<int32_t>             n_scored;  // per result index, filled by the caller
++};
++
++std::vector<server_task> server_score_tasks(
++        const server_context_meta & meta,
++        const llama_vocab * vocab,
++        const common_params & params,
++        const json & body,
++        server_response_reader & rd,
++        server_score_batch & out);
++
++json server_score_response(const server_score_batch & batch);
++
+ // forward declarations
+ struct server_res_generator;
+ 
+@@ -154,6 +179,7 @@ struct server_routes {
+     server_http_context::handler_t post_embeddings_oai;
+     server_http_context::handler_t post_rerank;
+     server_http_context::handler_t post_systemone;
++    server_http_context::handler_t post_natlang_score;
+     server_http_context::handler_t get_lora_adapters;
+     server_http_context::handler_t post_lora_adapters;
+ 
+diff --git a/tools/server/server-task.cpp b/tools/server/server-task.cpp
+index 3f30da2..fff681c 100644
+--- a/tools/server/server-task.cpp
++++ b/tools/server/server-task.cpp
+@@ -1498,6 +1498,18 @@ json server_task_result_decision::to_json() {
+     };
+ }
+ 
++//
++// server_task_result_score
++//
++json server_task_result_score::to_json() {
++    return json {
++        {"index",            index},
++        {"log_prob",         log_prob},
++        {"tokens",           n_scored},
++        {"tokens_evaluated", n_tokens},
++    };
++}
++
+ //
+ // server_task_result_error
+ //
+diff --git a/tools/server/server-task.h b/tools/server/server-task.h
+index e7bb043..c4f8a30 100644
+--- a/tools/server/server-task.h
++++ b/tools/server/server-task.h
+@@ -17,6 +17,7 @@ enum server_task_type {
+     SERVER_TASK_TYPE_EMBEDDING,
+     SERVER_TASK_TYPE_RERANK,
+     SERVER_TASK_TYPE_DECISION,
++    SERVER_TASK_TYPE_SCORE,
+     SERVER_TASK_TYPE_INFILL,
+     SERVER_TASK_TYPE_CANCEL,
+     SERVER_TASK_TYPE_CONTROL,
+@@ -152,6 +153,9 @@ struct server_task {
+     // if set on a parent, the children have their own prompt and only share its first n_tokens_shared tokens
+     int32_t n_tokens_shared = 0;
+ 
++    // used by SERVER_TASK_TYPE_SCORE: the log-probability of the prompt tokens from this position on is summed
++    int32_t n_score_from = -1;
++
+     // used by SERVER_TASK_TYPE_INFERENCE
+     task_params   params;
+     server_tokens tokens;
+@@ -236,6 +240,8 @@ struct server_task {
+                 return true;
+             case SERVER_TASK_TYPE_DECISION:
+                 return !decision.labels.empty();
++            case SERVER_TASK_TYPE_SCORE:
++                return true;
+             default:
+                 return false;
+         }
+@@ -530,6 +536,16 @@ struct server_task_result_decision : server_task_result {
+     virtual json to_json() override;
+ };
+ 
++// natlang decision readout: the summed log-probability of the scored prompt tokens
++struct server_task_result_score : server_task_result {
++    double  log_prob = 0.0;
++    int32_t n_scored = 0;
++
++    int32_t n_tokens;
++
++    virtual json to_json() override;
++};
++
+ struct server_task_result_error : server_task_result {
+     error_type err_type = ERROR_TYPE_SERVER;
+     std::string err_msg;
+diff --git a/tools/server/server.cpp b/tools/server/server.cpp
+index 871e827..1da1fe2 100644
+--- a/tools/server/server.cpp
++++ b/tools/server/server.cpp
+@@ -239,6 +239,7 @@ int llama_server(common_params & params, int argc, char ** argv, server_child &
+         routes.post_embeddings_oai         = models_routes->proxy_post;
+         routes.post_rerank                 = models_routes->proxy_post;
+         routes.post_systemone              = models_routes->proxy_post;
++        routes.post_natlang_score          = models_routes->proxy_post;
+         routes.post_tokenize               = models_routes->proxy_post;
+         routes.post_detokenize             = models_routes->proxy_post;
+         routes.post_apply_template         = models_routes->proxy_post;
+@@ -287,6 +288,7 @@ int llama_server(common_params & params, int argc, char ** argv, server_child &
+     ctx_http.post("/v1/rerank",                ex_wrapper(routes.post_rerank));
+     ctx_http.post("/v1/reranking",             ex_wrapper(routes.post_rerank));
+     ctx_http.post("/v1/systemone",             ex_wrapper(routes.post_systemone));
++    ctx_http.post("/v1/natlang/score",         ex_wrapper(routes.post_natlang_score));
+     ctx_http.post("/tokenize",                 ex_wrapper(routes.post_tokenize));
+     ctx_http.post("/detokenize",               ex_wrapper(routes.post_detokenize));
+     ctx_http.post("/apply-template",           ex_wrapper(routes.post_apply_template));

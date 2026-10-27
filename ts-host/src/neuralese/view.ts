@@ -4,7 +4,7 @@ import { canonical } from '../native/canonical-data.js';
  * The Neuralese instance of the builtin `view(value, instructions?)` on a server (plans/neuralese/DECISIONS.md
  * 2026-10-09: "one summarizer family" and "representation chosen by use"). A view is a template write of view's body:
  * the model reads the value at view's write site, with the body as its system text, and its reply is forced to
- * `return_result` with the value written as a block; the stop head decides the length. Without instructions the view
+ * `return_result` with the value written as a native state; the model ends the span. Without instructions the view
  * is faithful compression, with them it keeps what their purpose needs.
  *
  * The server owns the plan (training/neuralese/natlang_neuralese/view.py, `POST /v1/neuralese/view`): a value that fits

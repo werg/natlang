@@ -7,8 +7,9 @@
  * - the session is pi-durable's SQLite storage in the origin private file system (sqlite-wasm through ts-host's
  *   `openOpfsSqlite`, host/sqlite-wasm.ts), which needs a dedicated worker; elsewhere it is kept in memory;
  * - the executor is the page's natlang runtime (`@natlang/browser`), and the agent model is reached through natlang's
- *   model transport (host/agent-models.ts): an HTTP endpoint, or the in-page WebAssembly Neuralese engine's endpoint
- *   (`startBrowserNeuralese`), whose blocks are archived in the OPFS block store.
+ *   model transport (host/agent-models.ts) at an HTTP endpoint (an OpenAI-compatible or Neuralese server; a Neuralese
+ *   reader's native artifacts are archived in the OPFS store), or is pi-ai models the page composes (`AgentModels`).
+ *   The page's in-browser wllama model (`loadBrowserLocalModel`) is not connected to pi's agent transport.
  *
  * Built by ts-host/scripts/build-application-browser.mjs under the browser policy (no `node:*` module in its graph);
  * the runtime is the page's `@natlang/browser` module (an import map names it). See README.md "In the browser".
@@ -35,7 +36,7 @@ export type { RunResult };
 
 /** The agent model's server, as the CLI's --agent-* flags name it. */
 export type BrowserAgent = {
-  /** An OpenAI-compatible or Neuralese server, or the in-page engine's endpoint (`startBrowserNeuralese().endpoint`). */
+  /** An OpenAI-compatible or Neuralese server. */
   endpoint: string;
   model: string;
   apiKey?: string;
@@ -103,7 +104,7 @@ export type BrowserPi = {
 };
 
 const isStorage = (value: unknown): value is Storage => typeof (value as Storage).commit === 'function';
-const isStore = (value: unknown): value is NeuraleseStore => typeof (value as NeuraleseStore).put === 'function';
+const isStore = (value: unknown): value is NeuraleseStore => typeof (value as NeuraleseStore).putNativeState === 'function';
 const isModels = (agent: BrowserAgent | AgentModels): agent is AgentModels => 'models' in agent;
 
 /**

@@ -562,7 +562,7 @@ The port runs on two hosts. What the harness is stays one platform-neutral core;
 | Session storage, Node | host | pi-durable's SQLite on `node:sqlite` | As before. |
 | Session storage, browser | host | `host/sqlite-wasm.ts`: pi-durable's `SqliteDatabase` over sqlite-wasm, in OPFS through ts-host `openOpfsSqlite` (a dedicated worker); memory elsewhere, reported | pi-durable's own schema and transactions; OPFS sync access handles exist only in workers. |
 | Neuralese block archive | host | Node: a directory (`FileNeuraleseStore`); browser: OPFS (`OpfsNeuraleseStore`) | Blocks outlive the engine that wrote them on both hosts. |
-| The agent model, browser | host | natlang's model transport to an HTTP endpoint or the in-page WebAssembly engine's endpoint | The Neuralese wire standard as on the CLI. |
+| The agent model, browser | host | natlang's model transport to an HTTP endpoint (an OpenAI-compatible or Neuralese server), or pi-ai models the page composes | The Neuralese wire standard as on the CLI. The in-page wllama model is not connected. |
 | The browser build | host | ts-host `scripts/build-application-browser.mjs` over `tsconfig.browser.json` | Type-checks the core against the browser runtime's declarations and bundles it under the browser policy: a reachable `node:*` module fails the build with its import chain. |
 
 ## Shared functions (decided: `uses:`)

@@ -1,0 +1,50 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4248078..e138e04 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -78,6 +78,7 @@ add_subdirectory(llama.cpp)
+ 
+ set(LLAMA_INSTALL_VERSION 0.0.${LLAMA_BUILD_NUMBER})
+ add_subdirectory(llama.cpp/tools/mtmd)
++add_subdirectory(llama.cpp/vendor/tree-sitter)
+ 
+ file(GLOB_RECURSE LLAMA_COMMON_SRC
+     CONFIGURE_DEPENDS
+@@ -104,6 +105,7 @@ set(LLAMA_SERVER_SRC llama.cpp/tools/server/server-context.cpp
+     llama.cpp/tools/server/server-chat.cpp
+     llama.cpp/tools/server/server-common.cpp
+     llama.cpp/tools/server/server-decision.cpp
++    llama.cpp/tools/server/server-guidance.cpp
+     llama.cpp/tools/server/server-schema.cpp
+     llama.cpp/tools/server/server-stream.cpp
+ )
+@@ -131,4 +133,4 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/tools/server)
+ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/tools/mtmd)
+ 
+ add_executable(wllama ${WLLAMA_SRC})
+-target_link_libraries(wllama PRIVATE ggml llama mtmd ${CMAKE_THREAD_LIBS_INIT})
++target_link_libraries(wllama PRIVATE ggml llama mtmd vendor::tree-sitter-typescript ${CMAKE_THREAD_LIBS_INIT})
+diff --git a/UPSTREAM.md b/UPSTREAM.md
+index 934df49..71d143b 100644
+--- a/UPSTREAM.md
++++ b/UPSTREAM.md
+@@ -68,3 +68,19 @@ log-probability, a state not loaded is refused with the server's message, and de
+ (`wllama-lora-smoke.mjs`, two random rank-8 LoRAs) passes 7/7.
+ 
+ Build: `scripts/docker-compose.yml` steps run with a local emsdk 4.0.20 (x86_64).
++
++# natlang guided generation (llama.cpp-neuralese `wllama-natlang` b35efc8)
++
++- llama.cpp server: a `"guidance"` request field (`true` or `{require_call, tools, repeat, run, syntax, retries}`)
++  checks the reply while it is generated, as natlang's reference server: call names must be offered tools, and the
++  code of `eval(code=...)` calls is checked line by line for repetition, redeclaration and TypeScript syntax
++  (tree-sitter with the TypeScript grammar, vendored in `llama.cpp/vendor/tree-sitter`). A rejected point is rolled
++  back (slot memory cut or a context checkpoint restored), its token banned and sampled again. Responses carry
++  `x_natlang_guidance: {rejections}`; a streamed guided reply arrives with the final chunk.
++  `POST /v1/neuralese/guidance/check` checks a fixed reply.
++- wllama: the build adds `llama.cpp/vendor/tree-sitter` and `server-guidance.cpp`; `guidance` passes through
++  `createChatCompletion` like other request fields.
++
++Verified in headless Chromium against the fork's native `llama-server` (`wllama-fork-smoke.mjs`, LFM2.5-350M F32, CPU):
++a guided tool call whose first attempt fails the syntax check is rolled back and equals the native server's reply
++and rejections; the other checks still pass (14/14), and the LoRA smoke passes 7/7.

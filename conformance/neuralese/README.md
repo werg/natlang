@@ -16,8 +16,8 @@ Cases for the Neuralese extension (spec/SPEC.md "Neuralese", "Contexts", "Captur
   named in `stage` implements it (S3 port, S4 runtime and servers, S5 program
   training). The native conformance runner (`ts-host/scripts/native-conformance.mjs`)
   reads `conformance/programs/` only, so pending cases do not run. When a case is
-  implemented, it moves to a runnable form (a program fixture, a test, or the server
-  parity suite) and its entry records where.
+  implemented, it moves to a runnable form (a program fixture or a test) and its entry
+  records where.
 
 ## Case fields
 

@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { buildProject, createNatlangRuntime, defineNatlang, loadNatlang, save, softFunction } from '../dist/index.js';
+import { buildProject, createNatlangRuntime, createNeuraleseLibrary, defineNatlang, loadNatlang, save, softFunction } from '../dist/index.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseRef } from '../dist/native/neuralese.js';
 import { analyzeEvalSnippet } from '../dist/compiler/eval-check.js';
@@ -113,6 +113,28 @@ test('soft-bodied nl takes only nl.with captures; text nl.with lists them (soft-
   assert.ok(errors(analyze('const f = nl.with<() => Promise<string>>({ rubric })`Use \\`other\\`.`; return 1;')).includes('nl-unknown-name'));
   // Text nl keeps implicit captures by mention.
   assert.deepEqual(analyze('const f = nl<() => Promise<string>>`Use rubric.`; return 1;').plans[0].captures.map(capture => capture.name), ['rubric']);
+});
+
+test('the shipped natlang:learning and natlang:neuralese declarations cover what the runtime modules export', () => {
+  const root = folder({
+    'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
+      skipLibCheck: true }, include: ['*.ts'] }),
+    'package.json': JSON.stringify({ type: 'module' }),
+    'app.ts': "import { objectives, load, deltas, nativeAdapters, type NativeAdapter, type Loss } from 'natlang:learning';\n" +
+      "import { compose } from 'natlang:neuralese';\n" +
+      'export async function run(base: NativeAdapter, a: NativeAdapter, b: NativeAdapter, loss: (v: NativeAdapter) => Promise<Loss>): Promise<number> {\n' +
+      "  const law: Loss = await objectives.law('mapFusion', 1, 2, 3, 4);\n" +
+      "  const bundle = await load('weights.nz');\n" +
+      '  const merged: NativeAdapter = await deltas.compose([a, { delta: b, scale: 0.5 }]);\n' +
+      '  const learned = await deltas.learnMerge(base, [a, b], loss, { steps: 2 });\n' +
+      "  const patch = deltas.composePatches([deltas.diffFiles({ 'a.ts': 'x' }, {})]);\n" +
+      "  await nativeAdapters.optimize({}, { architecture: 'x', checkpoint_sha256: 'x', tokenizer_fingerprint: 'x', embedding_weight_sha256: 'x' }, { name: 'sgd', momentum: 0.9 });\n" +
+      '  const twice = compose(async (x: number) => x * 2, (s: string) => s.length);\n' +
+      '  return (await twice(bundle.path)) + learned.coefficients.length + Object.keys(patch.changes).length + Number(law) + (merged ? 1 : 0);\n}\n',
+  });
+  const outDir = mkdtempSync(join(tmpdir(), 'natlang-s4b-decl-'));
+  const built = buildProject({ project: root, outDir, runtimeModule });
+  assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
 });
 
 test('a project lowers nl.with: snapshot captures are read once, live captures are written back', async () => {
@@ -240,6 +262,26 @@ test('every node event of a Neuralese run validates against the graph schema (gr
 
 const VERSION = { model: 'm1', dialect: 'native-state/fixture' };
 const measured = (rule, extra = {}) => ({ rule, ...VERSION, comparison: `cmp-${rule}`, verdict: 'no-harm', ...extra });
+
+test('map fusion imports compose beside an imported map, and compose is exact composition', async () => {
+  const gate = new RewriteGate(VERSION, [measured('map-fusion'), measured('read-map')]);
+  const named = rewriteCombinators("import { map } from 'natlang:neuralese';\nconst out = await map(await map(v, g), f);\n" +
+    'const r = read(map(w, h));\n', { gate });
+  assert.match(named.code, /import \{ map, compose \} from 'natlang:neuralese';/);
+  // A name the file already imports is not added twice, and a namespace import needs nothing.
+  const both = rewriteCombinators("import { map, compose } from 'natlang:neuralese';\nconst out = await map(await map(v, g), f);\n", { gate });
+  assert.equal((both.code.match(/compose/g) || []).length, 2);
+  const spaced = rewriteCombinators("import * as nz from 'natlang:neuralese';\nconst out = await nz.map(await nz.map(v, g), f);\n", { gate });
+  assert.match(spaced.code, /nz\.map\(v, nz\.compose\(f, g\)\)/);
+  assert.match(spaced.code, /import \* as nz from 'natlang:neuralese';/);
+
+  const { compose } = createNeuraleseLibrary({ bodies: {} });
+  const twice = async x => x * 2, inc = x => x + 1;
+  const composed = compose(twice, inc);
+  assert.equal(await composed(3), 8);
+  assert.equal(composed.name, 'compose(twice, inc)');
+  assert.throws(() => compose(twice, 1), /compose needs two functions/);
+});
 
 test('a rule is not applied before its comparison has run (rewrite-off-until-enabled)', () => {
   const source = 'const out = await map(await map(v, g), f);\n';

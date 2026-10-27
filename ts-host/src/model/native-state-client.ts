@@ -35,9 +35,7 @@ export async function nativeStateRuntimeOptions(options: NativeClientOptions, se
   const dialect = info.dialects?.[0];
   if (typeof dialect !== 'string' || !dialect)
     return failure('neuralese-native-state-unavailable', 'the server must declare its native value dialect');
-  // `serves()` intentionally supports older servers by inferring common capabilities. A
-  // state writer is an exact producer service, so never infer it from an old info shape.
-  const canWrite = Array.isArray(info.capabilities) && info.capabilities.includes('native.text-write');
+  const canWrite = serves(info, 'native.text-write');
   if (settings.write !== 'available' && !canWrite)
     return failure('neuralese-native-text-write-unavailable', 'the server must explicitly advertise native.text-write');
   const port = canWrite ? await nativeStateWritePort({ ...options, info }) : undefined;

@@ -15,6 +15,8 @@ const runtime = natlang.createNatlangRuntime({ model: model.turn, services: { bo
 
 `loadBrowserLocalModel` fetches a separately published chat template, runs single-threaded when the page is not cross-origin isolated, and falls back to CPU when an automatic GPU load fails; `status.gpuFallbackReason` reports it. Requested GPU offload is not proof of GPU residency. Do not hard-code a historical checkpoint; use the published catalog or an explicit GGUF with its template.
 
+`model.turn` carries `decide`, so decision readouts (`runtime.decide`, `decisionReadout`) are scored in the page. The runtime's `guidance` option (guided generation: tool-call names, and eval code checked line by line for repetition, redeclaration and TypeScript syntax, with rollback) also works with the in-page model; it helps small models most. For a tuned release, `natlang.loadBrowserRelease(releaseUrl, { baseGgufSha256 })` returns `adapters`, `nativeStates` (the soft instruction and skill states) and `weights`; pass the first two to `loadBrowserLocalModel` as `loraAdapters` and `nativeStates`, and `weights` to `createNatlangRuntime`. A release exported for another base GGUF runs untuned, and its soft states run degraded.
+
 ## Application code
 
 Compile the application's TypeScript with the in-page compiler, or ahead of time with `natlang build --target browser`:

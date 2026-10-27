@@ -4,7 +4,7 @@
   "title": "natlang .nz file header",
   "description": "JSON stored under the `natlang` key of a .nz file's safetensors metadata (spec/NEURALESE_FILES.md).",
   "type": "object",
-  "required": ["format", "dialect", "exports", "blocks"],
+  "required": ["format", "dialect", "exports"],
   "additionalProperties": false,
   "properties": {
     "format": { "const": "natlang.neuralese-file/1" },
@@ -24,31 +24,17 @@
         }
       }
     },
-    "blocks": {
-      "type": "object",
-      "propertyNames": { "$ref": "#/$defs/legacyBlockId" },
-      "additionalProperties": {
-        "type": "object",
-        "required": ["dialect", "length", "width", "dtype"],
-        "additionalProperties": false,
-        "properties": {
-          "dialect": { "$ref": "#/$defs/dialect" },
-          "length": { "type": "integer", "minimum": 0 },
-          "width": { "type": "integer", "minimum": 1 },
-          "dtype": { "enum": ["BF16", "F16", "F32"] },
-          "producer": { "type": "object" },
-          "truncated": { "type": "boolean" }
-        }
-      }
-    },
     "native_states": {
       "type": "object",
-      "propertyNames": { "$ref": "#/$defs/nativeBlockId" },
-      "additionalProperties": {
-        "type": "object", "required": ["bytes"], "additionalProperties": false,
-        "properties": { "bytes": { "type": "integer", "minimum": 1 } }
-      },
+      "propertyNames": { "$ref": "#/$defs/nativeStateId" },
+      "additionalProperties": { "$ref": "#/$defs/artifactEntry" },
       "description": "Exact native-state safetensors bodies, each stored as one U8 tensor and verified against its nzs1 content address."
+    },
+    "native_tensors": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nativeTensorId" },
+      "additionalProperties": { "$ref": "#/$defs/artifactEntry" },
+      "description": "Exact named tensor artifact bodies (adapter coefficients and bases, gradients, optimizer state, derivative programs), each stored as one U8 tensor and verified against its nnt1 content address."
     },
     "skill": {
       "type": "object",
@@ -72,10 +58,13 @@
     "provenance": { "type": "object" }
   },
   "$defs": {
-    "dialect": { "type": "string", "pattern": "^(?:nd:[a-z0-9-]+@[0-9]+|native-state/[A-Za-z0-9_.-]+)$" },
-    "blockId": { "type": "string", "pattern": "^(?:nz1_[a-z2-7]+|nzs1_[a-z2-7]{52})$" },
-    "legacyBlockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" },
-    "nativeBlockId": { "type": "string", "pattern": "^nzs1_[a-z2-7]{52}$" },
+    "dialect": { "type": "string", "pattern": "^(?:native-state/[A-Za-z0-9_.-]+|native-tensor/[a-z-]+|semantic-state/[0-9a-f]{64})$" },
+    "nativeStateId": { "type": "string", "pattern": "^nzs1_[a-z2-7]{52}$" },
+    "nativeTensorId": { "type": "string", "pattern": "^nnt1_[a-z2-7]{52}$" },
+    "artifactEntry": {
+      "type": "object", "required": ["bytes"], "additionalProperties": false,
+      "properties": { "bytes": { "type": "integer", "minimum": 1 } }
+    },
     "softRef": {
       "type": "object",
       "required": ["$neuralese"],
@@ -87,11 +76,10 @@
           "additionalProperties": false,
           "properties": {
             "type": { "type": "string" },
-            "id": { "$ref": "#/$defs/blockId", "description": "The block, or the mean block of a distribution." },
-            "distribution": { "const": "gaussian-diag" },
-            "logScale": { "$ref": "#/$defs/blockId", "description": "Per-dimension log-scale block of a gaussian-diag distribution." }
-          },
-          "dependentRequired": { "distribution": ["logScale"], "logScale": ["distribution"] }
+            "id": { "$ref": "#/$defs/nativeStateId" },
+            "stop_gradient": { "const": true, "description": "This use is a constant in gradients." },
+            "source_occurrence": { "type": "string", "minLength": 1, "description": "The producing graph occurrence." }
+          }
         }
       }
     },
@@ -106,8 +94,36 @@
           "additionalProperties": false,
           "properties": {
             "type": { "type": "string" },
-            "body": { "$ref": "#/$defs/blockId" },
+            "body": { "$ref": "#/$defs/nativeStateId" },
+            "body_stop_gradient": { "const": true },
+            "body_source_occurrence": { "type": "string", "minLength": 1 },
             "captures": { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } }
+          }
+        }
+      }
+    },
+    "nativeAdapter": {
+      "type": "object",
+      "required": ["$nativeAdapter"],
+      "additionalProperties": false,
+      "properties": {
+        "$nativeAdapter": {
+          "type": "object", "required": ["id"], "additionalProperties": false,
+          "properties": { "id": { "$ref": "#/$defs/nativeTensorId" } }
+        }
+      }
+    },
+    "nativeTensor": {
+      "type": "object",
+      "required": ["$nativeTensor"],
+      "additionalProperties": false,
+      "properties": {
+        "$nativeTensor": {
+          "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/$defs/nativeTensorId" },
+            "kind": { "enum": ["parameter-set", "parameter-gradient", "parameter-update", "state-gradient", "optimizer-state",
+              "adapter-basis", "adapter-gradient", "derivative-program"] }
           }
         }
       }
@@ -122,6 +138,8 @@
       "anyOf": [
         { "$ref": "#/$defs/softRef" },
         { "$ref": "#/$defs/softFunction" },
+        { "$ref": "#/$defs/nativeAdapter" },
+        { "$ref": "#/$defs/nativeTensor" },
         { "$ref": "#/$defs/exportRef" },
         { "type": ["string", "number", "boolean", "null"] },
         { "type": "array", "items": { "$ref": "#/$defs/value" } },

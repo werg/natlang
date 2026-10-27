@@ -1,7 +1,7 @@
 import { parseType } from '../native/types.js';
 /**
- * `natlang:neuralese`, the combinator library (spec/SPEC.md, Neuralese chapter; S0 §4): `map`, `zip`, `ap`, `combine`,
- * `empty`, `split`, `splitList`, `read`, `convert`, `gloss`, and the query operator `ask(block, question)`, defined as
+ * `natlang:neuralese`, the combinator library (spec/ext/neuralese.md; S0 §4): `map`, `zip`, `ap`, `combine`,
+ * `empty`, `split`, `splitList`, `read`, `convert`, `compose`, `gloss`, and the query operator `ask(block, question)`, defined as
  * `read(map(block, question))` (DECISIONS.md 2026-10-09, "one summarizer family"; its law in S0 §4.2).
  *
  * Each combinator except `empty` and `ask` is a system natural-language function whose instructions are a native state
@@ -219,6 +219,16 @@ export function createNeuraleseLibrary(library: StandardLibrary) {
       return (typed as unknown as (value: unknown) => Promise<unknown>)(v);
     },
     convert: (v: NeuraleseRef, dialect: string) => call('convert', [v, dialect]),
+    /**
+     * Function composition, the right side of map fusion (`map(map(v, g), f)` becomes `map(v, compose(f, g))`,
+     * compiler/rewrites.ts): `f` applied to what `g` returns. It is exact and makes no model call itself, so the
+     * rewrite saves one `map` without changing what each step computes.
+     */
+    compose<A, B, C>(f: (b: B) => C | Promise<C>, g: (a: A) => B | Promise<B>): (a: A) => Promise<C> {
+      if (typeof f !== 'function' || typeof g !== 'function') throw new TypeError('compose needs two functions');
+      const composed = async (a: A) => f(await g(a));
+      return Object.defineProperty(composed, 'name', { value: `compose(${f.name || 'f'}, ${g.name || 'g'})` });
+    },
     gloss: (v: NeuraleseRef) => call('gloss', [v]) as Promise<string>,
     /**
      * The query operator: the answer to `question` from what `v` holds, by its definition `read(map(v, question))`:

@@ -12,7 +12,7 @@
     "kind": {
       "enum": [
         "invocation", "context_bind", "model_turn", "block_write", "block_read", "readout",
-        "combinator", "rewrite", "effect", "iteration_step", "grad", "literal"
+        "combinator", "rewrite", "effect", "iteration_step", "literal"
       ]
     },
     "inputs": {
@@ -39,26 +39,13 @@
         "properties": {
           "turn": { "type": "string" },
           "length": { "type": "integer", "minimum": 0 },
+          "width": { "type": "integer", "minimum": 1 },
           "truncated": { "type": "boolean" },
           "block": { "$ref": "#/$defs/blockId" },
+          "format": { "const": "native-state" },
           "position": { "type": "integer", "minimum": 0 },
-          "temperature": { "type": ["number", "null"], "minimum": 0 },
-          "seed": { "type": ["integer", "null"] },
-          "distribution": { "enum": ["gaussian-diag"] },
-          "mean": { "$ref": "#/$defs/blockId" },
-          "scale": { "$ref": "#/$defs/blockId" },
-          "stops": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["position", "decision", "p_stop"],
-              "properties": {
-                "position": { "type": "integer", "minimum": 0 },
-                "decision": { "enum": ["continue", "stop"] },
-                "p_stop": { "type": "number", "minimum": 0, "maximum": 1 }
-              }
-            }
-          }
+          "native_identity": { "type": "object" },
+          "stops": { "type": "array", "maxItems": 0, "description": "Always empty: a producer span ends at the model's end marker." }
         }
       }
     },
@@ -142,16 +129,9 @@
           "enabled_by": { "type": "string" }
         }
       }
-    },
-    {
-      "if": { "properties": { "kind": { "const": "grad" } } },
-      "then": {
-        "required": ["loss", "order"],
-        "properties": { "loss": { "type": "string" }, "order": { "enum": [1, 2] } }
-      }
     }
   ],
   "$defs": {
-    "blockId": { "type": "string", "pattern": "^(?:nz1_[a-z2-7]+|nzs1_[a-z2-7]{52})$" }
+    "blockId": { "type": "string", "pattern": "^nzs1_[a-z2-7]{52}$" }
   }
 }

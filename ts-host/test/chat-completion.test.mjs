@@ -230,3 +230,28 @@ test('interleaved reasoning history is carried under both provider field names',
   assert.equal(sent.messages[0].reasoning_content,'Inspect the supplied evidence.');
   assert.equal(messages[0].reasoning,undefined);
 });
+
+test('a request that binds weight adapters is refused by a transport that cannot apply them', async () => {
+  const sent = [];
+  const transport = async body => { sent.push(body); return { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }; };
+  const adapters = [{ id: 'nnt1_' + 'a'.repeat(52), scale: 1 }];
+  await assert.rejects(chatCompletionModelTurn(transport)({ ...request(), adapters }),
+    error => error.code === 'neuralese-native-adapters-unavailable');
+  assert.deepEqual(sent, [], 'nothing is sent with an adapter field the server would ignore');
+  const turn = await chatCompletionModelTurn(transport, { adapters: true })({ ...request(), adapters });
+  assert.equal(turn.text, 'ok');
+  assert.deepEqual(sent[0].x_natlang_adapters, adapters);
+});
+
+
+test('HTTP chat and decision scoring reject native states when none are loaded', async () => {
+  const { openAICompatibleModelTurn } = await import('../dist/model/openai-compatible.js');
+  const { nativeStateSentinel } = await import('../dist/native/neuralese.js');
+  for (const nativeStates of [undefined, () => new Set()]) {
+    const turn = openAICompatibleModelTurn({ endpoint: 'http://127.0.0.1:1', model: 'm', stream: false, nativeStates });
+    const messages = [{ role: 'user', content: nativeStateSentinel('nzs1_' + 'a'.repeat(52)) }];
+    await assert.rejects(turn({ ...request(), messages }), /weights-unavailable: native state/);
+    await assert.rejects(async () => turn.decide({ messages, options: ['yes', 'no'] }), /weights-unavailable: native state/);
+    await assert.rejects(async () => turn.decide.scoreMany([{ messages, options: ['yes', 'no'] }]), /weights-unavailable: native state/);
+  }
+});
