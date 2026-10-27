@@ -82,3 +82,21 @@ def test_services_propose_evaluate_refine_retrieve_and_release(tmp_path):
             verify_bundle(engine, bundle, bank)
     finally:
         engine.store.close()
+
+
+def test_tune_build_emits_free_tune_boundaries_after_each_commit(tmp_path):
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.tune.build import main as build
+    engine = engine_fixture(tmp_path, 'lfm')
+    rows = rows_for(engine, 'bx', 2)
+    (tmp_path / 'rows.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    plan = tmp_path / 'plan.json'
+    plan.write_text(json.dumps({'manifest': manifest_for(engine), 'rows': 'rows.jsonl', 'emitBoundaries': True, 'label': 'fit',
+                                'student': {'name': 'lfm', 'checkpoint': str(tmp_path / 'native.pt')},
+                                'recipe': {'steps': 2, 'batch_rows': 2, 'prompt_weight': 0}}))
+    assert build(['--plan', str(plan), '--out', str(tmp_path / 'out')]) == 0
+    boundaries = [json.loads(line) for line in (tmp_path / 'out' / 'boundaries.jsonl').read_text().splitlines()]
+    assert [item['stepAfter'] for item in boundaries] == [1, 2]
+    assert boundaries[0]['kind'] == 'final-residual' and boundaries[1]['kind'] == 'incremental'
+    assert set(boundaries[0]['nodesAfter']) == {'tree:', 'folder:a', 'lambda:x'}
+    assert boundaries[1]['nodesBefore'] == boundaries[0]['nodesAfter']

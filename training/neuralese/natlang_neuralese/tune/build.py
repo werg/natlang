@@ -7,7 +7,8 @@ already split-admitted training rows; this entry never selects or reads developm
 Writes every referenced native tensor artifact (coefficients, bases, optimizer states) to ``artifacts/`` and
 ``state.json`` after every logical update; rerunning the same command restores them and resumes. ``plan.artifacts``
 lists further directories to import first (published family versions). Finally ``result.json`` holds the release
-fragment (`artifacts`, `memberships`) and the training receipt.
+fragment (`artifacts`, `memberships`) and the training receipt. ``plan.emitBoundaries`` appends one free-tune target
+boundary per committed update to ``boundaries.jsonl`` for the learned optimizer (plans/neuralese/JOINT_LEARNED_OPTIMIZER.md).
 """
 from __future__ import annotations
 
@@ -160,8 +161,15 @@ def main(argv=None):
                            workdir=out / 'rl', parent=parent, pinned=plan.get('pinned'), warm=plan.get('warm'))
     save()
     while trainer.state['step'] < trainer.total_steps:
+        before = json.loads(json.dumps(trainer.state)) if plan.get('emitBoundaries') else None
         record = trainer.step()
         save()
+        if before is not None:
+            # Free-tune target boundaries for the learned optimizer (tune/learned/targets.py), after the commit.
+            from .learned.targets import tuner_boundary
+            with (out / 'boundaries.jsonl').open('a') as stream:
+                stream.write(json.dumps(tuner_boundary(trainer, before_state=before, label=plan.get('label', 'fit')),
+                                        sort_keys=True) + '\n')
         print(json.dumps({'step': record['step'], 'objective': record['objective'], 'lr_factor': record['lr_factor'],
                           'mean_row_loss': sum(record['row_losses']) / max(len(record['row_losses']), 1)}), flush=True)
     fragment = trainer.manifest_fragment()

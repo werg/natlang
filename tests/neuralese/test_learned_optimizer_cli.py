@@ -53,6 +53,16 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
     assert json.loads((tmp_path / 'state.json').read_text())['step'] == 1
     assert main(['train', '--spec', train_spec]) == 0  # resumes
     assert json.loads((tmp_path / 'receipt.json').read_text())['step'] == 2
+    collect_spec = write(tmp_path / 'collect-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'),
+                                                          'targets': str(tmp_path / 'targets.jsonl'), 'perContext': 2,
+                                                          'out': str(tmp_path / 'records.jsonl'), 'summary': str(tmp_path / 'collect.json')})
+    assert main(['collect', '--spec', collect_spec]) == 0
+    records = [json.loads(line) for line in (tmp_path / 'records.jsonl').read_text().splitlines()]
+    assert len(records) == 2 and all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
+    policy_spec = write(tmp_path / 'policy-spec.json', {**json.loads((tmp_path / 'train-spec.json').read_text()), 'steps': 0,
+                                                        'policy_records': [str(tmp_path / 'records.jsonl')]})
+    assert main(['train', '--spec', policy_spec]) == 0
+    assert json.loads((tmp_path / 'receipt.json').read_text())['step'] == 3
     context = json.loads((tmp_path / 'targets.jsonl').read_text().splitlines()[0])
     context['program'] = {'id': 'p', 'buildHash': 'b'}
     propose_spec = write(tmp_path / 'propose-spec.json', {**common, 'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'),

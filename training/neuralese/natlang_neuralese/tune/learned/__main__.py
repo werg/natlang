@@ -6,6 +6,7 @@
     python -m natlang_neuralese.tune.learned propose   --spec SPEC   apply the trained optimizer: bundle + receipt
     python -m natlang_neuralese.tune.learned ladder    --spec SPEC   ceiling ladder and gaps from measurements
     python -m natlang_neuralese.tune.learned service   --spec SPEC   one adaptation service of the Natlang `adapt` program
+    python -m natlang_neuralese.tune.learned collect   --spec SPEC   sampled proposal groups with paired rewards (policy records)
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -179,6 +180,64 @@ def propose(spec):
     return bundle['id']
 
 
+def collect(spec):
+    """Sample ``perContext`` proposals per target context, score each by the paired shaping reward (mean change of
+    the training-role actions' log-likelihood against the incoming bundle) and record leave-one-out advantages. Oracle
+    task outcomes are recorded when the spec supplies them per proposal (``outcomes``); otherwise the task component
+    is absent, never invented."""
+    from .bank import load_bank
+    from .episode import action_logprobs, propose as run
+    from .meta_rl import advantage_snr, leave_one_out_advantages, paired_reward
+    from .trainer import OuterRecipe, OuterTrainer
+    engine = _engine(spec)
+    bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
+    state = json.loads(Path(spec['state']).read_text())
+    trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
+    records, groups = [], []
+    for index, target in enumerate(_rows(spec['targets'])):
+        target.setdefault('program', {'id': target['manifest']['program']['id'], 'buildHash': target['manifest']['program'].get('buildHash')})
+        before = action_logprobs(engine, _incoming_bundle(engine, target), target['manifest'], target['rows'])
+        group = []
+        for sample in range(spec.get('perContext', 4)):
+            bundle, proposal, behavior = run(trainer, target, sample=True, seed=spec.get('seed', 0) * 1000003 + index * 101 + sample)
+            after = action_logprobs(engine, bundle, target['manifest'], target['rows'])
+            tokens = max(1, sum(1 for _ in target['rows']))
+            shaping = (sum(after) - sum(before)) / tokens
+            outcome = (spec.get('outcomes') or {}).get(bundle['id'])
+            reward = paired_reward(outcome['after'] if outcome else 0., outcome['before'] if outcome else 0.,
+                                   shaping=shaping, lambda_shape=float(spec.get('lambda_shape', 1.)))
+            reward['taskOutcome'] = outcome
+            if outcome is None:
+                reward['task'] = None  # no oracle outcome for this proposal: the component is absent, not zero
+            group.append({'context': target, 'behavior': behavior, 'bundle': bundle['id'], 'proposal': proposal['id'],
+                          'old_executor_logprob': sum(after), 'reward': reward})
+        advantages, info = leave_one_out_advantages([item['reward']['total'] for item in group])
+        for item, advantage in zip(group, advantages):
+            item['advantage'] = advantage
+        groups.append((advantages, info))
+        records.extend(group)
+    path = Path(spec['out'])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(''.join(json.dumps(item, sort_keys=True, default=_jsonable) + '\n' for item in records))
+    os.replace(temporary, path)
+    summary = {'records': len(records), 'contrastGroups': sum(1 for _, info in groups if info['contrast']),
+               'noContrastGroups': sum(1 for _, info in groups if not info['contrast']), **advantage_snr(groups)}
+    if spec.get('summary'):
+        _write(spec['summary'], summary)
+    return summary
+
+
+def _incoming_bundle(engine, target):
+    """The incoming bundle of a target context: zero composed adapters and the incoming soft states."""
+    instructions, skills = {}, {}
+    from .bundle import bundle_slot
+    for soft, state in target.get('incoming', {}).items():
+        field, key = bundle_slot(soft)
+        (instructions if field == 'instructions' else skills)[key] = state
+    return {'adapters': dict(target['placeholders']), 'instructions': instructions, 'skills': skills}
+
+
 def ladder(spec):
     from .ladder import aggregate, ladder as one
     ladders = [one(item['measurements'], role=item['role']) for item in spec['problems']]
@@ -196,7 +255,7 @@ def service(spec):
 
 
 COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder,
-            'service': service}
+            'service': service, 'collect': collect}
 
 
 def main(argv=None):

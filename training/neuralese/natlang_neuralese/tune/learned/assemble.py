@@ -54,6 +54,7 @@ def training_target(engine, bank, *, manifest, rows, contract, view, soft_texts,
     scales = field_scales([engine.store.get_native_state(state).block for state in target_states.values()]) if target_states else {}
     scales = {f'{index}.{name}': value for (index, name), value in scales.items()}  # JSON-serializable
     body = {'bank': bank.snapshot, 'tier': tier, 'manifest': manifest, 'rows': rows, 'messages': messages, 'writes': writes,
+            'incoming': dict(incoming_states),
             'arrays': arrays, 'placeholders': placeholders,
             'target_bundle': {'adapters': dict(target_adapters), 'states': dict(target_states)},
             'evidence': {'view': view['id'], 'items': [item['id'] for item in view['items']], 'keyEvidence': key_evidence,
