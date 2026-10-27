@@ -24,10 +24,14 @@ exported. Use that exact checkpoint for everything below (tune plans prepared fo
    (`name-vN`) stay on one side of every program-level split.
 2. **Program tunes.** Ordinary `natlang tune` rounds per program on the final student (development selection,
    untouched confirmation). Their tune plans are the corpus input.
-3. **Run this lane:** `training/neuralese/learned-optimizer/run-after-lfm-main.sh <final checkpoint .pt>`, after
-   adding the imported plans of step 1 to `corpus-spec.json` `programs` in the operation directory
-   `/mnt/external/natlang-learned-optimizer-20261027`. It installs the `lfm-*-spec.json` templates there and queues
-   in the memory ledger, each after the previous one finished:
+3. **Run this lane:** `training/neuralese/learned-optimizer/run-after-lfm-main.sh <final checkpoint .pt> [operation id]`,
+   after adding the imported plans of step 1 to `corpus-spec.json` `programs` in the operation directory
+   `/mnt/external/natlang-learned-optimizer-20261027`. It installs the `lfm-*-spec.json` templates there and runs
+   in the memory ledger, each stage as its own unit `lopt-<stage>-<operation>` that starts only after the previous
+   one recorded exit status 0 and its result line under `operations/<operation>/` (a failure or a unit that leaves
+   the ledger without a status stops the run; rerunning an operation skips its succeeded stages; an operation stays
+   bound to its checkpoint SHA). When outer training publishes a bank it stops with `needs-refit.json` (exit 3):
+   labels must be refitted against that snapshot before further updates:
    - `bank-init`: shared basis (rank 16) from the programs' gradients and weight SVD, one source component per
      program, Neuralese keys from their descriptions;
    - `corpus`: each tune plan refit on the bank basis with update boundaries, then free-tune and in-bank targets

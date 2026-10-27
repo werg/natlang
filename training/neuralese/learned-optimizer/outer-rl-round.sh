@@ -10,6 +10,7 @@ R=$W/outer-rl
 PY=${PY:-/home/werg/natlang/.venv-neuralese/bin/python}
 NATLANG=${NATLANG:-"/home/werg/.local/share/natlang-dev/node-v24.0.1-linux-arm64/bin/node /home/werg/natlang/ts-host/bin/natlang.mjs"}
 mkdir -p "$R"
+: > "$R/score.log"
 "$PY" - "$W" <<'PY'
 import json, sys
 w = sys.argv[1]
@@ -34,5 +35,5 @@ for path in sorted(glob.glob(f'{r}/releases/requests/*.outcomes.json')):
     outcomes.update(json.load(open(path)))
 json.dump(outcomes, open(f'{r}/outcomes.json', 'w'))
 PY
-"$PY" -m natlang_neuralese.tune.learned collect --spec "$R/collect-spec.json" >> "$R/collect.log" 2>&1
-"$PY" -m natlang_neuralese.tune.learned train --spec "$R/policy-spec.json" >> "$R/policy.log" 2>&1
+"$PY" -m natlang_neuralese.tune.learned collect --spec "$R/collect-spec.json" > "$R/collect.log" 2>&1
+"$PY" -m natlang_neuralese.tune.learned train --spec "$R/policy-spec.json" > "$R/policy.log" 2>&1
