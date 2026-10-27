@@ -12,7 +12,8 @@
  * `{type: "native_state", id}` content part, the text in plain text, and the state again after other requests, with
  * the log-probability of every answer token. With `--server`, the fork's native llama-server answers the same
  * requests (`--native-state`); the browser must match it token for token and within `--tolerance` in log-probability.
- * Then both score the same replies (`createNatlangScore`, `POST /v1/natlang/score`), with and without a state.
+ * Then both score the same replies (`createNatlangScore`, `POST /v1/natlang/score`), with and without a state, and
+ * answer one guided tool call (`guidance`) whose first attempt the checks reject.
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -51,6 +52,12 @@ const order = ['state', 'control', 'text', 'stateAgain', 'missing'];
 const scoring = { items: [{ messages: requests.text, continuations: ['paris', 'Paris', 'London'] },
   { messages: requests.state, continuations: ['paris', 'France is a country located in Western Europe.'] },
   { messages: 'not messages', continuations: ['x'] }] };
+// Guided generation: the first eval call this model writes for the prompt is not TypeScript, so it is rolled back.
+const guided = { messages: [{ role: 'user', content: 'Use eval to print the text hello world five times. Write five separate console.log("hello world"); lines, no loop.' }],
+  tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] } } }],
+  tool_choice: 'required', temperature: 0, max_tokens: 120, guidance: { repeat: 2 } };
+const guidedResult = response => ({ calls: (response.choices[0].message.tool_calls ?? []).map(call => [call.function.name, call.function.arguments]),
+  rejections: response.x_natlang_guidance?.rejections });
 const body = name => ({ messages: name === 'stateAgain' ? requests.state : name === 'missing'
   ? messages({ type: 'native_state', id: 'nzs1_not_loaded' }) : requests[name], max_tokens: Number(values.tokens), temperature: 0, top_k: 1,
   logprobs: true });
@@ -62,7 +69,7 @@ const files = { '/base.gguf': resolve(values.base), '/state.gguf': resolve(value
 const wllamaDir = resolve(values.wllama);
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import { Wllama } from '/wllama/esm/index.js';
-window.run = async ({ bodies, scoring }) => {
+window.run = async ({ bodies, scoring, guided }) => {
   const wllama = new Wllama({ default: '/wllama/esm/wasm/wllama.wasm' }, { allowOffline: true });
   if (!wllama.capabilities?.nativeStates) throw new Error('this wllama build cannot load native states');
   const blob = async path => (await fetch(path)).blob();
@@ -80,6 +87,10 @@ window.run = async ({ bodies, scoring }) => {
   }
   console.log('scoring');
   out.scores = (await wllama.createNatlangScore(scoring)).results;
+  console.log('guided');
+  const response = await wllama.createChatCompletion(guided);
+  out.guided = { calls: (response.choices[0].message.tool_calls ?? []).map(call => [call.function.name, call.function.arguments]),
+    rejections: response.x_natlang_guidance?.rejections };
   await wllama.exit();
   return out;
 };
@@ -119,6 +130,9 @@ async function native() {
     const scored = await fetch(`http://127.0.0.1:${port}/v1/natlang/score`, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(scoring) });
     out.scores = (await scored.json()).results;
+    const guidedResponse = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(guided) });
+    out.guided = guidedResult(await guidedResponse.json());
     return out;
   } finally { child.kill('SIGTERM'); }
 }
@@ -128,12 +142,12 @@ const browser = await chromium.launch({ executablePath: chromiumPath(), args: ['
 let failed = false;
 try {
   const tab = await browser.newPage();
-  tab.on('console', message => { if (message.type() === 'error' || message.text().match(/^(loaded|request|scoring)/))
+  tab.on('console', message => { if (message.type() === 'error' || message.text().match(/^(loaded|request|scoring|guided)/))
     console.error('[page]', message.text()); });
   await tab.goto(`http://127.0.0.1:${server.address().port}/`);
   await tab.waitForFunction(() => window.ready);
   const started = Date.now();
-  const out = await tab.evaluate(options => window.run(options), { bodies: order.map(name => [name, body(name)]), scoring });
+  const out = await tab.evaluate(options => window.run(options), { bodies: order.map(name => [name, body(name)]), scoring, guided });
   const reference = values.server ? await native() : undefined;
   console.log(JSON.stringify({ seconds: (Date.now() - started) / 1000, ids, browser: out, ...(reference ? { native: reference } : {}) }, null, 1));
   const answered = value => typeof value?.text === 'string' && value.logprobs.length > 0;
@@ -152,8 +166,12 @@ try {
       out.scores[0].log_probs.every(value => Number.isFinite(value) && value < 0),
     'decision readout reads the state': out.scores?.[1]?.log_probs?.every(Number.isFinite),
     'an item that cannot be rendered fails alone': typeof out.scores?.[2]?.error === 'string',
+    'guidance rejects the first attempt and the reply is rolled back': out.guided?.rejections?.length > 0 &&
+      out.guided.calls.length > 0 && out.guided.calls.every(([name]) => name === 'eval'),
     ...(reference ? Object.fromEntries(order.slice(0, 4).map(name => [`${name}: the browser equals the native server`,
       answered(out[name]) && out[name].text === reference[name]?.text && gap(out[name], reference[name]) <= tolerance])) : {}),
+    ...(reference ? { 'guidance: the browser equals the native server':
+      JSON.stringify(out.guided) === JSON.stringify(reference.guided) } : {}),
     ...(reference ? { 'decision readout: the browser equals the native server': [0, 1].every(item =>
       out.scores?.[item]?.tokens?.join() === reference.scores?.[item]?.tokens?.join() &&
       out.scores[item].log_probs.every((value, k) => Math.abs(value - reference.scores[item].log_probs[k]) <= tolerance)) } : {}),
