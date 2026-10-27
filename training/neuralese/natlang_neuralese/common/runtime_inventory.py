@@ -1,5 +1,7 @@
 """Exact built task runtime, npm and protection-file identity shared by providers and eval."""
 from pathlib import Path
+import json
+import os
 from .hashing import sha256_file_hex
 
 
@@ -50,22 +52,37 @@ def snapshot_task_runtime(source, directory):
         return runtime
 
 
+def task_source_reviews(path):
+    """Use the registry carried by a frozen runtime, or beside a live ts-host."""
+    path = Path(path)
+    inside = path / 'training/source-reviews'
+    return inside if (path / 'frozen-runtime.json').is_file() or inside.is_dir() else path.parent / 'training/source-reviews'
+
+
 def task_runtime_inventory(path):
     path = Path(path)
-    names = ['prelude.js', 'package.json', '../package.json', '../package-lock.json',
-             '../training/source-reviews/holds.jsonl',
-             '../training/source-reviews/family-holds.json',
-             '../training/source-reviews/datasets.json']
+    frozen = path / 'frozen-runtime.json'
+    names = ['prelude.js', 'package.json']
+    names += ['package-lock.json', 'frozen-runtime.json'] if frozen.is_file() else ['../package.json', '../package-lock.json']
+    reviews = task_source_reviews(path)
+    names += [os.path.relpath(reviews/name, path) for name in ('holds.jsonl', 'family-holds.json', 'datasets.json')]
     required = [path/'dist/teacher/cli.js', path/'prelude.js', path/'package.json',
                 *(path/name for name in names)]
-    if not all(item.is_file() for item in required):
-        raise ValueError('provider task runtime needs built CLI and pinned npm manifests')
+    missing = [str(item) for item in required if not item.is_file()]
+    if missing:
+        raise ValueError('provider task runtime needs built CLI and pinned npm manifests and source-review tables; missing: '
+                         + ', '.join(dict.fromkeys(missing)))
     # Small built files are cheaper to hash than repeatedly scanning the shared
     # append-only cache intended for multi-gigabyte checkpoint artifacts.
     result = {str(p.relative_to(path)): sha256_file_hex(p)
               for p in sorted((path/'dist').rglob('*')) if p.is_file()}
     result.update({name: sha256_file_hex(path/name)
                    for name in names})
+    if frozen.is_file():
+        declared = json.loads(frozen.read_text())['files']
+        for name, digest in result.items():
+            if name != 'frozen-runtime.json' and declared.get(name) != digest:
+                raise ValueError(f'frozen task runtime changed its declared file: {name}')
     return result
 
 

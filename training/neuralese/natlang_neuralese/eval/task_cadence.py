@@ -402,7 +402,8 @@ class TaskEval:
                 url = external['url']
             env = node_path_env()
             runtime = Path(self.spec.get('runtime') or self.repo / 'ts-host')
-            env['NATLANG_SOURCE_REVIEWS'] = str(runtime.parent / 'training' / 'source-reviews')
+            from ..common.runtime_inventory import task_source_reviews
+            env['NATLANG_SOURCE_REVIEWS'] = str(task_source_reviews(runtime))
             children = []
             queues = self._queues(run, repeat)
             coefficient_runtime=getattr(engine,'native_coefficient_policy_runtime',None)
