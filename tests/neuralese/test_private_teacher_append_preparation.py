@@ -281,6 +281,26 @@ def test_append_rebind_preserves_every_resolved_optional_seed_source(tmp_path, m
     assert merged['source_classification_migration'] == refs['source_classification_migration']
 
 
+@pytest.mark.parametrize('model_role,history', [('lfm25', 'keep'), ('mellum21', None)])
+def test_foundation_sharing_train_binding_follows_append_in_recipe_and_seed(tmp_path, monkeypatch, model_role, history):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'row-index-cache'))
+    descriptor, config_path, *_ = _fixture(tmp_path, model_role,
+        stage_history=history, optional_sources=True)
+    recipe_path = Path(json.loads(config_path.read_text())['production_recipe'])
+    recipe = json.loads(recipe_path.read_text())
+    recipe['stages'][0]['inputs']['foundation_native_graphs'] = 'train'
+    del recipe['input_bindings']['foundation']
+    _write_json(recipe_path, recipe)
+    result = prepare(descriptor)
+    updated = load_recipe(Path(result['recipe']['path']))
+    config = json.loads(Path(result['next_config']['path']).read_text())
+    assert result['new_rows'] == 2 and result['existing_prefix_unchanged']
+    assert config['foundation_native_graphs'] == config['seed_native_graphs']
+    assert config['foundation_native_graphs'] == result['native_training_sources']['path']
+    assert config['continued_native_graphs'] == recipe['input_bindings']['continued']['path']
+    assert updated['input_bindings']['continued'] == recipe['input_bindings']['continued']
+
+
 def test_conflicting_identity_fails_closed(tmp_path, monkeypatch):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'row-index-cache'))
     descriptor, *_ = _fixture(tmp_path, 'lfm25', stage_history='keep')

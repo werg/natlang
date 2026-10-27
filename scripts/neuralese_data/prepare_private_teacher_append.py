@@ -856,6 +856,27 @@ def prepare(descriptor: dict) -> dict:
     write_json(next_recipe_path, next_recipe)
     recipe_api.load_recipe(next_recipe_path)
 
+    # Validate that the complete loader still resolves exactly the stage roles we
+    # just rebound, with no unreferenced catalog inputs or hidden source roles.
+    loaded_recipe = recipe_api.load_recipe(next_recipe_path)
+    rebound = recipe_api.resolve_stage_inputs(loaded_recipe, next_stage, {})
+    if (rebound['native_graphs']['sha256'] != new_tree_binding['sha256']
+            or rebound['ce_supervision_policy']['sha256'] != ce_binding['sha256']
+            or rebound['held_native_graphs']['sha256'] != held_binding['sha256']):
+        raise ValueError('complete frozen recipe loader resolved different train/CE/held stage bindings')
+    for source_role, binding in resolved.items():
+        if source_role in {'native_graphs', 'ce_supervision_policy', 'held_native_graphs'}:
+            continue
+        # Roles may deliberately share one named input (the foundation often
+        # uses the entire training source). Such aliases follow that binding;
+        # separately named predecessor/held inputs remain exact and unchanged.
+        name = role_names[source_role]
+        expected = (next_recipe['input_bindings'][name]
+            if name in {role_names['native_graphs'], role_names['ce_supervision_policy']}
+            else binding)
+        if source_role not in rebound or rebound[source_role]['sha256'] != expected['sha256']:
+            raise ValueError(f'optional stage source role {source_role!r} changed during append preparation')
+
     # Preserve the active seed's operational values, including Mellum's inherited
     # checkpoint_every=50 override, while supplying newly bound stage data roles.
     next_config = copy.deepcopy(active_config)
@@ -872,7 +893,7 @@ def prepare(descriptor: dict) -> dict:
     seed_parameters['recipe_binding'] = recipe_binding
     seed_parameters['memory_qualification'] = next_stage['parameters']['memory_qualification']
     next_config['seed_trainer_parameters'] = seed_parameters
-    seed_sources = _seed_source_bindings(resolved, train=_json_binding(new_tree_path),
+    seed_sources = _seed_source_bindings(rebound, train=_json_binding(new_tree_path),
         held=held_binding, ce=_json_binding(ce_path))
     next_config = supervisor.bind_seed_sources(next_config, seed_sources)
     supervisor.bind_seed_parameters(next_config, seed_parameters)
@@ -880,20 +901,6 @@ def prepare(descriptor: dict) -> dict:
     write_json(next_config_path, next_config)
     next_plan_path = output_root / 'next-plan.json'
     shutil.copyfile(plan_path, next_plan_path)
-
-    # Validate that the complete loader still resolves exactly the stage roles we
-    # just rebound, with no unreferenced catalog inputs or hidden source roles.
-    loaded_recipe = recipe_api.load_recipe(next_recipe_path)
-    rebound = recipe_api.resolve_stage_inputs(loaded_recipe, next_stage, {})
-    if (rebound['native_graphs']['sha256'] != new_tree_binding['sha256']
-            or rebound['ce_supervision_policy']['sha256'] != ce_binding['sha256']
-            or rebound['held_native_graphs']['sha256'] != held_binding['sha256']):
-        raise ValueError('complete frozen recipe loader resolved different train/CE/held stage bindings')
-    for source_role, binding in resolved.items():
-        if source_role in {'native_graphs', 'ce_supervision_policy', 'held_native_graphs'}:
-            continue
-        if source_role not in rebound or rebound[source_role]['sha256'] != binding['sha256']:
-            raise ValueError(f'optional stage source role {source_role!r} changed during append preparation')
 
     # Snapshot stability and compare-and-swap validation are the final gate.
     for package in ready_records:
