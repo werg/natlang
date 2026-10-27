@@ -9,6 +9,7 @@ import { executionKey } from './execution.js';
  * development release is what `tuneProgram` then validates and activates, as for a single joint fit.
  */
 import { verifierDigest } from './reward.js';
+import { servicesDigest } from './services.js';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../package/archive.js';
@@ -41,7 +42,9 @@ export function roundsSelector(options: TuneOptions, settings: RoundsSettings = 
     // A completed round belongs to its actual recipe and parent. Reusing a data-only journal silently skips
     // requested recipe improvements (or serves a release fitted against a different student base).
     const runKey = createHash('sha256').update(canonicalJson(JSON.parse(JSON.stringify([
-      options.student.base, options.settings.recipe ?? {}, settings, softStatesServed(options.settings), verifierDigest(options.root)
+      options.student.base, options.settings.recipe ?? {}, settings, softStatesServed(options.settings), verifierDigest(options.root),
+      // Program tune services join the key only when present: journals of programs without them keep their keys.
+      ...(servicesDigest(options.root) ? [servicesDigest(options.root)] : [])
     ])))).digest('hex').slice(0, 24);
     const directory = join(tuneDirectory(options.root), 'rounds', `native-runtime-v3-${data.dataKey}-${runKey}-execution-${executionKey(options.settings.execution)}`);
     const development = data.examples.filter(example => example.partition === 'development');

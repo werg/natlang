@@ -27,7 +27,7 @@ import { createNatlangRuntime, type ModelDriver, type Services } from '../runtim
 import type { SplitExample } from './collect.js';
 import { exampleArguments } from './evaluate.js';
 import { scorable, scoreRoot, verifierDigest, type RootScore } from './reward.js';
-import { rootServices } from './services.js';
+import { rootServices, servicesDigest } from './services.js';
 
 export const ROLLOUT_SCHEMA = 'natlang.tune-rollout/v1';
 
@@ -88,9 +88,9 @@ export async function runRollouts(options: { root: string; program: ProgramDescr
   for (const example of options.examples) {
     if (example.partition !== 'train') { skipped.push({ root: example.id, sample: null, reason: `${example.partition} root` }); continue; }
     if (!await scorable(options.root, example)) { skipped.push({ root: example.id, sample: null, reason: 'no root oracle or verifier' }); continue; }
-    const verifier = verifierDigest(options.root);
+    const verifier = verifierDigest(options.root), services = servicesDigest(options.root);
     const group = `${example.id}/${options.release.digest}/round-${options.round}/execution-${executionKey(options.execution)}` +
-      (verifier ? `/verifier-${verifier.slice(0, 16)}` : '');
+      (verifier ? `/verifier-${verifier.slice(0, 16)}` : '') + (services ? `/services-${services.slice(0, 16)}` : '');
     for (let sample = 0; sample < options.samples; sample++) {
       if (existing.has(`${group}\0${sample}`)) { reused++; continue; }
       const seed = derivedSeed(options.release.digest, options.round, example.id, sample);

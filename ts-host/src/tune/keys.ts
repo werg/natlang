@@ -9,13 +9,17 @@
 import { createHash } from 'node:crypto';
 import type { ProgramDescriptor } from '../adaptation/types.js';
 import type { WeightManifest } from '../adaptation/weights/manifest.js';
+import { servicesDigest } from './services.js';
 
 const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 /** Everything a root's trajectories depend on besides the lambdas it reached: non-instruction sources (helpers,
  * services, types, TS modules) and program-level policy. `.nl` files are covered by binding semantic hashes. */
-export function sharedSourceHash(program: ProgramDescriptor): string {
-  return sha(Object.entries(program.sources).filter(([path]) => !path.endsWith('.nl')).sort(([a], [b]) => a.localeCompare(b)));
+export function sharedSourceHash(program: ProgramDescriptor, root: string): string {
+  const sources = sha(Object.entries(program.sources).filter(([path]) => !path.endsWith('.nl')).sort(([a], [b]) => a.localeCompare(b)));
+  // The program's tune services (tune/services.ts) are part of every root's world; without them the hash is unchanged.
+  const services = servicesDigest(root);
+  return services === null ? sources : sha([sources, services]);
 }
 
 export type Invalidation = {

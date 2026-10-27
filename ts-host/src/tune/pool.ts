@@ -66,7 +66,7 @@ export function exportCases(context: PoolContext, out: string, options: { includ
   servingPromptSupported(program);
   if (existsSync(out) && readdirSync(out).length) throw new Error(`${out} is not empty; case lists are immutable, choose a new directory`);
   const partitions = new Set(['train', 'development', ...(options.includeConfirmation ? ['confirmation'] : [])]);
-  const shared = sharedSourceHash(program);
+  const shared = sharedSourceHash(program, root);
   const files = Object.fromEntries(Object.entries(program.sources).filter(([path]) => !path.startsWith('@natlang/')));
   const scaffoldKey = trainingScaffoldKey(scaffold), split = sha(json(context.splitReceipt));
   const rows: string[] = [], cases: { index: number; seed: number }[] = [], skipped: { root: string; reason: string }[] = [];
@@ -321,7 +321,7 @@ export function importCases(context: PoolContext, path: string, custody: TunePoo
   for (const binding of custody.reviewed_artifacts) verifyCustodyFile(binding, 'reviewed plan artifact');
   if (custody.runtime.receipt.sha256 !== custody.runtime.receipt_sha256)
     throw new Error('reviewed dispatcher runtime receipt identity changed');
-  const scaffoldKey = trainingScaffoldKey(scaffold), split = sha(json(context.splitReceipt)), shared = sharedSourceHash(program);
+  const scaffoldKey = trainingScaffoldKey(scaffold), split = sha(json(context.splitReceipt)), shared = sharedSourceHash(program, context.root);
   const sourceRows = readFileSync(custody.source.path, 'utf8').split('\n').map((line, index) => line.trim()
     ? { index, row: JSON.parse(line) } : null).filter((item): item is { index: number; row: unknown } => item !== null);
   const byId = new Map(examples.map(example => [example.id, example]));

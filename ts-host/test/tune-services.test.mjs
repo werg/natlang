@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rootServices } from '../dist/tune/services.js';
+import { rootServices, servicesDigest } from '../dist/tune/services.js';
+import { sharedSourceHash } from '../dist/tune/keys.js';
 
 test('a root gets its program\'s own tune services and declarations, or the host\'s with the same declarations', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-tune-services-'));
@@ -27,4 +28,16 @@ test('the learned optimizer serves whole adapt roots from their reference contex
   const { services, serviceDeclarations } = await rootServices(root, undefined, { id: 'r', reference: { plan: '/p.json', out: '/o' } });
   assert.deepEqual(Object.keys(services.optimizer).sort(), ['evidence', 'propose', 'refine', 'retrieve']);
   assert.match(serviceDeclarations.optimizer, /operations: Record<string, RevisionOperation>/);
+});
+
+test('a program\'s tune services bind its teacher data; programs without them keep their hash', () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-tune-services-'));
+  const program = { sources: { 'helpers.ts': 'a', 'f.nl': 'b' } };
+  const without = sharedSourceHash(program, root);
+  assert.equal(servicesDigest(root), null);
+  writeFileSync(join(root, 'tune.services.mjs'), 'export default () => ({});\n');
+  const first = sharedSourceHash(program, root);
+  assert.notEqual(first, without);
+  writeFileSync(join(root, 'tune.services.mjs'), 'export default () => ({ clock: {} });\n');
+  assert.notEqual(sharedSourceHash(program, root), first);
 });

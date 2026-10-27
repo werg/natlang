@@ -184,7 +184,7 @@ export async function prepareData(options: TuneOptions, timings: StageTiming[] =
     throw new Error('no training roots: add root invocations to tune.examples.jsonl (one JSON object per line: {"function", "input", "expected"?, "group"?})');
   // Per-root records: raw evidence survives edits; a root is recollected only when a binding it reached changed
   // semantics or the shared (non-instruction) sources changed (keys.ts).
-  const shared = sharedSourceHash(program);
+  const shared = sharedSourceHash(program, root);
   const rootsDir = join(tuneDirectory(root), 'data', 'roots');
   const recordPath = (example: SplitExample) => rootRecordPath(root, example, options.teacherId);
   const collectable = examples.filter(example => example.partition === 'train' || example.partition === 'development');

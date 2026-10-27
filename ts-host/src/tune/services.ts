@@ -21,10 +21,17 @@ type Provided = { build: (example: SplitExample) => Services | Promise<Services>
 
 const loaded = new Map<string, Promise<Provided | null>>();
 
-async function providedBy(root: string): Promise<Provided | null> {
+/** The program's services file digest, or null when it provides none. Everything a root's run depends on binds it:
+ * teacher data (`keys.sharedSourceHash`), rollout groups and round journals, so changed services never reuse runs. */
+export function servicesDigest(root: string): string | null {
   const path = join(root, SERVICES_FILE);
-  if (!existsSync(path)) return null;
-  const digest = createHash('sha256').update(readFileSync(path)).digest('hex'), key = `${root}:${digest}`;
+  return existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
+}
+
+async function providedBy(root: string): Promise<Provided | null> {
+  const path = join(root, SERVICES_FILE), digest = servicesDigest(root);
+  if (digest === null) return null;
+  const key = `${root}:${digest}`;
   if (!loaded.has(key)) loaded.set(key, (async () => {
     const module = await import(`${pathToFileURL(path).href}?sha256=${digest}`) as { default?: unknown; declarations?: unknown };
     if (typeof module.default !== 'function') throw new Error(`${SERVICES_FILE} must default-export (example) => services`);

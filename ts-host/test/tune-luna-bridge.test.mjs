@@ -217,11 +217,11 @@ test('pool cases: export, the real collector, import, and a tune that reuses the
     const job = readdirSync(join(root, '.natlang/tune/jobs'))[0];
     assert.deepEqual(JSON.parse(readFileSync(join(root, '.natlang/tune/jobs', job, 'out/result.json'), 'utf8')).receipt.teachers, summary.teachers,
       'training rows carry the pool actor identity');
-    const retained = validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program), 'teacher:configured');
+    const retained = validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program, root), 'teacher:configured');
     assert.ok(retained?.imported, 'the exact imported row remains reusable while its snapshot is intact');
     const ledgerSnapshot = retained.imported.campaign.claim_ledger.snapshot.path;
     writeFileSync(ledgerSnapshot, 'tampered');
-    assert.equal(validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program), 'teacher:configured'), undefined,
+    assert.equal(validRootRecord(root, context.examples[0], context.scaffold, sharedSourceHash(context.program, root), 'teacher:configured'), undefined,
       'a missing or changed immutable terminal snapshot invalidates imported custody');
   } finally {
     server.close();
