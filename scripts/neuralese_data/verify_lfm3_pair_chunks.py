@@ -81,7 +81,8 @@ def verify_pair(row, *, records, edges, tokenizer, model_id, fingerprint, roles,
     if graph.get('split')!='train' or set(graph.get('source_groups') or [])!=groups or len(parsed.plan.invocations)!=2:
         raise ValueError('graph split/groups or node topology differs')
     producer,consumer=graph['nodes'];export=view['export'];lo,hi=export['start'],export['stop']
-    if tokenizer.decode(producer['token_ids'][lo:hi],skip_special_tokens=False)!=body or export['text']!=body:
+    if (export.get('node')!=producer['name'] or [lo,hi] not in producer.get('producing',[])
+            or tokenizer.decode(producer['token_ids'][lo:hi],skip_special_tokens=False)!=body or export['text']!=body):
         raise ValueError('producer export differs from authenticated source')
     count=len(occurrence['reader_json_pointers'])
     imports=consumer.get('imports') or []
