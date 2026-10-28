@@ -83,18 +83,18 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     assert all(item['handoff_requirement']==requirement for item,requirement in
                zip(raw['models'],config['participants']))
     assert 'semantic_refresh_config' not in raw
-    # Production auto-bootstrap defaults to the integrity-bound 128-task union
+    # Production auto-bootstrap defaults to the integrity-bound corrected 76-task source
     # for both participants; the older explicit fixture above remains supported.
     admitted_manifest = (Path(__file__).resolve().parents[2]
-        / 'runs/decision-rich-train-20261016-v2-curriculum/task-source-manifest.json')
+        / 'runs/decision-rich-train-20261016-v2-curriculum-corrected/task-source-manifest.json')
     admitted = prepare(release, curriculum, tmp_path/'deployment-admitted',
         participants=participants, runtime=runtime, namespace=str(tmp_path))
     admitted_bootstrap = json.loads(Path(json.loads(admitted.read_text())['rl_bootstrap']['path']).read_text())
     assert len(admitted_bootstrap['models']) == 2
     assert {row['cases']['sha256'] for row in admitted_bootstrap['models']} == {
-        'bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a'}
+        'eb56ff4c3577bcf4b72f1400659527ce76789a53666e70ff8b5a4a071e6ae86f'}
     assert all(row['task_source']['manifest'] == str(admitted_manifest.resolve())
-        and row['task_source']['rows'] == 128 for row in admitted_bootstrap['models'])
+        and row['task_source']['rows'] == 76 for row in admitted_bootstrap['models'])
     first = json.loads(Path(config['curriculum']).read_text())
     refresh = json.loads(Path(bootstrap['semantic_refresh_config']['path']).read_text())
     assert first['pairs'] == binding(train)
