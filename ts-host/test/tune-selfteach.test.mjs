@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import * as host from '../dist/index.js';
 import { prepareData } from '../dist/tune/pipeline.js';
 import { readRootExamples, splitExamples } from '../dist/tune/collect.js';
-import { PRIVILEGED_MARKER, PRIVILEGED_SCHEMA, leaksPrivileged, privilegedText, selfTeacherId, withPrivileged } from '../dist/tune/selfteach.js';
+import { PRIVILEGED_HEADER, PRIVILEGED_SCHEMA, leaksPrivileged, privilegedText, selectFacts, selfTeacherId, withPrivileged } from '../dist/tune/selfteach.js';
 import { scriptedModel } from './support/natlang.mjs';
 
 const base = { architecture: 'lfm3', checkpoint_sha256: 'c'.repeat(64), tokenizer_fingerprint: 'd'.repeat(64), embedding_weight_sha256: 'e'.repeat(64) };
@@ -33,21 +33,28 @@ const settings = { student: 'lfm3', students: {}, teacher: 'self', backend: 'man
 const student = { name: 'lfm3', base, checkpoint: '/unused', trainer: ['/unused'], moduleMap: 'lfm3', baseGgufSha256: 'f'.repeat(64) };
 const split = root => splitExamples(readRootExamples(root));
 function writeReferences(root, examples) {
+  // The shape `natlang_neuralese.tune.supply privileged` writes from the shared `case_facts` (rl/privileged_context.py).
   writeFileSync(join(root, 'tune.privileged.jsonl'), examples.map(example => JSON.stringify({ schema: PRIVILEGED_SCHEMA,
-    function: example.function, group: example.group, input: example.input, result: example.expected,
-    calls: [{ function: 'inner', value: example.expected }] })).join('\n') + '\n');
+    function: example.function, group: example.group, input: example.input, result: example.expected, case_id: `case:${example.group}`,
+    custody: { schema: 'natlang.jolt-privileged-custody/1', split: 'train', protected_sha256: 'p'.repeat(64) },
+    facts: [{ id: 'expected_result:0', kind: 'expected_result', text: `The verified result of this program is ${JSON.stringify(example.expected)}.` },
+      { id: 'child_value:0', kind: 'child_value', text: `The verified answer of this call is ${JSON.stringify(example.expected)}.`,
+        match: ['Return value in uppercase.'] }] })).join('\n') + '\n');
 }
-/** A student that solves the task only when its turn carries a privileged reference; `leak` roots echo the marker. */
+/** A student that solves the task only when its turn carries a privileged block; `leak` roots echo the header. */
 function student_(leak = new Set()) {
   const seen = [];
   const model = scriptedModel(opening => {
-    const privileged = opening.includes(PRIVILEGED_MARKER), value = /"value":\s*"(\w+)"|value[^a-z]*([a-z]+)/.exec(opening);
-    seen.push({ privileged, opening });
     if (opening.includes('Pass value')) return 'return await inner(value)';
-    const echo = [...leak].some(item => opening.includes(item)) ? ` // ${PRIVILEGED_MARKER}` : '';
-    return privileged ? `return value.toUpperCase()${echo}` : 'return value';
+    const echo = [...leak].some(item => opening.includes(item)) ? ` // ${PRIVILEGED_HEADER}` : '';
+    return seen.at(-1).privileged ? `return value.toUpperCase()${echo}` : 'return value';
   });
-  return { driver: model.driver, seen };
+  const driver = async (request, ...rest) => {
+    const block = request.messages.find(message => message.role === 'system' && String(message.content).startsWith(PRIVILEGED_HEADER));
+    seen.push({ privileged: !!block, block: block?.content, opening: request.messages.map(message => String(message.content)).join('\n') });
+    return model.driver({ ...request, messages: request.messages.filter(message => message !== block) }, ...rest);
+  };
+  return { driver, seen };
 }
 
 test('privileged self-teaching collects only training roots and records the task without the reference', async () => {
@@ -63,14 +70,17 @@ test('privileged self-teaching collects only training roots and records the task
     const data = await prepareData({ root, program: program(root), settings, student, teacher: self.driver, teacherId, serve: async () => { throw new Error('unused'); } });
     // Every model turn of a training root saw the reference; no development root was run at all.
     assert.ok(self.seen.length > 0 && self.seen.every(item => item.privileged), 'self-teaching turns carry the privileged reference');
+    // The root sees its world-level result; a child sees only its own matched verified value.
+    assert.ok(self.seen.some(item => item.block.includes('The verified result of this program')));
+    assert.ok(self.seen.every(item => !(item.block.includes('verified result') && item.block.includes('answer of this call'))));
     for (const example of examples.filter(item => item.partition !== 'train'))
       assert.ok(!self.seen.some(item => item.opening.includes(`"${example.input.value}"`)), `${example.partition} root ${example.input.value} was never run`);
     // Recorded rows hold the plain task: training removes the reference, so the student learns to act without it.
     // (The leaking root's own later turns hold its echoing reply in their assistant history, never the reference.)
     assert.ok(data.turns.length > 0 && data.turns.every(turn => turn.root === train[0].id ||
-      !JSON.stringify(turn.messages).includes(PRIVILEGED_MARKER)));
+      !JSON.stringify(turn.messages).includes(PRIVILEGED_HEADER)));
     assert.ok(data.turns.every(turn => turn.messages.every(message => message.role === 'assistant' ||
-      !JSON.stringify(message).includes(PRIVILEGED_MARKER))));
+      !JSON.stringify(message).includes(PRIVILEGED_HEADER))));
     assert.ok(data.turns.every(turn => turn.teacher === teacherId && turn.partition === 'train'));
     // Oracle-verified roots are targets; the root whose reply echoed the reference is not.
     const rows = new Set(data.trainRows.map(turn => turn.root));
@@ -105,14 +115,23 @@ test('existing verified teacher data is reused before the self teacher runs a ro
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('the privileged block is appended to the first user message without mutating the request', () => {
-  const request = { messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'task' }, { role: 'user', content: 'later' }], tools: [], seed: null, max_tokens: null };
-  const text = privilegedText({ schema: PRIVILEGED_SCHEMA, function: 'main.nl', input: {}, result: 'grant', calls: [{ function: 'riskLevel', value: 'low' }] });
-  assert.equal(text, `${PRIVILEGED_MARKER}: riskLevel returns "low"; the task's final result is "grant". Follow the instructions step by step so that each step reaches its value.`);
+test('the shared crisp policy selects facts per invocation and the block is a system turn after the leading one', () => {
+  const facts = [{ id: 'child_value:0', kind: 'child_value', text: 'The verified answer of this call is "low".', match: ['Rate the risk'] },
+    { id: 'decisive:0', kind: 'decisive', text: 'Decisive evidence: total(order) returns 9500' },
+    { id: 'expected_result:0', kind: 'expected_result', text: 'The verified result of this program is "grant".' }];
+  assert.deepEqual(selectFacts(facts, { role: 'root', text: 'Decide an access request.' }).map(fact => fact.id), ['expected_result:0', 'decisive:0']);
+  assert.deepEqual(selectFacts(facts, { role: 'child', text: 'Rate the risk of the request.' }).map(fact => fact.id), ['child_value:0']);
+  assert.deepEqual(selectFacts(facts, { role: 'child', text: 'Apply in order' }), []);
+  // Two different verified values match one child: no answer is given (ambiguous).
+  assert.deepEqual(selectFacts([...facts, { ...facts[0], id: 'child_value:1', text: 'The verified answer of this call is "high".' }],
+    { role: 'child', text: 'Rate the risk' }), []);
+  const text = privilegedText(selectFacts(facts, { role: 'root', text: '' }));
+  assert.equal(text, `${PRIVILEGED_HEADER}\n\nThe verified result of this program is "grant".\n\nDecisive evidence: total(order) returns 9500`);
+  assert.equal(privilegedText([]), null);
+  const request = { messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'task' }], tools: [], seed: null, max_tokens: null };
   const changed = withPrivileged(request, text);
-  assert.equal(changed.messages[1].content, `task\n\n${text}`);
-  assert.equal(changed.messages[2].content, 'later');
-  assert.equal(request.messages[1].content, 'task');
-  const parts = withPrivileged({ ...request, messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }, text);
-  assert.deepEqual(parts.messages[0].content.at(-1), { type: 'text', text: `\n\n${text}` });
+  assert.deepEqual(changed.messages.map(message => message.role), ['system', 'system', 'user']);
+  assert.equal(changed.messages[1].content, text);
+  assert.equal(request.messages.length, 2);
+  assert.deepEqual(withPrivileged({ ...request, messages: [{ role: 'user', content: 'x' }] }, text).messages[0], { role: 'system', content: text });
 });
