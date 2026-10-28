@@ -206,9 +206,53 @@ def content_key(row) -> str:
     return digest.hexdigest()
 
 
-def candidates(config, policy, decisions, trajectories, held):
-    """Eligible samples with features, tier and category; omissions by reason."""
+def carved(groups, carve) -> bool:
+    """The policy's permanent held slice: a source group is held when sha256(salt + group) falls below the declared
+    fraction (deterministic, so every later version holds the same groups)."""
+    if not carve:
+        return False
+    limit = int(carve['fraction'] * 2 ** 32)
+    return any(int(hashlib.sha256((carve['salt'] + g).encode()).hexdigest()[:8], 16) < limit for g in groups)
+
+
+def carve_groups(config, policy) -> set:
+    """Source groups of the permanent held slice, closed over shared groups. Only teacher-twin rows are carved, and
+    never a group that any render train row (possibly trained in an earlier version) carries."""
+    carve = policy.get('held_carve')
+    if not carve:
+        return set()
+    render_groups = set()
+    for render in config['renders']:
+        for _, path in graph_files(render, 'train'):
+            for _, raw in iter_lines(path):
+                render_groups.update(json.loads(raw).get('source_groups') or [])
+    rows = []
+    for item in config.get('teacher_graphs', []):
+        for _, raw in iter_lines(REPO / item):
+            rows.append(frozenset(json.loads(raw).get('source_groups') or ()))
+    chosen = {g for groups in rows if carved(groups, carve) for g in groups}
+    while True:  # closure: a row touching a held group is held whole
+        grown = {g for groups in rows if groups & chosen for g in groups}
+        if grown <= chosen:
+            break
+        chosen |= grown
+    blocked = {g for g in chosen if g in render_groups}
+    if blocked:  # a component touching render train rows cannot become held
+        component = set(blocked)
+        while True:
+            grown = {g for groups in rows if groups & component for g in groups}
+            if grown <= component:
+                break
+            component |= grown
+        chosen -= component
+    return chosen
+
+
+def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset()):
+    """Eligible samples with features, tier and category; omissions by reason. Rows of carved held groups go to
+    ``carve_out`` (held, up to the declared row cap; beyond it they are dropped, never trained)."""
     out, omitted, covered, seen = [], collections.Counter(), set(), set()
+    carve = policy.get('held_carve')
     feature_cache = {}
     inputs = [('render', view, path) for render in config['renders'] for view, path in graph_files(render, 'train')]
     inputs += [('teacher', 'teacher-turn', REPO / p) for p in config.get('teacher_graphs', [])]
@@ -220,6 +264,13 @@ def candidates(config, policy, decisions, trajectories, held):
                 continue
             if set(row.get('source_groups') or ()) & held:
                 omitted['shares a held/dev source group'] += 1
+                continue
+            if kind == 'teacher' and set(row.get('source_groups') or ()) & carve_set:
+                if carve_out is not None and len(carve_out) < carve['max_rows']:
+                    carve_out.append((str(path), number))
+                    omitted['carved into the permanent held slice'] += 1
+                else:
+                    omitted['carved held group beyond the held row cap (not trained)'] += 1
                 continue
             conversion = row.get('conversion') or {}
             if kind == 'teacher':
@@ -363,7 +414,8 @@ def main(argv=None):
         for _, raw in iter_lines(path):
             held.update(json.loads(raw).get('source_groups') or [])
 
-    cands, omitted = candidates(config, policy, decisions, trajectories, held)
+    carve_out, carve_set = [], carve_groups(config, policy)
+    cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
 
@@ -458,6 +510,20 @@ def main(argv=None):
             if row.get('split') == 'test' and key not in held_seen:
                 held_seen.add(key)
                 held_writer.write(raw)
+    carve_lines = collections.defaultdict(set)
+    for path, number in carve_out:
+        carve_lines[path].add(number)
+    for path, numbers in carve_lines.items():
+        for number, raw in iter_lines(Path(path)):
+            if number in numbers:
+                row = json.loads(raw)
+                row['split'] = 'test'  # the permanent held slice (policy held_carve); its groups never train
+                row.setdefault('conversion', {})['held_carve'] = {'policy': policy['id'],
+                                                                  'rule': 'sha256(salt+source_group) < fraction'}
+                key = content_key(row)
+                if key not in held_seen:
+                    held_seen.add(key)
+                    held_writer.write(json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode())
     held_output = held_writer.close()
 
     priority = {int(k): v for k, v in policy['tier_training_priority'].items()}

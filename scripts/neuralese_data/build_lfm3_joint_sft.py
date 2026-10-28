@@ -57,14 +57,17 @@ def teacher_twins():
             yield receipt_path.parent, receipt
 
 
+def teacher_score_file(source: str) -> Path:
+    return SCORES / 'teacher-twins' / f'{hashlib.sha1(source.encode()).hexdigest()[:16]}.jsonl.zst'
+
+
 def score_teachers(args):
-    sources = sorted({receipt['source']['path'] for _, receipt in teacher_twins()})
-    out = score_file(sources, 'teacher-twins')
-    if out.exists():
-        print(json.dumps({'exists': str(out)}))
-        return
-    run([PY, 'scripts/neuralese_data/idiom_scores.py', '--kind', 'trajectories', '--corpus', 'lfm3-teacher-twins',
-         '--out', str(out), '--source', *sources])
+    """One small score file per twin source (a preempted unit loses at most one source)."""
+    for source in sorted({receipt['source']['path'] for _, receipt in teacher_twins()}):
+        out = teacher_score_file(source)
+        if not out.exists():
+            run([PY, 'scripts/neuralese_data/idiom_scores.py', '--kind', 'trajectories', '--corpus',
+                 'lfm3-teacher-twins', '--out', str(out), '--source', source])
 
 
 def render_inputs():
@@ -90,14 +93,10 @@ def build(args):
     out = (REPO / args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     renders, scores, waiting = render_inputs()
-    twins = list(teacher_twins())
-    teacher_sources = sorted({receipt['source']['path'] for _, receipt in twins})
-    teacher_scores = score_file(teacher_sources, 'teacher-twins')
-    teacher_graphs, teacher_test = [], []
-    if twins and teacher_scores.exists():
-        scores.append(str(teacher_scores))
-        teacher_graphs = [str((d / 'train/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
-        teacher_test = [str((d / 'test/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
+    twins = [(d, r) for d, r in teacher_twins() if teacher_score_file(r['source']['path']).exists()]
+    scores += sorted({str(teacher_score_file(r['source']['path'])) for _, r in twins})
+    teacher_graphs = [str((d / 'train/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
+    teacher_test = [str((d / 'test/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
     communication = []
     if COMMUNICATION.exists():
         listed = json.loads(COMMUNICATION.read_text())

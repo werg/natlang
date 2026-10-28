@@ -146,7 +146,8 @@
   "deep_or_branching_or_reducer": "deep_or_branching or reducer"
  },
  "caps": {
-  "near_duplicate_per_tier": 4, "near_duplicate_unit": "source trajectories (tasks) per cluster per tier; samples of one admitted trajectory share its slot",
+  "near_duplicate_per_tier": 4,
+  "near_duplicate_unit": "source trajectories (tasks) per cluster per tier; samples of one admitted trajectory share its slot",
   "family_share_per_tier": 0.15,
   "reducer_family_share_per_tier": 0.1,
   "family_cap_floor_rows": 64,
@@ -186,5 +187,11 @@
   "broad": 15
  },
  "category_caps_rule": "per tier, a category keeps at most ceil(share/100 * rows of that tier after the cluster and family caps) rows (highest fit first): the 35/20/15/15/15 idiom split is a cap, not a target (owner, LFM3_COMMITTED_DECISIONS_20261028.md #4); no rebalancing runs",
- "learner_data": "pre-tokenized native graph cohort files (token ids, target weights) plus the exact packed-capacity geometry sidecar built on DGX (build_native_packed_geometry.py); learners do no tokenization (decision #9)"
+ "learner_data": "pre-tokenized native graph cohort files (token ids, target weights) plus the exact packed-capacity geometry sidecar built on DGX (build_native_packed_geometry.py); learners do no tokenization (decision #9)",
+ "held_carve": {
+  "fraction": 0.015,
+  "max_rows": 1500,
+  "salt": "lfm3-joint-sft-held-v1:",
+  "rule": "teacher-twin rows only: a source group is held when sha256(salt+group) < fraction, closed over groups shared by teacher rows; a component that touches any render train group (possibly trained in an earlier version) is not carved; carved rows are held (split test, conversion.held_carve) in every version; beyond max_rows they are dropped, never trained"
+ }
 }
