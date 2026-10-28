@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-verified-positive-native-graphs-20261015-v19-mellum-prefix-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/qwen-verified-positive-native-graphs-20261015-v19-mellum-prefix",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3208,
+      "sha256": "281686b0f9aec384d8a6f2890cb45b85740f34bcb0ca52067f3e515518e03e0f"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 3017398,
+      "sha256": "b4ffe1628018fb683a917559e9ad1d40a61b9418c4712fc404879a602068f9de"
+    }
+  ],
+  "bytes": 3020619
+}

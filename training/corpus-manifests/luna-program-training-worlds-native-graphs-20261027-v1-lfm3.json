@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-program-training-worlds-native-graphs-20261027-v1-lfm3",
+  "owner": "dgx",
+  "path": "runs/lfm3-teacher-graphs/luna-program-training-worlds-native-graphs-20261027-v1",
+  "files": [
+    {
+      "path": "lfm3/receipt.json",
+      "bytes": 3220,
+      "sha256": "28a522286032e2475b911946175f350e31432a3899467e851c33337383854464"
+    },
+    {
+      "path": "lfm3/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm3/train/native-graphs.jsonl.zst",
+      "bytes": 600607,
+      "sha256": "0baf80699b8282d50e4eda520d1dbf6d6dd60d96c2fcbef7a0fa830b681f4db4"
+    }
+  ],
+  "bytes": 603840
+}
