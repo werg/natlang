@@ -133,10 +133,18 @@ def test_two_http_learners_train_and_merge(tmp_path):
         settings = DilocoSettings(coordinator_url=f"http://127.0.0.1:{port}", run_id="unit", workers=2, worker_id=worker, local_steps=8, wire_dtype="fp32", heartbeat_seconds=0.05)
         surface = TensorSurface.from_module(model)
         learner = DilocoLearner(settings, surface=surface, identity={"objective": "toy"}, output=tmp_path / f"w{worker}", transport=Transport(settings.coordinator_url, TOKEN, 5))
-        learner.start()
+        learners.append((model, torch.optim.AdamW(model.parameters(), lr=1e-2), learner))
+    # Start barrier: learner 0 boots first and waits until its peer has registered.
+    starter = threading.Thread(target=learners[0][2].start)
+    starter.start()
+    time.sleep(0.5)
+    assert starter.is_alive()
+    learners[1][2].start()
+    starter.join(timeout=30)
+    assert not starter.is_alive() and learners[0][2].start_wait["all"] and learners[0][2].start_wait["seconds"] >= 0.4
+    for model, _, _ in learners:
         for name, param in model.named_parameters():
             assert torch.equal(param, dict(seed.named_parameters())[name])
-        learners.append((model, torch.optim.AdamW(model.parameters(), lr=1e-2), learner))
     shard = [i for i in range(len(inputs))]
     for step in range(1, 81):
         for worker, (model, optimizer, learner) in enumerate(learners):
@@ -155,6 +163,9 @@ def test_two_http_learners_train_and_merge(tmp_path):
     for thread in threads:
         thread.join()
     assert finished == [True, True]
+    status = Transport(f"http://127.0.0.1:{port}", TOKEN, 5).json("GET", "/v1/status")
+    assert set(status["registered"]) == {"0", "1"} and status["recent_rounds"]
+    assert all({"steps", "tokens", "staleness"} <= set(w) for r in status["recent_rounds"] for w in r["windows"].values())
     state = learners[0][2].state_dict()
     for _, _, learner in learners:
         learner.close()
@@ -330,3 +341,93 @@ def test_export_global_from_a_running_coordinator_equals_the_volume_read(tmp_pat
         assert all(torch.equal(a[n], b[n]) for n in a)
         assert ea["fragment_versions"] == eb["fragment_versions"] and ea["source"] == eb["source"]
     assert not list((tmp_path / "dl").iterdir())  # downloaded fragments are not kept
+
+
+def test_file_store_streams_resumes_verifies_and_serves_files(tmp_path):
+    import hashlib
+    import os
+    import tracemalloc
+
+    from natlang_neuralese.train.diloco.worker import RemoteError
+    from natlang_neuralese.train.native_diloco import uploaded
+
+    _init(tmp_path / "coord", _model())
+    port = _free_port()
+    stop = threading.Event()
+    threading.Thread(target=serve_coordinator, args=(tmp_path / "coord", "127.0.0.1", port, TOKEN),
+                     kwargs={"stop": stop}, daemon=True).start()
+    transport = Transport(f"http://127.0.0.1:{port}", TOKEN, 60)
+    deadline = time.time() + 10
+    while True:
+        try:
+            transport.json("GET", "/v1/status")
+            break
+        except OSError:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.05)
+    try:
+        big = tmp_path / "learner-0.pt"
+        with big.open("wb") as handle:  # 256 MiB, written in 4 MiB blocks
+            for index in range(64):
+                handle.write(hashlib.sha256(str(index).encode()).digest() * ((4 << 20) // 32))
+        tracemalloc.start()
+        # 100 MiB chunks: the upload continues the stored partial file twice before committing.
+        result = transport.upload_file(big, "learner-0.pt", chunk_bytes=100 << 20)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        assert result["status"] == "committed" and result["bytes"] == big.stat().st_size
+        assert peak < 64 << 20, peak  # streamed both ways: no buffer proportional to the 256 MiB file
+        assert transport.upload_file(big, "learner-0.pt")["status"] == "present"
+        stored = tmp_path / "coord" / "uploads" / "learner-0.pt"
+        expected = hashlib.sha256(big.read_bytes()).hexdigest()
+        assert hashlib.sha256(stored.read_bytes()).hexdigest() == expected
+        back = transport.download_file("learner-0.pt", tmp_path / "back" / "learner-0.pt")
+        assert back["sha256"] == expected and back["bytes"] == big.stat().st_size
+        # A wrong declared sha256 is refused and nothing is committed under that name.
+        small = tmp_path / "small.bin"
+        small.write_bytes(os.urandom(1000))
+        with pytest.raises(RemoteError) as refused:
+            with small.open("rb") as handle:
+                transport.request("PUT", "/v1/files/other.bin", file=handle, headers={
+                    "Content-Length": "1000", "X-Sha256": "0" * 64, "X-Offset": "0", "X-Total-Bytes": "1000"})
+        assert refused.value.status == 400 and not (tmp_path / "coord" / "uploads" / "other.bin").exists()
+        with pytest.raises(ValueError):  # a committed name is immutable
+            transport.upload_file(small, "learner-0.pt")
+        with pytest.raises(RemoteError):
+            transport.download_file("missing.pt", tmp_path / "missing.pt")
+        assert uploaded(tmp_path / "coord", "learner-0.pt") == stored
+    finally:
+        stop.set()
+
+
+def test_launcher_creates_learners_concurrently_and_reports_failures(monkeypatch):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "coreweave"))
+    import diloco as launcher
+
+    active, peak, lock = [0], [0], threading.Lock()
+
+    def fake_launch(job, dry_run, wait, price, bundle_file, secrets=None):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.3)
+        with lock:
+            active[0] -= 1
+        if job["id"].endswith("-2") and fake_launch.fail:
+            raise launcher.cwctl.ControllerError("capacity")
+        return {"sandbox_id": job["id"], "status": "running", "push": {}}
+
+    monkeypatch.setattr(launcher, "learner_job", lambda run, worker, url: {"id": f"learner-{worker}"})
+    monkeypatch.setattr(launcher.cwctl, "launch", fake_launch)
+    run = {"settings": {"workers": 4}, "learners": {"bundle_file": "b.json"}}
+    fake_launch.fail = False
+    started = []
+    assert launcher.launch_learners(run, "https://c", "t" * 32, b"g", started) == [f"learner-{w}" for w in range(4)]
+    assert peak[0] >= 2 and sorted(started) == [f"learner-{w}" for w in range(4)]
+    fake_launch.fail = True
+    started = []
+    with pytest.raises(launcher.cwctl.ControllerError):
+        launcher.launch_learners(run, "https://c", "t" * 32, b"g", started)
+    assert len(started) == 3  # the caller stops every sandbox that did start

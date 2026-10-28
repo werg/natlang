@@ -19,6 +19,7 @@ Root layout::
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import io
 import json
@@ -39,7 +40,7 @@ from safetensors import safe_open
 from safetensors.torch import save
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
-from natlang_neuralese.common.jsonio import write_json_durable
+from natlang_neuralese.common.jsonio import write_bytes_durable, write_json_durable
 from natlang_neuralese.train.diloco.protocol import (
     PROTOCOL,
     Fragment,
@@ -293,6 +294,7 @@ class Coordinator:
                 "session": session,
                 "expires": time.time() + self.manifest["lease_seconds"],
             }
+            self.progress.setdefault("registered", {}).setdefault(str(worker), time.time())
             self._write_progress()
         with self.lock:
             return {**self.status(), "sequences": self._sequences(worker)}
@@ -313,6 +315,9 @@ class Coordinator:
         return result
 
     def heartbeat(self, worker: int, session: str, steps: int, tokens: int, metrics: dict | None = None) -> dict:
+        if isinstance(metrics, dict) and isinstance(metrics.get("start_wait"), dict):
+            with self.progress_lock:
+                self.progress.setdefault("start_waits", {})[str(worker)] = metrics["start_wait"]
         with self.progress_lock:
             self._lease_valid(worker, session)
             if type(steps) is not int or type(tokens) is not int or steps < 0 or tokens < 0:
@@ -340,6 +345,11 @@ class Coordinator:
                 "versions": list(self.published_versions),
                 "live_workers": sum(x["expires"] >= time.time() for x in self.progress["leases"].values()),
                 "worker_progress": {k: dict(v) for k, v in self.progress["workers"].items()},
+                "registered": dict(self.progress.get("registered", {})),
+                "start_waits": dict(self.progress.get("start_waits", {})),
+                "min_quorum": self.manifest["min_quorum"],
+                "workers": self.manifest["workers"],
+                "recent_rounds": list(self.progress.get("rounds", []))[-8:],
                 **({"outer_schedule": self.manifest["outer_schedule"],
                     "outer_next": [outer_entry(self.manifest, v)[1] for v in sorted(set(self.published_versions))]}
                    if "outer_schedule" in self.manifest else {}),
@@ -458,7 +468,9 @@ class Coordinator:
             committed["ema"] = torch.lerp(data["ema"], theta, weight)
         # The authoritative fragment with its last_seq is the commit record;
         # proposals replayed after a crash are discarded by the ledger above.
-        record = {"version": str(version + 1), "last_seq": json.dumps(last_seq)}
+        windows = {item["worker"]: {"steps": int(item["steps"]), "tokens": int(item["tokens"]), "staleness": age}
+                   for _, item, age in proposals}
+        record = {"version": str(version + 1), "last_seq": json.dumps(last_seq), "windows": json.dumps(windows)}
         if "outer_schedule" in self.manifest:
             record["outer"] = json.dumps({"entry": entry_index, **entry}, sort_keys=True)
         save_tensors(path, committed, metadata=record)
@@ -472,6 +484,13 @@ class Coordinator:
             file.unlink(missing_ok=True)
         with self.progress_lock:
             self.progress["merges"] += 1
+            # One record per (fragment, version); fragment 0 stands for the round in the rolling view.
+            if index == 0:
+                steps = [w["steps"] for w in windows.values()]
+                rounds = self.progress.setdefault("rounds", [])
+                rounds.append({"version": version + 1, "at": time.time(), "final": final, "windows": windows,
+                               "step_imbalance": max(steps) / max(1, min(steps))})
+                del rounds[:-256]
             self._write_progress()
 
     def tick(self) -> None:
@@ -577,11 +596,109 @@ def remote_global(transport, key: str, workdir: str | Path) -> tuple[dict[str, t
     return tensors, {**info, **({"ema": manifest["ema"]} if key == "ema" else {})}, manifest
 
 
+FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+class FileStore:
+    """Named files beside a coordinator run (ROOT/uploads): continuation checkpoints and learner full states move
+    sandbox to sandbox through the coordinator instead of through the workstation uplink.
+
+    An upload streams into ``uploads/.partial/<name>.<sha256>`` (bounded memory) and may continue a partial file at
+    its current size (``X-Offset``), so an interrupted transfer resumes. At the declared total size the partial file
+    is hashed; a mismatch deletes it, a match is fsynced and renamed to ``uploads/<name>`` with a ``<name>.sha256``
+    sidecar. A committed name is immutable: the same content again is ``present``, other content is a conflict."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root) / "uploads"
+        self.partial = self.root / ".partial"
+        self.locks: dict[str, threading.Lock] = {}
+        self.guard = threading.Lock()
+
+    @staticmethod
+    def check(name: str, sha256: str | None = None) -> None:
+        if not FILE_NAME.fullmatch(name) or name.endswith(".sha256"):
+            raise ValueError("file names are 1-128 of [A-Za-z0-9._-], starting alphanumeric, not ending .sha256")
+        if sha256 is not None and not HEX64.fullmatch(sha256):
+            raise ValueError("X-Sha256 must be 64 lower-case hex digits")
+
+    def lock(self, name: str) -> threading.Lock:
+        with self.guard:
+            return self.locks.setdefault(name, threading.Lock())
+
+    def committed(self, name: str) -> str | None:
+        sidecar = self.root / f"{name}.sha256"
+        return sidecar.read_text().strip() if sidecar.is_file() and (self.root / name).is_file() else None
+
+    def state(self, name: str, sha256: str) -> dict:
+        self.check(name, sha256)
+        done = self.committed(name)
+        if done is not None:
+            return {"status": "present" if done == sha256 else "conflict", "sha256": done,
+                    "bytes": (self.root / name).stat().st_size}
+        part = self.partial / f"{name}.{sha256}"
+        return {"status": "partial", "bytes": part.stat().st_size if part.exists() else 0}
+
+    def receive(self, name: str, sha256: str, offset: int, total: int, length: int, read) -> dict:
+        self.check(name, sha256)
+        if not (0 <= offset and 0 <= length and offset + length <= total):
+            raise ValueError("X-Offset + Content-Length exceeds X-Total-Bytes")
+        lock = self.lock(name)
+        if not lock.acquire(blocking=False):
+            raise Conflict("another upload of this name is in progress")
+        try:
+            done = self.committed(name)
+            if done is not None:
+                if done != sha256:
+                    raise Conflict("a different file is already committed under this name")
+                return {"status": "present", "sha256": done, "bytes": (self.root / name).stat().st_size}
+            self.partial.mkdir(parents=True, exist_ok=True)
+            part = self.partial / f"{name}.{sha256}"
+            have = part.stat().st_size if part.exists() else 0
+            if offset != have:
+                raise Conflict("upload offset does not match the partial file", offset=have)
+            with part.open("ab") as handle:
+                remaining = length
+                while remaining:
+                    block = read(min(4 << 20, remaining))
+                    if not block:
+                        break  # a dropped client leaves a resumable prefix
+                    handle.write(block)
+                    remaining -= len(block)
+                handle.flush()
+                os.fsync(handle.fileno())
+            size = part.stat().st_size
+            if remaining:
+                raise ValueError(f"truncated upload: {size} of {total} bytes kept, resume at X-Offset {size}")
+            if size < total:
+                return {"status": "partial", "bytes": size}
+            digest = hashlib.sha256()
+            with part.open("rb") as handle:
+                for block in iter(lambda: handle.read(8 << 20), b""):
+                    digest.update(block)
+            if digest.hexdigest() != sha256:
+                part.unlink()
+                raise ValueError("sha256 mismatch: the upload was discarded")
+            os.replace(part, self.root / name)
+            write_bytes_durable(self.root / f"{name}.sha256", (sha256 + "\n").encode())
+            return {"status": "committed", "sha256": sha256, "bytes": size}
+        finally:
+            lock.release()
+
+    def open(self, name: str):
+        self.check(name)
+        sha256 = self.committed(name)
+        if sha256 is None:
+            raise FileNotFoundError(f"no committed file {name}")
+        return (self.root / name).open("rb"), sha256
+
+
 def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, stop: threading.Event | None = None) -> None:
     """Serve on a private host, behind the sandbox gateway or an authenticated TLS proxy."""
     if not token or len(token) < 24:
         raise ValueError(f"Set {TOKEN_ENV} to a random secret (>=24 chars)")
     coordinator = Coordinator(root)
+    files = FileStore(coordinator.root)
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -610,7 +727,7 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        def _stream(self, file, version: int | None = None) -> None:
+        def _stream(self, file, version: int | None = None, sha256: str | None = None) -> None:
             with file:
                 size = (file.getbuffer().nbytes if isinstance(file, io.BytesIO)
                         else os.fstat(file.fileno()).st_size)
@@ -620,6 +737,8 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                 self.send_header("Cache-Control", "no-store")
                 if version is not None:
                     self.send_header("X-Fragment-Version", str(version))
+                if sha256 is not None:
+                    self.send_header("X-Sha256", sha256)
                 self.end_headers()
                 for chunk in iter(lambda: file.read(4 << 20), b""):
                     self.wfile.write(chunk)
@@ -671,6 +790,18 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
                     self._json(200, coordinator.manifest)
                 elif parsed.path == "/v1/status":
                     self._json(200, coordinator.status())
+                elif parsed.path.startswith("/v1/files/"):
+                    name = parsed.path[len("/v1/files/"):]
+                    query = parse_qs(parsed.query)
+                    if "sha256" in query:  # upload state: committed, conflict, or the partial size to resume at
+                        self._json(200, files.state(name, query["sha256"][0]))
+                    else:
+                        try:
+                            file, sha256 = files.open(name)
+                        except FileNotFoundError as exc:
+                            self._json(404, {"error": str(exc)})
+                            return
+                        self._stream(file, sha256=sha256)
                 elif parsed.path == "/v1/seed":
                     self._stream((coordinator.root / "seed.safetensors").open("rb"))
                 elif re.fullmatch(r"/v1/ema/[0-9]+", parsed.path):
@@ -740,6 +871,25 @@ def serve_coordinator(root: str | Path, host: str, port: int, token: str, *, sto
             except Conflict as exc:
                 self._json(409, {"error": str(exc), **exc.detail})
             except (KeyError, TypeError, ValueError, OSError) as exc:
+                self._json(400, {"error": str(exc)})
+
+        def do_PUT(self) -> None:
+            if not self._auth():
+                return
+            parsed = urlsplit(self.path)
+            try:
+                if not parsed.path.startswith("/v1/files/"):
+                    self._json(404, {"error": "Unknown endpoint"})
+                    return
+                length = int(self.headers.get("Content-Length", "-1"))
+                result = files.receive(parsed.path[len("/v1/files/"):], self._header("X-Sha256"),
+                                       int(self.headers.get("X-Offset", "0")), int(self._header("X-Total-Bytes")),
+                                       length, self.rfile.read)
+                self._json(200, result)
+            except Conflict as exc:
+                self._json(409, {"error": str(exc), **exc.detail})
+            except (KeyError, TypeError, ValueError, OSError) as exc:
+                self.close_connection = True  # the unread rest of a refused body must not be parsed as a request
                 self._json(400, {"error": str(exc)})
 
     server = ThreadingHTTPServer((host, port), Handler)

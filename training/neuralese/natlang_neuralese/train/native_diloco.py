@@ -139,8 +139,22 @@ def merged_exposure(parent_counts, learner_counts):
     return merged
 
 
+def uploaded(root, name):
+    """ROOT/uploads/NAME after re-verifying the sha256 the file store committed for it."""
+    from .diloco.coordinator import FileStore
+    store = FileStore(Path(root))
+    store.check(name)
+    expected = store.committed(name)
+    if expected is None or sha256_file_hex_cached(store.root / name) != expected:
+        raise ValueError(f'{name}: no verified upload in {store.root}')
+    return store.root / name
+
+
 def export(args):
     from .checkpoint_policy import CheckpointPolicy
+    args.learner_checkpoint = [*args.learner_checkpoint, *(uploaded(args.root, name) for name in args.learner_upload)]
+    if not args.learner_checkpoint:
+        raise ValueError('export needs --learner-checkpoint or --learner-upload for every learner')
     from .native_continuation import collect_sft_progress
     from ..model.native_model import model_state
 
@@ -274,7 +288,9 @@ def main(argv=None):
     finish.add_argument('--root', type=Path, required=True)
     finish.add_argument('--parent', type=Path, required=True)
     finish.add_argument('--base', type=Path)
-    finish.add_argument('--learner-checkpoint', type=Path, action='append', required=True)
+    finish.add_argument('--learner-checkpoint', type=Path, action='append', default=[])
+    finish.add_argument('--learner-upload', action='append', default=[],
+                        help='a learner full state uploaded to this coordinator (ROOT/uploads/NAME; sha256 re-verified)')
     finish.add_argument('--out', type=Path, required=True)
     finish.add_argument('--ema-out',
                         help='model-only checkpoint of the coordinator EMA of global versions (default: <out>-ema '
