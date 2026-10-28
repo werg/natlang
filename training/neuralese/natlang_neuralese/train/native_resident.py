@@ -90,7 +90,7 @@ def _source_witness(source, package=None):
     if source.kind == 'manifest':
         return [w for child in source.children for w in _source_witness(child, package)]
     package = Path(package or Path(__file__).resolve().parents[1])
-    names = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+    names = ('data/native_sources.py', 'data/native_graph_schema.py', 'data/decision_graph.py', 'model/native_graph_plan.py',
              'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
     key = {'source_sha256': source.file_sha256, 'tokenizer': source.tokenizer_fingerprint,
            'split': source.required_split, 'policy_sha256': digest({n: sha256_file_hex(package/n) for n in names}),

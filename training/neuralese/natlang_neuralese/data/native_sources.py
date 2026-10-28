@@ -49,7 +49,7 @@ class NativeGraphSource:
         self.file_sha256 = sha256_file_hex_cached(self.path)
         package = Path(__file__).resolve().parents[1]
         policy = canonical_json_sha256_hex({name: sha256_file_hex_cached(package / name) for name in (
-            'data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+            'data/native_sources.py', 'data/native_graph_schema.py', 'data/decision_graph.py', 'model/native_graph_plan.py',
             'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')})
         key = {'source_sha256': self.file_sha256, 'tokenizer': tokenizer_fingerprint,
                'split': required_split, 'policy_sha256': policy,
@@ -295,6 +295,7 @@ def _require_communication_graph(example, view, role_ids):
 def _row_bindings(examples):
     """Exact semantic identities needed to prove an append-only data continuation."""
     from ..model.native_graph_plan import invocation_dict
+    from dataclasses import asdict
     result = {}
     for item in examples:
         value = {'id': item.id, 'groups': item.source_groups, 'split': item.split,
@@ -306,6 +307,8 @@ def _row_bindings(examples):
                             'imports': list(invocation_dict(node)['imports']),
                             'producing': node.producing, 'logical_producing': node.logical_producing}
                            for node in item.plan.invocations]}
+        if getattr(item, 'decisions', ()):
+            value['decisions'] = [asdict(decision) for decision in item.decisions]
         result[item.id] = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return result
 

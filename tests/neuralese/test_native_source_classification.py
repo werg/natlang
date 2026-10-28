@@ -96,6 +96,25 @@ def test_migration_reuses_bindings_writes_new_cache_and_never_compiles(tmp_path,
     assert again == part and Path(part['new_index']['path']).read_bytes() == before
 
 
+def test_ordinary_topology_proof_cannot_skip_changed_row_binding_law(tmp_path, monkeypatch):
+    source, old, old_package, package, _ = fixture(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match='changed row-binding law'):
+        migration.migrate_index(source, old, old_package=old_package, new_package=package,
+                                ordinary_partition={})
+
+
+def test_seven_file_legacy_index_migrates_only_through_source_row_validation(tmp_path, monkeypatch):
+    source, old, old_package, package, current = fixture(tmp_path, monkeypatch)
+    value = row_index.load(old)
+    value['key']['policy_sha256'] = migration.source_policy(old_package, migration.LEGACY_POLICY_FILES)
+    row_index.save(old, value)
+    part = migration.migrate_index(source, old, old_package=old_package, new_package=package)
+    assert set(part['old_policy']) == set(migration.LEGACY_POLICY_FILES)
+    result = row_index.load(Path(part['new_index']['path']))
+    assert result['key']['policy_sha256'] == migration.source_policy(package)
+    assert result['entries'][0]['binding'] == current.entries[0]['binding']
+
+
 @pytest.mark.parametrize('change', ['mask', 'id', 'old-key', 'old-binding'])
 def test_migration_rejects_changed_identity_before_writing(tmp_path, monkeypatch, change):
     source, old, old_package, package, current = fixture(tmp_path, monkeypatch)

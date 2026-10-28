@@ -83,10 +83,12 @@ def indexed_graph_metadata(row, *, tokenizer_fingerprint):
     """
     from types import SimpleNamespace
     nodes, weights, external = _graph_fields(row, tokenizer_fingerprint=tokenizer_fingerprint)
+    from .decision_graph import parse_decisions
+    decisions = parse_decisions(row, nodes, weights)
     plan = SimpleNamespace(invocations=tuple(nodes), external_names=tuple(external),
                            external_sizes=tuple(value['token_count'] for value in external.values()))
     return NativeGraphExample(row['id'], row['split'], tuple(row['source_groups']),
-                              tokenizer_fingerprint, plan, weights, external)
+                              tokenizer_fingerprint, plan, weights, external, decisions)
 
 
 def communication_classification(example):

@@ -73,7 +73,7 @@ class NativeSourcePreparation:
         from ..common import row_index
         from ..common.hashing import canonical_json_sha256_hex
         package = Path(__file__).resolve().parents[1]
-        names = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+        names = ('data/native_sources.py', 'data/native_graph_schema.py', 'data/decision_graph.py', 'model/native_graph_plan.py',
                  'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
         policy = canonical_json_sha256_hex({name: sha256_file_hex_cached(package/name) for name in names})
         key = {'source_sha256': source_sha256, 'tokenizer': self.tokenizer_fingerprint,

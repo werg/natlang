@@ -38,6 +38,42 @@ def decision_row(*, label=2, stop_gradient=False, extra_nodes=(), producer=True)
                            'prompt_tokens': len(PROMPT), 'label': label, 'label_source': 'exact-oracle'}]}
 
 
+def test_decision_labels_bind_content_and_source_row_identity():
+    from natlang_neuralese.data.native_sources import _row_bindings
+    from natlang_neuralese.data.native_graph_schema import indexed_graph_metadata
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import graph_content_sha256
+    first = decision_row(label=0)
+    second = decision_row(label=1)
+    assert first['nodes'] == second['nodes']
+    assert graph_content_sha256(first) != graph_content_sha256(second)
+    parsed_first = parse_graph(first, tokenizer_fingerprint=FINGERPRINT)
+    parsed_second = parse_graph(second, tokenizer_fingerprint=FINGERPRINT)
+    assert _row_bindings([parsed_first]) != _row_bindings([parsed_second])
+    assert _row_bindings([indexed_graph_metadata(first, tokenizer_fingerprint=FINGERPRINT)]) == _row_bindings([parsed_first])
+    changed = copy.deepcopy(first)
+    changed['external_states'] = {'z': {'id': 'nzs1_' + 'a' * 52, 'token_count': 2}}
+    assert graph_content_sha256(first) != graph_content_sha256(changed)
+
+
+def test_ordinary_row_keeps_historical_binding():
+    import hashlib
+    import json
+    from natlang_neuralese.data.native_sources import _row_bindings
+    from natlang_neuralese.model.native_graph_plan import invocation_dict
+    row = decision_row()
+    row.pop('decisions')
+    parsed = parse_graph(row, tokenizer_fingerprint=FINGERPRINT)
+    old = {'id': parsed.id, 'groups': parsed.source_groups, 'split': parsed.split,
+           'tokenizer': parsed.tokenizer_fingerprint, 'targets': parsed.target_weights,
+           'external_names': parsed.plan.external_names, 'external_sizes': parsed.plan.external_sizes,
+           'external_states': parsed.external_states,
+           'nodes': [{'name': n.name, 'token_ids': n.token_ids, 'imports': list(invocation_dict(n)['imports']),
+                      'producing': n.producing, 'logical_producing': n.logical_producing}
+                     for n in parsed.plan.invocations]}
+    expected = hashlib.sha256(json.dumps(old, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    assert _row_bindings([parsed])[parsed.id] == expected
+
+
 def cached_scores(model, *, stop_gradient=False):
     """Explicit cached execution: run the producer, splice its state into the consumer cache, score each option
     token by token from the shared prompt cache (the serving `_score_from_cache` law)."""

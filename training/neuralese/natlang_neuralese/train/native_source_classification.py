@@ -14,8 +14,9 @@ from ..data.native_sources import _jsonl, _row_bindings
 
 SCHEMA = 'natlang.native-source-classification/1'
 CLASS_FIELDS = ('communication', 'producer_consumer', 'external_state_consumption')
-POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
-                'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
+LEGACY_POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
+                       'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
+POLICY_FILES = (*LEGACY_POLICY_FILES, 'data/decision_graph.py')
 
 
 def _binding(path):
@@ -38,8 +39,8 @@ def _index(ref):
     return value
 
 
-def source_policy(package):
-    return digest({name: sha256_file_hex(Path(package) / name) for name in POLICY_FILES})
+def source_policy(package, files=POLICY_FILES):
+    return digest({name: sha256_file_hex(Path(package) / name) for name in files})
 
 
 def migrate_index(source, old_index, *, old_package, new_package, ordinary_partition=None):
@@ -54,7 +55,10 @@ def migrate_index(source, old_index, *, old_package, new_package, ordinary_parti
     old_ref = _binding(old_index)
     old = _index(old_ref)
     key = old['key']
-    if key['source_sha256'] != source_ref['sha256'] or key['policy_sha256'] != source_policy(old_package):
+    old_files = next((files for files in (POLICY_FILES, LEGACY_POLICY_FILES)
+                      if all((Path(old_package) / name).is_file() for name in files)
+                      and key['policy_sha256'] == source_policy(old_package, files)), None)
+    if key['source_sha256'] != source_ref['sha256'] or old_files is None:
         raise ValueError('source classification prior source/policy differs')
     if key['kind'] not in ('native-graphs', 'semantic-pairs'):
         raise ValueError('source classification needs an execution-indexed graph source')
@@ -62,6 +66,9 @@ def migrate_index(source, old_index, *, old_package, new_package, ordinary_parti
     if ordinary_partition is not None:
         if key['kind'] != 'native-graphs':
             raise ValueError('ordinary topology proof cannot replace semantic-pair qualification')
+        if sha256_file_hex(Path(old_package) / 'data/native_sources.py') != sha256_file_hex(
+                Path(new_package) / 'data/native_sources.py'):
+            raise ValueError('ordinary topology proof cannot migrate a changed row-binding law')
         _ordinary_partition_classes(ordinary_partition, source_ref, old)
         entries = [{**entry, 'communication': False, 'producer_consumer': False,
                     'external_state_consumption': False} for entry in old['entries']]
@@ -97,7 +104,7 @@ def migrate_index(source, old_index, *, old_package, new_package, ordinary_parti
     row_index.save(path, result)
     return {'source': source_ref, 'old_index': old_ref, 'new_index': _binding(path),
             'rows': len(entries), 'producer': _binding(__file__),
-            'old_policy': {name: _binding(Path(old_package) / name) for name in POLICY_FILES},
+            'old_policy': {name: _binding(Path(old_package) / name) for name in old_files},
             'graph_position_expansions': 0, 'optimizer_updates': 0,
             'ordinary_partition': ordinary_partition}
 
@@ -123,7 +130,7 @@ def migration_classes(proof_path, source):
         if part['source']['sha256'] not in leaves or part['producer'] != _binding(__file__):
             raise ValueError('source classification proof is not produced for this source/runtime')
         old_policy = part.get('old_policy') or {}
-        if set(old_policy) != set(POLICY_FILES):
+        if set(old_policy) not in (set(POLICY_FILES), set(LEGACY_POLICY_FILES)):
             raise ValueError('source classification lost the prior parser policy')
         prior_policy = digest({name: _binding(_checked(ref))['sha256'] for name, ref in old_policy.items()})
         old, new = _index(part['old_index']), _index(part['new_index'])

@@ -57,7 +57,7 @@ def geometry_for_source(source, out, *, prior=None, allow_build=False, indexed_g
     from ..common.jsonio import write_json_durable
     from .native_resident import binding, bound
     package = Path(__file__).resolve().parents[1]
-    parser_files = ('data/native_sources.py','data/native_graph_schema.py','model/native_graph_plan.py',
+    parser_files = ('data/native_sources.py','data/native_graph_schema.py','data/decision_graph.py','model/native_graph_plan.py',
                     'data/native_pair_schema.py','common/row_index.py','common/jsonio.py','common/hashing.py')
     identity = {'tokenizer': source.tokenizer_fingerprint, 'roles': list(source.role_ids),
         'split': source.required_split, 'pair_model': source.pair_model,

@@ -884,7 +884,9 @@ def admitted_teacher_turn(row, index, turn, decisions):
 
 def graph_content_sha256(graph):
     return canonical_json_sha256_hex({'tokenizer_fingerprint': graph['tokenizer_fingerprint'],
-                                     'nodes': graph['nodes']})
+                                     'nodes': graph['nodes'],
+                                     'external_states': graph.get('external_states') or {},
+                                     'decisions': graph.get('decisions') or []})
 
 
 def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, turn_index: int,
@@ -1088,7 +1090,6 @@ def _valid_content_index(cached, key):
 
 
 def _content_index_policy_sha256(parser_sha256=None):
-    from scripts.neuralese_data.continue_native_source_indexes import POLICY_FILES
     package = Path(__file__).resolve().parents[2] / 'training/neuralese/natlang_neuralese'
     functions = {'graph_content_sha256', '_validated_content_fingerprints', '_valid_content_index'}
     tree = ast.parse(Path(__file__).read_text())
@@ -1103,22 +1104,14 @@ def _content_index_policy_sha256(parser_sha256=None):
             'functions': law, 'parser': parser_sha256})
     from scripts.neuralese_data.source_policy_identity import scoped_python_policy, scoped_python_policy_bytes
     return canonical_json_sha256_hex({
-        'schema': 'natlang.teacher-content-index-law/4',
+        'schema': 'natlang.teacher-content-index-law/5',
         'functions': scoped_python_policy_bytes(Path(__file__).read_text().encode(), functions),
-        'parser': scoped_python_policy(package / 'data/native_graph_schema.py', ('parse_graph',)),
+        'parser': scoped_python_policy(package / 'data/native_graph_schema.py', ('_graph_fields', 'parse_graph')),
+        'decision_parser': sha256_file(package / 'data/decision_graph.py'),
         'graph_facade': scoped_python_policy(package / 'data/native_graph.py', ('parse_graph',), allow_imports=True),
         'graph_plan': sha256_file(package / 'model/native_graph_plan.py'),
         'jsonio': sha256_file(package / 'common/jsonio.py'),
         'hashing': scoped_python_policy(package / 'common/hashing.py', ('canonical_json_sha256_hex',))})
-
-
-# Independently reviewed legacy whole-converter identity. Migration is available
-# only while the complete new fingerprint/parser/cache-validation law matches.
-_REVIEWED_LEGACY_CONTENT_CACHE = {
-    'policy_sha256': 'd20e8a2da8b7c6fe2c65ee1c812d2da651f5ab2a231b42d4ff80fc6b6a7bfe52',
-    'legacy_policy_sha256': '22dc344fa6c242e804294431241f39cc8f4b20d602353402710e1e6312d78db7',
-    'legacy_converter_sha256': '0e16b1d941f1ee4aa2a32cd68ded0fd8d7b9f4282ddbdacec1dd050a3b379491',
-}
 
 
 def _classification_content_cache(part, proof, key, source_bytes):
@@ -1394,17 +1387,6 @@ def seed_content_fingerprints(paths, fingerprint, *, model_key=None, classificat
         valid = _valid_content_index(cached, key)
         migrated = False
         evidence = None
-        continuation = _REVIEWED_LEGACY_CONTENT_CACHE
-        if not valid and policy == continuation['policy_sha256']:
-            for legacy_policy in (continuation['legacy_policy_sha256'],
-                                  '2ebde0101c9d93116285ae9f7deedacadfaca151e81943002e6317b47fef96d4',
-                                  '673e8c76458b0bb6fe3ad127494678df8c924f90da7b8ed2b73de6a2c3c27635'):
-                legacy_key = {**key, 'policy_sha256': legacy_policy}
-                legacy_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(legacy_key))
-                legacy = row_index.load(legacy_path)
-                if _valid_content_index(legacy, legacy_key):
-                    cached, valid, migrated = legacy, True, True
-                    break
         if not valid:
             for reference, proof in proofs:
                 for part in proof['indexes']:
