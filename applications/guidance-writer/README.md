@@ -10,6 +10,7 @@ visibility.ts           crisp: which facts a call may see at all (exact rule; rl
 crispSelection.ts       crisp side of the selection pluggable: a fixed kind order
 selectGuidanceFacts.nl  natural-language side: which visible facts, most useful first
 writeGuidance.nl        the guidance: Neuralese<string>, readout: template (one forced producer write)
+planTeacherAttempts.nl  how many privileged teacher attempts each scored student group gets (JOLT+ controller)
 ```
 
 Per consumer call, on its first model turn (ts-host/src/native/training-guidance.ts, run by the native agent):

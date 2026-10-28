@@ -20,3 +20,14 @@ export type GuidanceFact = {
  * instruction or skill state (it sees what a root sees). `text` is the call's own prompt text.
  */
 export type GuidanceConsumer = { name: string, role: "root" | "child" | "binding", text: Untrusted<string> };
+
+/**
+ * One scored student group of a JOLT+ collection (planTeacherAttempts): how its students did on one training world,
+ * the runtime feedback their attempts received, and how many verified facts the world has.
+ */
+export type TeacherGroup = {
+  group: number, taskId: string, family: string | null, students: number, successes: number, meanQuality: number,
+  feedback: Untrusted<string>[], facts: number,
+};
+/** Privileged teacher attempts planned for one group. */
+export type TeacherAttempts = { group: number, attempts: number };

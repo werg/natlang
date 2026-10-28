@@ -11,6 +11,7 @@
     "crispSelection.ts",
     "selectGuidanceFacts.nl",
     "writeGuidance.nl",
+    "planTeacherAttempts.nl",
     "tsconfig.json"
   ],
   "engines": {
