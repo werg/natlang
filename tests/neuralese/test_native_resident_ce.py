@@ -235,3 +235,27 @@ def test_same_content_source_aliases_accept_both_builder_inventory_forms(tmp_pat
     for role,name in [('native_graphs','train'),('ce_supervision_policy','new_ce')]:
         ref=resident.binding(paths[name]);new['stage_inputs']['sft'][role]={**ref,'binding':role}
     assert extension_policy(old['stage_inputs']['sft'],new['stage_inputs']['sft']) is not None
+
+
+def test_shared_foundation_and_ce_append_resume_exact_training_state(tmp_path,monkeypatch):
+    original_fixture=fixture
+    def aliased_fixture(*args,**kwargs):
+        paths,old,new=original_fixture(*args,**kwargs)
+        for plan,name in ((old,'old_recipe'),(new,'new_recipe')):
+            path=paths[name];recipe=json.loads(path.read_text())
+            recipe['stages'][0]['inputs']['foundation_native_graphs']='train';write_json(path,recipe)
+            plan['recipe']=load_recipe(path);plan['recipe_sha256']=resident.sha(path)
+            plan['stage_inputs']['sft']=resolve_stage_inputs(plan['recipe'],plan['recipe']['stages'][0],{})
+        return paths,old,new
+    original_main=trainer.main
+    def main_with_foundation(argv):
+        argv=list(argv);argv.extend(['--foundation-native-graphs',argv[argv.index('--native-graphs')+1]])
+        return original_main(argv)
+    monkeypatch.setitem(globals(),'fixture',aliased_fixture)
+    monkeypatch.setattr(trainer,'main',main_with_foundation)
+    test_actual_trainer_live_append_matches_explicit_complete_source_updates(tmp_path,monkeypatch,'lfm')
+    actual=torch.load(tmp_path/'live/checkpoint.pt',weights_only=False,map_location='cpu')
+    options=actual['training']['options']
+    assert options['foundation_native_graphs_binding']['sha256']==resident.sha(tmp_path/'train.json')
+    assert options['foundation_native_graphs']==str(tmp_path/'train.json')
+    assert options['ce_supervision_policy_binding']['sha256']==resident.sha(tmp_path/'new-ce.json')
