@@ -549,7 +549,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
     p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
     p.add_argument('--parent-qualification',type=Path,required=True);p.add_argument('--parent-copy-receipt',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
-    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');p.add_argument('--runtime-bundle',type=Path);args=p.parse_args()
+    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');p.add_argument('--runtime-bundle',type=Path);p.add_argument('--health-only',action='store_true');args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
@@ -558,6 +558,9 @@ def main():
     if args.ownership_journal:
         health_path=args.state.with_name(args.state.stem+'-health.json')
         threading.Thread(target=health_loop,args=(record,args.ownership_journal,health_path,args.health_interval),daemon=True).start()
+    if args.health_only:
+        if not args.ownership_journal:p.error('health-only requires an ownership journal')
+        while True:time.sleep(args.health_interval)
     if args.wait_worker_progress:
         if not args.ownership_journal:p.error('waiting for worker progress requires an ownership journal')
         while True:
