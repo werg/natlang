@@ -381,15 +381,6 @@ class Coordinator:
                     return self._progress_status()
                 if not prior or not prior.get('drained'):
                     raise Conflict('only a fully drained worker can reopen')
-                # Every prior worker must finish before any source generation
-                # reopens; subsequent reopen calls join that same transition.
-                for index in range(self.manifest['workers']):
-                    other=done.get(str(index)); moved=reopened.get(str(index))
-                    if other and other.get('drained') and other.get('generation') in (None,previous):
-                        continue
-                    if moved and moved.get('previous')==previous and moved.get('generation')==generation:
-                        continue
-                    raise Conflict('prior source generation is not fully drained by every learner')
                 if prior.get('generation') not in (None, previous):
                     raise Conflict('prior source generation differs from completion custody')
                 if (not isinstance(sequences,list) or sequences!=prior.get('sequences') or
