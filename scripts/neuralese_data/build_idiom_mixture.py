@@ -259,15 +259,17 @@ def carved(groups, carve) -> bool:
     return any(int(hashlib.sha256((carve['salt'] + g).encode()).hexdigest()[:8], 16) < limit for g in groups)
 
 
-def carve_groups(config, policy, trained_groups=frozenset()) -> set:
+def communication_is_held(row, graphs, held, carve_set):
+    return bool(set(row.get('source_groups') or graphs[0].get('source_groups') or ()) & (held | carve_set))
+
+
+def carve_groups(config, policy, trained_groups=frozenset(), held_groups=frozenset(), prior_components=()):
     """Source groups of the permanent held slice. Rows sharing a source group form one component (a row touching a
     held group is held whole); a component is a candidate when one of its groups falls in the declared hash fraction,
     and never when it touches a group an earlier version trained on. Candidates are taken in hash order while their
     rows fit ``max_rows``: a component that would overflow stays in training (2026-10-28: v3 left 8,648 rows of
     over-cap carved components neither held nor trained)."""
     carve = policy.get('held_carve')
-    if not carve:
-        return set()
     parent = {}
 
     def find(g):
@@ -277,24 +279,48 @@ def carve_groups(config, policy, trained_groups=frozenset()) -> set:
         return g
 
     rows = []
+    def add_groups(groups, *, count):
+        groups = sorted(set(groups))
+        if not groups:
+            return
+        if count:
+            rows.append(groups[0])
+        find(groups[0])
+        for g in groups[1:]:
+            a, b = find(groups[0]), find(g)
+            if a != b:
+                parent[max(a, b)] = min(a, b)
     paths = [path for render in config['renders'] for _, path in graph_files(render, 'train')]
     paths += [REPO / item for item in config.get('teacher_graphs', [])]
     for path in paths:
         for _, raw in iter_lines(path):
-            groups = sorted(json.loads(raw).get('source_groups') or ())
-            if not groups:
+            add_groups(json.loads(raw).get('source_groups') or (), count=True)
+    for groups in prior_components:
+        add_groups(groups, count=False)
+    for item in config.get('communication', []):
+        for _, raw in iter_lines(REPO / item['path']):
+            row = json.loads(raw)
+            if row.get('split') != 'train':
                 continue
-            rows.append(groups[0])
-            for g in groups[1:]:
-                a, b = find(groups[0]), find(g)
-                if a != b:
-                    parent[max(a, b)] = min(a, b)
+            graphs = [v['graph'] for v in row['models'].values()] if 'models' in row else [row]
+            add_groups(row.get('source_groups') or graphs[0].get('source_groups') or (), count=False)
+    for group in held_groups:
+        find(group)
+    held_roots = {find(group) for group in held_groups}
+    protected = {group for group in parent if find(group) in held_roots}
+    conflict = protected & set(trained_groups)
+    if conflict:
+        raise ValueError('prior train sources are connected to held groups; use an explicit source correction: '
+                         + ', '.join(sorted(conflict)[:8]))
+    if not carve:
+        return set(), protected
     size = collections.Counter(find(g) for g in rows)
     members = collections.defaultdict(set)
     for g in list(parent):
         members[find(g)].add(g)
     candidates = [root for root, groups in members.items()
-                  if any(carved([g], carve) for g in groups) and not groups & set(trained_groups)]
+                  if size[root] and any(carved([g], carve) for g in groups)
+                  and not groups & (set(trained_groups) | protected)]
     candidates.sort(key=lambda root: hashlib.sha256((carve['salt'] + root).encode()).hexdigest())
     chosen, held_rows = set(), 0
     for root in candidates:
@@ -302,13 +328,13 @@ def carve_groups(config, policy, trained_groups=frozenset()) -> set:
             continue
         chosen |= members[root]
         held_rows += size[root]
-    return chosen
+    return chosen, protected
 
 
 def prior_versions(config):
     """Earlier mixture versions this one appends to: their train sources stay in the manifest unchanged, their rows,
     decisions and graphs are taken, and their held groups stay held."""
-    sources, ids, decisions, keys, groups, trained = [], set(), set(), set(), set(), set()
+    sources, ids, decisions, keys, groups, trained, components = [], set(), set(), set(), set(), set(), []
     for prior in config.get('prior', []):
         root = (REPO / prior).resolve()
         manifest = json.loads((root / 'train-sources.json').read_text())
@@ -319,6 +345,15 @@ def prior_versions(config):
                 raise ValueError(f'prior mixture source changed: {path}')
             sources.append({**source, 'path': str(path)})
             if source['kind'] != 'native-graphs':
+                if source['kind'] != 'semantic-pairs':
+                    raise ValueError('prior source has an unsupported graph kind')
+                for _, raw in iter_lines(path):
+                    pair = json.loads(raw)
+                    views = list((pair.get('models') or {}).values())
+                    pair_groups = pair.get('source_groups') or sorted({g for view in views
+                        for g in (view.get('graph') or {}).get('source_groups') or []})
+                    trained.update(pair_groups)
+                    components.append(tuple(pair_groups))
                 continue
             for _, raw in iter_lines(path):
                 row = json.loads(raw)
@@ -328,12 +363,14 @@ def prior_versions(config):
                                  else conversion.get('source_record_ids') or [])
                 ids.add(row['id'])
                 keys.add(content_key(row))
-                trained.update(row.get('source_groups') or [])
+                row_groups = row.get('source_groups') or []
+                trained.update(row_groups)
+                components.append(tuple(row_groups))
         held_manifest = json.loads((root / 'held-sources.json').read_text())
         for source in held_manifest['sources']:
             for _, raw in iter_lines(root / source['path']):
                 groups.update(json.loads(raw).get('source_groups') or [])
-    return sources, ids, decisions, keys, groups, trained
+    return sources, ids, decisions, keys, groups, trained, components
 
 
 def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None):
@@ -558,8 +595,9 @@ def main(argv=None):
             held.update(json.loads(raw).get('source_groups') or [])
 
     prior = prior_versions(config)
-    carve_out, carve_set = [], carve_groups(config, policy, prior[5])
     held |= prior[4]
+    carve_set, held = carve_groups(config, policy, prior[5], held, prior[6])
+    carve_out = []
     cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior)
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
@@ -631,7 +669,7 @@ def main(argv=None):
                     composition['communication'].update(not_train=1)
                     continue
                 graphs = [v['graph'] for v in row['models'].values()] if 'models' in row else [row]
-                if set(row.get('source_groups') or graphs[0].get('source_groups') or ()) & held:
+                if communication_is_held(row, graphs, held, carve_set):
                     composition['communication'].update(dropped_held_group=1)
                     continue
                 comm_writers[index % files].write(raw)
