@@ -4,7 +4,7 @@
  "kind": "eval",
  "placement": {"where": "coreweave", "reason": "LFM3 development-packet probe (natlang-dev-task-packet-v2-20261028, 128 cases, selection only; held v3 stays confirmation-only) of one GGUF through the prebuilt llama.cpp-neuralese server. One GPU with a measured RAM minimum, bounded lifetime, stopped after collection."},
  "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
- "resources": {"gpu": 1, "memory": "32Gi"},
+ "resources": {"gpu": 1, "cpu": "8", "memory": "32Gi"},
  "lifetime_hours": 4,
  "scratch": {"path": "/work", "size": "100Gi"},
  "env": {"NATLANG_CW_COLLECT_WAIT": "3600", "HF_HUB_OFFLINE": "1", "LFM3_GGUF": "@@GGUF_PATH@@"},

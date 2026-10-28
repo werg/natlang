@@ -248,6 +248,10 @@ OOM, but experienced substantial memory-limit pressure; its current replacement
 uses 24Gi. These observations apply to evaluation, not training capacity.
 Prefer an unconstrained one-GPU request when capacity is scarce and adapt to the
 actual assigned resources.
+Owner decision (2026-10-28): GPU sandboxes running inference engines (RL actors,
+evaluators, serving) request a CPU minimum of 8 cores. vLLM/SGLang were CPU-bound on
+the 2 CPUs an unconstrained request receives (GPU 13-68% busy). Learner sandboxes keep
+CPU unspecified; their GPU stays saturated on 2 CPUs with pre-tokenized shards.
 
 Generation supply-chain supervision (engineering finding, 2026-10-23): monitor
 the actual generator, exporter and admission worker separately. A busy teacher
