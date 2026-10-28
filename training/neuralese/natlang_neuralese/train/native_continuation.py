@@ -50,6 +50,43 @@ def verify_retired_withdrawal(training, proof_path, *, current_bindings, model_i
     return {'proof_sha256':proof_sha,'rows':len(rows)}
 
 
+
+def retired_withdrawal_set_dependencies(manifest_path):
+    """Resolve a complete immutable set of historical withdrawal proofs and evidence."""
+    path=Path(manifest_path).resolve(strict=True)
+    value=json.loads(path.read_text())
+    entries=value.get('proofs')
+    if value.get('schema')!='natlang.native-retired-withdrawal-set/1' or not isinstance(entries,list) or not entries:
+        raise ValueError('retired withdrawal set must contain exact proofs')
+    dependencies=[];seen=set()
+    for entry in entries:
+        if not isinstance(entry,dict) or set(entry)!={'path','sha256'}:
+            raise ValueError('retired withdrawal set entry must bind path and sha256')
+        proof=Path(entry['path'])
+        if not proof.is_absolute():proof=path.parent/proof
+        proof=proof.resolve(strict=True)
+        if sha256_file_hex_cached(proof)!=entry['sha256'] or entry['sha256'] in seen:
+            raise ValueError('retired withdrawal set has changed or duplicate proof')
+        seen.add(entry['sha256']);value=json.loads(proof.read_text())
+        if value.get('schema')!='natlang.native-graph-withdrawal/1':raise ValueError('unsupported retired proof')
+        evidence=value.get('evidence') or {};ep=Path(evidence.get('path',''))
+        if not ep.is_absolute():ep=proof.parent/ep
+        ep=ep.resolve(strict=True)
+        if sha256_file_hex_cached(ep)!=evidence.get('sha256'):raise ValueError('retired evidence changed')
+        dependencies.extend([{'path':str(proof),'sha256':entry['sha256']},{'path':str(ep),'sha256':evidence['sha256']}])
+    return dependencies
+
+
+def verify_retired_withdrawal_set(training, manifest_path, *, current_bindings, model_id):
+    """Check every committed historical proof, preserving all withdrawal history."""
+    dependencies=retired_withdrawal_set_dependencies(manifest_path)
+    proofs=dependencies[::2]
+    history=(training.get('options') or {}).get('withdrawal_history') or []
+    if len(history)!=len(proofs) or {x.get('proof_sha256') for x in history}!={x['sha256'] for x in proofs}:
+        raise ValueError('retired withdrawal set differs from complete checkpoint history')
+    for proof in proofs:verify_retired_withdrawal(training,proof['path'],current_bindings=current_bindings,model_id=model_id)
+    return {'proofs':len(proofs)}
+
 def withdraw_native_rows(training, proof_path, *, current_bindings, model_id, source_origins=None):
     """Withdraw exact rejected targets, preserving earned numeric state and history.
 

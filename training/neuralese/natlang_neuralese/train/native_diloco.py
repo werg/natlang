@@ -80,7 +80,7 @@ _SOURCE_ARGUMENTS = frozenset({'--native-graphs','--held-native-graphs','--found
     '--continued-native-graphs','--continued-held-native-graphs','--source-correction',
     '--source-classification-migration','--ce-supervision-policy','--sft-packed-geometry',
     '--memory-qualification','--recipe-binding','--pending-native-sources','--withdrawn-native-graphs',
-    '--retired-native-withdrawal'})
+    '--retired-native-withdrawal','--retired-native-withdrawal-set'})
 
 def _fixed_trainer_argv(argv):
     result=[];i=0
@@ -135,7 +135,7 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
                     # Only retire consumed correction/predecessor switches without
                     # inventing another data generation; trainer already verified
                     # their checkpoint history and current bound source.
-                    retired={'--withdrawn-native-graphs','--retired-native-withdrawal','--source-correction','--continued-native-graphs','--continued-held-native-graphs'}
+                    retired={'--withdrawn-native-graphs','--retired-native-withdrawal','--retired-native-withdrawal-set','--source-correction','--continued-native-graphs','--continued-held-native-graphs'}
                     def without_retired(argv):
                         out=[];i=0
                         while i<len(argv):

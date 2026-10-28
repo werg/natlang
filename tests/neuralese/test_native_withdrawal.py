@@ -262,6 +262,23 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         assert twice['optimizer'] and twice['rng'] and 'extra' not in twice['source_row_bindings']
         assert len(twice['options']['withdrawal_history'])==2 and twice['options']['withdrawal_history'][0]['proof_sha256']==sha(withdrawal) and twice['options']['withdrawal_history'][1]['proof_sha256']==sha(second)
         assert twice['options']['withdrawal_history'][1]['rows'][0]['consumed_visits']==1
+        # Subsequent appends authenticate both committed proofs as one exact set.
+        proofset=tmp_path/'retired-set.json'
+        proofset.write_text(json.dumps({'schema':'natlang.native-retired-withdrawal-set/1','proofs':[
+            {'path':str(withdrawal),'sha256':sha(withdrawal)},{'path':str(second),'sha256':sha(second)}]}))
+        after_source=tmp_path/'after-second.jsonl';after_source.write_text(filtered.read_text()+json.dumps(dict(graph('after-second'),tokenizer_fingerprint=fp))+'\n')
+        after=list(corrected)
+        for flag in ('--retired-native-withdrawal','--withdrawn-native-graphs','--continued-native-graphs'):
+            n=after.index(flag);del after[n:n+2]
+        after[after.index('--native-graphs')+1]=str(after_source)
+        after += ['--continued-native-graphs',str(filtered),'--retired-native-withdrawal-set',str(proofset)]
+        assert trainer.main(after)==0
+        newest=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+        assert newest['exposure_counts']['after-second']==1 and len(newest['options']['withdrawal_history'])==2
+        broken=tmp_path/'retired-incomplete.json';broken.write_text(json.dumps({'schema':'natlang.native-retired-withdrawal-set/1','proofs':[{'path':str(second),'sha256':sha(second)}]}))
+        from natlang_neuralese.train.native_continuation import verify_retired_withdrawal_set
+        with pytest.raises(ValueError,match='complete checkpoint history'):
+            verify_retired_withdrawal_set(newest,broken,current_bindings=newest['source_row_bindings'],model_id=config['architecture']+':'+config['base_inventory_sha256'])
     finally:stop.set();server.join(timeout=3)
 
 

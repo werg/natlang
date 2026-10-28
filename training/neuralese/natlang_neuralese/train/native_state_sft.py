@@ -1089,6 +1089,7 @@ def build_parser():
     parser.add_argument('--continued-held-native-graphs', type=Path)
     parser.add_argument('--withdrawn-native-graphs', type=Path)
     parser.add_argument('--retired-native-withdrawal', type=Path)
+    parser.add_argument('--retired-native-withdrawal-set', type=Path)
     parser.add_argument('--unavailable-native-sources', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
@@ -1982,6 +1983,12 @@ def _main(argv=None, *, requested_refresh):
             checkpoint_options['source_classification_history'].append(
                 {'proof_sha256': proof_sha, 'graph_visits_created': 0})
     diloco_withdrawal_changed=False
+    if args.retired_native_withdrawal_set:
+        if resume is None or args.retired_native_withdrawal:
+            raise ValueError('retired withdrawal set needs an earned checkpoint and no single retired proof')
+        from .native_continuation import verify_retired_withdrawal_set
+        verify_retired_withdrawal_set(resume,args.retired_native_withdrawal_set,
+            current_bindings=source_row_bindings,model_id=config['architecture']+':'+config['base_inventory_sha256'])
     if args.retired_native_withdrawal:
         if resume is None:
             raise ValueError('retired withdrawal needs the earned checkpoint')
