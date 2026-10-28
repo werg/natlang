@@ -71,6 +71,7 @@ A callable folder holds code the program owns: helpers it was given and code it 
 - Scope a service to the functions that should use it (`serviceScopes`): a specialist's data, reachable from its calls and the calls they make. The caller can still read every declaration and instruction, and is told who can use it; it asks. This is how to make delegation the way to the evidence. Hiding code is not: never design a program whose correctness depends on the interpreter not reading source, because it reads everything it can reach.
 - Importable packages are external too: `read_code("pkg")` lists a package's exports from its type declarations, `read_code("pkg.name")` shows one.
 - The built-ins of eval (`nl`, `iterateOn`, `transcript`) are documented, not defined, in the program: `read_code("nl")` shows how to use one.
+- `read_code` answers for every name a call can see, not only the program's functions: a source file name (`resolve.js`, `./resolve.js`) shows the function it defines; a type alias of the call shows its definition; a bare method name of a scope service (`certificate`) shows that service's declaration and the qualified call (`greenhouse.certificate()`); the call's own name says it is the call being executed (its opening message is all of its source: carry out the instructions there); a value in the eval scope says to inspect it in eval. None of these is an edit target.
 
 ## Callable-folder TypeScript
 
