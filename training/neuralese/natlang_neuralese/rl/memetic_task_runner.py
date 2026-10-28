@@ -1,8 +1,9 @@
-"""Exact task collector and author interface for native program guidance search.
+"""Author interface and guidance prompt wrapper for native program guidance search.
 
 The author proposes natural-language program policy from development failures.
-The collector and oracle score are crisp mechanisms. No weight adapter or flat
-soft-block path is exposed by this module.
+Evaluation runs through the production collector (rl.production.collect, called by
+memetic_program.evaluate); the oracle score is the shared task scorer. No weight
+adapter or flat soft-block path is exposed by this module.
 """
 from __future__ import annotations
 import json
@@ -10,13 +11,11 @@ import hashlib
 import base64
 import re
 import subprocess
-import sys
 import time
 import urllib.request
 from urllib.parse import urlsplit
 from pathlib import Path
 from ..eval.task_packet import read_jsonl
-from .task_rollouts import build_queue, score
 from ..common import memetic_teacher_ferry as teacher_ferry
 ROOT = Path(__file__).resolve().parents[4]
 GUIDANCE_WORDS = 120
@@ -135,55 +134,6 @@ def default_system_prompt() -> str:
 def guided_system(base: str, guidance: str) -> str:
     """The runtime's program-guidance wrapper (ts-host adaptation/prompts.ts programGuidance)."""
     return base + ("\n\n<natlang_program_guidance>\n" + guidance + "\n</natlang_program_guidance>\n" if guidance else "")
-
-def evaluate(args, ind: dict, packet: Path, base_system: str) -> dict:
-    """Run the individual on every packet row (`samples` each, the same seeds for every individual) and verify."""
-    out = Path(args.out) / "evals" / ind["id"]
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "packet.jsonl").write_text(packet.read_text())
-    # The shared rollout scorer needs the exact packet binding to authenticate
-    # complete budget-terminated execution prefixes without a terminal result row.
-    from ..common.jsonio import write_json_durable
-    write_json_durable(out / 'preparation.json', {
-        'schema': 'natlang.memetic-task-capture-preparation/1', 'root_mode': 'authored',
-        'packet_sha256': hashlib.sha256((out / 'packet.jsonl').read_bytes()).hexdigest(),
-        'policy_checkpoint_sha256': args.policy_checkpoint_sha256})
-    system = out / "system.md"
-    system.write_text(guided_system(base_system, ind["guidance"]))
-    capture_config = out / 'native-capture.json'
-    capture_config.write_text(json.dumps({'x_natlang_rl_capture': True}))
-    entries = build_queue(out / "packet.jsonl", args.rows, args.samples, out, temperature=args.temperature,
-                          case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
-                          max_turns=args.max_turns, seed_base=args.seed_base)
-    for entry in entries:
-        entry["system_file"] = str(system)
-    (out / "queue.jsonl").write_text("".join(json.dumps(e, sort_keys=True) + "\n" for e in entries))
-    shards = out / "shards"
-    shards.mkdir(exist_ok=True)
-    started = time.time()
-    procs = []
-    for s in range(args.shards):
-        (shards / f"queue-{s}.jsonl").write_text("".join(json.dumps(e, sort_keys=True) + "\n" for e in entries[s::args.shards]))
-        log = open(shards / f"queue-{s}.log", "w")
-        procs.append(subprocess.Popen([sys.executable, str(ROOT / "scripts/run_bonsai_queue.py"), str(shards / f"queue-{s}.jsonl"),
-                                       str(shards / f"journal-{s}.jsonl"), "--runtime", str(ROOT / "ts-host"),
-                                       "--server", args.server, "--chat-completions-url", args.server.rstrip("/") + "/v1/chat/completions",
-                                       "--model-id", args.model_id, "--model-concurrency", "2",
-                                       "--neuralese-server", "--chat-request-config", str(capture_config)], stdout=log, stderr=subprocess.STDOUT))
-    for proc in procs:
-        proc.wait()
-    (out / "journal.jsonl").write_text("".join((shards / f"journal-{s}.jsonl").read_text()
-                                               for s in range(args.shards) if (shards / f"journal-{s}.jsonl").exists()))
-    report = score(out, out / "rollouts.jsonl")
-    rewards = read_jsonl(out / "rewards.jsonl")
-    scored = [r for r in rewards if r["reward"] is not None]
-    fit = {"fitness": sum(r["reward"] for r in scored) / len(scored) if scored else 0.0,
-           "successes": report["successes"], "scored": report["scored"], "rollouts": report["rollouts"],
-           "budget_stops": report["outcome_counts"].get("budget_exhaustion", 0),
-           "outcomes": report["outcome_counts"], "groups_with_spread": report["groups_with_spread"],
-           "per_row": [sum(r["reward"] == 1.0 for r in rewards if r["group"] == g) for g in range(args.rows)],
-           "seconds": round(time.time() - started, 1), "dir": str(out)}
-    return fit
 
 def failure_digest(fit: dict, limit: int = 6) -> str:
     """Failed rollouts of an evaluation: outcome class, failed checks, returned value, errors. Never the gold."""

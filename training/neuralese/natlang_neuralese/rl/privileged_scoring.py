@@ -35,6 +35,8 @@ class _Edit:
     at: int          # own-token boundary of the edit
     removed: int     # own tokens removed at ``at`` (student_form)
     inserted: tuple  # own tokens inserted at ``at`` (teacher_form)
+    imports: tuple = ()  # ImportSpans of the inserted block, ``at`` relative to the block (teacher_form)
+    dropped: tuple = ()  # own-token positions of the removed block's imports (student_form)
 
     @property
     def delta(self):
@@ -80,11 +82,16 @@ def _rebase_plan(plan, edits):
                 raise ValueError('privileged blocks cannot enter a raw prefix cache invocation')
             if not 0 <= edit.at <= edit.at + edit.removed <= len(tokens):
                 raise ValueError('privileged block lies outside its invocation')
-            if any(edit.at <= item.at <= edit.at + edit.removed for item in node.imports):
-                raise ValueError('privileged block cannot share or contain a native-state import boundary')
+            inside = sorted(item.at for item in node.imports if edit.at < item.at < edit.at + edit.removed)
+            if inside != sorted(edit.dropped):
+                raise ValueError('privileged block imports differ from the guidance it declares')
+            if any(item.at in (edit.at, edit.at + edit.removed) for item in node.imports):
+                raise ValueError('privileged block cannot share a native-state import boundary')
             tokens = tokens[:edit.at] + edit.inserted + tokens[edit.at + edit.removed:]
         imports = []
         for item in node.imports:
+            if edit is not None and edit.at < item.at < edit.at + edit.removed:
+                continue  # the removed guidance turn's own import
             at = item.at + edit.delta if edit is not None and item.at > edit.at else item.at
             if item.source in plan.external_names:
                 start, stop = item.start, item.stop
@@ -93,11 +100,19 @@ def _rebase_plan(plan, edits):
             else:
                 start, stop = local(item.source, item.start, item.stop)
             imports.append(replace(item, at=at, start=start, stop=stop))
+        if edit is not None:
+            for item in edit.imports:  # the inserted guidance turn imports its in-graph writer's state
+                if item.source not in index or item.source == node.name:
+                    raise ValueError('guidance imports a state written by another invocation of this graph')
+                imports.append(replace(item, at=edit.at + item.at))
+            imports.sort(key=lambda item: item.at)
         producing = tuple(local(node.name, a, b) for a, b in node.producing)
         logical_producing = tuple(logical(node.name, a, b) for a, b in node.logical_producing)
         nodes.append(Invocation(node.name, tuple(tokens), tuple(imports), producing, logical_producing,
                                 node.cache_prefix))
-    rebased = compile_graph(nodes, external_sizes=dict(zip(plan.external_names, plan.external_sizes)))
+    rebased = compile_graph(_dependency_order(nodes),
+                            external_sizes=dict(zip(plan.external_names, plan.external_sizes)))
+    placed = {node.name: offset for node, offset in zip(rebased.invocations, rebased.offsets)}
 
     def requery(action):
         name = action['turn']
@@ -108,8 +123,24 @@ def _rebase_plan(plan, edits):
             if own < edit.at + edit.removed:
                 raise ValueError('a scored action precedes the privileged insertion boundary')
             own += edit.delta
-        return {**action, 'query': rebased.offsets[number] + own, 'local_query': own}
+        return {**action, 'query': placed[name] + own, 'local_query': own}
     return rebased, requery
+
+
+def _dependency_order(nodes):
+    """Stable order in which every import source precedes its consumer (an inserted guidance import may name a
+    writer the captured order placed later, e.g. a student's write-only writer)."""
+    pending, done, ordered = list(nodes), set(), []
+    names = {node.name for node in nodes}
+    while pending:
+        for number, node in enumerate(pending):
+            if all(edge.source in done or edge.source not in names for edge in node.imports):
+                ordered.append(pending.pop(number))
+                done.add(node.name)
+                break
+        else:
+            raise ValueError('privileged graph edit creates an import cycle')
+    return ordered
 
 
 def _edited(replay, edits):
@@ -133,10 +164,27 @@ def _shift_written(plan, edits, item):
     return item['start'] + edit.delta, item['stop'] + edit.delta
 
 
+def writer_span(replay, block):
+    """The in-graph producer span of a guidance block's state: (writer invocation, start, stop)."""
+    found = [item for item in replay.written_sources if item['state_id'] == block.state_id
+             and (block.source_occurrence is None or item.get('node') == block.source_occurrence)]
+    if len(found) != 1:
+        raise ValueError('guidance state has no unique writer in this episode graph')
+    return found[0]['invocation'], found[0]['start'], found[0]['stop']
+
+
 def teacher_form(replay, blocks):
-    """Insert each nonempty block at its declared own-token boundary."""
-    return _edited(replay, {name: _Edit(block.insert_at, 0, tuple(block.token_ids))
-                            for name, block in blocks.items() if block.token_ids})
+    """Insert each nonempty block at its declared own-token boundary; an import block imports its in-graph writer."""
+    edits = {}
+    for name, block in blocks.items():
+        if not block.token_ids:
+            continue
+        imports = ()
+        if block.import_offset is not None:
+            source, start, stop = writer_span(replay, block)
+            imports = (ImportSpan(block.import_offset, source, start, stop),)
+        edits[name] = _Edit(block.insert_at, 0, tuple(block.token_ids), imports)
+    return _edited(replay, edits)
 
 
 def student_form(replay, blocks):
@@ -151,7 +199,8 @@ def student_form(replay, blocks):
         span = node.token_ids[block.insert_at:block.insert_at+len(block.token_ids)]
         if tuple(span) != tuple(block.token_ids):
             raise ValueError('teacher-role invocation does not carry its declared privileged block')
-        edits[name] = _Edit(block.insert_at, len(block.token_ids), ())
+        dropped = () if block.import_offset is None else (block.insert_at + block.import_offset,)
+        edits[name] = _Edit(block.insert_at, len(block.token_ids), (), (), dropped)
     return _edited(replay, edits)
 
 

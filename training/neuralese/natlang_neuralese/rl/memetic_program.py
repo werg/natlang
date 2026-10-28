@@ -1,7 +1,10 @@
 """Iterate one program's stored native-state guidance on repeated train invocations.
 
-The author sees only development failures. A disjoint train confirmation slice is
-used solely to accept an improvement. Every candidate is written by the serving
+The author sees only development failures. Candidates are selected on development
+outcomes only (common.acceptance.select); the selected guidance is confirmed once on
+the untouched confirmation slice (common.acceptance.confirm). Slices carry the shared
+world custody receipt (common.custody), and every evaluation runs through the
+production collector (rl.production.collect). Every candidate is written by the serving
 student's native producer, then imported into actual executor model messages.
 The output binding can be used by a program's guidance field; a changed student
 checkpoint requires writing the text again and evaluating the new state.
@@ -13,10 +16,10 @@ import copy
 import hashlib
 import json
 import re
-import shutil
 import urllib.request
 from pathlib import Path
 
+from ..common import acceptance, custody
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from ..common.jsonio import write_json_durable
 from ..common.runtime_inventory import python_runtime_binding, task_runtime_inventory
@@ -37,26 +40,15 @@ def request_json(server: str, path: str, value=None):
         return json.load(response)
 
 
-def verified_cases(path: Path, program_id: str):
-    rows = [authored_root_row(row) for row in read_jsonl(path)]
-    if len(rows) < 2 or any(row.get('program_id') != program_id for row in rows):
-        raise ValueError('each slice needs multiple train invocations of exactly the named program')
-    ids = [row['id'] for row in rows]
-    if len(ids) != len(set(ids)):
-        raise ValueError('repeated invocation IDs in a slice')
-    return rows
-
-
-def prepare_slices(development: Path, confirmation: Path, program_id: str):
-    dev = verified_cases(development, program_id)
-    confirm = verified_cases(confirmation, program_id)
-    if set(row['id'] for row in dev) & set(row['id'] for row in confirm):
-        raise ValueError('development and confirmation invocation IDs overlap')
-    def bindings(rows):
-        return {value for row in rows for value in (row.get('memetic_source') or {}).get('world_bindings', [])}
-    if bindings(dev) & bindings(confirm):
-        raise ValueError('development and confirmation world bindings overlap')
-    return dev, confirm
+def load_slices(development: Path, confirmation: Path, program_id: str, receipt: Path):
+    """Development and confirmation rows of one program under their shared world-custody receipt."""
+    slices = {'development': read_jsonl(development), 'confirmation': read_jsonl(confirmation)}
+    bound = custody.check_slice_receipt(json.loads(Path(receipt).read_text()), slices)
+    for rows in slices.values():
+        if len(rows) < 2 or any(row.get('program_id') != program_id for row in rows):
+            raise ValueError('each slice needs multiple train invocations of exactly the named program')
+    return ([authored_root_row(row) for row in slices['development']],
+            [authored_root_row(row) for row in slices['confirmation']], bound)
 
 
 def state_guidance(text: str, state_id: str) -> str:
@@ -148,6 +140,7 @@ def _definition_bindings(root: Path) -> dict[str, str]:
         'task_rollouts': 'training/neuralese/natlang_neuralese/rl/task_rollouts.py',
         'memetic_program': 'training/neuralese/natlang_neuralese/rl/memetic_program.py',
         'memetic_runner': 'training/neuralese/natlang_neuralese/rl/memetic_task_runner.py',
+        'production': 'training/neuralese/natlang_neuralese/rl/production.py',
         'collector_cli': 'ts-host/dist/teacher/cli.js',
         'collector_core': 'ts-host/dist/teacher/collector.js',
     }
@@ -155,8 +148,9 @@ def _definition_bindings(root: Path) -> dict[str, str]:
               if name in {'queue_worker', 'task_classifier', 'collector_cli', 'collector_core'}}
     definitions = {
         'task_rollouts': ('build_queue', 'reward_of', 'rollout_turns'),
-        'memetic_program': ('prepare_slices', 'evaluate'),
-        'memetic_runner': ('default_system_prompt', 'evaluate'),
+        'memetic_program': ('load_slices', 'evaluate'),
+        'memetic_runner': ('default_system_prompt', 'guided_system'),
+        'production': ('collect',),
     }
     for module, names in definitions.items():
         path = root / files[module]
@@ -248,7 +242,7 @@ def _verify_existing_fit_outputs(out: Path, actor: dict, previous_root: Path,
         if (fit.get('evaluation_inputs_sha256') not in prior_inputs or
                 fit.get('actor_capture_reached_model') is not True or
                 fit.get('scored') != len(read_jsonl(target / 'queue.jsonl')) or
-                not student_capture_reached(target, actor)):
+                not rollouts_reached(target, actor)):
             raise ValueError(f'cached evaluation {name} is not a complete exact-actor measurement')
         # The rows already exist, so compare old and new score semantics without rerunning the collector.
         old_report = _score_on_runtime(previous_root, target)
@@ -306,8 +300,8 @@ def evaluator_inputs(out: Path, inputs: dict, actor: dict, previous_runtime: Pat
         new_semantics = _definition_bindings(current_root)
         exact_keys = ('queue_worker', 'task_classifier', 'collector_cli', 'collector_core',
                       'task_rollouts.build_queue', 'task_rollouts.reward_of', 'task_rollouts.rollout_turns',
-                      'memetic_program.prepare_slices',
-                      'memetic_runner.default_system_prompt', 'memetic_runner.evaluate')
+                      'memetic_program.load_slices', 'production.collect',
+                      'memetic_runner.default_system_prompt', 'memetic_runner.guided_system')
         if any(old_semantics.get(key) != new_semantics.get(key) for key in exact_keys):
             raise ValueError('evaluator continuation changed a task collector or policy-scoring mechanism')
         prior_inputs = {origin_sha, previous_sha}
@@ -364,6 +358,8 @@ def author_provenance(path: Path, model: str, endpoint: str):
 
 def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, base_system: str,
              actor: dict, server_info_sha256: str, evaluation_inputs_sha256: str | None = None):
+    """Paired-seed outcome of one guidance on one slice, collected by the production collector."""
+    from .production import collect
     packet = out / (name + '-packet.jsonl')
     packet_bytes = ''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows).encode()
     if packet.exists() and packet.read_bytes() != packet_bytes:
@@ -373,6 +369,9 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
         write_bytes_durable(packet, packet_bytes)
     target = out / 'evals' / name
     fit_path = out / (name + '-fit.json')
+    state_id = re.fullmatch(r'\ue002(nzs1_[a-z2-7]{52})\ue003', guidance) if guidance else None
+    if guidance and not state_id:
+        raise ValueError('program guidance must be an exact native state sentinel')
     receipt = {'evaluation_inputs_sha256': evaluation_inputs_sha256 or sha256_file_hex(out / 'inputs.json'),
                'guidance_sha256': hashlib.sha256(guidance.encode()).hexdigest(),
                'packet_sha256': hashlib.sha256(packet_bytes).hexdigest()}
@@ -385,109 +384,46 @@ def evaluate(args, out: Path, name: str, guidance: str, rows: list[dict], *, bas
         if not exact_receipt or (not same_input and not continued_input):
             raise ValueError('cached guidance fitness is not bound to this student evaluation')
         if (fit.get('scored') != len(rows) * args.samples or fit.get('actor_capture_reached_model') is not True
-                or not student_capture_reached(target, actor)):
+                or not rollouts_reached(target, actor, state_id.group(1) if state_id else None)):
             raise ValueError('cached guidance fitness lacks complete exact-actor rollout evidence')
-        if guidance:
-            state_id = re.fullmatch(r'\ue002(nzs1_[a-z2-7]{52})\ue003', guidance)
-            if (not state_id or fit.get('native_import_reached_model') is not True
-                    or not native_import_reached(target, state_id.group(1))):
-                raise ValueError('cached guidance fitness lacks native state import evidence')
         return fit
-    if target.exists():
-        shutil.rmtree(target)  # only this incomplete, invocation-specific evaluation
-    options = argparse.Namespace(**vars(args))
-    options.out = out
-    options.rows = len(rows)
-    options.shards = args.shards
-    options.policy_checkpoint_sha256 = actor['checkpoint_sha256']
-    individual = {'id': name, 'guidance': guidance}
-    fit = runner.evaluate(options, individual, packet, base_system)
-    if fit['scored'] != len(rows) * args.samples:
+    report = collect(cases=packet, out=target, endpoints=[args.server], policy_id=actor['checkpoint_sha256'],
+                     rows=len(rows), group=args.samples, workers=args.shards, root_mode='authored',
+                     seed_base=args.seed_base, case_seconds=args.case_seconds,
+                     max_model_requests=args.max_model_requests, max_turns=args.max_turns,
+                     system_prompt=runner.guided_system(base_system, guidance))
+    if report['scored'] != len(rows) * args.samples:
         raise ValueError('guidance evaluation lacks complete scored task outcomes')
-    if not student_capture_reached(target, actor):
-        raise ValueError('scored evaluation lacks exact student actor capture on every invocation')
+    if not rollouts_reached(target, actor, state_id.group(1) if state_id else None):
+        raise ValueError('scored evaluation lacks exact student capture (or native guidance import) on every invocation')
     if canonical_json_sha256_hex(request_json(args.server, '/v1/neuralese/info')) != server_info_sha256:
         raise ValueError('serving student info changed during evaluation')
-    if guidance:
-        state_id = re.fullmatch(r'\ue002(nzs1_[a-z2-7]{52})\ue003', guidance)
-        if not state_id or not native_import_reached(target, state_id.group(1)):
-            raise ValueError('guidance state did not reach the executing model as native state')
-        fit['native_import_reached_model'] = True
-    fit['actor_capture_reached_model'] = True
-    fit.update(receipt)
+    rewards = read_jsonl(target / 'rewards.jsonl')
+    fit = {'successes': report['successes'], 'scored': report['scored'], 'rollouts': report['rollouts'],
+           'outcomes': report['outcome_counts'], 'groups_with_spread': report['groups_with_spread'],
+           'per_row': [sum(r['reward'] == 1.0 for r in rewards if r['group'] == g) for g in range(len(rows))],
+           'dir': str(target), 'actor_capture_reached_model': True,
+           **({'native_import_reached_model': True} if state_id else {}), **receipt}
     write_json_durable(fit_path, fit)
     return fit
 
 
-def captured_invocations(evaluation: Path):
-    """Read complete results or the shared verifier's exact budget prefix."""
-    from .task_rollouts import _budget_terminated_prefix
-    packet = evaluation / 'packet.jsonl'
-    queue = evaluation / 'queue.jsonl'
-    if not queue.exists():
-        return []
-    entries = read_jsonl(queue)
-    tasks = read_jsonl(packet)
-    preparation = json.loads((evaluation / 'preparation.json').read_text())
-    packet_sha = hashlib.sha256(packet.read_bytes()).hexdigest()
-    if preparation.get('packet_sha256') != packet_sha:
-        return []
-    finishes = {row['key']: row for row in read_jsonl(evaluation / 'journal.jsonl')
-                if row.get('event') == 'finish'}
-    results = []
-    for entry in entries:
-        path = Path(entry['output'])
-        rows = read_jsonl(path) if path.exists() else []
-        if not rows:
-            prefix = _budget_terminated_prefix(entry, tasks[entry['index']], finishes.get(entry['key']),
-                packet_source_path=packet, packet_source_sha256=packet_sha)
-            rows = [{'trajectory': prefix['trajectory']}] if prefix else []
-        results.append(rows)
-    return results
-
-
-def student_capture_reached(evaluation: Path, actor: dict) -> bool:
-    invocations = captured_invocations(evaluation)
-    if not invocations:
+def rollouts_reached(evaluation: Path, actor: dict, state_id: str | None = None) -> bool:
+    """Every production rollout sampled by the exact student actor (and imported the guidance state natively)."""
+    path = evaluation / 'rollouts.jsonl'
+    rollouts = read_jsonl(path) if path.exists() else []
+    if not rollouts:
         return False
-    for rows in invocations:
-        captured = False
-        for result in rows:
-            for step in result.get('trajectory') or []:
-                sampling = (step.get('model_response') or {}).get('rl_sampling') or {}
-                if not sampling:
-                    continue
-                if any(sampling.get('policy', {}).get(key) != actor[key] for key in IDENTITY):
-                    return False
-                captured = True
-        if not captured:
+    for rollout in rollouts:
+        sampled = [turn['sampling'] for turn in rollout.get('turns') or [] if turn.get('sampling')]
+        if not sampled or any(sampling.get('policy', {}).get(key) != actor[key]
+                              for sampling in sampled for key in IDENTITY):
+            return False
+        if state_id is not None and not any(
+                isinstance(item, dict) and item.get('id') == state_id
+                for turn in rollout['turns'] for item in turn.get('native_state_imports') or []):
             return False
     return True
-
-
-def native_import_reached(evaluation: Path, state_id: str) -> bool:
-    """Require a server import receipt, not merely a sentinel in rendered text."""
-    invocations = captured_invocations(evaluation)
-    if not invocations:
-        return False
-    for rows in invocations:
-        imported = False
-        for result in rows:
-            for step in result.get('trajectory') or []:
-                response = step.get('model_response') or {}
-                receipts = response.get('native_state_imports') or []
-                if any(item.get('id') == state_id for item in receipts if isinstance(item, dict)):
-                    imported = True
-        if not imported:
-            return False
-    return True
-
-
-def acceptance(previous: dict, candidate: dict):
-    """Use paired seeds and complete oracle-scored outcomes, never author judgement."""
-    if previous['scored'] != candidate['scored'] or not previous['scored']:
-        return False
-    return candidate['successes'] > previous['successes']
 
 
 def _prior_development_rejection(state: dict) -> dict | None:
@@ -528,12 +464,6 @@ def _author_record(authored: dict, attempt: dict) -> dict:
         raise ValueError('authored guidance custody differs from its signed ferry receipt')
     return {'schema': 'natlang.memetic-guidance-author-record/1',
             'attempt': attempt, **custody}
-
-
-def qualification(baseline: dict, best: dict, min_gain_fraction: float) -> bool:
-    return all(best[split]['scored'] == baseline[split]['scored'] and best[split]['scored'] > 0 and
-        (best[split]['successes'] - baseline[split]['successes']) / best[split]['scored'] >= min_gain_fraction
-        for split in ('development', 'confirmation'))
 
 
 def guidance_training_graph(rollout: dict, *, program_id: str, written: dict, actor: dict, roles, fetch_block):
@@ -709,6 +639,10 @@ def main(argv=None):
     parser.add_argument('--program-id', required=True)
     parser.add_argument('--development', type=Path, required=True)
     parser.add_argument('--confirmation', type=Path, required=True)
+    parser.add_argument('--custody', type=Path, required=True,
+                        help='natlang.world-slices/1 receipt of both slices (memetic_batch writes custody.json)')
+    parser.add_argument('--confirmation-ledger', type=Path,
+                        help='spent-confirmation ledger (default: confirmation-ledger.json beside --confirmation)')
     parser.add_argument('--recipe-base', type=Path,
         help='validated native production recipe; emit captured producer/consumer SFT continuation')
     parser.add_argument('--foundation-id', default='native_full_sft')
@@ -727,7 +661,6 @@ def main(argv=None):
     parser.add_argument('--generations', type=int, default=3)
     parser.add_argument('--samples', type=int, default=2)
     parser.add_argument('--shards', type=int, default=2)
-    parser.add_argument('--temperature', type=float, default=1.)
     parser.add_argument('--case-seconds', type=int, default=900)
     parser.add_argument('--max-model-requests', type=int, default=32)
     parser.add_argument('--max-turns', type=int, default=20)
@@ -737,7 +670,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 0 < args.min_gain_fraction <= 1:
         parser.error('--min-gain-fraction must be in (0, 1]')
-    dev, confirm = prepare_slices(args.development, args.confirmation, args.program_id)
+    dev, confirm, slice_custody = load_slices(args.development, args.confirmation, args.program_id, args.custody)
+    ledger = args.confirmation_ledger or args.confirmation.with_name('confirmation-ledger.json')
     info = request_json(args.server, '/v1/neuralese/info')
     identity = actor_identity(args.server, info)
     server_info_sha256 = canonical_json_sha256_hex(info)
@@ -746,11 +680,12 @@ def main(argv=None):
     inputs = {'schema': 'natlang.memetic-student-evaluation-inputs/1', 'program_id': args.program_id,
         'development': hashlib.sha256(args.development.read_bytes()).hexdigest(),
         'confirmation': hashlib.sha256(args.confirmation.read_bytes()).hexdigest(),
+        'custody': canonical_json_sha256_hex(slice_custody),
         'student': identity, 'student_server': args.server, 'student_info_sha256': server_info_sha256,
         'student_model_id': args.model_id,
         'system_prompt_sha256': hashlib.sha256(base_system.encode()).hexdigest(),
         'evaluator_runtime': local_runtime_binding(),
-        'seed_base': args.seed_base, 'samples': args.samples, 'temperature': args.temperature,
+        'seed_base': args.seed_base, 'samples': args.samples, 'temperature': 1.0,
         'shards': args.shards, 'case_seconds': args.case_seconds,
         'max_model_requests': args.max_model_requests, 'max_turns': args.max_turns}
     input_path = out / 'inputs.json'
@@ -823,11 +758,6 @@ def main(argv=None):
                 base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
                 evaluation_inputs_sha256=current_inputs_sha256)
             write_json_durable(seed_pending_path, seed)
-        if 'confirmation' not in seed:
-            seed['confirmation'] = evaluate(args, out, 'seed-confirm', state_guidance(seed_text, seed['write']['id']), confirm,
-                base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                evaluation_inputs_sha256=current_inputs_sha256)
-            write_json_durable(seed_pending_path, seed)
         state['best'] = seed
         write_json_durable(state_path, state)
         seed_pending_path.unlink(missing_ok=True)
@@ -860,13 +790,8 @@ def main(argv=None):
                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
                                              evaluation_inputs_sha256=current_inputs_sha256)
             write_json_durable(pending, candidate)
-        if 'confirmation' not in candidate:
-            candidate['confirmation'] = evaluate(args, out, prefix + '-confirm', state_guidance(proposed, written['id']), confirm,
-                                              base_system=base_system, actor=identity, server_info_sha256=server_info_sha256,
-                                              evaluation_inputs_sha256=current_inputs_sha256)
-            write_json_durable(pending, candidate)
-        accepted = (acceptance(best['development'], candidate['development'])
-                    and acceptance(best['confirmation'], candidate['confirmation']))
+        # Development selection only: confirmation worlds stay untouched until the final decision.
+        accepted = acceptance.select(best['development'], candidate['development'])
         state['history'].append({'generation': generation, 'accepted': accepted, 'candidate': candidate})
         if accepted:
             state['best'] = candidate
@@ -875,13 +800,21 @@ def main(argv=None):
         pending.unlink(missing_ok=True)
     best = state['best']
     baseline = state['baseline']
-    qualified = qualification(baseline, best, args.min_gain_fraction)
+    artifact = best['write']['id']
+    acceptance.require_untouched(slice_custody['slices']['confirmation'], artifact, ledger)
+    if 'confirmation' not in best:
+        best['confirmation'] = evaluate(args, out, 'selected-confirm-' + artifact[5:21],
+            state_guidance(best['text'], artifact), confirm, base_system=base_system, actor=identity,
+            server_info_sha256=server_info_sha256, evaluation_inputs_sha256=current_inputs_sha256)
+        write_json_durable(state_path, state)
+    decision = acceptance.confirm(artifact=artifact, baseline=baseline,
+        selected={split: best[split] for split in ('development', 'confirmation')},
+        min_gain_fraction=args.min_gain_fraction, confirmation=slice_custody['slices']['confirmation'],
+        ledger=ledger)
+    qualified = decision['status'] == 'qualified'
     outcome = {'schema': 'natlang.memetic-program-outcome/1', 'program_id': args.program_id,
-               'status': 'qualified' if qualified else 'no_lift',
-               'baseline': {split: {key: baseline[split][key] for key in ('successes', 'scored')}
-                            for split in ('development', 'confirmation')},
-               'best': {split: {key: best[split][key] for key in ('successes', 'scored')}
-                        for split in ('development', 'confirmation')},
+               'status': decision['status'], 'baseline': decision['baseline'], 'best': decision['selected'],
+               'acceptance': decision,
                'min_gain_fraction': args.min_gain_fraction,
                'accepted_revisions': sum(item['accepted'] for item in state['history']),
                'inputs_sha256': sha256_file_hex(input_path),

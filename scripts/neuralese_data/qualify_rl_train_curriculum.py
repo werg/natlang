@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Protection intersections and additional-source qualification proof for a procedural RL train curriculum.
 
-Checks the packet's ids, source ids and source groups against the current held/quality source-group projections and
-the decision-hold files exactly as the RL task-source resolver's audits do, then writes
+Checks every row against the shared protected-world custody (common.custody.ProtectedWorlds over
+training/protected-worlds.json: evaluation packets, held/quality source groups, decision holds, test reservations;
+ids, groups, world bindings and content fingerprints), then writes
 `qualification.json` (schema natlang.rl-additional-task-source-qualification/1) so the packet can be appended to an
 RL task source as an additional admitted train source. Exit 1 on any intersection or non-train row.
 
@@ -18,20 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common.custody import REGISTRY, ProtectedWorlds  # noqa: E402
 from natlang_neuralese.common.hashing import sha256_file_hex as sha_file  # noqa: E402
-from natlang_neuralese.common.paths import resolve  # noqa: E402
-
-BUNDLE = resolve('data_nvme', 'e2e-current-protection-bundle-20261015-v1')
-HELD = BUNDLE / 'held-union/full/source-groups/text-data.jsonl'
-QUALITY = BUNDLE / 'quality-groups.jsonl'
-
-
-def group_set(path: Path) -> set[str]:
-    out: set[str] = set()
-    for line in path.read_text().splitlines():
-        if line.strip():
-            out.update(json.loads(line).get('source_groups', []))
-    return out
 
 
 def main() -> int:
@@ -41,20 +30,9 @@ def main() -> int:
     a = ap.parse_args()
     cases = a.packet / 'cases.jsonl'
     rows = [json.loads(line) for line in cases.read_text().splitlines() if line.strip()]
-    held, quality = group_set(HELD), group_set(QUALITY)
-    hold_dir = ROOT / 'training/decision-holds'
-    hold_ids: set[str] = set()
-    hold_files = {}
-    for path in sorted(hold_dir.glob('*.jsonl')):
-        hold_files[path.name] = sha_file(path)
-        for line in path.read_text().splitlines():
-            if line.strip() and isinstance(json.loads(line).get('id'), str):
-                hold_ids.add(json.loads(line)['id'])
-    ids = {r['id'] for r in rows}
-    all_ids = ids | {s for r in rows for s in r.get('source_ids', [])}
-    groups = {g for r in rows for g in r.get('source_groups', [])}
-    inter = {'decision_ids': sorted(all_ids & hold_ids), 'held_groups': sorted(groups & held),
-             'quality_groups': sorted(groups & quality)}
+    protected = ProtectedWorlds.load()  # fails closed
+    related = [{'id': r['id'], 'kinds': protected.related(r)} for r in rows if protected.related(r)]
+    inter = {'protected_worlds': related}
     row_sha = {r['id']: hashlib.sha256(json.dumps(r, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
                                        .encode('utf-8')).hexdigest() for r in rows}
     verification = json.loads((a.packet / 'verification.json').read_text())
@@ -72,10 +50,9 @@ def main() -> int:
                                'whole student episodes scored by existing exact outcomes, actual communication graphs '
                                'updated whole.'),
         'current_protection_intersections': inter,
-        'current_protection_bindings': {
-            'decision_hold_files': hold_files,
-            'held_groups': {'path': str(HELD), 'sha256': sha_file(HELD), 'groups': len(held)},
-            'quality_groups': {'path': str(QUALITY), 'sha256': sha_file(QUALITY), 'groups': len(quality)}},
+        'current_protection_bindings': {'registry': REGISTRY, 'registry_sha256': sha_file(ROOT / REGISTRY),
+                                        'protected_sha256': protected.digest,
+                                        'sources': [json.loads(item) for item in protected.sources]},
         'verification': {'path': 'verification.json', 'sha256': sha_file(a.packet / 'verification.json'),
                          'reference_executions': verification['cases'], 'failures': len(verification['failures'])},
         'task_ids': [r['id'] for r in rows],

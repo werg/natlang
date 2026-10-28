@@ -11,13 +11,19 @@ row must have `split: "train"`, the same `program_id`, a distinct `id`, and the
 normal authored root task contract. Confirmation invocations are **never**
 shown to the author or exported as SFT graphs. If a program has protected test
 rows, keep them in a third packet and use the existing held evaluator after
-the candidate is bound. Development and confirmation use the same student,
-sampler and seeds for seed/candidate comparison. Outcomes come from the normal
-task oracle; infrastructure and incomplete scores stop acceptance.
-The worker first measures an unguided baseline with the same cases and seeds.
-It publishes a program binding only when the best native guide improves both
-development and confirmation success rates by at least
-`--min-gain-fraction` (default 0.1). A run without measured lift writes
+the candidate is bound. Both slices carry the shared world-custody receipt
+(`common/custody.py`, `--custody`): pairwise unrelated worlds, none related to a
+protected source of `training/protected-worlds.json`. Every evaluation runs
+through the production collector (`rl/production.collect` with the guidance
+as its bound system prompt). Outcomes come from the normal task oracle;
+infrastructure and incomplete scores stop acceptance. The worker first
+measures an unguided baseline with the same cases and seeds. Candidates are
+selected on development outcomes only (`common/acceptance.select`); the selected
+guide is then measured once on the untouched confirmation slice, and
+`common/acceptance.confirm` publishes a program binding only when it improves
+both development and confirmation success rates by at least
+`--min-gain-fraction` (default 0.1). The confirmation ledger beside the
+confirmation packet refuses a different guide on spent confirmation worlds. A run without measured lift writes
 `result.json` with `status: "no_lift"` and leaves no user binding or trainer
 graphs. A longer resumed search can still qualify later.
 
@@ -27,7 +33,8 @@ declared service contract. Private service implementation data remains an
 invocation world binding. Rows retain the source file SHA-256, original row
 SHA-256 and index. The selector makes global source/world connected components
 before splitting, so related cases cannot appear in development for one
-program and confirmation for another. It writes a `batch.json` manifest with
+program and confirmation for another; it refuses protected-related rows and
+writes each ready program's `custody.json`. It writes a `batch.json` manifest with
 ready jobs and explicit pending groups. The worker iterates every ready
 program, journals successes and failures, and resumes each program from its
 own candidate/fitness state on restart. With a base recipe, it verifies that
@@ -69,7 +76,7 @@ independent cases for two training and two confirmation invocations.
 
 ```sh
 PYTHONPATH=training/neuralese:. .venv-neuralese/bin/python -m natlang_neuralese.rl.memetic_program \
-  --program-id my-program --development dev.jsonl --confirmation confirm.jsonl \
+  --program-id my-program --development dev.jsonl --confirmation confirm.jsonl --custody custody.json \
   --recipe-base training/neuralese/recipes/native-state-production-base-20261015-v1.json \
   --foundation-id native_full_sft \
   --recipe-graph-path /work/memetic/native-guidance-graphs.jsonl \
