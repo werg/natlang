@@ -51,7 +51,7 @@ def score_file(sources: list[str], label: str) -> Path:
 
 
 def teacher_twins():
-    for receipt_path in sorted(TEACHERS.glob('*/lfm3/receipt.json')):
+    for receipt_path in sorted(TEACHERS.glob('*/lfm3*/receipt.json')):  # lfm3 (full) and lfm3-program-header
         receipt = json.loads(receipt_path.read_text())
         if (receipt.get('verification') or {}).get('passed'):
             yield receipt_path.parent, receipt
