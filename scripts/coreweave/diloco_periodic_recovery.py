@@ -496,7 +496,7 @@ def run_once(record,state_path,backend):
 
 
 
-_HEALTH_PROBE = r"""import json,pathlib,sys
+_HEALTH_PROBE = r"""import hashlib,json,pathlib,sys
 expected=json.loads(sys.argv[1]);boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
 p=pathlib.Path('/proc')/str(expected['pid']); alive=False
 try:
@@ -506,7 +506,10 @@ progress=pathlib.Path('/work/diloco-learner/progress.json');value=None
 try:
  value=json.loads(progress.read_text());value={k:value.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
 except (OSError,ValueError):pass
-print(json.dumps({'boot_id':boot,'pid_alive':alive,'progress':value}))"""
+module=pathlib.Path('/home/werg/natlang/training/neuralese/natlang_neuralese/train/native_state_sft.py')
+try: module_sha=hashlib.sha256(module.read_bytes()).hexdigest()
+except OSError: module_sha=None
+print(json.dumps({'boot_id':boot,'pid_alive':alive,'progress':value,'runtime_module_sha256':module_sha}))"""
 
 def health_snapshot(record, ownership, *, read_sandbox=None):
     """Actual sandbox status, boot/PID ownership and last optimizer progress."""
@@ -521,7 +524,9 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
             r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role)],timeout_seconds=30).result(timeout=40)
             if r.returncode:raise ValueError('health probe failed')
             data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
-            data['state']='live' if status=='running' and data['pid_alive'] else 'dead-or-replaced'
+            expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
+            data['runtime_matches']=bool(expected_sha and data.get('runtime_module_sha256')==expected_sha)
+            data['state']='live' if status=='running' and data['pid_alive'] and data['runtime_matches'] else 'dead-replaced-or-runtime-mismatch'
             return str(i),data
         except Exception as error:return str(i),{'sandbox_id':ident,'state':'unavailable','error_type':type(error).__name__}
     with ThreadPoolExecutor(max_workers=len(ids)) as pool:return dict(pool.map(check,range(len(ids))))
@@ -530,7 +535,8 @@ def health_loop(record, ownership_path, destination, interval):
     while True:
         try:
             ownership=json.loads(Path(ownership_path).read_text());workers=health_snapshot(record,ownership)
-            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'at':time.time(),'workers':workers}
+            current=json.loads((cwctl.STATE/'diloco'/(record['run']['id']+'.json')).read_text())
+            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'journal_state':current.get('state'),'at':time.time(),'workers':workers}
             durable_json(destination,value)
             print(json.dumps({'event':'worker_health','workers':workers},sort_keys=True),flush=True)
         except Exception as error:
