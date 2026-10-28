@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { findNativeCheckpoint, nativePort, nativeServerCommand, pinNativeCheckpoint, removeNativePin, validateNativeSettings } from '../dist/model/native-managed.js';
+import { ensureNativeServer, findNativeCheckpoint, nativeIdentity, nativePort, nativeServerCommand, pinNativeCheckpoint, removeNativePin, validateNativeSettings } from '../dist/model/native-managed.js';
 
 const sha = 'ab'.repeat(32), other = 'cd'.repeat(32);
 
@@ -45,6 +45,19 @@ test('a native profile launches its pinned checkpoint on a port derived from it,
   assert.deepEqual(launched.slice(0, 6), ['ledger', 'run', '--unit', `natlang-native-${sha.slice(0, 12)}-${nativePort(native)}`, '--', 'env']);
   assert.throws(() => validateNativeSettings({ checkpoint: '/x', sha256: 'short' }), /sha256/);
   assert.throws(() => validateNativeSettings({ ...native, stop: ['x'] }), /launcher/);
+});
+
+test('a matching direct checkpoint server records its identity without creating a managed pin', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'natlang-direct-identity-'));
+  const environment = { NATLANG_NATIVE_MODELS: directory };
+  const identity = { architecture: 'lfm3', checkpoint_sha256: sha, embedding_weight_sha256: 'cd'.repeat(32), tokenizer_fingerprint: 'ef'.repeat(32) };
+  const old = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ native_state: identity }), { status: 200 });
+  try {
+    await ensureNativeServer({ checkpoint: '/direct/checkpoint.pt', sha256: sha }, environment);
+    assert.deepEqual(nativeIdentity(sha, environment), identity);
+    assert.equal(existsSync(join(directory, 'pins.json')), false);
+  } finally { globalThis.fetch = old; rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('a pin carries its compact actor view; the server loads it, and a pin made before views gains one', async () => {

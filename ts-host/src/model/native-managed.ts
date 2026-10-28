@@ -132,7 +132,12 @@ export async function nativeServing(native: NativeModelSettings): Promise<'servi
 
 /** The identity a pin's server reported (recorded in the pin index when the server is first seen serving it). */
 export function nativeIdentity(sha256: string, environment: NodeJS.ProcessEnv = process.env): NativeIdentity | undefined {
-  try { return (JSON.parse(readFileSync(join(nativeModelsDirectory(environment), 'pins.json'), 'utf8')) as Record<string, { identity?: NativeIdentity }>)[sha256]?.identity; }
+  const directory = nativeModelsDirectory(environment);
+  try {
+    const identity = (JSON.parse(readFileSync(join(directory, 'pins.json'), 'utf8')) as Record<string, { identity?: NativeIdentity }>)[sha256]?.identity;
+    if (identity) return identity;
+  } catch { /* direct profiles need not have a pin index */ }
+  try { return (JSON.parse(readFileSync(join(directory, 'identities.json'), 'utf8')) as Record<string, NativeIdentity>)[sha256]; }
   catch { return undefined; }
 }
 function rememberIdentity(served: Served, environment: NodeJS.ProcessEnv): void {
@@ -142,7 +147,16 @@ function rememberIdentity(served: Served, environment: NodeJS.ProcessEnv): void 
   try {
     const pins = JSON.parse(readFileSync(index, 'utf8')) as Record<string, Omit<Pin, 'reused'>>;
     if (pins[identity.checkpoint_sha256]) recordPin(index, identity.checkpoint_sha256, { ...pins[identity.checkpoint_sha256]!, identity });
-  } catch { /* no pin index: nothing to remember it in */ }
+  } catch { /* direct profiles need not have a pin index */ }
+  if (nativeIdentity(identity.checkpoint_sha256, environment)) return;
+  // Directly configured checkpoints are not pins and must never acquire pin-retention or deletion semantics.
+  const directory = nativeModelsDirectory(environment), file = join(directory, 'identities.json');
+  mkdirSync(directory, { recursive: true });
+  const identities = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as Record<string, NativeIdentity> : {};
+  identities[identity.checkpoint_sha256] = identity;
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify(identities, null, 2) + '\n');
+  renameSync(temporary, file);
 }
 
 type Owned = { child: ChildProcess | null; native: NativeModelSettings; stderr: string };
