@@ -66,6 +66,7 @@ def worker_pin(checkpoint, destination, worker, expected_fingerprint, package):
                 'source_hash':training.get('source_hash'),
                 'required_dependencies':dependencies,
                 'resident_generation':(training.get('options',{}).get('resident_adoption') or {}).get('generation'),
+                'source_receipt_sha256': [x.get('sha256') for x in training['source_receipts'][:2]],
                 'recipe_binding':training.get('options',{}).get('recipe_binding'),
                 'ce_supervision_policy_binding':training.get('options',{}).get('ce_supervision_policy_binding'),
                 'runtime_code_sha256':canonical_json_sha256_hex(code_inventory(package))}
@@ -104,6 +105,12 @@ def resident_pin(directory, archive):
         os.link(temp, archive); temp.unlink()
         return {'path': str(archive), 'sha256': _hash(archive), 'bytes': archive.stat().st_size,
                 'generation': state['generation'] if state else initial_state['plan_sha256'],
+                'binding_kind': 'adopted' if state else 'initial-only',
+                'initial_binding': None if state else {'plan_sha256': initial_state['plan_sha256'],
+                    'recipe_sha256': active_plan['recipe_sha256'],
+                    'roles': [{'train': x.get('native_graphs', {}).get('sha256'),
+                               'held': x.get('held_native_graphs', {}).get('sha256')}
+                              for x in active_plan['stage_inputs'].values()]},
                 'at_global_step': state['at_global_step'] if state else None,
                 'captured_at': time.time()}
     finally:

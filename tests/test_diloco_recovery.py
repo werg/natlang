@@ -529,3 +529,15 @@ def test_recovery_wait_requires_four_owned_workers_and_qualified_local_parent(tm
     assert not wait.ready(record,pin,parent,copy,qualified)
     bad['learners'][3]='s3';bad['ownership']['s3']=[];record.write_text(json.dumps(bad))
     assert not wait.ready(record,pin,parent,copy,qualified)
+
+
+def test_initial_resident_requires_exact_plan_recipe_and_source_receipts():
+    service=load('diloco_periodic_recovery')
+    components={'coordinator':{'fingerprint':'f','versions':[0],'last_seq':[{}],'queued':[{}],'runtime_code_sha256':'code'}}
+    for i in range(4):
+        components[f'worker-{i}']={'worker':i,'fingerprint':'f','versions':[0],'sequences':[0], 'pending':{},'awaiting_global':[], 'source_hash':'s','runtime_code_sha256':'code','resident_generation':None,'source_receipt_sha256':['train','held'],'recipe_binding':{'lineage_sha256':'recipe'},'ce_supervision_policy_binding':'ce'}
+        components[f'resident-{i}']={'generation':'plan','binding_kind':'initial-only','initial_binding':{'plan_sha256':'plan','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}}
+    assert service.compatibility(components)['compatible']
+    for replacement in ({'plan_sha256':'other','recipe_sha256':'recipe','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'other','roles':[{'train':'train','held':'held'}]}, {'plan_sha256':'plan','recipe_sha256':'recipe','roles':[{'train':'other','held':'held'}]}):
+        bad={**components,'resident-0':{**components['resident-0'],'initial_binding':replacement}}
+        assert not service.compatibility(bad)['compatible']

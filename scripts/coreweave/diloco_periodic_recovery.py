@@ -345,8 +345,24 @@ def compatibility(components):
             or len({json.dumps(w.get('ce_supervision_policy_binding'),sort_keys=True) for w in workers})!=1):
         return {'compatible':False,'reason':'worker source or runtime transitions differ'}
     residents=[components.get('resident-'+str(i)) for i in range(4)]
-    if any(not r or not w.get('resident_generation') or r['generation']!=w['resident_generation'] for w,r in zip(workers,residents)):
-        return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}
+    for w,r in zip(workers,residents):
+        if not r:
+            return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}
+        if w.get('resident_generation'):
+            if r['generation'] != w['resident_generation']:
+                return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}
+            continue
+        initial=r.get('initial_binding') or {}
+        try:
+            recipe=json.loads(w['recipe_binding']) if isinstance(w['recipe_binding'],str) else w['recipe_binding']
+            sources=w['source_receipt_sha256']
+            matching={'train':sources[0], 'held':sources[1]} in initial['roles']
+            valid=(r.get('binding_kind')=='initial-only' and r['generation']==initial['plan_sha256']
+                   and recipe['lineage_sha256']==initial['recipe_sha256'] and matching)
+        except (KeyError,TypeError,IndexError,ValueError):
+            valid=False
+        if not valid:
+            return {'compatible':False,'reason':'resident state is missing or differs from the worker checkpoint'}
     versions=coord['versions']
     if any(len(w['versions'])!=len(versions) or any(a>b for a,b in zip(w['versions'],versions)) for w in workers):
         return {'compatible':False,'reason':'a worker checkpoint is ahead of the pinned coordinator'}
