@@ -196,7 +196,7 @@ const LINE_TOTAL_BOUNDARIES = [
   { sku: 'H6', quantity: 7, unit_cents: 1499, discount_cents: 299 },
   { sku: 'H7', quantity: 0, unit_cents: 820, discount_cents: 15 },
 ];
-function lineTotalChecks(lines, change) {
+export function lineTotalChecks(lines, change) {
   const contract = line => Math.max(0, line.quantity * line.unit_cents - line.discount_cents);
   // The case's lines under fresh SKUs too, so a lookup keyed by the visible SKUs fails.
   const hidden = [...lines, ...lines.map((line, i) => ({ ...line, sku: `Q${i + 1}` })), ...LINE_TOTAL_BOUNDARIES];

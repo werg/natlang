@@ -80,11 +80,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--threads', type=int, default=6)
+    parser.add_argument('--corpora-file', type=Path, help='scan only the corpus ids listed (one per line or a JSON list)')
+    parser.add_argument('--exclude', default=None, help='regular expression of file paths to skip (for example rendered views)')
     parser.add_argument('families', nargs='+')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     corpora = candidate_corpora(ROOT)
-    files = sorted({f for corpus in corpora for f in corpus['files']})
+    if args.corpora_file:
+        text = args.corpora_file.read_text(encoding='utf-8')
+        wanted = set(json.loads(text)) if text.lstrip().startswith('[') else {line.strip() for line in text.splitlines() if line.strip()}
+        corpora = [c for c in corpora if c['id'] in wanted]
+    skip = re.compile(args.exclude) if args.exclude else None
+    files = sorted({f for corpus in corpora for f in corpus['files'] if not (skip and skip.search(f))})
     chunks = [files[i:i + CHUNK] for i in range(0, len(files), CHUNK)]
     progress = args.out / 'progress.txt'
     done = {int(line.split('\t', 1)[0]) for line in progress.read_text().splitlines() if line} if progress.exists() else set()

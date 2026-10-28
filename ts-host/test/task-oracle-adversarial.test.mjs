@@ -81,3 +81,24 @@ test('contract_diagnosis function-effect oracle rejects unrepaired, hard-coded a
   }
   t.diagnostic(`contract_diagnosis: ${rejected} negatives rejected, ${accepted} positives accepted`);
 });
+
+test('regrading stored rows agrees with the live oracles (old-oracle rows: no function_checks)', async () => {
+  const { regradeEpisode } = await import('../scripts/inline-curriculum/regrade-family-rows.mjs');
+  let checked = 0;
+  for (const record of FAMILIES.contract_diagnosis.build(7, 0)) {
+    for (const [name, root] of [...contractDiagnosisNegatives(record), ...contractDiagnosisPositives(record)]) {
+      const probe = structuredClone(record);
+      probe.curriculum.reference.root = root;
+      const outcome = (await replayReference(probe, TOOLS_PROMPT)).run.outcome;
+      // A row graded by the old oracle: no function_checks, accepted whenever the value matched.
+      const old = structuredClone(record);
+      delete old.semantics.function_checks;
+      const answerOk = outcome.checks.answer === true;
+      const graded = regradeEpisode(old, { ...outcome, accepted: answerOk });
+      if (!answerOk) { assert.equal(graded.verdict, 'already_rejected'); continue; }
+      assert.equal(graded.verdict === 'pass', outcome.accepted, `${record.curriculum.variant} "${name}": ${graded.verdict} ${graded.problems.join('; ')}`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 10);
+});
