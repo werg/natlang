@@ -22,11 +22,12 @@ from natlang_neuralese.model.shared_state import native_step
 from natlang_neuralese.serve import load_native_engine
 
 checkpoint, out, dump = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+base = sys.argv[sys.argv.index('--base') + 1] if '--base' in sys.argv else None
 device = 'cpu' if '--cpu' in sys.argv else 'cuda'
 out.mkdir(parents=True, exist_ok=True)
 if '--export' in sys.argv or not (out / 'base' / 'model-f32.gguf').exists():
-    export_native_gguf(checkpoint, out / 'base', outtypes=('f32',))
-engine = load_native_engine(str(checkpoint), device=device, dtype=torch.float32)
+    export_native_gguf(checkpoint, out / 'base', outtypes=('f32',), base=base)
+engine = load_native_engine(str(checkpoint), base=base, device=device, dtype=torch.float32)
 model, tok, roles = engine.shared_model, engine.tokenizer, engine.role_tokens
 prompt = tok.encode('Summarize the ticket for the billing team:', add_special_tokens=False)
 span = tok.encode(' refund request for order 4411, charged twice', add_special_tokens=False)
