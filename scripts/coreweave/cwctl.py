@@ -490,11 +490,20 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     # Objects already in the volume's content store (a restored snapshot, an earlier bundle) are linked into the inbox
     # instead of crossing the controller's uplink (measured 0.2-0.5 MB/s from DGX); the fetch still verifies them.
     cas = f"{job['scratch']['path']}/.coreweave/cas"
-    reuse = ('import json,os,sys\ninbox,cas=sys.argv[1],sys.argv[2];os.makedirs(inbox,exist_ok=True);found=[]\n'
-             'for sha,size in json.loads(sys.argv[3]):\n p=os.path.join(cas,sha)\n'
-             ' if os.path.isfile(p) and os.path.getsize(p)==size:\n'
-             '  t=os.path.join(inbox,sha)\n  os.path.exists(t) or os.link(p,t)\n  found.append(sha)\n'
-             'print(json.dumps(found))')
+    reuse = ("import hashlib,json,os,sys\n"
+             "inbox,cas=sys.argv[1:3]; os.makedirs(inbox,exist_ok=True); found=[]\n"
+             "def valid(p,sha,size):\n"
+             " if not os.path.isfile(p) or os.path.getsize(p)!=size:return False\n"
+             " h=hashlib.sha256()\n"
+             " with open(p,'rb') as f:\n"
+             "  for block in iter(lambda:f.read(8388608),b''):h.update(block)\n"
+             " return h.hexdigest()==sha\n"
+             "for sha,size in json.loads(sys.argv[3]):\n"
+             " t=os.path.join(inbox,sha); p=os.path.join(cas,sha)\n"
+             " if valid(t,sha,size):found.append(sha);continue\n"
+             " if os.path.lexists(t):os.unlink(t)\n"
+             " if valid(p,sha,size):os.link(p,t);found.append(sha)\n"
+             "print(json.dumps(found))")
     result = sandbox.exec(['python3', '-c', reuse, inbox, cas,
                            json.dumps([[i['sha256'], i['bytes']] for i in items])]).result()
     seen = set(json.loads(result.stdout.strip() or '[]')) if result.returncode == 0 else set()
@@ -513,7 +522,7 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
         sandbox.write_file_streaming(f"{inbox}/{item['sha256']}", _chunks(source), timeout_seconds=7200).result()
         return item, round(time.time() - started, 1)
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    concurrency = int(os.environ.get('NATLANG_CW_UPLOAD_WORKERS', '4'))
+    concurrency = int(os.environ.get('NATLANG_CW_UPLOAD_WORKERS', '1'))
     if not 1 <= concurrency <= 16:
         raise ControllerError('NATLANG_CW_UPLOAD_WORKERS must be between 1 and 16')
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -523,6 +532,12 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
             bytes_pushed += item['bytes']
             log(json.dumps({'event': 'pushed', 'path': item.get('path', 'code'), 'bytes': item['bytes'],
                             'seconds': seconds}))
+    # Never publish readiness until each inbox object is complete and hash verified.
+    result = sandbox.exec(['python3', '-c', reuse, inbox, cas,
+                           json.dumps([[i['sha256'], i['bytes']] for i in items])]).result()
+    verified = set(json.loads(result.stdout.strip() or '[]')) if result.returncode == 0 else set()
+    if verified != {i['sha256'] for i in items}:
+        raise ControllerError('input upload verification failed; readiness was not published')
     for name, value in (secrets or {}).items():
         if not SECRET_NAME.fullmatch(name):
             raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')

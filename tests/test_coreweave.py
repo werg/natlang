@@ -1583,7 +1583,13 @@ def test_parallel_input_transfer_publishes_ready_only_after_complete_objects(tmp
         objects = {}; published = []
         lock = threading.Lock()
         def exec(self, argv):
-            future = Future(); future.set_result(type('Result', (), {'returncode': 0, 'stdout': '[]'})()); return future
+            verified = []
+            if argv[:2] == ['python3', '-c']:
+                for sha, size in json.loads(argv[-1]):
+                    body=self.objects.get('/work/.coreweave/inbox/'+sha)
+                    if body is not None and len(body)==size and hashlib.sha256(body).hexdigest()==sha:
+                        verified.append(sha)
+            future = Future(); future.set_result(type('Result', (), {'returncode': 0, 'stdout': json.dumps(verified)})()); return future
         def write_file_streaming(self, path, chunks, **kwargs):
             with self.lock:
                 self.active += 1; self.peak = max(self.peak, self.active)
@@ -1608,3 +1614,27 @@ def test_parallel_input_transfer_publishes_ready_only_after_complete_objects(tmp
         assert box.published[-1].endswith('/inputs-ready')
     assert box.peak > 1
 
+
+
+def test_resume_inputs_checks_real_sha_before_reuse(tmp_path, monkeypatch):
+    import hashlib, subprocess
+    from concurrent.futures import Future
+    import cwctl
+    body=b'right'; sha=hashlib.sha256(body).hexdigest(); source=tmp_path/'source';source.write_bytes(body)
+    root=tmp_path/'sandbox';inbox=root/'.coreweave/inbox';inbox.mkdir(parents=True)
+    (inbox/sha).write_bytes(b'wrong')  # Same size is not enough.
+    manifest=tmp_path/'bundle.json';manifest.write_text(json.dumps({'files':[{'key':sha,'sha256':sha,'bytes':len(body),'path':'/x'}]}))
+    manifest.with_suffix('.sources.json').write_text(json.dumps({sha:str(source)}))
+    class Box:
+        def __init__(self):self.pushes=0
+        def exec(self,argv):
+            r=subprocess.run(argv,capture_output=True,text=True);f=Future();f.set_result(r);return f
+        def write_file_streaming(self,path,chunks,**kw):
+            self.pushes+=1;Path(path).write_bytes(b''.join(chunks));f=Future();f.set_result(None);return f
+        def write_file(self,path,data):
+            Path(path).write_bytes(data);f=Future();f.set_result(None);return f
+    box=Box();job={'scratch':{'path':str(root)},'env':{}}
+    assert cwctl.push_inputs(box,job,manifest,log=lambda _:None)['pushed']==1
+    assert (inbox/sha).read_bytes()==body
+    assert cwctl.push_inputs(box,job,manifest,log=lambda _:None)['pushed']==0
+    assert box.pushes==1
