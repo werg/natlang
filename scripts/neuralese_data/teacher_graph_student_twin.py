@@ -123,8 +123,13 @@ def _calls(raw_calls):
     return out
 
 
+def view_dir(model_key: str, prompt_rendering: str = 'full') -> str:
+    """Output view directory: ``<model_key>`` (full system prompt) or ``<model_key>-program-header`` (serving mode)."""
+    return model_key if prompt_rendering == 'full' else f'{model_key}-{prompt_rendering}'
+
+
 def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: str = 'lfm25',
-            tokenizer_state=None) -> dict:
+            tokenizer_state=None, prompt_rendering: str = 'full') -> dict:
     from natlang_neuralese.common.hashing import sha256_file_hex
     from natlang_neuralese.data.native_graph_conversion import text_row_graph
     from natlang_neuralese.serve.chat import build_message
@@ -133,7 +138,7 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
     entries = {e['id']: e for e in _load(REGISTRY)['corpora']}
     entry = entries[package_id]
     root = package_root(entry)
-    out = out_root / package_id / model_key
+    out = out_root / package_id / view_dir(model_key, prompt_rendering)
     if (out / 'receipt.json').exists():
         return _load(out / 'receipt.json')
     reference_receipt_path = root / reference_key / 'receipt.json'
@@ -185,7 +190,8 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                     omissions.append({'id': ref['id'], 'split': split, 'source_row_id': row['id'],
                                       'teacher_turn_index': index, 'reason': reason, **extra})
                 try:
-                    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn)
+                    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn,
+                                                             prompt_rendering=prompt_rendering)
                 except ValueError as error:  # e.g. RequestError('tool-call-unrepresentable') under XML calls
                     omit(f'{model_key} rendering refused: {error}'[:300])
                     continue
@@ -273,6 +279,7 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
         verification['passed'] = False
         problems.append('emitted + omitted rows differ from the reference rows')
     receipt = {'schema': SCHEMA, 'package_id': package_id, 'model_key': model_key, 'model_id': identity['model_id'],
+               'prompt_rendering': prompt_rendering,
                'tokenizer': {k: identity[k] for k in ('source_fingerprint', 'expanded_fingerprint',
                                                       'role_token_ids', 'history_reasoning')},
                'reference': {'model_key': reference_key, 'model_id': reference.get('model_id'),
@@ -314,7 +321,8 @@ class Locked:
 def plan(args):
     entries = [e for e in _load(REGISTRY)['corpora'] if is_teacher_package(e)]
     with Locked(args.queue) as queue:
-        queue.update(model_key=args.model_key, reference_key=args.reference_key, out_root=str(args.out_root))
+        queue.update(model_key=args.model_key, reference_key=args.reference_key, out_root=str(args.out_root),
+                     prompt_rendering=args.prompt_rendering)
         items = queue.setdefault('items', {})
         for entry in entries:
             if entry.get('training_admission') is not True or entry['id'].endswith('-' + args.model_key):
@@ -350,7 +358,9 @@ def _claim(queue_path, shard: int, shards: int):
         for item in items.values():  # a claim of a stopped/preempted process returns to pending
             if item.get('status') == 'claimed' and not _alive(item.get('claim_pid')):
                 item['status'] = 'pending'
-        ids = sorted(items)
+        # Smallest packages first: a preempted unit restarts its current package, so many short packages finish
+        # between preemptions and the few very large ones come last.
+        ids = sorted(items, key=lambda i: (items[i].get('reference_rows') or 0, i))
         order = [i for k, i in enumerate(ids) if k % shards == shard] + ids
         for package_id in order:
             if items[package_id].get('status') == 'pending':
@@ -367,7 +377,7 @@ def run_queue(args):
         started = time.time()
         try:
             receipt = convert(package_id, queue['model_key'], out_root, reference_key=queue['reference_key'],
-                              tokenizer_state=state)
+                              tokenizer_state=state, prompt_rendering=queue.get('prompt_rendering', 'full'))
             update = {'status': 'converted' if receipt['verification']['passed'] else 'verify-failed',
                       'rows': receipt['verification']['emitted_rows'],
                       'omitted': receipt['verification']['omitted_rows'], 'seconds': round(time.time() - started)}
@@ -394,7 +404,8 @@ def collect(args):
         item = queue['items'][package_id]
         if item.get('status') != 'converted':
             continue
-        receipt = _load(out_root / package_id / queue['model_key'] / 'receipt.json')
+        receipt = _load(out_root / package_id / view_dir(queue['model_key'], queue.get('prompt_rendering', 'full'))
+                        / 'receipt.json')
         root = package_root({'path': _registry_path(package_id)})
         in_production = any(str(root) in p for p in prod)
         for split, output in receipt['outputs'].items():
@@ -445,7 +456,8 @@ def entries(args):
         if item.get('status') != 'converted' or new_id in registry:
             continue
         source = registry[package_id]
-        receipt = _load(out_root / package_id / queue['model_key'] / 'receipt.json')
+        receipt = _load(out_root / package_id / view_dir(queue['model_key'], queue.get('prompt_rendering', 'full'))
+                        / 'receipt.json')
         directory = out_root / package_id
         rel = str(directory.relative_to(ROOT)) if directory.is_relative_to(ROOT) else str(directory)
         keep = ('source_class', 'split', 'license', 'license_provenance', 'training_admission_reason')
@@ -481,11 +493,14 @@ def main():
     p.add_argument('--model-key', required=True)
     p.add_argument('--reference-key', default='lfm25')
     p.add_argument('--out-root', type=Path, required=True)
+    p.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='program-header')
     p = sub.add_parser('plan')
     p.add_argument('--model-key', required=True)
     p.add_argument('--reference-key', default='lfm25')
     p.add_argument('--out-root', type=Path, required=True)
     p.add_argument('--queue', type=Path, required=True)
+    p.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='program-header',
+                   help='program-header is the serving mode (policy serving_mode); full keeps the generic system prompt')
     p = sub.add_parser('run-queue')
     p.add_argument('--queue', type=Path, required=True)
     p.add_argument('--shard', type=int, default=0)
@@ -502,7 +517,7 @@ def main():
         state = student_tokenizer(args.model_key)
         for package_id in args.package_id:
             receipt = convert(package_id, args.model_key, args.out_root.resolve(), reference_key=args.reference_key,
-                              tokenizer_state=state)
+                              tokenizer_state=state, prompt_rendering=args.prompt_rendering)
             print(json.dumps({'package': package_id, 'verification': receipt['verification']}))
     else:
         {'plan': plan, 'run-queue': run_queue, 'collect': collect, 'entries': entries}[args.cmd](args)

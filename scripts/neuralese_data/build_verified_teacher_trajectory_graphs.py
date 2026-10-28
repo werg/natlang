@@ -1023,15 +1023,16 @@ def captured_text_emulation_context(turn, context, tools):
     return rendered, chosen_tools, proof, None
 
 
-def render_teacher_packet(tokenizer, context, target, tools, turn=None):
-    """Render one action or return an explicit omission when its exact state payload is unavailable."""
+def render_teacher_packet(tokenizer, context, target, tools, turn=None, prompt_rendering='full'):
+    """Render one action or return an explicit omission when its exact state payload is unavailable.
+    ``prompt_rendering``: ``full`` (generic system prompt and tool schemas) or ``program-header`` (the serving mode)."""
     emulation_proof = None
     if turn is not None:
         context, tools, emulation_proof, omission = captured_text_emulation_context(turn, context, tools)
         if omission is not None:
             return None, omission
     try:
-        packet = native_gold_packet(tokenizer, context, target, tools, prompt_rendering='full')
+        packet = native_gold_packet(tokenizer, context, target, tools, prompt_rendering=prompt_rendering)
         return (packet, emulation_proof), None
     except ValueError as error:
         scope = unresolved_gold_error(error)
