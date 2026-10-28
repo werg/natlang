@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch one DiLoCo stage on CoreWeave: a CPU coordinator sandbox and N one-GPU learner sandboxes.
+"""Launch one DiLoCo stage: by default the coordinator shares worker 0's GPU sandbox.
 
 Every role is an ordinary cwctl job (job.py, transport "api"). The run file names two job templates:
 
@@ -19,9 +19,15 @@ bearer token and the coordinator's share token reach the sandboxes only as secre
     diloco.py status RUN_ID       the coordinator's merge status
     diloco.py attach-eval RUN_ID JOB.json BUNDLE.json   an eval sandbox with the coordinator URL and secrets
 
-After the learners finish, collect them (cwctl.py collect), stop the coordinator with a graceful SIGTERM
-(``cwctl.py stop ID``: it merges what arrived last), collect its root and run
-``python -m natlang_neuralese.train.native_diloco export`` to produce the continuation checkpoint.
+Cohosted mode uses the learner bundle for both roles; it must include the exact coordinator parent and code.
+Worker 0 uses loopback, all others use the share-token gateway. Its coordinator remains live after worker 0 finishes.
+Collect the worker outputs and coordinator root before stopping the shared sandbox once; the run journal under
+``~/.local/state/natlang/coreweave/diloco/RUN_ID.json`` records each sandbox's owned roles and current launch state. Replacing
+worker 0 also replaces the coordinator: restore its durable root and worker 0's full state deliberately; this launcher
+does not implement automatic failover. If an SDK launch fails before returning its sandbox ID, reconcile the cwctl
+launch event journal before any replacement; the per-run journal cannot yet contain that ID. To opt into a separate CPU sandbox, set ``"placement": "separate"``.
+For either placement, collect all learners and the coordinator root while the sandbox is live; then stop it and run
+``python -m natlang_neuralese.train.native_diloco export`` with every learner checkpoint.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ import os
 import secrets
 import shlex
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -54,6 +61,8 @@ def validate(run: dict) -> dict:
             raise cwctl.ControllerError(f'run file lacks {key!r}')
     if not {'job', 'bundle_file', 'parent'} <= set(run['coordinator']) or not {'job', 'bundle_file'} <= set(run['learners']):
         raise cwctl.ControllerError('coordinator needs job, bundle_file and parent; learners need job and bundle_file')
+    if run.get('placement', 'cohosted') not in ('cohosted', 'separate'):
+        raise cwctl.ControllerError('placement must be cohosted or separate')
     if 'coordinator_url' in run['settings']:
         raise cwctl.ControllerError('settings.coordinator_url is filled in by the launch')
     return run
@@ -83,11 +92,77 @@ def learner_job(run: dict, worker: int, url: str) -> dict:
     return jobs.validate(job)
 
 
+def cohosted_job(run: dict, trainer_args: list[str]) -> dict:
+    """Worker 0 owns the GPU; the coordinator owns CPU and its own root on the same sandbox."""
+    job = learner_job(run, 0, f'http://127.0.0.1:{PORT}')
+    root = f"{job['scratch']['path']}/diloco-coordinator"
+    init = ['python', '-m', 'natlang_neuralese.train.native_diloco', 'init', '--root', root,
+            '--parent', run['coordinator']['parent'], '--trainer-argv', json.dumps(trainer_args),
+            '--settings', json.dumps(run['settings']), *run['coordinator'].get('args', [])]
+    serve = ['python', '-m', 'natlang_neuralese.train.diloco', 'serve', '--root', root, '--port', str(PORT)]
+    logs = f"{job['scratch']['path']}/diloco-cohost-logs"
+    # The authenticated status probe confirms HTTP readiness, not merely a listening socket.
+    probe = ("import urllib.request; from natlang_neuralese.train.diloco.coordinator import credential, TOKEN_ENV, TOKEN_SECRET; "
+             f"r=urllib.request.Request('http://127.0.0.1:{PORT}/v1/status', "
+             "headers={'Authorization':'Bearer '+credential(TOKEN_ENV,TOKEN_SECRET)}); "
+             "urllib.request.urlopen(r,timeout=2).read()")
+    script = f"""set -e
+mkdir -p {shlex.quote(logs)}
+CUDA_VISIBLE_DEVICES='' {shlex.join(init)} >{shlex.quote(logs + '/init.log')} 2>&1
+CUDA_VISIBLE_DEVICES='' {shlex.join(serve)} >{shlex.quote(logs + '/server.log')} 2>&1 &
+coord=$!
+worker=''
+cleanup() {{ [ -z "$worker" ] || kill "$worker" 2>/dev/null || true; kill "$coord" 2>/dev/null || true; wait 2>/dev/null || true; }}
+trap cleanup EXIT
+ready=0
+for i in $(seq 1 300); do
+  if python -c {shlex.quote(probe)} >/dev/null 2>&1; then ready=1; break; fi
+  kill -0 "$coord" 2>/dev/null || {{ echo 'coordinator exited before readiness' >&2; exit 1; }}
+  sleep 1
+done
+[ "$ready" = 1 ] || {{ echo 'coordinator HTTP readiness timed out' >&2; exit 1; }}
+{shlex.join(job['command'])} >{shlex.quote(logs + '/worker-0.log')} 2>&1 &
+worker=$!
+set +e
+wait -n -p finished "$coord" "$worker"
+result=$?
+if [ "$finished" = "$coord" ]; then echo 'coordinator exited while worker ran' >&2; exit 1; fi
+worker=''
+[ "$result" = 0 ] || exit "$result"
+echo 'worker 0 complete; coordinator remains available for other learners'
+wait "$coord"
+exit $?
+"""
+    job.update(id=f"{run['id']}-learner-0", resources={**job['resources'], 'gpu': 1, 'cpu': '8', 'memory': '96Gi'},
+               service={'port': PORT}, outputs=list(dict.fromkeys([*job.get('outputs', []), root, logs])),
+               command=['bash', '-c', script])
+    return jobs.validate(job)
+
+
 def _keep(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, 'w') as stream:
         stream.write(value)
+
+
+def wait_coordinator(url: str, token: str, gateway: bytes, timeout: float = 600) -> None:
+    """Wait for authenticated coordinator HTTP readiness before starting other workers."""
+    deadline = time.monotonic() + timeout
+    error = None
+    while time.monotonic() < deadline:
+        try:
+            request = urllib.request.Request(url.rstrip('/') + '/v1/status', headers={
+                'Authorization': 'Bearer ' + token, 'X-Sandbox-Share-Token': gateway.decode()})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                status = json.load(response)
+            if not isinstance(status, dict):
+                raise ValueError('coordinator status is not an object')
+            return
+        except (OSError, ValueError) as exc:
+            error = exc
+            time.sleep(2)
+    raise cwctl.ControllerError(f'coordinator HTTP readiness timed out: {error}')
 
 
 # Learners boot concurrently: placed one at a time with --wait, sandboxes came up 3-6 minutes apart and learner 0 ran
@@ -96,7 +171,7 @@ def _keep(path: Path, value: str) -> None:
 LEARNER_CREATE_INTERVAL_SECONDS = 5.0
 
 
-def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str]) -> list[str]:
+def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str], *, first_worker=0, on_started=None) -> list[str]:
     """Create every learner sandbox in its own thread; any failure stops all of them (the caller stops ``started``)."""
     import threading
     if 'NATLANG_CW_CREATE_INTERVAL' not in os.environ:
@@ -112,6 +187,8 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
                                  secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway})
             with lock:
                 started.append(entry['sandbox_id'])
+                if on_started is not None:
+                    on_started(worker, entry['sandbox_id'])
                 if 'wait_error' in entry or 'push' not in entry:
                     raise cwctl.ControllerError(f'learner {worker} did not start: {entry}')
                 results[worker] = entry['sandbox_id']
@@ -119,14 +196,14 @@ def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: li
             with lock:
                 errors.append(error)
 
-    threads = [threading.Thread(target=one, args=(worker,), name=f'learner-{worker}') for worker in range(workers)]
+    threads = [threading.Thread(target=one, args=(worker,), name=f'learner-{worker}') for worker in range(first_worker, workers)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
     if errors:
         raise errors[0]
-    return [results[worker] for worker in range(workers)]
+    return [results[worker] for worker in range(first_worker, workers)]
 
 
 def launch(run: dict) -> dict:
@@ -141,23 +218,63 @@ def launch(run: dict) -> dict:
     token = secrets.token_urlsafe(32)
     _keep(RUNS / run['id'] / 'token', token)
     started: list[str] = []
+    placement = run.get('placement', 'cohosted')
+    record = {'run': run, 'placement': placement, 'state': 'launching', 'coordinator': None,
+              'learners': [None] * run['settings']['workers'], 'ownership': {}}
+
+    def save_record():
+        tmp = record_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(record, indent=1) + '\n')
+        os.replace(tmp, record_path)
+
+    def assigned(worker, sandbox_id):
+        record['learners'][worker] = sandbox_id
+        record['ownership'][sandbox_id] = [f'learner-{worker}']
+        save_record()
+
+    save_record()
     try:
-        coordinator = cwctl.launch(coordinator_job(run, trainer_args), False, True, None,
-                                   Path(run['coordinator']['bundle_file']), secrets={'diloco-token': token.encode()})
+        cohosted = placement == 'cohosted'
+        job = cohosted_job(run, trainer_args) if cohosted else coordinator_job(run, trainer_args)
+        bundle = run['learners']['bundle_file'] if cohosted else run['coordinator']['bundle_file']
+        coordinator = cwctl.launch(job, False, True, None, Path(bundle), secrets={'diloco-token': token.encode()})
         started.append(coordinator['sandbox_id'])
-        if 'service_url' not in coordinator:
+        record['coordinator'] = coordinator['sandbox_id']
+        record['ownership'][coordinator['sandbox_id']] = ['coordinator', 'learner-0'] if cohosted else ['coordinator']
+        if cohosted:
+            record['learners'][0] = coordinator['sandbox_id']
+        save_record()
+        if 'service_url' not in coordinator or 'wait_error' in coordinator or 'push' not in coordinator:
             raise cwctl.ControllerError(f"coordinator {coordinator['sandbox_id']} did not start: {coordinator}")
+        record['url'] = coordinator['service_url']
+        save_record()
         gateway = cwctl.share_token(coordinator['sandbox_id'])
-        learners = launch_learners(run, coordinator['service_url'], token, gateway, started)
-    except BaseException:
-        for sandbox_id in started:
-            cwctl.passthrough(['stop', sandbox_id])
+        wait_coordinator(coordinator['service_url'], token, gateway)
+        record['state'] = 'coordinator-ready'
+        save_record()
+        launch_learners(run, coordinator['service_url'], token, gateway, started,
+                        first_worker=1 if cohosted else 0, on_started=assigned)
+    except BaseException as error:
+        record['state'] = 'failed-stopping'
+        record['error'] = f'{type(error).__name__}: {error}'
+        save_record()
+        stop_errors = {}
+        for sandbox_id in dict.fromkeys(started):
+            try:
+                result = cwctl.passthrough(['stop', sandbox_id])
+                if result not in (None, 0):
+                    stop_errors[sandbox_id] = f'stop returned {result}'
+            except Exception as stop_error:
+                stop_errors[sandbox_id] = f'{type(stop_error).__name__}: {stop_error}'
+            record['stop_requests'] = {**record.get('stop_requests', {}), sandbox_id: stop_errors.get(sandbox_id, 'requested')}
+            save_record()
+        record['state'] = 'failed-stop-incomplete' if stop_errors else 'failed-stop-requested'
+        save_record()
         raise
-    record = {'run': run, 'coordinator': coordinator['sandbox_id'], 'url': coordinator['service_url'],
-              'learners': learners}
-    record_path.write_text(json.dumps(record, indent=1) + '\n')
+    record['state'] = 'running'
+    save_record()
     cwctl.record({'event': 'diloco_launched', 'run': run['id'], 'coordinator': record['coordinator'],
-                  'learners': learners})
+                  'learners': record['learners'], 'placement': placement, 'ownership': record['ownership']})
     return record
 
 

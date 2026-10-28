@@ -581,3 +581,82 @@ def test_diloco_run_composes_ordinary_jobs(tmp_path):
     assert 'native_diloco init' in coordinator['command'][-1] and 'diloco serve' in coordinator['command'][-1]
     with pytest.raises(diloco.cwctl.ControllerError, match='filled in'):
         diloco.validate({**run, 'settings': {**run['settings'], 'coordinator_url': 'x'}})
+
+
+def test_diloco_cohosted_job_uses_one_gpu_and_separate_owned_roots(tmp_path):
+    import subprocess
+    diloco = load('diloco')
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
+    (tmp_path / 'learner.json').write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    run = {'id': 'lfm-dl', 'settings': {'run_id': 'lfm-dl', 'workers': 4},
+           'coordinator': {'parent': '/work/in/parent.pt'}, 'learners': {'job': str(tmp_path / 'learner.json')}}
+    job = diloco.cohosted_job(run, trainer[3:])
+    assert job['resources'] == {'gpu': 1, 'cpu': '8', 'memory': '96Gi'}
+    assert job['env']['NATLANG_DILOCO_WORKER_ID'] == '0'
+    assert '/work/diloco-coordinator' in job['outputs'] and '/work/diloco-cohost-logs' in job['outputs']
+    script = job['command'][2]
+    assert "CUDA_VISIBLE_DEVICES=''" in script and 'http://127.0.0.1:8080/v1/status' in script
+    assert script.index('/v1/status') < script.index('native_state_sft')
+    assert 'coordinator remains available' in script and 'wait -n -p finished' in script
+    subprocess.run(['bash', '-n'], input=script, text=True, check=True)
+
+
+@pytest.mark.parametrize('placement,expected_count', [('cohosted', 4), ('separate', 5)])
+def test_diloco_launch_records_shared_ownership_once(tmp_path, monkeypatch, placement, expected_count):
+    diloco = load('diloco')
+    monkeypatch.setattr(diloco, 'RUNS', tmp_path / 'records')
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
+    learner = tmp_path / 'learner.json'
+    coord = tmp_path / 'coord.json'
+    learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    coord.write_text(json.dumps(base_job(id='coord', resources={'cpu': '8', 'memory': '32Gi'}, transport='api')))
+    run = {'schema': diloco.SCHEMA, 'id': 'run', 'placement': placement,
+           'settings': {'run_id': 'run', 'workers': 4},
+           'coordinator': {'job': str(coord), 'bundle_file': 'coord.bundle', 'parent': '/work/in/parent.pt'},
+           'learners': {'job': str(learner), 'bundle_file': 'learner.bundle'}}
+    calls = []
+    def fake_launch(job, *args, **kwargs):
+        calls.append((job['id'], str(args[3])))
+        result = {'sandbox_id': job['id'], 'push': {}}
+        if job.get('service'):
+            result['service_url'] = 'https://coord.example'
+        return result
+    monkeypatch.setattr(diloco.cwctl, 'launch', fake_launch)
+    monkeypatch.setattr(diloco.cwctl, 'share_token', lambda sandbox_id: b'gateway')
+    monkeypatch.setattr(diloco, 'wait_coordinator', lambda *args: None)
+    monkeypatch.setattr(diloco.cwctl, 'record', lambda event: None)
+    record = diloco.launch(run)
+    assert len(calls) == expected_count and len(record['learners']) == 4
+    assert len(record['ownership']) == expected_count and record['state'] == 'running'
+    assert (record['coordinator'] == record['learners'][0]) == (placement == 'cohosted')
+    assert json.loads((tmp_path / 'records/run.json').read_text()) == record
+    if placement == 'cohosted':
+        assert record['ownership'][record['coordinator']] == ['coordinator', 'learner-0']
+        assert calls[0][1] == 'learner.bundle'
+
+
+def test_diloco_cohost_failure_journals_roles_and_stops_each_sandbox_once(tmp_path, monkeypatch):
+    diloco = load('diloco')
+    monkeypatch.setattr(diloco, 'RUNS', tmp_path / 'records')
+    trainer = ['python', '-m', 'natlang_neuralese.train.native_state_sft', '--continue-from', '/work/in/parent.pt']
+    learner, coord = tmp_path / 'learner.json', tmp_path / 'coord.json'
+    learner.write_text(json.dumps(base_job(id='lfm', kind='train', command=trainer)))
+    coord.write_text(json.dumps(base_job(id='coord', resources={'cpu': '8', 'memory': '32Gi'})))
+    run = {'schema': diloco.SCHEMA, 'id': 'run', 'settings': {'run_id': 'run', 'workers': 2},
+           'coordinator': {'job': str(coord), 'bundle_file': 'c', 'parent': '/work/in/parent.pt'},
+           'learners': {'job': str(learner), 'bundle_file': 'l'}}
+    def fake_launch(job, *args, **kwargs):
+        if job.get('service'):
+            return {'sandbox_id': 'shared', 'push': {}, 'service_url': 'https://coord.example'}
+        return {'sandbox_id': 'worker1', 'wait_error': 'failed'}
+    stops = []
+    monkeypatch.setattr(diloco.cwctl, 'launch', fake_launch)
+    monkeypatch.setattr(diloco.cwctl, 'share_token', lambda sandbox_id: b'gateway')
+    monkeypatch.setattr(diloco, 'wait_coordinator', lambda *args: None)
+    monkeypatch.setattr(diloco.cwctl, 'passthrough', lambda args: stops.append(args[1]))
+    with pytest.raises(diloco.cwctl.ControllerError, match='did not start'):
+        diloco.launch(run)
+    record = json.loads((tmp_path / 'records/run.json').read_text())
+    assert record['state'] == 'failed-stop-requested'
+    assert record['ownership'] == {'shared': ['coordinator', 'learner-0'], 'worker1': ['learner-1']}
+    assert sorted(stops) == ['shared', 'worker1']
