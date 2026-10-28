@@ -796,6 +796,13 @@ A whole-case model request budget is a collection resource control. Once exhaust
 ## 2026-10-07 — Inline closures retain checked aliases; proofs retain failures
 
 Generated soft functions retain the same alias map already computed for their checked return, parameter and capture types. Eval-local Draft/Progress aliases are supported without forcing models to expand every object shape. Authored proof snapshots are written for failed as well as successful cases; final failure report and immutable hashes precede nonzero exit. Actual model/runtime verification remains separate from per-pass semantic evidence review and training admission.
+### 2026-10-28 — LFM3: Muon, BF16 everywhere, QAT to NVFP4/FP8 (owner)
+
+Owner 2026-10-28: Muon for the LFM3 backbone matrices; no full precision (BF16 parameters and optimizer state with
+stochastic-rounding writes, including the learned sparse rows, superseding FP32 masters for this line); QAT targets
+NVFP4 (required deploy point, Liquid's ModelOpt layout: FFN W4A4 group 16) and FP8 (Liquid's compressed-tensors
+FP8_BLOCK layout). Details: LFM3_RECIPE_20261028.md "Optimizer and precision".
+
 ### 2026-10-28 — supervise the model's own outputs only; whole-trajectory supervision retired (owner)
 
 Owner 2026-10-28: drop the whole-trajectory supervision rule below. New recipes put zero loss weight on prompts,
