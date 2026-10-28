@@ -763,7 +763,7 @@ class SharedStateModel(nn.Module):
     marker overrides are bypassed even when their reserved rows are reused.
     """
     def __init__(self, port, marker_ids, rank=8, token_override_ids=(), token_override_dtype=torch.float32,
-                 sparse_row_dtype=torch.float32, native_norm_execution=None):
+                 sparse_row_dtype=torch.float32, native_norm_execution=None, adapter_dtype=torch.float32):
         super().__init__()
         if len(marker_ids) != 4 or len(set(marker_ids)) != 4:
             raise ValueError('shared-state Neuralese requires four distinct marker IDs')
@@ -782,7 +782,8 @@ class SharedStateModel(nn.Module):
         if not self.tied:
             self.output_rows = nn.Parameter(port.output_weight[list(marker_ids)].detach().to(
                 dtype=sparse_row_dtype or port.output_weight.dtype).clone())
-        self.adapter = LowRankTokenEmbedding(weight.shape[1], rank, device=weight.device, dtype=torch.float32)
+        # FP32 by default; an all-BF16 profile (LFM3, bf16-stochastic-rounding-v1) keeps the adapter in BF16 too.
+        self.adapter = LowRankTokenEmbedding(weight.shape[1], rank, device=weight.device, dtype=adapter_dtype)
         self.token_override_ids = ()
         self.add_token_overrides(token_override_ids, dtype=token_override_dtype)
 

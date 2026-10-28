@@ -199,12 +199,13 @@ def test_training_plumbing_declares_lfm3_forms():
     latent, ordinary = latent_split(native_trainable_parameters(model), 'muonsr')
     latent_names = {name for name, _ in latent}
     ordinary_names = {name for name, _ in ordinary}
-    assert 'backbone.model.layers.1.self_attn.gate_proj.weight' in ordinary_names
+    # The real per-class routing (gate_proj [16, 2048] on Muon) is checked on the LFM3-1.7B inventory in
+    # test_lfm3_real_parity.py; this twin's 4-head gate is narrower than MUON_MIN_SIDE.
     assert 'backbone.model.layers.1.self_attn.o_proj.weight' in latent_names
     assert 'backbone.model.layers.0.conv.conv.weight' in ordinary_names
     assert {'interface.input_rows', 'interface.adapter.up.weight'} <= ordinary_names
     gate = dict(port.hf.named_parameters())['model.layers.1.self_attn.gate_proj.weight']
-    assert not muon_eligible('backbone.model.layers.1.self_attn.gate_proj.weight', gate, 64, set())
+    assert muon_eligible('backbone.model.layers.1.self_attn.gate_proj.weight', gate, 64, set())
 
 
 def test_native_precision_profiles_cover_every_lfm3_norm():
@@ -241,8 +242,11 @@ def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
     hf_tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}\\n{% endfor %}"
     hf_tokenizer.save_pretrained(tmp_path)
 
-    model, tokenizer, roles, config = load_native_model(tmp_path, rank=4, dtype=torch.float32,
-                                                        native_ordinary_precision='fp32-norms-v1')
+    # FP32 is a full-precision diagnostic load (no profile); LFM3 has no FP32-master profile (owner 2026-10-28).
+    with pytest.raises(ValueError, match='no FP32-master'):
+        load_native_model(tmp_path, rank=4, dtype=torch.float32, native_ordinary_precision='fp32-norms-v1')
+    model, tokenizer, roles, config = load_native_model(tmp_path, rank=4, dtype=torch.float32)
+    assert 'native_ordinary_precision' not in config
     assert isinstance(model.port, Lfm3PortBackbone)
     assert config['architecture'] == 'lfm3' and config['vendored_modeling']['sources'] == lfm3.SOURCES
     assert config['vendored_modeling']['revision'] == lfm3.REVISION
@@ -257,14 +261,14 @@ def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
     restored, _ = restore_backbone(tmp_path, 'lfm3', state, device='cpu', dtype=torch.float32)
     assert type(restored).__module__ == 'natlang_neuralese.third_party.lfm3.modeling_lfm3'
     assert all(torch.equal(state[name], restored.state_dict()[name]) for name in state)
-    # A BF16 backbone keeps FP32 masters for the learned role and reasoning rows and the declared FP32 norm gains.
-    half, _, _, half_config = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16,
-                                                native_ordinary_precision='fp32-norms-v1')
-    assert half.port.embedding_weight.dtype == torch.bfloat16
-    assert half.input_rows.dtype == torch.float32 and half.extra_input_rows.dtype == torch.float32
-    assert half.port.layers[3].post_operator_norm.weight.dtype == torch.float32
-    assert half.port.layers[3].self_attn.gate_proj.weight.dtype == torch.bfloat16
-    assert half_config['sparse_row_dtype'] == 'torch.float32'
+    # A BF16 load selects the all-BF16 profile: backbone, norm gains, learned rows and adapter, no FP32 masters.
+    half, _, _, half_config = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16)
+    assert half_config['native_ordinary_precision'] == 'bf16-stochastic-rounding-v1'
+    assert half_config['sparse_row_dtype'] == 'torch.bfloat16'
+    assert half_config['token_override_dtype'] == 'torch.bfloat16'
+    assert all(parameter.dtype == torch.bfloat16 for parameter in half.parameters())
+    with pytest.raises(ValueError, match='BF16'):
+        load_native_model(tmp_path, rank=4, dtype=torch.bfloat16, sparse_row_dtype=torch.float32)
 
 
 def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
@@ -297,3 +301,88 @@ def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
     optimizer.step()
     for name, value in targets.items():
         assert not torch.equal(before[name], value), name
+
+
+def test_adamwsr_matches_adamw_in_fp32_and_keeps_small_bf16_updates_in_expectation():
+    from natlang_neuralese.train.optim import AdamWSR
+    torch.manual_seed(0)
+    gradients = [torch.randn(64, 32) for _ in range(5)]
+    exact = torch.nn.Parameter(torch.randn(64, 32))
+    mine = torch.nn.Parameter(exact.detach().clone())
+    reference = torch.optim.AdamW([exact], lr=1e-2, weight_decay=0.1, foreach=False)
+    candidate = AdamWSR([mine], lr=1e-2, weight_decay=0.1)
+    for gradient in gradients:
+        exact.grad, mine.grad = gradient.clone(), gradient.clone()
+        reference.step()
+        candidate.step()
+    torch.testing.assert_close(mine, exact, atol=1e-6, rtol=1e-6)
+    # A constant gradient makes every AdamW step ~lr = 1e-4, far below BF16's 2**-8 spacing just under 1.0.
+    start = torch.ones(256, 64, dtype=torch.bfloat16)
+    nearest = torch.nn.Parameter(start.clone())
+    stochastic = torch.nn.Parameter(start.clone())
+    fp32 = torch.nn.Parameter(start.float())
+    optimizers = [torch.optim.AdamW([nearest], lr=1e-4, weight_decay=0.),
+                  AdamWSR([stochastic], lr=1e-4, weight_decay=0.),
+                  torch.optim.AdamW([fp32], lr=1e-4, weight_decay=0.)]
+    for _ in range(100):
+        for parameter, optimizer in zip((nearest, stochastic, fp32), optimizers):
+            parameter.grad = torch.ones_like(parameter)
+            optimizer.step()
+    assert torch.equal(nearest, start)  # round-to-nearest loses every update
+    expected = float((fp32 - 1).mean())
+    actual = float((stochastic.float() - 1).mean())
+    assert expected == pytest.approx(-0.01, rel=1e-3)
+    assert actual == pytest.approx(expected, rel=0.05)
+    assert stochastic.dtype == torch.bfloat16 and optimizers[1].state[stochastic]['exp_avg'].dtype == torch.bfloat16
+
+
+def test_all_bf16_native_optimizer_moves_small_sparse_row_updates_with_stochastic_rounding(tmp_path):
+    from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_state_sft import (make_native_optimizer, packed_graph_loss,
+                                                          sparse_row_updates)
+    from natlang_neuralese.train.optim import AdamWSR
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+    tiny_lfm3_hf().save_pretrained(tmp_path, safe_serialization=True)
+    tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
+    hf_tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}\\n{% endfor %}"
+    hf_tokenizer.save_pretrained(tmp_path)
+    raw = {'schema': SCHEMA, 'id': 'lfm3-bf16-rows', 'split': 'train', 'source_groups': ['lfm3-bf16-rows'],
+           'tokenizer_fingerprint': '1' * 64,
+           'nodes': [{'name': 'producer', 'token_ids': [4, 9, 10, 11, 5, 12], 'producing': [[0, 5]],
+                      'target_weights': [0., 1., 1., 1., 1., 1.]},
+                     {'name': 'consumer', 'token_ids': [6, 13, 14, 7, 15, 16, 17, 18],
+                      'target_weights': [0., 0., 1., 1., 1., 1., 1., 1.],
+                      'imports': [{'at': 1, 'source': 'producer', 'start': 1, 'stop': 4}]}]}
+    example = parse_graph(raw, tokenizer_fingerprint='1' * 64)
+    changes = {}
+    for rounding in ('stochastic', 'nearest'):
+        torch.manual_seed(5)
+        model, _, _, _ = load_native_model(tmp_path, rank=4, dtype=torch.bfloat16)
+        # Per-step updates (~lr) well below the role rows' BF16 spacing.
+        optimizer, _ = make_native_optimizer(model, lr=2e-5, weight_decay=0., in_backward=False,
+                                             learned_row_lr=2e-5)
+        assert isinstance(optimizer.auxiliary, AdamWSR) and optimizer.auxiliary_rounding == 'stochastic'
+        assert {entry['dtype'] for entry in optimizer.schema} == {'torch.bfloat16'}
+        assert optimizer.state_dict()['adamw_rounding'] == 'stochastic'
+        if rounding == 'nearest':  # the same routing with round-to-nearest writes, for contrast
+            optimizer.auxiliary = torch.optim.AdamW(optimizer.auxiliary.param_groups, lr=2e-5, weight_decay=0.)
+        with torch.no_grad():  # rows of magnitude 0.5-1 (BF16 spacing >= 2**-9): every step is far below it
+            sign = torch.randint(0, 2, model.input_rows.shape, generator=torch.Generator().manual_seed(1)) * 2 - 1
+            model.input_rows.copy_(sign * (0.5 + 0.4 * torch.rand(model.input_rows.shape)))
+        start = model.input_rows.detach().clone()
+        for _ in range(40):
+            before = {'input_rows': model.input_rows.detach().clone()}
+            loss, _ = packed_graph_loss(model, [example], checkpoint_layers=False)
+            loss.backward()
+            optimizer.auxiliary.step()
+            telemetry = sparse_row_updates(model, before)
+            optimizer.zero_grad(set_to_none=True)
+        changes[rounding] = float((model.input_rows.detach().float() - start.float()).abs().sum())
+        rows = telemetry['input_rows']
+        assert rows['dtype'] == 'torch.bfloat16' and all(row['gradient_present'] for row in rows['rows'])
+    assert changes['nearest'] == 0
+    assert changes['stochastic'] > 0

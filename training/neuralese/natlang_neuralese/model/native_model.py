@@ -159,7 +159,7 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None, backbone_state=None):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=None, sparse_row_dtype=None, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None, native_shared_execution=None, backbone_state=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -175,6 +175,22 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     if architecture == 'qwen3_5' and native_ordinary_precision in (None, 'fp32-norms-v1'):
         from .native_parameter_precision import QWEN35_DELTA_PROFILE
         native_ordinary_precision = QWEN35_DELTA_PROFILE
+    from .native_parameter_precision import BF16_SR_PROFILE
+    if architecture == 'lfm3':
+        # Owner 2026-10-28: LFM3 trains with every parameter and optimizer state in BF16 (stochastic rounding); an
+        # FP32 load is a full-precision diagnostic, never FP32 masters beside BF16 weights.
+        if native_ordinary_precision is None and dtype == torch.bfloat16:
+            native_ordinary_precision = BF16_SR_PROFILE
+        if native_ordinary_precision not in (None, BF16_SR_PROFILE):
+            raise ValueError('LFM3 has no FP32-master precision profile; it trains under ' + BF16_SR_PROFILE)
+    all_bf16 = native_ordinary_precision == BF16_SR_PROFILE
+    if all_bf16:
+        if dtype != torch.bfloat16 or any(value not in (None, torch.bfloat16)
+                                          for value in (token_override_dtype, sparse_row_dtype)):
+            raise ValueError(BF16_SR_PROFILE + ' keeps the backbone and its learned rows in BF16')
+    row_default = torch.bfloat16 if all_bf16 else torch.float32
+    token_override_dtype = row_default if token_override_dtype is None else token_override_dtype
+    sparse_row_dtype = row_default if sparse_row_dtype is None else sparse_row_dtype
     if history_reasoning_policy not in (None, 'keep'):
         raise ValueError('native history_reasoning_policy must be omitted or explicitly keep')
     if architecture in {'mellum', 'maple'}:
@@ -216,7 +232,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         token_override_ids = reasoning_token_ids(tokenizer)
     model = SharedStateModel(port, marker_ids=roles.ids, rank=rank, token_override_ids=token_override_ids,
                              token_override_dtype=token_override_dtype, sparse_row_dtype=sparse_row_dtype,
-                             native_norm_execution=native_norm_execution)
+                             native_norm_execution=native_norm_execution,
+                             adapter_dtype=torch.bfloat16 if all_bf16 else torch.float32)
     if native_ordinary_precision is not None:
         from .native_parameter_precision import configure_norm_precision
         configure_norm_precision(model, native_ordinary_precision)
@@ -266,9 +283,10 @@ def restore_model_state(model, state):
         from .native_parameter_precision import ordinary_precision_parameters
         for name, (_, parameter) in ordinary_precision_parameters(model, profile).items():
             value = state['backbone_state'].get(name)
-            if value is None or value.dtype != torch.float32 or value.shape != parameter.shape:
-                raise ValueError('native checkpoint norm tensors violate declared FP32 profile (ordinary precision): '
-                                 + name)
+            from .native_parameter_precision import profile_dtype
+            if value is None or value.dtype != profile_dtype(profile) or value.shape != parameter.shape:
+                raise ValueError(f'native checkpoint norm tensors violate declared {profile} profile '
+                                 f'(ordinary precision): ' + name)
     model.port.hf.load_state_dict(state['backbone_state'], strict=True)
     from .shared_state import restore_channel_checkpoint
     restore_channel_checkpoint(model, state['interface_state'])

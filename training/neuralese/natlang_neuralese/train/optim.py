@@ -32,15 +32,14 @@ def port_named_parameters(backbone, heads) -> list[tuple[str, torch.nn.Parameter
 def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding_ids: set[int]) -> bool:
     return (parameter.ndim == 2 and min(parameter.shape) > 1 and vocab_size not in parameter.shape
             and id(parameter) not in embedding_ids and name != "backbone.control_rows" and "lora_" not in name
-            # Quantizer scales, MoE routers and per-head attention output gates are not hidden-state matrices: AdamW.
-            and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name
-            and ".self_attn.gate_proj." not in name)
+            # Quantizer scales and MoE routers are not hidden-state matrices: AdamW.
+            and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name)
 
 
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
                  ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr", latent_options=None,
-                 force_adamw_ids=()):
+                 force_adamw_ids=(), auxiliary_rounding: str = "nearest"):
         """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped in backward with one BF16 momentum and
         stochastic-rounding writes, for the latent backbone policy. ``latent_optimizer``: ``lionsr`` (per-row step
         ``lr x row_scale``, the memory-lean path of Mellum's conversion v3; ``lr`` in units of each row's ternary
@@ -48,7 +47,12 @@ class PortMuonAdamW(torch.optim.Optimizer):
         ``split_rows``) or ``adaminisr`` (Adam-mini,
         ``lr`` on AdamW's scale; the fourth element is the latent's ``block_rows``, ``latent_block_rows``).
         ``latent_options``: constructor options of the latent optimizer (LionSR/AdamMiniSR: ``skip_idle``,
-        ``cautious``; AdamMiniSR: ``betas``; MuonSR: ``ns``) plus ``weight_decay`` of every latent group."""
+        ``cautious``; AdamMiniSR: ``betas``; MuonSR: ``ns``) plus ``weight_decay`` of every latent group.
+        ``auxiliary_rounding``: ``nearest`` (torch AdamW) or ``stochastic`` (``AdamWSR``: the same AdamW update with
+        moments in the parameter dtype and stochastic-rounding writes, for an all-BF16 model such as LFM3)."""
+        if auxiliary_rounding not in AUXILIARY_ROUNDINGS:
+            raise ValueError(f"unknown auxiliary rounding {auxiliary_rounding!r}")
+        self.auxiliary_rounding = auxiliary_rounding
         if not hasattr(torch.optim, "Muon"):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
@@ -104,10 +108,14 @@ class PortMuonAdamW(torch.optim.Optimizer):
         # Without Muon-eligible matrices outside the latents (a direct stage without projections), no Muon child.
         self.muon = torch.optim.Muon(muon, lr=lr, weight_decay=0.0, momentum=momentum, ns_steps=ns_steps,
                                      adjust_lr_fn="match_rms_adamw") if muon else None
-        self.auxiliary = torch.optim.AdamW(auxiliary, lr=lr, weight_decay=0.0) if auxiliary else None
+        self.auxiliary = self._auxiliary_optimizer(auxiliary, lr=lr, weight_decay=0.0) if auxiliary else None
         self._constructed = False
         super().__init__(self._groups(), {})
         self._constructed = True
+
+    def _auxiliary_optimizer(self, params, **options):
+        kind = AdamWSR if getattr(self, 'auxiliary_rounding', 'nearest') == 'stochastic' else torch.optim.AdamW
+        return kind(params, **options)
 
     def _groups(self):
         return ((self.muon.param_groups if self.muon else []) + (self.auxiliary.param_groups if self.auxiliary else [])
@@ -126,7 +134,8 @@ class PortMuonAdamW(torch.optim.Optimizer):
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
                                 "optimizer": "adamw"})
         if self.auxiliary is None:
-            self.auxiliary = torch.optim.AdamW(params, lr=group.get("lr", 1e-3), weight_decay=group.get("weight_decay", 0.0))
+            self.auxiliary = self._auxiliary_optimizer(params, lr=group.get("lr", 1e-3),
+                                                       weight_decay=group.get("weight_decay", 0.0))
             self.auxiliary.param_groups[0].update({k: v for k, v in group.items() if k != "params"})
         else:
             self.auxiliary.add_param_group({**group, "params": params})
@@ -157,9 +166,14 @@ class PortMuonAdamW(torch.optim.Optimizer):
             if child is not None}
         if self._native_optimizer_transitions:
             state['native_optimizer_transitions'] = self._native_optimizer_transitions
+        if self.auxiliary_rounding != 'nearest':
+            state['adamw_rounding'] = self.auxiliary_rounding
         return state
 
     def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=(), native_optimizer_migration=None):
+        if state_dict.get('adamw_rounding', 'nearest') != self.auxiliary_rounding:
+            raise ValueError('port optimiser checkpoint AdamW rounding differs: '
+                             f"{state_dict.get('adamw_rounding', 'nearest')} vs {self.auxiliary_rounding}")
         if all(isinstance(item.get('name'),str) for item in self.schema):
             from .optim_restore import load_named_port_state
             return load_named_port_state(self,state_dict,allow_added_names=allow_added_names,
@@ -240,6 +254,56 @@ def make_port_optimizer(policy: str, backbone, heads, lr: float, momentum: float
     embedding_ids = {id(p) for module in heads.modules() if isinstance(module, nn.Embedding) for p in module.parameters()}
     return PortMuonAdamW(named, lr=lr, vocab_size=int(backbone.embedding_weight.shape[0]), embedding_ids=embedding_ids,
                          momentum=momentum)
+
+
+AUXILIARY_ROUNDINGS = ("nearest", "stochastic")
+
+
+class AdamWSR(torch.optim.Optimizer):
+    """AdamW (decoupled weight decay, bias-corrected moments) for an all-BF16 model: the update is computed in FP32,
+    the moments are kept in the parameter's dtype, and BF16 parameters and moments are written with unbiased
+    stochastic rounding (``stochastic_round_``), so updates below BF16 resolution (small learned sparse rows, norm
+    gains) survive in expectation instead of being rounded away. FP32 parameters are written exactly (the same values
+    as torch AdamW's single-tensor path). State keys match torch AdamW (``step``, ``exp_avg``, ``exp_avg_sq``)."""
+
+    def __init__(self, params, lr: float = 1e-3, betas=(0.9, 0.999), eps: float = 1e-8, weight_decay: float = 1e-2):
+        super().__init__(params, dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay))
+
+    @staticmethod
+    def _write(target: torch.Tensor, value: torch.Tensor) -> None:
+        if target.dtype == torch.bfloat16:
+            stochastic_round_(target, value)
+        else:
+            target.copy_(value)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        if closure is not None:
+            raise ValueError("AdamWSR does not support closures")
+        for group in self.param_groups:
+            beta1, beta2 = group["betas"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                if p.grad.is_sparse:
+                    raise ValueError("AdamWSR needs dense gradients")
+                state = self.state[p]
+                if not state:
+                    state["step"] = torch.zeros((), dtype=torch.float32)
+                    state["exp_avg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state["exp_avg_sq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                state["step"] += 1
+                step = float(state["step"])
+                g = p.grad.float()
+                m = state["exp_avg"].float().mul_(beta1).add_(g, alpha=1 - beta1)
+                v = state["exp_avg_sq"].float().mul_(beta2).addcmul_(g, g, value=1 - beta2)
+                self._write(state["exp_avg"], m)
+                self._write(state["exp_avg_sq"], v)
+                first, second = 1 - beta1 ** step, 1 - beta2 ** step
+                value = p.float().mul_(1 - group["lr"] * group["weight_decay"])
+                value.addcdiv_(m, (v / second).sqrt_().add_(group["eps"]), value=-group["lr"] / first)
+                self._write(p, value)
+        return None
 
 
 def stochastic_round_(target: torch.Tensor, value: torch.Tensor, generator: torch.Generator | None = None) -> None:
@@ -825,12 +889,12 @@ def latent_split(named, latent_optimizer: str):
     matrices (and stacks of them) stepped by the latent optimizer; MoE routers (``.mlp.gate.``), vectors and, under
     MuonSR, matrices with a side under ``MUON_MIN_SIDE`` (LFM's short-conv kernels [d, 1, k]: no meaningful
     orthogonalization; Moonlight keeps non-matrix weights on Adam) are others, on AdamW at the backbone rate.
-    LFM3's per-head attention output gates (``.self_attn.gate_proj.``, hidden -> one scalar per head) are routed like
-    MoE routers: low-dimensional controls, not hidden-state matrices (declared by name, not by their 16-row shape).
+    LFM3's per-head attention output gate (``self_attn.gate_proj``, [16, 2048]) is a hidden 2-D weight matrix on
+    MuonSR (owner, 2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md "Optimizer"); its 16-row side is not narrow.
     Shared by the direct and the end-to-end stage."""
     def is_latent(n, q):
         narrow = latent_optimizer == 'muonsr' and q.ndim >= 2 and min(q.shape[-2:]) < MUON_MIN_SIDE
-        return q.ndim >= 2 and '.mlp.gate.' not in n and '.self_attn.gate_proj.' not in n and not narrow
+        return q.ndim >= 2 and '.mlp.gate.' not in n and not narrow
     named = list(named)
     return [(n, q) for n, q in named if is_latent(n, q)], [(n, q) for n, q in named if not is_latent(n, q)]
 

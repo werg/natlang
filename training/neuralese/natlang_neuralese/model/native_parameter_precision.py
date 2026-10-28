@@ -5,7 +5,16 @@ import torch
 
 PROFILE = 'fp32-norms-v1'
 QWEN35_DELTA_PROFILE = 'fp32-norms-qwen35-delta-controls-v1'
-ORDINARY_PRECISION_PROFILES = (PROFILE, QWEN35_DELTA_PROFILE)
+# Owner 2026-10-28 (LFM3): no full precision. Every parameter and optimizer state stays BF16, including the learned
+# sparse role/reasoning rows and the embedding-space adapter; AdamW-routed parameters are written with stochastic
+# rounding (AdamWSR) and Muon matrices through MuonSR. No FP32 masters are built.
+BF16_SR_PROFILE = 'bf16-stochastic-rounding-v1'
+ORDINARY_PRECISION_PROFILES = (PROFILE, QWEN35_DELTA_PROFILE, BF16_SR_PROFILE)
+
+
+def profile_dtype(profile):
+    """The storage dtype a declared ordinary precision profile requires of its parameters."""
+    return torch.bfloat16 if profile == BF16_SR_PROFILE else torch.float32
 _NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
           'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 NORM_EXECUTIONS = ('source-v1', 'stable-v1')
@@ -124,6 +133,17 @@ def configure_norm_precision(model, profile):
         raise ValueError('Qwen3.5 DeltaNet precision profile requires a Qwen3.5 text backbone')
     if profile == PROFILE and getattr(model.port, 'architecture', None) == 'qwen3_5':
         raise ValueError('Qwen3.5 requires the FP32 DeltaNet controls precision profile')
+    if profile == BF16_SR_PROFILE:
+        # Nothing is promoted: the declared contract is BF16 storage of every ordinary and learned-row parameter.
+        values = [('backbone.' + name, parameter) for name, (_, parameter) in norm_parameters(model).items()]
+        values += [(name, parameter) for name, parameter in model.named_parameters()
+                   if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows',
+                                       'adapter.'))]
+        wrong = [name for name, parameter in values if parameter.dtype != torch.bfloat16]
+        if wrong:
+            raise ValueError('BF16 stochastic-rounding profile requires BF16 parameters: ' + ', '.join(wrong[:4]))
+        model.native_ordinary_precision = profile
+        return {}
     norms = norm_parameters(model)
     for name, (module, parameter) in ordinary_precision_parameters(model, profile).items():
         if parameter.dtype not in (torch.float32, torch.bfloat16, torch.float16):
@@ -168,5 +188,6 @@ def validate_norm_precision(model, config):
         else:
             dtypes = getattr(model, '_native_ordinary_parameter_dtypes',
                              getattr(model, '_native_norm_parameter_dtypes', ()))
-        if profile not in ORDINARY_PRECISION_PROFILES or not dtypes or any(dtype != torch.float32 for dtype in dtypes):
-            raise ValueError('native norm storage violates declared FP32 profile')
+        if (profile not in ORDINARY_PRECISION_PROFILES or not dtypes
+                or any(dtype != profile_dtype(profile) for dtype in dtypes)):
+            raise ValueError('native norm storage violates declared ' + profile + ' profile')

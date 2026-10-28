@@ -217,3 +217,65 @@ def test_incremental_decode_equals_full_forward_across_window(lfm3):
             cache = step['cache']
         assert _relative(torch.cat(steps, 1), graph, 'native_step decode h') < 1e-5
         torch.testing.assert_close(shared.logits(graph), full, atol=1e-3, rtol=1e-4)
+
+
+def test_native_optimizer_routes_the_real_lfm3_inventory_per_owner_recipe(lfm3):
+    """Owner 2026-10-28 (plans/neuralese/LFM3_RECIPE_20261028.md "Optimizer"): Muon for every hidden 2-D backbone
+    matrix (q/k/v/o, the per-head gate_proj, feed_forward w1/w2/w3, conv in/out_proj); AdamW for the learned sparse
+    role/reasoning rows and the embedding-space adapter (never by shape), RMSNorm gains and the depthwise conv
+    kernels. The tied embedding/output stays frozen (it is not an optimizer parameter at all)."""
+    from collections import Counter
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.train.optim import muon_eligible
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    from natlang_neuralese.model.native_parameter_precision import BF16_SR_PROFILE, configure_norm_precision
+    from natlang_neuralese.model.shared_state import SharedStateModel, provision_role_tokens
+    from natlang_neuralese.train.optim import AdamWSR
+    from types import SimpleNamespace
+    model, tokenizer = lfm3
+    half = copy.deepcopy(model).to(torch.bfloat16)
+    tokenizer = copy.deepcopy(tokenizer)
+    weight = half.get_input_embeddings().weight
+    roles = provision_role_tokens(SimpleNamespace(hf=half, config=half.config, embedding_weight=weight), tokenizer)
+    port = Lfm3PortBackbone(half, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
+    # The owner's all-BF16 LFM3 contract (as load_native_model builds it): BF16 rows, adapter and norm gains.
+    shared = SharedStateModel(port, roles.ids, rank=8, sparse_row_dtype=torch.bfloat16,
+                              token_override_ids=tuple(tokenizer.convert_tokens_to_ids(['<think>', '</think>'])),
+                              token_override_dtype=torch.bfloat16, adapter_dtype=torch.bfloat16)
+    configure_norm_precision(shared, BF16_SR_PROFILE)
+    optimizer, named = make_native_optimizer(shared, lr=1e-4, in_backward=False)
+    assert isinstance(optimizer.auxiliary, AdamWSR)
+    routes = {entry['name']: entry['optimizer'] for entry in optimizer.schema}
+    assert set(routes) == {name for name, _ in named}
+    assert {entry['dtype'] for entry in optimizer.schema} == {'torch.bfloat16'}
+
+    def kind(name):
+        if name.startswith('interface.'):
+            return name.split('.')[1]
+        tail = name.split('.', 4)[-1].rsplit('.', 1)[0]
+        return 'rmsnorm' if tail.endswith('norm') else tail
+    expected = {'self_attn.q_proj': 'muonsr', 'self_attn.k_proj': 'muonsr', 'self_attn.v_proj': 'muonsr',
+                'self_attn.o_proj': 'muonsr', 'self_attn.gate_proj': 'muonsr', 'feed_forward.w1': 'muonsr',
+                'feed_forward.w2': 'muonsr', 'feed_forward.w3': 'muonsr', 'conv.in_proj': 'muonsr',
+                'conv.out_proj': 'muonsr', 'conv.conv': 'adamw', 'rmsnorm': 'adamw', 'input_rows': 'adamw',
+                'extra_input_rows': 'adamw', 'adapter': 'adamw'}
+    counts = Counter()
+    for name, route in routes.items():
+        assert expected[kind(name)] == route, (name, route)
+        counts[(kind(name), route)] += 1
+    print('LFM3-OPTIMIZER-ROUTES', dict(sorted(counts.items())))
+    # 24 layers: 13 conv, 6 full attention, 5 sliding attention.
+    assert counts[('self_attn.gate_proj', 'muonsr')] == 11 and counts[('conv.conv', 'adamw')] == 13
+    assert counts[('rmsnorm', 'adamw')] == 24 * 4 + 11 * 2
+    assert counts[('feed_forward.w1', 'muonsr')] == 24 and counts[('conv.in_proj', 'muonsr')] == 13
+    assert not any('embed_tokens' in name or 'lm_head' in name or 'embedding_norm' in name for name in routes)
+    # The FP32-master (non-latent) PortMuonAdamW routing agrees on every backbone class.
+    parameters = dict(half.named_parameters())
+    weight = half.get_input_embeddings().weight
+    vocab, embedding = int(weight.shape[0]), {id(weight)}
+    for name in routes:
+        if name.startswith('backbone.'):
+            eligible = muon_eligible(name, parameters[name[len('backbone.'):]], vocab, embedding)
+            assert eligible == (routes[name] == 'muonsr'), name
+    assert not muon_eligible('backbone.model.embed_tokens.weight', weight, vocab, embedding)
+    del optimizer, shared, half
