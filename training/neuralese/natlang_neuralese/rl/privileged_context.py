@@ -83,7 +83,7 @@ class ProtectedWorlds:
     packets: tuple
 
     @property
-    def sha256(self):
+    def digest(self):
         return canonical_json_sha256_hex({'packets': list(self.packets),
                                           'identities': sorted(map(list, self.identities))})
 
@@ -131,7 +131,7 @@ class ProtectedWorlds:
             kinds = sorted({kind for kind, _ in overlap})
             raise CustodyError(f'privileged context refuses a world related to a protected packet ({", ".join(kinds)})')
         return {'schema': CUSTODY_SCHEMA, 'case_id': case['id'], 'split': 'train',
-                'world_sha256': world_fingerprint(case), 'protected_sha256': self.sha256}
+                'world_sha256': world_fingerprint(case), 'protected_sha256': self.digest}
 
 
 # ---------------------------------------------------------------- facts
@@ -145,7 +145,7 @@ class Fact:
     match: tuple = ()               # child references: substrings of the child prompt
 
     @property
-    def sha256(self):
+    def digest(self):
         return canonical_json_sha256_hex({'id': self.id, 'kind': self.kind, 'text': self.text,
                                           'invocation': self.invocation, 'match': list(self.match)})
 
@@ -296,7 +296,7 @@ class PrivilegedRendering:
                 'header': self.header, 'placement': self.placement, 'budget_tokens': self.budget_tokens}
 
     @property
-    def sha256(self):
+    def digest(self):
         return canonical_json_sha256_hex(self.declaration())
 
     def turn(self, texts):
@@ -328,7 +328,7 @@ class PrivilegedBlock:
     receipt: dict
 
     @property
-    def sha256(self):
+    def digest(self):
         return canonical_json_sha256_hex(self.receipt)
 
 
@@ -354,8 +354,8 @@ def render_block(rendering, *, invocation, token_ids, facts, custody_receipt, co
     tokens = tuple(rendering.turn([fact.text for fact in included])) if included else ()
     text = '\n\n'.join([rendering.header, *(fact.text for fact in included)]) if included else ''
     receipt = {'schema': BLOCK_SCHEMA, 'invocation': invocation['name'], 'role': invocation['role'],
-               'rendering_sha256': rendering.sha256, 'policy': policy_identity(command, policy_root),
-               'custody': custody_receipt, 'facts': [{'id': fact.id, 'kind': fact.kind, 'sha256': fact.sha256}
+               'rendering_sha256': rendering.digest, 'policy': policy_identity(command, policy_root),
+               'custody': custody_receipt, 'facts': [{'id': fact.id, 'kind': fact.kind, 'sha256': fact.digest}
                                                      for fact in included],
                'omitted': omitted, 'insert_at': insert_at, 'placement': placement, 'token_count': len(tokens),
                'token_ids_sha256': canonical_json_sha256_hex(list(tokens)),
@@ -367,11 +367,11 @@ def verify_block(block, rendering, *, custody):
     """Re-verify a block's receipt against its tokens, rendering and custody."""
     receipt = block.receipt
     if (receipt.get('schema') != BLOCK_SCHEMA or receipt['invocation'] != block.invocation
-            or receipt['insert_at'] != block.insert_at or receipt['rendering_sha256'] != rendering.sha256
+            or receipt['insert_at'] != block.insert_at or receipt['rendering_sha256'] != rendering.digest
             or receipt['token_count'] != len(block.token_ids)
             or receipt['token_ids_sha256'] != canonical_json_sha256_hex(list(block.token_ids))
             or receipt['text_sha256'] != sha256_hex(block.text.encode())
-            or receipt['custody'].get('protected_sha256') != custody.sha256
+            or receipt['custody'].get('protected_sha256') != custody.digest
             or receipt['custody'].get('split') != 'train'):
         raise CustodyError('privileged block differs from its bound receipt, rendering or custody')
     return block
