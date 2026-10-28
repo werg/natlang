@@ -53,6 +53,7 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
         throw new Error('neuralese-native-archive-unavailable: native views need a native-capable archive');
       const client = { endpoint: options.endpoint, headers: options.headers, store: options.store, info: server };
       await restoreNativeInputs(client, system);
+      // model-call-kind: view-write -- training/model-call-kinds.json
       const response = await fetchModel(`${base}/v1/neuralese/view`, { method: 'POST',
         headers: { 'content-type': 'application/json', ...options.headers },
         body: JSON.stringify({ value: site.value, ...(site.instructions ? { instructions: site.instructions } : {}), system,

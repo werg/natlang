@@ -39,7 +39,16 @@ let report = {};
 if (history) {
   const { added, failures } = await historicalPieces();
   pieces.push(...added);
-  report = { historical: added.length, load_failures: failures };
+  // Recorded corpora keep every text an earlier table matched: retain the previous table's pieces the git history no
+  // longer yields (e.g. the deleted text-emulation module's revisions came from Pop's bank).
+  let retained = [];
+  try {
+    const previous = JSON.parse(readFileSync(out, 'utf8')).pieces ?? [];
+    const known = new Set(pieces.map(p => p.text));
+    retained = previous.filter(p => !known.has(p.text)).map(p => ({ ...p, historical: true }));
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  pieces.push(...retained);
+  report = { historical: added.length + retained.length, retained_from_previous_table: retained.length, load_failures: failures };
 }
 writeFileSync(out, JSON.stringify({ schema: 'natlang.prompt-pieces/1', generated_from_commit: commit, history, pieces, ...report }, null, 1) + '\n');
 if (fixtureAt >= 0) {

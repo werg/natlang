@@ -88,6 +88,7 @@ export function decisionJudge(scorer: DecisionScorer, options: { id: string; sys
       const messages = [{ role: 'system', content: options.system ?? JUDGE_SYSTEM_PROMPT },
         { role: 'user', content: `Value, between the markers:\n<<<value\n${renderForJudge(value)}\nvalue>>>\n\n` +
           `Property: the value is ${normalize(predicate)}\n\nDoes the value satisfy the property? Reply with exactly one of these JSON values and nothing else: true, false.` }];
+      // model-call-kind: refinement-judge-scored -- training/model-call-kinds.json
       const scores = await scorer({ messages, options: ['true', 'false'] }, signal);
       if (scores.log_probs.length !== 2 || scores.log_probs.some(item => !Number.isFinite(item)))
         throw new Error('refinement judge returned no finite score for true and false');

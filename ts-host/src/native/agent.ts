@@ -1155,6 +1155,7 @@ export class NativeToolAgent {
       const adapters = adapterCells(lam);
       if (adapters.length && !supportsNeuralese(this.driver))
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
+      // model-call-kind: decision-readout -- training/model-call-kinds.json
       scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies, ...(adapters.length ? { adapters } : {}) },
         session.runtime.signal));
     } catch (error) {
@@ -1457,6 +1458,7 @@ export class NativeToolAgent {
             Math.max(1, Math.min(limit ?? statedWindow, statedWindow - Math.ceil(estimate(availableTools)) - REPLY_MARGIN)) };
         // Drivers read the invocation's tuned stack from the current frame when called; browsers keep no frame
         // across the awaits above, so the call starts inside its own frame on every platform.
+        // model-call-kind: tool-loop-turn -- training/model-call-kinds.json
         response = await runInFrame(session.runtime.frame, () => turnOptions ? this.driver(turnRequest, session.runtime.signal, turnOptions) :
           this.driver(turnRequest, session.runtime.signal));
         streamed = false;
@@ -1592,6 +1594,7 @@ export class NativeToolAgent {
           return 'careful review budget exhausted before applying proposal';
         const budget = allowance();
         const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
+        // model-call-kind: careful-review -- training/model-call-kinds.json
         const answer = await (review.driver ?? this.driver)({ messages: review.driver && review.driver !== this.driver ? fork : renderPromptMessages(fork, this.options.promptRendering),
           tools: this.options.promptRendering === 'program-header' && (!review.driver || review.driver === this.driver) ? [] : this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :

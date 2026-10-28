@@ -109,6 +109,7 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
     const missing = await restoreNativeArtifacts(new HttpNeuraleseStore(options.endpoint, options.headers), options.store, ids as string[]);
     if (missing.length) return failure('neuralese-unknown-native-artifact', `restore native adapter coefficients and bases ${missing.join(', ')}`);
   }
+  // model-call-kind: native-forced-write (write-text / init-body) -- training/model-call-kinds.json
   const response = await fetchModel(`${options.endpoint.replace(/\/$/, '')}/v1/neuralese/native-states/${operation}`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...options.headers }, body: JSON.stringify(body) });
   if (!response.ok) return failure('neuralese-native-write', `${operation} failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);

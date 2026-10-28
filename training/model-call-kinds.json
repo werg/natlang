@@ -1,0 +1,83 @@
+{
+ "schema": "natlang.model-call-kinds/1",
+ "doc": "Every kind of request the runtime sends to the executing model, with how training covers it. A new model-facing call site (ts-host/src) or serving route (serve/http.py) fails tests/neuralese/test_model_call_kind_coverage.py until it is declared here with its SFT target, RL action treatment and rendering-parity test. Status 'covered' names evidence files; 'gap' names an owner and its section in the audit; 'not-applicable' gives the reason. Audit: plans/neuralese/TRAINING_DATA_COVERAGE_AUDIT_20261028.md.",
+ "audit": "plans/neuralese/TRAINING_DATA_COVERAGE_AUDIT_20261028.md",
+ "kinds": {
+  "tool-loop-turn": {
+   "summary": "An ordinary turn of a natlang call: reasoning, tool calls (eval, return_result, ...), typed answers; includes the opening, template readouts, repair turns after rejected actions and protocol-failure retries.",
+   "model_output": "generated",
+   "endpoints": ["/v1/chat/completions"],
+   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/train/own_output_supervision.py", "tests/neuralese/test_own_output_supervision.py", "tests/neuralese/test_own_output_supervision_real_rows.py"]},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/native_replay.py", "tests/neuralese/test_rl_episode_graph.py"]},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_prompt_rendering_parity.py", "tests/neuralese/test_lfm3_format.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
+  },
+  "runtime-authored-call": {
+   "summary": "A natlang call whose instructions the runtime or a host tool writes: refinement:holds (no scoring driver), the iterateOn progress judge (builtin progressJudge), bash ask, natlang ask (CLI), nl@python, the delegate tool's directory reducer, the specializer's compareBehaviors judge. Each runs as tool-loop turns, so the generic mechanisms apply; their data coverage is measured in the audit.",
+   "model_output": "generated",
+   "endpoints": ["/v1/chat/completions"],
+   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/train/own_output_supervision.py"]},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/episode_graph.py", "tests/neuralese/test_rl_episode_graph.py"]},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_prompt_rendering_parity.py", "ts-host/test/prompt-pieces-export.test.mjs"]}
+  },
+  "decision-readout": {
+   "summary": "A finite-typed call answered by scoring every allowed JSON value as the reply (readout: decision, decisionReadout: finite-returns, decide()).",
+   "model_output": "scored-options",
+   "endpoints": ["/v1/neuralese/decide", "/v1/neuralese/decide_many", "/v1/natlang/score"],
+   "sft": {"status": "gap", "owner": "decide", "section": "decision-readout"},
+   "rl": {"status": "gap", "owner": "decide", "section": "decision-readout"},
+   "parity": {"status": "gap", "owner": "decide", "section": "decision-readout"}
+  },
+  "refinement-judge-scored": {
+   "summary": "A refinement predicate (Is<T, P>, refine) judged by one scoring pass over true/false with JUDGE_SYSTEM_PROMPT (native/refinement.ts decisionJudge), when the driver can score.",
+   "model_output": "scored-options",
+   "endpoints": ["/v1/neuralese/decide", "/v1/neuralese/decide_many", "/v1/natlang/score"],
+   "sft": {"status": "gap", "owner": "lfm3-mixture", "section": "refinement-judge-scored"},
+   "rl": {"status": "gap", "owner": "decide", "section": "refinement-judge-scored"},
+   "parity": {"status": "covered", "evidence": ["tests/test_refine_data_judge.py"]}
+  },
+  "careful-review": {
+   "summary": "Optional review of a pending action batch (model.review): a forked turn that must call review_write with reason and decision.",
+   "model_output": "generated",
+   "endpoints": ["/v1/chat/completions"],
+   "sft": {"status": "gap", "owner": "supervisor", "section": "careful-review"},
+   "rl": {"status": "gap", "owner": "supervisor", "section": "careful-review"},
+   "parity": {"status": "gap", "owner": "supervisor", "section": "careful-review"}
+  },
+  "view-write": {
+   "summary": "The Neuralese instance of builtin view(value, instructions?): template writes of the value at a view site (POST /v1/neuralese/view).",
+   "model_output": "generated",
+   "endpoints": ["/v1/neuralese/view"],
+   "sft": {"status": "gap", "owner": "legacy-sweep", "section": "view-write"},
+   "rl": {"status": "gap", "owner": "legacy-sweep", "section": "view-write"},
+   "parity": {"status": "not-applicable", "reason": "the server renders the view site itself (view.py); nothing in ts-host constructs serverViewer"}
+  },
+  "native-forced-write": {
+   "summary": "Forced producers: write-text materializes a string as native state (Neuralese<string> arguments, soft-body placeholders); init-body encodes a soft body in its real rendered call context.",
+   "model_output": "forced",
+   "endpoints": ["/v1/neuralese/native-states/write-text", "/v1/neuralese/native-states/init-body"],
+   "sft": {"status": "not-applicable", "reason": "forced text has no sampled target; its state is trained through the consumers that import it"},
+   "rl": {"status": "gap", "owner": "rl", "section": "native-forced-write"},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_lfm3_format.py"]}
+  }
+ },
+ "endpoints": {
+  "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "careful-review"]},
+  "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},
+  "/v1/neuralese/decide_many": {"kinds": ["decision-readout", "refinement-judge-scored"]},
+  "/v1/natlang/score": {"kinds": ["decision-readout", "refinement-judge-scored"]},
+  "/v1/neuralese/view": {"kinds": ["view-write"]},
+  "/v1/neuralese/native-states/write-text": {"kinds": ["native-forced-write"]},
+  "/v1/neuralese/native-states/init-body": {"kinds": ["native-forced-write"]},
+  "/health": {"model_facing": false, "reason": "liveness"},
+  "/metrics": {"model_facing": false, "reason": "metrics"},
+  "/v1/health": {"model_facing": false, "reason": "liveness"},
+  "/v1/models": {"model_facing": false, "reason": "model listing"},
+  "/v1/neuralese/info": {"model_facing": false, "reason": "capabilities and rendering identity"},
+  "/v1/neuralese/adapters": {"model_facing": false, "reason": "adapter artifact creation"},
+  "/v1/neuralese/collect": {"model_facing": false, "reason": "store garbage collection"},
+  "/v1/neuralese/grad": {"model_facing": false, "reason": "learning: gradients of recorded objectives (consumes recordings of the kinds above)"},
+  "/v1/neuralese/optim": {"model_facing": false, "reason": "learning: optimizer step"},
+  "/v1/neuralese/guidance/check": {"model_facing": false, "reason": "crisp guidance verdict on a given reply; no model call"},
+  "/v1/neuralese/render": {"model_facing": false, "reason": "prompt rendering diagnostic; no model call"}
+ }
+}
