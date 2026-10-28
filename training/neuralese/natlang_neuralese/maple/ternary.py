@@ -126,6 +126,9 @@ def quantized_value(weight: torch.Tensor, fmt: str, options: dict | None = None)
     - ``ternary``: Maple's per-row rule; with ``options["nested_group"]`` it is applied to the Q4_0 values of that
       block size, so the ternary weights are a function of the int4 codes and scales (the coarsest level of the int4
       grid: an int4 artifact determines the ternary one, Matryoshka style);
+    - ``nvfp4``: ModelOpt NVFP4 (group 16, E4M3 group scales, FP32 global scale; ``options["global_amax"]`` when the
+      global scale is shared with fused siblings); ``fp8_block``: compressed-tensors FP8 128x128 blocks
+      (train/qformats.py);
     - ``bf16``: the weight itself."""
     options = options or {}
     w = weight.detach()
@@ -137,24 +140,56 @@ def quantized_value(weight: torch.Tensor, fmt: str, options: dict | None = None)
         if options.get("nested_group"):
             w = q4_0(w, int(options["nested_group"]))
         return ternarize(w.float()).float()
+    if fmt in ("nvfp4", "fp8_block"):
+        from ..train.qformats import weight_value
+        return weight_value(w, fmt, options)
     raise ValueError(f"unknown precision format: {fmt}")
 
 
-def precision_value(weight: torch.Tensor, group: str) -> torch.Tensor:
-    """``weight`` under the active precision point for its module ``group`` (``group@layer`` for a layer's module):
-    w + mix·(Q(w) − w), straight-through (identity gradient to the latent). Unchanged when no point is active, the
-    point does not select the group, or the point's layer selection (``options["layers"]``) excludes the layer."""
+def parse_group_key(key: str):
+    """``group[@layer][:leaf]`` -> (group, layer or None, leaf or None)."""
+    head, _, leaf = key.partition(":")
+    name, _, layer = head.partition("@")
+    return name, (int(layer) if layer else None), (leaf or None)
+
+
+def _selected(key: str):
+    """The active (fmt, mix, options) for a module key, or None when the active point leaves it unquantized (no point,
+    group not selected, λ = 0, or excluded by the point's ``layers`` / ``names`` selection)."""
     groups = PRECISION["groups"]
     if not groups:
-        return weight
-    name, _, layer = group.partition("@")
+        return None
+    name, layer, leaf = parse_group_key(key)
     if name not in groups:
-        return weight
+        return None
     fmt, mix, options = groups[name]
-    if mix <= 0.0 or fmt == "bf16":
+    if mix <= 0.0:
+        return None
+    if layer is not None and options.get("layers") is not None and layer not in options["layers"]:
+        return None
+    if leaf is not None and options.get("names") is not None and leaf not in options["names"]:
+        return None
+    return fmt, mix, options
+
+
+def precision_value(weight: torch.Tensor, group: str, peers=()) -> torch.Tensor:
+    """``weight`` under the active precision point for its module ``group`` (``group@layer`` for a layer's module,
+    ``:leaf`` its module name): w + mix·(Q(w) − w), straight-through (identity gradient to the latent). Unchanged when
+    no point is active, the point does not select the group, or the point's layer selection (``options["layers"]``)
+    or module names (``options["names"]``) exclude it. ``peers``: (leaf, latent) of the sibling projections a format
+    may share a scale with (NVFP4 ``shared_global``: one fused deploy GEMM, one global scale)."""
+    selected = _selected(group)
+    if selected is None:
         return weight
-    if layer and options.get("layers") is not None and int(layer) not in options["layers"]:
+    fmt, mix, options = selected
+    if fmt == "bf16":
         return weight
+    if fmt == "nvfp4" and peers and options.get("shared_global"):
+        leaf = parse_group_key(group)[2]
+        shared = next((set(s) for s in options["shared_global"] if leaf in s), set())
+        amaxes = [weight.detach().abs().amax()] + [p.detach().abs().amax() for n, p in peers if n in shared]
+        if len(amaxes) > 1:
+            options = {**options, "global_amax": torch.stack(amaxes).amax()}
     from ..common.profiling import scope
     with scope("qat"):
         if PRECISION["fused"] and weight.is_cuda and weight.dtype == torch.bfloat16 and (
@@ -214,14 +249,50 @@ class active_precision:
 
 
 class PrecisionSTE(nn.Module):
-    """Parametrization of a selected weight: its value under the active precision point (``precision_value``)."""
+    """Parametrization of a selected weight: its value under the active precision point (``precision_value``).
+    ``peers`` (set by the quantization component): [(leaf, module)] siblings whose latents a format's shared scale reads
+    (a plain list, so the modules are not registered as children)."""
 
     def __init__(self, group: str):
         super().__init__()
         self.group = group
+        self.peers = []
 
     def forward(self, latent: torch.Tensor) -> torch.Tensor:
-        return precision_value(latent, self.group)
+        peers = [(leaf, module.parametrizations.weight.original) for leaf, module in self.peers]
+        return precision_value(latent, self.group, peers)
+
+
+class InputPrecision:
+    """The input-activation quantizer of one selected linear module (a forward pre-hook installed by the quantization
+    component): under an active point whose module config has ``activations``, the input becomes
+    x + mix·(Q(x) − x), straight-through. ``amax`` is the static calibrated range for formats with a static scale
+    (NVFP4: ``input_scale = amax / (6·448)``); ``observe`` records max |x| for calibration (BF16 forwards)."""
+
+    def __init__(self, key: str):
+        self.key, self.amax, self.observed = key, None, None
+        self.observe = False
+
+    def __call__(self, module, args):
+        x = args[0]
+        if self.observe:
+            current = x.detach().abs().amax().float()
+            self.observed = current if self.observed is None else torch.maximum(self.observed, current)
+        selected = _selected(self.key)
+        if selected is None or not selected[2].get("activations"):
+            return None
+        _, mix, options = selected
+        from ..train.qformats import activation_value, nvfp4_global_scale
+        config = options["activations"]
+        scale = None
+        if config["format"] == "nvfp4":
+            if self.amax is None:
+                raise RuntimeError(f"{self.key}: static NVFP4 activations are not calibrated (Quantization.calibrate)")
+            if self.amax.device != x.device:
+                self.amax = self.amax.to(x.device)
+            scale = nvfp4_global_scale(self.amax)
+        value = activation_value(x.detach(), config, scale)
+        return (_PrecisionRamp.apply(x, value, float(mix)),) + tuple(args[1:])
 
 
 # Global switches read by every adapter: which nested member is running (its private deltas apply) and whether
