@@ -410,11 +410,13 @@ def _run_collector(command, log, control, *, shutdown_grace=30., custody_receipt
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None,
-            behavior_top_k=None, teacher_attempts=0):
+            behavior_top_k=None, teacher_attempts=0, teacher_plan='nl'):
     """Bounded subprocess fanout; existing collector and exact task verifier. ``behavior_top_k`` also records the
     actors' top-k sampler log-probs at every sampled position (score-centered RL); None leaves collection unchanged.
-    ``teacher_attempts`` JOLT+ teacher attempts per group follow the scored student attempts: the same actor samples
-    with each invocation's privileged block (rl.jolt.teacher_entries); rows are tagged ``jolt_role: teacher``."""
+    ``teacher_attempts`` JOLT+ teacher attempts per group (the crisp plan; ``teacher_plan='nl'`` lets
+    planTeacherAttempts skip or add attempts) follow the scored student attempts: the same actor samples with
+    in-run guidance written and imported per invocation (rl.jolt.teacher_entries); rows are tagged
+    ``jolt_role: teacher``. Students write guidance without importing it (rl.jolt.student_guidance)."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
@@ -443,7 +445,10 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     receipt = out / 'collection-binding.json'
     if teacher_attempts and not (receipt.exists() and json.loads(receipt.read_text()) == binding):
         # A collection bound before teacher attempts existed keeps its recorded behaviour.
+        if teacher_plan not in ('nl', 'crisp'):
+            raise ValueError("jolt_teacher_plan is 'nl' (planTeacherAttempts) or 'crisp'")
         binding['jolt_teacher_attempts'] = teacher_attempts
+        binding['jolt_guidance'] = {'schema': 'natlang.guidance-run/1', 'teacher_plan': teacher_plan}
     elif receipt.exists():
         teacher_attempts = 0
     if receipt.exists():
@@ -527,9 +532,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             from .jolt import teacher_entries
             write_journal_and_queue()
             score(out, out / 'student-rollouts.jsonl')
+            from .jolt import plan_command
             teachers = teacher_entries(entries, list(read_jsonl(out / 'student-rollouts.jsonl')),
                                        cases=Path(cases), config=config, out=out, attempts=teacher_attempts,
-                                       seed_base=seed_base)
+                                       seed_base=seed_base, plan_command=(plan_command(endpoints[0])
+                                                                          if teacher_plan == 'nl' else None))
             if teachers['entries']:
                 entries.extend(teachers['entries'])
                 phase.update(entries=teachers['entries'], name='teacher-')
@@ -550,6 +557,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     if teacher_attempts:
         report['jolt_teacher_attempts'] = {'requested_per_group': teacher_attempts,
                                            'entries': len(teachers['entries']), 'refusal': teachers['refusal'],
+                                           'plan': teachers.get('plan'),
                                            'student_guidance_refusal': guidance_refusal}
     from .graph_replay import block_ids, save_bundle
     rollouts = list(read_jsonl(out / 'rollouts.jsonl'))
@@ -1017,7 +1025,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native,
                     **({'behavior_top_k': behavior_top_k(policy_loss)} if behavior_top_k(policy_loss) else {}),
                     teacher_attempts=(config.get('jolt_teacher_attempts', 1)
-                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0))
+                                      if policy_loss is not None and policy_loss['schema'] == 'jolt-plus/1' else 0),
+                    teacher_plan=config.get('jolt_teacher_plan', 'nl'))
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)

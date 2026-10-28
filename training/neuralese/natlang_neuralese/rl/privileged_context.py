@@ -43,7 +43,7 @@ FACT_KINDS = ('expected_result', 'expected_stop', 'expected_files', 'expected_ef
               'reference_solution', 'child_value', 'minimum_sequence', 'decisive', 'teacher_trajectory',
               'attempt_feedback', 'fit_hindsight')
 REFERENCE_KINDS = ('reference_solution', 'teacher_trajectory', 'child_value', 'expected_result')
-VERBATIM_MIN_CHARS = 24
+VERBATIM_MIN_CHARS = 16
 
 
 class CustodyError(ValueError):
@@ -476,8 +476,10 @@ def verify_captured_block(block, rendering, *, custody_receipt, facts, invocatio
     receipt = block.receipt
     if receipt.get('custody') != custody_receipt:
         raise CustodyError('guidance custody differs from the world\'s current custody receipt')
-    if receipt.get('rendering_sha256') != rendering.digest or receipt.get('role') != invocation['role']:
-        raise ValueError('guidance rendering or invocation role differs from the learner\'s')
+    if receipt.get('rendering_sha256') != rendering.digest:
+        raise ValueError('guidance rendering differs from the learner\'s')
+    if receipt.get('role') != invocation['role'] or receipt.get('invocation') != invocation['name']:
+        raise CustodyError('guidance was rendered for another invocation or role than the graph\'s')
     by_id = {fact.id: fact for fact in facts}
     used = []
     for item in receipt.get('facts') or []:

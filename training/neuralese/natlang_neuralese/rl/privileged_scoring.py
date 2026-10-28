@@ -110,7 +110,9 @@ def _rebase_plan(plan, edits):
         logical_producing = tuple(logical(node.name, a, b) for a, b in node.logical_producing)
         nodes.append(Invocation(node.name, tuple(tokens), tuple(imports), producing, logical_producing,
                                 node.cache_prefix))
-    rebased = compile_graph(nodes, external_sizes=dict(zip(plan.external_names, plan.external_sizes)))
+    rebased = compile_graph(_dependency_order(nodes),
+                            external_sizes=dict(zip(plan.external_names, plan.external_sizes)))
+    placed = {node.name: offset for node, offset in zip(rebased.invocations, rebased.offsets)}
 
     def requery(action):
         name = action['turn']
@@ -121,8 +123,24 @@ def _rebase_plan(plan, edits):
             if own < edit.at + edit.removed:
                 raise ValueError('a scored action precedes the privileged insertion boundary')
             own += edit.delta
-        return {**action, 'query': rebased.offsets[number] + own, 'local_query': own}
+        return {**action, 'query': placed[name] + own, 'local_query': own}
     return rebased, requery
+
+
+def _dependency_order(nodes):
+    """Stable order in which every import source precedes its consumer (an inserted guidance import may name a
+    writer the captured order placed later, e.g. a student's write-only writer)."""
+    pending, done, ordered = list(nodes), set(), []
+    names = {node.name for node in nodes}
+    while pending:
+        for number, node in enumerate(pending):
+            if all(edge.source in done or edge.source not in names for edge in node.imports):
+                ordered.append(pending.pop(number))
+                done.add(node.name)
+                break
+        else:
+            raise ValueError('privileged graph edit creates an import cycle')
+    return ordered
 
 
 def _edited(replay, edits):

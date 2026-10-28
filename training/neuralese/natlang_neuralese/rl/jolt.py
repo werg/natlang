@@ -191,8 +191,9 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
         receipt, facts = case_facts(case, custody=custody,
             teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
             attempt_feedback=group_feedback(case, group, rollout.get('sample')))
-        invocations = {item['name']: item for item in graph_invocations(replay, turns,
-                                                                         root_calls=root_calls(rollout, turns))}
+        invocations = {item['name']: {'name': item['name'].rsplit('#turn', 1)[0], 'role': item['role'],
+                                      'text': item['text']}
+                       for item in graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))}
         by_turn = {turn.get('graph_turn'): turn for turn in turns}
         blocks, telemetry = {}, {'blocks': 0, 'writer_blocks': 0, 'text_fallbacks': 0, 'verbatim_reference': 0,
                                  'fallback_reasons': []}
@@ -259,15 +260,20 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
     if role not in ('student', 'teacher'):
         raise ValueError('JOLT+ episode role must be student or teacher')
     flagged = policy_turns(turns)
+    for turn in turns:  # integrity, not custody: never turned into a refusal
+        capture = turn.get('sampling') or {}
+        sampled = any(segment.get('privileged') for segment in capture.get('prompt') or [])
+        mode = (capture.get('privileged') or {}).get('mode')
+        if role == 'student' and (sampled or mode not in (None, 'write-only')):
+            raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
+        if (sampled or mode is not None) and capture.get('schema') == 'natlang.native-decision-capture/1':
+            raise ValueError('a decision readout carries guidance')
+        if (sampled or mode is not None) and turn.get('graph_turn') in flagged:
+            raise ValueError('a guidance policy turn carries guidance itself')
     try:
         if source is None:
             raise CustodyError('no privileged source is available to this learner')
         blocks, telemetry = source(rollout, replay, turns)
-        # Decision readouts are scored without privileged context during teacher attempts.
-        decisions = {turn.get('graph_turn') for turn in turns
-                     if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
-        if any(name in decisions for name in blocks):
-            raise ValueError('a decision readout carries guidance')
         modes = {block.receipt['mode'] for block in blocks.values()}
         if role == 'teacher':
             if 'write-only' in modes:
@@ -277,8 +283,6 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
                 raise CustodyError('no guidance entered any invocation of this teacher attempt')
             twin = student_form(replay, blocks)
         else:
-            if modes - {'write-only'}:
-                raise ValueError('a student episode was sampled with guidance; mark it as a teacher attempt')
             turn = source.rendering.state_turn()
             blocks = {name: _as_insertion(block, turn) for name, block in blocks.items()}
             twin = teacher_form(replay, blocks)
@@ -486,15 +490,60 @@ def student_guidance(student_entries, *, ids, cases, config, out, custody=None, 
     return None
 
 
+PLAN_POLICY_PATH = 'applications/guidance-writer/planTeacherAttempts.nl'
+MAX_ATTEMPTS_PER_GROUP = 2
+
+
+def plan_command(endpoint, repo=None):
+    """``natlang call`` of the NL attempt plan against the actor endpoint (the controller is not a natlang runtime)."""
+    from pathlib import Path
+    repo = Path(repo or Path(__file__).resolve().parents[4])
+    return {'argv': ['node', str(repo / 'ts-host/bin/natlang.mjs'), 'call', str(repo / PLAN_POLICY_PATH)],
+            'env': {'NATLANG_SERVER': endpoint.rstrip('/')}}
+
+
+def plan_teacher_attempts(groups, *, default, budget, command=None):
+    """planTeacherAttempts(groups, budget) -> {group: attempts}; NL by default when ``command`` is given.
+
+    ``groups``: ``[{group, taskId, family, students, successes, meanQuality, feedback, facts}]`` of the scored
+    student groups whose worlds have facts. The crisp plan gives every group ``default`` attempts. The NL answer is
+    validated (known groups, integers in [0, MAX_ATTEMPTS_PER_GROUP], total within ``budget``); a failed or invalid
+    NL plan falls back to crisp and the reason is returned. Returns ``(plan, record)``.
+    """
+    import os
+    import subprocess
+    crisp = {item['group']: default for item in groups}
+    if command is None or not groups:
+        return crisp, {'implementation': 'crisp'}
+    try:
+        response = subprocess.run(command['argv'], input=json.dumps({'groups': groups, 'budget': budget}), text=True,
+                                  capture_output=True, check=True, timeout=600,
+                                  env={**os.environ, **command.get('env', {})})
+        answer = json.loads(response.stdout)
+        known = {item['group'] for item in groups}
+        plan = {}
+        for item in answer:
+            group, count = item.get('group'), item.get('attempts')
+            if group not in known or group in plan or type(count) is not int or not 0 <= count <= MAX_ATTEMPTS_PER_GROUP:
+                raise ValueError('planTeacherAttempts must return known groups once with 0..2 attempts')
+            plan[group] = count
+        if sum(plan.values()) > budget:
+            raise ValueError('planTeacherAttempts exceeded its attempt budget')
+        return {group: plan.get(group, 0) for group in known}, {'implementation': 'nl'}
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, AttributeError) as error:
+        return crisp, {'implementation': 'crisp', 'nl_failure': str(error)[:400]}
+
+
 def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None,
-                    selection=None):
+                    selection=None, plan_command=None):
     """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
 
     Each attempt samples the same world after its group's students with ``guidance_controls`` (role teacher): the
     custody-checked facts of the world plus the group's ``group_feedback``. The runtime's writer writes each
     invocation's guidance inside the episode and the engine imports it at the declared place; the learner
     re-verifies what the actor recorded. Returns ``{'entries': [...], 'refusal': None | reason}``; a world without
-    custody or facts gets no teacher attempt.
+    custody or facts gets no teacher attempt. ``attempts`` is the crisp count per group and its budget scale;
+    ``plan_command`` (``plan_command(endpoint)``) runs the NL ``planTeacherAttempts`` that may skip or add attempts.
     """
     import copy
     from pathlib import Path
@@ -511,13 +560,30 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
     for row in student_rows:
         by_group.setdefault(row.get('group'), []).append(row)
     entries, out = [], Path(out)
+    firsts, summaries = [], []
     for first in sorted((entry for entry in student_entries if entry.get('sample') == 0), key=lambda e: e['group']):
         members = by_group.get(first['group'], [])
         case = worlds.get(members[0]['task_id']) if members else None
         if case is None:
             continue
+        try:
+            _, facts = case_facts(case, custody=custody)
+        except CustodyError:
+            continue
+        if not facts:
+            continue
+        qualities = [row['reward']['quality'] for row in members if row.get('reward') is not None]
+        firsts.append((first, members, case))
+        summaries.append({'group': first['group'], 'taskId': case['id'], 'family': case.get('family'),
+                          'students': len(members), 'successes': sum(quality >= 1 for quality in qualities),
+                          'meanQuality': sum(qualities) / len(qualities) if qualities else 0.,
+                          'feedback': [text for text in map(attempt_feedback, members) if text][:MAX_FEEDBACK_ATTEMPTS],
+                          'facts': len(facts)})
+    plan, record = plan_teacher_attempts(summaries, default=attempts, budget=attempts * len(summaries),
+                                         command=plan_command)
+    for first, members, case in firsts:
         size = max(entry['sample'] for entry in student_entries if entry['group'] == first['group']) + 1
-        for attempt in range(attempts):
+        for attempt in range(plan[first['group']]):
             sample = size + attempt
             try:
                 receipt, facts = case_facts(case, custody=custody,
@@ -540,4 +606,4 @@ def teacher_entries(student_entries, student_rows, *, cases, config, out, attemp
                          output=str(directory / 'results.jsonl'), chat_request_config=str(controls),
                          jolt_role='teacher')
             entries.append(entry)
-    return {'entries': entries, 'refusal': None}
+    return {'entries': entries, 'refusal': None, 'plan': record}
