@@ -9,6 +9,7 @@ from pathlib import Path
 
 from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common import paths
 from natlang_neuralese.data.native_graph_schema import parse_graph, communication_classification
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
@@ -27,6 +28,9 @@ def main():
     p.add_argument('--tokenizer', type=Path, required=True)
     p.add_argument('--protection', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--current-source-reviews', type=Path,
+                   default=paths.resolve('repo', 'training/source-reviews'),
+                   help='live review authority; set explicitly when running a frozen or relocated checkout')
     args = p.parse_args()
     if args.out.exists(): raise ValueError('chain output must be a fresh namespace')
     root = Path(__file__).resolve().parents[2]
@@ -47,7 +51,7 @@ def main():
     reviews = {}
     for name in ('holds.jsonl', 'family-holds.json', 'datasets.json'):
         frozen = root/'training/source-reviews'/name
-        current = Path('/home/werg/natlang/training/source-reviews')/name
+        current = args.current_source_reviews/name
         frozen_sha, current_sha = sha256_file_hex(frozen), sha256_file_hex(current)
         if frozen_sha != current_sha:
             raise ValueError('frozen source reviews differ from the live current review: '+name)
