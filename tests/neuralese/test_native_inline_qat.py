@@ -278,3 +278,18 @@ def test_diloco_qat_transition_preserves_progress_calibration_and_resume(base):
     assert resume_q.state_dict()==calibration and resume_options['quantization']==options['quantization']
     with pytest.raises(ValueError,match='stage differs'):
         _quantization_shard_transition(saved,global_step=50,pending_updates=238,stage='wrong',worker=0)
+
+
+def test_diloco_export_retains_each_workers_qat_declaration_and_calibration():
+    from natlang_neuralese.train.native_diloco import _retire_learner_calibration
+    training={'quantization':{'old':'merged'}}
+    learners=[{'diloco':{'worker':i},'quantization':{'amax':i},
+               'options':{'quantization':{'bind':{'end':100+i}},
+                          'quantization_history':[{'event':'transition','worker':i}]}}
+              for i in range(4)]
+    result=_retire_learner_calibration(training,learners)
+    assert 'quantization' not in training
+    for i in range(4):
+        assert result['learners'][str(i)]=={'amax':i}
+        assert result['learner_declarations'][str(i)]=={
+            'declaration':{'bind':{'end':100+i}},'history':[{'event':'transition','worker':i}]}

@@ -154,7 +154,12 @@ def _retire_learner_calibration(training, learners):
     """Archive local calibration and force a fresh window on the merged weights."""
     calibration = {str(item['diloco']['worker']): item.get('quantization') for item in learners}
     training.pop('quantization', None)
-    return {'action': 'recalibrate-merged-weights', 'learners': calibration}
+    declarations = {str(item['diloco']['worker']): {
+        'declaration': (item.get('options') or {}).get('quantization'),
+        'history': (item.get('options') or {}).get('quantization_history') or []}
+        for item in learners}
+    return {'action': 'recalibrate-merged-weights', 'learners': calibration,
+            'learner_declarations': declarations}
 
 
 def export(args):
