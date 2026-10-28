@@ -36,6 +36,21 @@ Component (JSON, validated by ``validate_spec``)::
   one component serves both lines (Mellum: experts + attention; LFM: mlp + conv + attention).
 - ``layers``: ``"all"`` (default), a list of layer indices, or the least sensitive fraction of layers according to a
   pinned sensitivity probe (``python -m natlang_neuralese.train.quantization sensitivity``): experts first, attention later or never.
+- Formats: ``int4`` (Q4_0, ``group``), ``ternary`` (``nested_group``), and the deployable formats of
+  train/qformats.py, exact to Liquid's LFM3 releases (owner 2026-10-28): ``nvfp4`` (ModelOpt NVFP4: E2M1 weights in
+  groups of 16 with E4M3 group scales and an FP32 global scale; ``shared_global`` lists module names that deploy as one
+  fused GEMM and so share the global scale, ``[["w1", "w3"]]`` for the LFM gate/up pair) and ``fp8_block``
+  (compressed-tensors FP8_BLOCK: E4M3 weights, 128x128 block scales, ``block``).
+- ``names``: the module names (last name component) of the group a point quantizes, e.g. attention without its
+  per-head ``gate_proj``. Module groups stay those of ``classify``.
+- ``activations``: input-activation quantization of the selected linear modules, straight-through like the weights
+  and ramped by the same λ: ``{"format": "fp8_group", "group": 128}`` (dynamic per-token group scales) or
+  ``{"format": "nvfp4", "calibration": {"method": "max", "refresh": R, "batches": N}}`` (NVFP4's static per-tensor
+  input scale; the group scales are dynamic). Static ranges are calibrated as ModelOpt does (max |input| over BF16
+  forwards) from the current latents: before the first update and every ``R`` updates, the trainer runs
+  ``Quantization.calibrate`` over its next ``N`` training batches (``calibration_due``). The ranges are trainer state
+  (``state_dict``/``load_state_dict``, checkpointed with the optimizer) and are exported as ``input_scale``. Between
+  refreshes they are fixed, so inputs beyond the calibrated range saturate exactly as deployed.
 """
 from __future__ import annotations
 
@@ -53,7 +68,9 @@ from torch.nn.utils import parametrize
 from ..common.hashing import sha256_file_hex
 
 SCHEMA = 'natlang.neuralese-quantization/1'
-FORMATS = ('bf16', 'int4', 'ternary')
+FORMATS = ('bf16', 'int4', 'ternary', 'nvfp4', 'fp8_block')
+ACTIVATION_FORMATS = ('nvfp4', 'fp8_group')
+CALIBRATION_SCHEMA = 'natlang.neuralese-quantization-calibration/1'
 GROUPS = ('experts', 'attention', 'conv', 'mlp', 'router', 'embeddings', 'heads')
 GATES = ('required', 'report', 'none')
 STAGE_KINDS = ('core_text_warmup', 'raw_recurrence_training', 'neuralese_direct')
@@ -142,13 +159,14 @@ def validate_spec(spec, stages=None):
             raise ValueError('precision point modules map module groups to formats: ' + name)
         for group, config in modules.items():
             if not isinstance(config, dict) or config.get('format') not in FORMATS or \
-                    set(config) - {'format', 'group', 'nested_group'}:
+                    set(config) - {'format', 'group', 'nested_group', 'block', 'names', 'activations', 'shared_global'}:
                 raise ValueError(f'module {group} of {name} needs a format in {FORMATS}')
-            for key in ('group', 'nested_group'):
+            for key in ('group', 'nested_group', 'block'):
                 if key in config and (type(config[key]) is not int or config[key] < 1):
                     raise ValueError(f'{key} must be a positive integer')
             if 'nested_group' in config and config['format'] != 'ternary':
                 raise ValueError('nested_group applies to ternary (the coarsest level of the int4 grid)')
+            _validate_deploy_options(name, group, config)
         layers = point.get('layers', 'all')
         if not (layers == 'all' or (isinstance(layers, list) and all(type(i) is int and i >= 0 for i in layers))
                 or (isinstance(layers, dict) and set(layers) == {'least_sensitive', 'probe'}
@@ -157,6 +175,48 @@ def validate_spec(spec, stages=None):
             raise ValueError('precision point layers is "all", a list of layer indices, or '
                              '{"least_sensitive": fraction, "probe": {"path", "sha256"}}')
     return spec
+
+
+def _validate_deploy_options(point, group, config):
+    """Options of the deployable formats (train/qformats.py): ``block`` (fp8_block), ``shared_global`` (nvfp4: lists
+    of module names sharing one global scale, the projections a deploy engine fuses into one GEMM), ``names`` (the
+    module names of the group the point quantizes; any format) and ``activations`` (input-activation quantization)."""
+    fmt = config['format']
+    if 'block' in config and fmt != 'fp8_block':
+        raise ValueError('block applies to fp8_block')
+    if 'group' in config and fmt == 'fp8_block':
+        raise ValueError('fp8_block takes block, not group')
+    names = config.get('names')
+    if names is not None and (not isinstance(names, list) or not names
+                              or not all(isinstance(n, str) and n and '.' not in n for n in names)):
+        raise ValueError(f'names of {group} in {point} is a nonempty list of module names (the last name component)')
+    shared = config.get('shared_global')
+    if shared is not None:
+        if fmt != 'nvfp4' or not isinstance(shared, list) or not all(
+                isinstance(s, list) and len(s) > 1 and all(isinstance(n, str) and n for n in s) for s in shared):
+            raise ValueError('shared_global applies to nvfp4: a list of module-name lists sharing one global scale')
+        flat = [n for s in shared for n in s]
+        if len(flat) != len(set(flat)):
+            raise ValueError('a module name is in one shared_global set at most')
+    activations = config.get('activations')
+    if activations is None:
+        return
+    if fmt not in ('nvfp4', 'fp8_block'):
+        raise ValueError('activations apply with the deployable weight formats (nvfp4, fp8_block)')
+    if (not isinstance(activations, dict) or activations.get('format') not in ACTIVATION_FORMATS
+            or set(activations) - {'format', 'group', 'calibration'}
+            or ('group' in activations and (type(activations['group']) is not int or activations['group'] < 1))):
+        raise ValueError(f'activations of {group} in {point} is a format in {ACTIVATION_FORMATS}, group, calibration')
+    calibration = activations.get('calibration')
+    if activations['format'] == 'nvfp4':
+        if (not isinstance(calibration, dict) or calibration.get('method', 'max') != 'max'
+                or set(calibration) - {'method', 'refresh', 'batches'}
+                or type(calibration.get('refresh')) is not int or calibration['refresh'] < 1
+                or type(calibration.get('batches')) is not int or calibration['batches'] < 1):
+            raise ValueError('nvfp4 activations have a static scale: calibration is {method: max, refresh: updates, '
+                             'batches: forwards}')
+    elif calibration is not None:
+        raise ValueError('fp8_group activations are dynamic and take no calibration')
 
 
 def stage_component(spec, stage, *, start, end, init_mix=None):
@@ -256,6 +316,8 @@ class Quantization:
         self.root = root
         self.installed = {}  # group -> number of modules
         self.layers = {}  # point -> selected layer set or None
+        self.inputs = {}  # module name -> InputPrecision (activation quantizer)
+        self.calibration = {'step': None, 'batches': 0, 'source': None}
 
     # Schedule --------------------------------------------------------------------------------------------------------
     def progress(self, step):
@@ -339,7 +401,9 @@ class Quantization:
         return {'schema': SCHEMA, 'stage': self.stage['id'], 'progress': self.progress(step),
                 'mixes': self.mixes(step), 'init_mix': dict(self.init_mix), 'mode': self.mode,
                 'installed': dict(self.installed),
-                'required': self.required_points(), 'gated': self.gated_points()}
+                'required': self.required_points(), 'gated': self.gated_points(),
+                **({'calibration': {**self.calibration, 'modules': len(self.input_amax())}}
+                   if self.calibration_config() else {})}
 
     # Installation ----------------------------------------------------------------------------------------------------
     def install(self, module, layer_count=None):
@@ -357,32 +421,129 @@ class Quantization:
             layer_count = 1 + max((layer_of(n) or 0) for n, _ in module.named_modules())
         for name, point in self.points.items():
             self.layers[name] = selected_layers(point, layer_count, root=self.root)
-        seen = set()
+        configs = {}  # group -> the points' module configs for it
+        for point in self.points.values():
+            for group, config in point['modules'].items():
+                configs.setdefault(group, []).append(config)
+        seen, parametrized = set(), {}
         for name, child in module.named_modules():
             group = classify(name, child)
             if group not in wanted:
                 continue
             layer = layer_of(name)
-            # Keyed ``group@layer``: a point's layer selection (``options["layers"]``) decides per pass.
+            # Keyed ``group@layer[:leaf]``: a point's layer and name selections (``options["layers"]``,
+            # ``options["names"]``) decide per pass.
             if isinstance(child, DenseExperts):
                 if not isinstance(child.gate_up, nn.Parameter):
                     child.make_latent(quantize=False)
                 child.precision_group = self._group_key(group, layer)
             else:
+                leaf = name.rsplit('.', 1)[-1]
+                if all(c.get('names') is not None and leaf not in c['names'] for c in configs[group]):
+                    continue  # no point quantizes this module
                 weight = child.weight
                 if id(weight) in seen:
                     continue  # tied weights are parametrized once
                 seen.add(id(weight))
                 if parametrize.is_parametrized(child, 'weight'):
                     raise ValueError('module already parametrized; precision points need plain latents: ' + name)
-                parametrize.register_parametrization(child, 'weight', PrecisionSTE(self._group_key(group, layer)),
-                                                     unsafe=True)
+                key = self._group_key(group, layer, leaf)
+                ste = PrecisionSTE(key)
+                parametrize.register_parametrization(child, 'weight', ste, unsafe=True)
+                parametrized[name] = (group, leaf, child, ste)
+                if isinstance(child, nn.Linear) and any(c.get('activations') for c in configs[group]):
+                    self._install_input(name, key, child, configs[group])
             self.installed[group] = self.installed.get(group, 0) + 1
+        # Projections sharing one NVFP4 global scale (one fused deploy GEMM): each reads its siblings' latents.
+        for name, (group, leaf, child, ste) in parametrized.items():
+            parent = name.rsplit('.', 1)[0]
+            shared = {n for c in configs[group] for s in c.get('shared_global', []) if leaf in s for n in s} - {leaf}
+            ste.peers = [(n, parametrized[f'{parent}.{n}'][2]) for n in sorted(shared) if f'{parent}.{n}' in parametrized]
         return self.installed
 
+    def _install_input(self, name, key, child, configs):
+        from ..maple.ternary import InputPrecision
+        holder = InputPrecision(key)
+        holder.static = any((c.get('activations') or {}).get('format') == 'nvfp4' for c in configs)
+        child.register_forward_pre_hook(holder)
+        self.inputs[name] = holder
+
     @staticmethod
-    def _group_key(group, layer):
-        return group if layer is None else f'{group}@{layer}'
+    def _group_key(group, layer, leaf=None):
+        key = group if layer is None else f'{group}@{layer}'
+        return key if leaf is None else f'{key}:{leaf}'
+
+    # Static activation calibration -----------------------------------------------------------------------------------
+    def calibration_config(self):
+        """The calibration of the static (NVFP4) activation scales: {refresh, batches} (the most frequent refresh and
+        the most batches any point declares), or None when no point has static activation scales."""
+        found = [c['activations']['calibration'] for p in self.points.values() for c in p['modules'].values()
+                 if (c.get('activations') or {}).get('format') == 'nvfp4']
+        if not found:
+            return None
+        return {'method': 'max', 'refresh': min(c['refresh'] for c in found), 'batches': max(c['batches'] for c in found)}
+
+    def calibration_due(self, step):
+        """Whether the trainer must (re)calibrate before update ``step``: never calibrated, or ``refresh`` updates
+        since the last calibration."""
+        config = self.calibration_config()
+        if config is None:
+            return False
+        last = self.calibration.get('step')
+        return last is None or step - last >= config['refresh']
+
+    @torch.no_grad()
+    def calibrate(self, forward, batches, step, source=None):
+        """ModelOpt ``max`` calibration of the static activation scales from the current latents: run ``forward(batch)``
+        at BF16 (unquantized, as ModelOpt calibrates) over ``batches`` (the trainer's next ``calibration.batches``
+        training batches) and set each module's ``amax`` to the max |input| seen. ``source`` records which batches
+        (e.g. the data cursor). The result is part of the trainer state (``state_dict``)."""
+        holders = {n: h for n, h in self.inputs.items() if h.static}
+        if not holders:
+            return {}
+        for holder in holders.values():
+            holder.observe, holder.observed = True, None
+        count = 0
+        try:
+            with self.context('bf16', 0.0):
+                for batch in batches:
+                    forward(batch)
+                    count += 1
+        finally:
+            for holder in holders.values():
+                holder.observe = False
+        missing = [n for n, h in holders.items() if h.observed is None]
+        if count == 0 or missing:
+            raise ValueError('calibration forwards reached no input of: ' + ', '.join(missing or sorted(holders)))
+        for holder in holders.values():
+            holder.amax, holder.observed = holder.observed.detach().float(), None
+        self.calibration = {'step': int(step), 'batches': count, 'source': source}
+        return {n: float(h.amax) for n, h in holders.items()}
+
+    def input_amax(self):
+        """{module name: calibrated input amax} of the static activation scales (export: ``input_scale``)."""
+        return {n: float(h.amax) for n, h in self.inputs.items() if h.static and h.amax is not None}
+
+    def check_calibrated(self, name):
+        """Raise when point ``name`` quantizes activations with a static scale that has not been calibrated."""
+        point = self.points[name]
+        static = any((c.get('activations') or {}).get('format') == 'nvfp4' for c in point['modules'].values())
+        if static and any(h.static and h.amax is None for h in self.inputs.values()):
+            raise ValueError(f'precision point {name} has static activation scales: calibrate before evaluating it')
+
+    def state_dict(self):
+        """The component's trainer state: the calibrated static activation ranges (FP32 values, exact in JSON)."""
+        return {'schema': CALIBRATION_SCHEMA, **self.calibration, 'amax': self.input_amax()}
+
+    def load_state_dict(self, state):
+        if state.get('schema') != CALIBRATION_SCHEMA:
+            raise ValueError('not a quantization calibration state')
+        static = {n for n, h in self.inputs.items() if h.static}
+        if set(state['amax']) - static or (state['amax'] and set(state['amax']) != static):
+            raise ValueError('calibration state names other modules than the installed static activation inputs')
+        for name, value in state['amax'].items():
+            self.inputs[name].amax = torch.tensor(value, dtype=torch.float32)
+        self.calibration = {k: state.get(k) for k in ('step', 'batches', 'source')}
 
 
 
@@ -551,6 +712,7 @@ def gate_columns(quantization, evaluate, passed, step=None, points='all'):
         if step is not None and name not in required and mixes.get(name, 0.0) <= 0.0:
             columns[name] = {'passed': None, 'skipped': 'ramp not started in this stage', 'report': {}}
             continue
+        quantization.check_calibrated(name)
         started = time.perf_counter()
         with quantization.context(name, 1.0):
             report = evaluate()
