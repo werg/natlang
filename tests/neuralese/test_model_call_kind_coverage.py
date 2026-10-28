@@ -115,3 +115,18 @@ def test_every_kind_declares_sft_rl_and_parity():
                     f'{kind}: a model-produced output always has an SFT target (owner: supervise the model\'s own outputs)'
             else:
                 raise AssertionError(f'{kind}.{column}: unknown status {status!r}')
+
+
+def test_guidance_runtime_calls_declare_individual_training_coverage():
+    calls = REGISTRY['runtime_calls']
+    assert set(calls) == {'selectGuidanceFacts', 'writeGuidance', 'planTeacherAttempts'}
+    anchors = set(re.findall(r'<a id="([a-z0-9-]+)"></a>', AUDIT.read_text(encoding='utf-8')))
+    for name, entry in calls.items():
+        assert entry['kind'] in KINDS and (ROOT / entry['source']).is_file(), name
+        assert name in (ROOT / entry['source']).name
+        for column in COLUMNS:
+            cell = entry[column]
+            if cell['status'] == 'covered':
+                assert cell.get('evidence') and all((ROOT / path).exists() for path in cell['evidence']), (name, column)
+            else:
+                assert cell['status'] == 'gap' and cell.get('owner') and cell.get('section') in anchors, (name, column)

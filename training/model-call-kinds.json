@@ -60,6 +60,26 @@
    "parity": {"status": "covered", "evidence": ["tests/neuralese/test_lfm3_format.py"]}
   }
  },
+ "runtime_calls": {
+  "selectGuidanceFacts": {
+   "kind": "runtime-authored-call", "source": "applications/guidance-writer/selectGuidanceFacts.nl",
+   "sft": {"status": "gap", "owner": "supervisor", "section": "guidance-writer-data"},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/jolt.py", "tests/neuralese/test_rl_jolt.py"]},
+   "parity": {"status": "covered", "evidence": ["ts-host/test/training-guidance.test.mjs"]}
+  },
+  "writeGuidance": {
+   "kind": "runtime-authored-call", "source": "applications/guidance-writer/writeGuidance.nl",
+   "sft": {"status": "gap", "owner": "supervisor", "section": "guidance-writer-data"},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/jolt.py", "tests/neuralese/test_rl_jolt.py"]},
+   "parity": {"status": "covered", "evidence": ["ts-host/test/training-guidance.test.mjs", "tests/neuralese/test_jolt_privileged_context.py"]}
+  },
+  "planTeacherAttempts": {
+   "kind": "runtime-authored-call", "source": "applications/guidance-writer/planTeacherAttempts.nl",
+   "sft": {"status": "gap", "owner": "supervisor", "section": "guidance-writer-data"},
+   "rl": {"status": "gap", "owner": "supervisor", "section": "guidance-writer-data"},
+   "parity": {"status": "gap", "owner": "supervisor", "section": "guidance-writer-data"}
+  }
+ },
  "endpoints": {
   "/v1/chat/completions": {"kinds": ["tool-loop-turn", "runtime-authored-call", "careful-review"]},
   "/v1/neuralese/decide": {"kinds": ["decision-readout", "refinement-judge-scored"]},

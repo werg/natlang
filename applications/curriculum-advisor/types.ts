@@ -45,4 +45,3 @@ export type TrainingSelectionBudget = { rows: number; group: number; offset: num
 export type TrainingTaskSelection = { row: number; samples: number };
 
 export type TrainingCurriculumOptions = { schema: "natlang.rl-task-curriculum/1"; breadth_fraction: number; promotion_success_rate: number };
-
