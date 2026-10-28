@@ -1352,3 +1352,29 @@ def test_startup_log_capture_redacts_run_command(tmp_path):
     cwctl.capture_startup_logs(Sandbox(),path,ready)
     assert 'secret argument' not in path.read_text() and 'trainer output' not in path.read_text()
     assert ready.read_text().strip()=='ready'
+
+
+def test_coordinator_identity_uses_unwrapped_restored_trainer_argv(tmp_path,monkeypatch):
+    diloco=load('diloco');monkeypatch.setattr(diloco,'RUNS',tmp_path/'records')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/parent.pt','--weight-ema','off']
+    learner=base_job(id='lfm',kind='train',command=trainer)
+    learner['scratch']={'path':'/work','size':'200Gi','restore_from_snapshot_id':'snapshot'}
+    learner['env']={'NATLANG_DILOCO_SEED_SHA256':'a'*64}
+    path=tmp_path/'learner.json';path.write_text(json.dumps(learner))
+    run={'schema':diloco.SCHEMA,'id':'run','placement':'cohosted','settings':{'run_id':'run','workers':4},
+         'resident':{'directory':'/work/diloco-resident/resident-data','geometry_qualification':'/work/diloco-resident/geometry.json'},
+         'coordinator':{'job':str(path),'bundle_file':'coord.bundle','parent':'/work/parent.pt'},
+         'learners':{'job':str(path),'bundle_file':'learner.bundle'}}
+    wrapped=diloco.learner_job(run,0,'http://127.0.0.1:8080')['command']
+    assert wrapped[:2]==['bash','-c']
+    actual=diloco.cohosted_job;captured=[]
+    def cohost(run,argv):captured.extend(argv);return actual(run,argv)
+    monkeypatch.setattr(diloco,'cohosted_job',cohost)
+    monkeypatch.setattr(diloco.cwctl,'launch',lambda *a,**k:{'sandbox_id':'s0','push':{},'service_url':'https://coord'})
+    monkeypatch.setattr(diloco.cwctl,'share_token',lambda _:b'gateway')
+    monkeypatch.setattr(diloco,'wait_coordinator',lambda *a,**k:None)
+    monkeypatch.setattr(diloco.cwctl,'record',lambda _:None)
+    result=diloco.launch(run,coordinator_only=True)
+    assert result['state']=='coordinator-ready'
+    assert captured==trainer[3:]+['--resident-data-directory','/work/diloco-resident/resident-data',
+                                  '--resident-geometry-qualification','/work/diloco-resident/geometry.json']

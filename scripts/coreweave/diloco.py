@@ -96,20 +96,25 @@ def coordinator_job(run: dict, trainer_args: list[str]) -> dict:
     return jobs.validate(job)
 
 
+def trainer_command(run: dict, job: dict) -> list[str]:
+    """Actual trainer command before the restored-volume verification wrapper."""
+    command = list(job['command'])
+    if isinstance(run.get('resident'), dict):
+        if any(flag in command for flag in ('--resident-data-directory', '--resident-geometry-qualification')):
+            raise cwctl.ControllerError('declare resident paths in the run, not twice in the trainer command')
+        command += ['--resident-data-directory', run['resident']['directory'],
+                    '--resident-geometry-qualification', run['resident']['geometry_qualification']]
+    return command
+
+
 def learner_job(run: dict, worker: int, url: str) -> dict:
     job = copy.deepcopy(_template(run['learners']['job']))
     settings = {**run['settings'], 'coordinator_url': url}
-    resident_args = []
-    if isinstance(run.get('resident'), dict):
-        resident_args = ['--resident-data-directory', run['resident']['directory'],
-                         '--resident-geometry-qualification', run['resident']['geometry_qualification']]
-        if any(flag in job['command'] for flag in ('--resident-data-directory', '--resident-geometry-qualification')):
-            raise cwctl.ControllerError('declare resident paths in the run, not twice in the trainer command')
     ident = f"{run['id']}-learner-{worker}"
     environment = {**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)}
     if job['scratch'].get('restore_from_snapshot_id'):
         environment['NATLANG_CW_INSTANCE'] = ident
-    command = [*job['command'], *resident_args, '--diloco', json.dumps(settings, sort_keys=True)]
+    command = [*trainer_command(run, job), '--diloco', json.dumps(settings, sort_keys=True)]
     expected = environment.get('NATLANG_DILOCO_SEED_SHA256')
     if job['scratch'].get('restore_from_snapshot_id') and expected:
         import re
@@ -299,7 +304,7 @@ def launch(run: dict, *, coordinator_only=False) -> dict:
     learner_template = _template(run['learners']['job'])
     if learner_template['command'][:len(TRAINER)] != TRAINER:
         raise cwctl.ControllerError(f'the learner command must start with {shlex.join(TRAINER)}')
-    trainer_args = learner_job(run, 0, 'http://127.0.0.1:8080')['command'][len(TRAINER):-2]
+    trainer_args = trainer_command(run, learner_template)[len(TRAINER):]
     token = secrets.token_urlsafe(32)
     _keep(RUNS / run['id'] / 'token', token)
     started: list[str] = []
