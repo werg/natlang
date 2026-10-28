@@ -231,6 +231,8 @@ def launch(args):
         for item in items.values():  # refresh
             if item['status'] in ('missing-source',) and not [s for s in sources_of(item) if not (REPO / s).exists()]:
                 item['status'] = 'pending'
+            if item['status'] == 'failed' and (REPO / item['out'] / 'receipt.json').exists():
+                item['status'] = 'rendered'  # its receipt landed after the unit was last seen
             if item['status'] == 'running':
                 done = (REPO / item['out'] / 'receipt.json').exists()
                 if unit_state(item['unit']) != 'active':
