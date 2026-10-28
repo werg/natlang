@@ -87,7 +87,12 @@ def status(directory):
         if (directory / 'rejections').exists():
             rejected = [json.loads(p.read_text()) for p in sorted((directory / 'rejections').glob('*.json'))]
         initial = json.loads((directory / 'initial.json').read_text()) if (directory / 'initial.json').exists() else {}
+        payload = state['payload'] if state else {}
         return {'owner_alive': resident.owner_alive(initial.get('owner') or {}),
+                'active': ({'train': payload['train'], 'held': payload['held'], 'recipe': payload['recipe'],
+                            'geometry_qualification': payload.get('geometry_qualification'),
+                            'ce_supervision_policy': payload['plan']['stage_inputs'][payload['stage_id']].get('ce_supervision_policy')}
+                           if state else None),
                 'generation': state['generation'] if state else None,
                 'at_global_step': state.get('at_global_step') if state else None,
                 'pending': pending_ref, 'pending_generation': pending_generation,
