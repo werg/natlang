@@ -164,6 +164,5 @@ test('the registry files are what the loader reads, and the loader refuses a reg
     ['hotpotqa', 'knowledge_evidence', 'c5b955678123f51525b7e3c83d317961b1c2093262aa317b9ceb60a3a26ccc42'],
     ['banking77', 'cross_source_folders', null],
     ['musique', 'musique_hops', null],
-    ['musique', 'musique_answer_hops', null],
-    ['ag_news', 'edit_stream', null]]);
+    ['musique', 'musique_answer_hops', null]]);
 });
