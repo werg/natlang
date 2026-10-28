@@ -77,3 +77,37 @@ prospective queries; teacher = served model with the full program context, stude
 (synaptic and structural variants) and the hidden-state MSE term next to our teacher-SFT; CR/RR measured on
 development and confirmation invocations. Note the interaction with NVFP4: LFM3's FFN is the quantized part, so
 folded FFN writes must be re-quantized and measured at NVFP4.
+
+## 7. JOLT: one policy as privileged teacher and as student (Perplexity, "A good teacher meets the student where they are")
+
+One shared policy in two roles: the teacher sees privileged information (verified answer, reference solution, execution
+feedback, summaries of earlier attempts, private verifier info), the student only the task. Student update (OPSD):
+student samples its own trajectories, the same model with the privileged context in place scores every visited token,
+and the student minimizes reverse KL to that teacher (dense, on-policy). Teacher update: centered return of the
+teacher's own attempts on log-likelihood under the privileged context, minus beta_T KL to the student's policy, so the
+teacher's guidance stays within reach of the student ("reward-consistent" teacher, target pi_T* proportional to
+pi_student exp(A/beta_T)). JOLT+ adds the ordinary centered outcome reward on student attempts. Reported: JOLT+ beats
+tuned GRPO on GSM8K (+1.5), MATH (+4.2), LiveCodeBench v6 (+3.0), AppWorld (+9.9), Terminal-Bench 2.1 (+2.7, 0.6B-30B
+Qwen/DeepSeek models); on MATH 6.5x fewer processed and ~13x fewer completion tokens than GRPO to the same accuracy.
+Without the outcome term it trails GRPO on the agentic benchmarks. No beta values, no ablations, code not released.
+
+**Fit with our work.** Strong:
+- Our curriculum already carries exactly the privileged information it needs, for training worlds: authored reference
+  solutions and child reference values, oracle checks, verified teacher trajectories of the same world, and the
+  runtime's error/repair feedback from earlier attempts.
+- It densifies reward where GRPO gives nothing: all-fail and all-success groups currently fall back to RFT seeding;
+  the self-teacher still scores every token. It also reduces dependence on the external teacher (one Luna worker,
+  Qwen3.6 sandbox) because the student's own model teaches with privileged context.
+- It is the RL-time counterpart of Cortex (teacher with context, student without) and of our producer/consumer design:
+  a teacher trained so that its guidance is usable by the student is what we want from Neuralese producers and
+  stored guidance.
+- Composes with score centering: the outcome terms (teacher attempts, JOLT+ student term) use the score-centered
+  estimator; the OPSD term is computed by the learner's own forward with the privileged context, so it has no
+  sampler mismatch.
+**Requirements/risks:** privileged context only from training worlds (never held/dev); the teacher scoring forward must
+run on the whole actual graph (privileged block added per invocation, consumer import positions handled by the shared
+positional splice, gradients through producers/consumers) rather than on detached turns; leakage of reference text
+into student behaviour is limited because the student only learns preferences over its own sampled tokens; beta_S,
+beta_T untested at our scale.
+**Plan:** implement as an option of the shared whole-graph RL learner (JOLT+ with score-centered outcome terms), pilot
+on the development curriculum against score-centered GRPO at equal tokens, then use it in phase 3.
