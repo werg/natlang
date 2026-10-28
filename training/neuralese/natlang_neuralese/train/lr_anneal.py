@@ -173,6 +173,12 @@ def plan_branch(source, out, spec, *, extra_argv=()):
     return argv, provenance
 
 
+def branch_has_weight_ema(path):
+    """The branch keeps an EMA when its parent carried one or the default started one (weight EMA is on by default)."""
+    from .checkpoint_policy import CheckpointPolicy
+    return 'ema' in (CheckpointPolicy.load(path, map_location='cpu', semantic_only=True).get('training') or {})
+
+
 def run(args, extra):
     spec = parse_lr_anneal(json.dumps({'steps': args.steps, 'shape': args.shape, 'floor': args.floor}))
     argv, provenance = plan_branch(args.source, args.out, spec, extra_argv=extra)
@@ -182,7 +188,7 @@ def run(args, extra):
     from .native_state_sft import main as train
     status = train(argv)
     branch = Path(args.out) / 'branch'
-    if status == 0 and provenance['parent_has_weight_ema'] and (branch / 'checkpoint.pt').exists():
+    if status == 0 and (branch / 'checkpoint.pt').exists() and branch_has_weight_ema(branch / 'checkpoint.pt'):
         from .weight_ema import export_checkpoint
         candidate = Path(args.out) / 'release-candidate-ema'
         export = export_checkpoint(branch / 'checkpoint.pt', candidate, base=args.base, device='cpu',

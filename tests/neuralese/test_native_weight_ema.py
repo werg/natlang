@@ -274,7 +274,7 @@ def test_trainer_ema_resumes_bit_exactly_earns_no_credit_and_leaves_training_unt
     base, paths = _fixture(tmp_path)
     spec = '{"decay": 0.9, "warmup": 3, "eval": "both"}'
     plain = tmp_path / 'plain'
-    _train(_argv(base, paths, plain, epochs=4), monkeypatch)
+    _train(_argv(base, paths, plain, epochs=4, extra=['--weight-ema', 'off']), monkeypatch)
     straight = tmp_path / 'straight'
     _train(_argv(base, paths, straight, epochs=4, extra=['--weight-ema', spec]), monkeypatch)
     halted = tmp_path / 'halted'
@@ -311,14 +311,17 @@ def test_trainer_ema_resumes_bit_exactly_earns_no_credit_and_leaves_training_unt
     assert differing > 0
 
 
-def test_trainer_requires_an_explicit_choice_for_a_carried_ema(tmp_path, monkeypatch):
+def test_trainer_continues_a_carried_ema_by_default_and_discards_it_only_explicitly(tmp_path, monkeypatch):
     base, paths = _fixture(tmp_path)
     first = tmp_path / 'first'
-    _train(_argv(base, paths, first, epochs=1, extra=['--weight-ema', '{"decay": 0.9}']), monkeypatch)
-    follow = _argv(base, paths, tmp_path / 'second', epochs=2, extra=['--continue-from', str(first / 'checkpoint.pt')])
-    from natlang_neuralese.train import native_state_sft as trainer
-    with pytest.raises(ValueError, match='weight EMA'):
-        trainer.main(follow)
+    _train(_argv(base, paths, first, epochs=1, extra=['--weight-ema', '{"decay": 0.9, "eval": "ema"}']), monkeypatch)
+    # Omitted: the carried EMA continues with its recorded decay, warmup, seed and evaluation mode.
+    second = tmp_path / 'second'
+    _train(_argv(base, paths, second, epochs=2, extra=['--continue-from', str(first / 'checkpoint.pt')]), monkeypatch)
+    training = _load(second / 'checkpoint.pt')['training']
+    assert training['ema']['updates'] == 2 and training['ema']['decay'] == 0.9
+    assert json.loads(training['options']['weight_ema'])['eval'] == 'ema'
+    assert training['options']['weight_ema_resolution'] == {'source': 'carried'}
     continued = tmp_path / 'third'
     _train(_argv(base, paths, continued, epochs=2, extra=['--continue-from', str(first / 'checkpoint.pt'),
                                                         '--weight-ema', '{"decay": 0.9}']), monkeypatch)
@@ -448,3 +451,35 @@ def test_anneal_branch_is_a_separate_continuation_that_leaves_the_main_lineage_u
     resumed, straight = _load(main / 'checkpoint.pt'), _load(reference / 'checkpoint.pt')
     assert _same_weights(resumed, straight)
     assert resumed['training']['global_step'] == 6 and resumed['training']['options']['lr_anneal'] is None
+
+
+def test_weight_ema_and_telemetry_are_on_by_default_and_a_continuation_without_an_ema_starts_one(tmp_path, monkeypatch):
+    from natlang_neuralese.train.matrix_telemetry import DEFAULT as TELEMETRY, parse_matrix_telemetry
+    from natlang_neuralese.train.weight_ema import DEFAULT, resolve_weight_ema
+
+    assert parse_matrix_telemetry(None) == TELEMETRY and parse_matrix_telemetry('off') is None
+    assert resolve_weight_ema(None, None) == (DEFAULT, {'source': 'default', 'started_from': 'current-weights'})
+    assert resolve_weight_ema(None, None, fp8_training=True)[0]['eval'] == 'raw'
+    assert resolve_weight_ema(None, None, diloco=True)[0] is None
+    assert resolve_weight_ema(None, {'updates': 3, 'decay': .9, 'warmup': 0, 'seed': 1}, diloco=True)[0] == {'off': True}
+    base, paths = _fixture(tmp_path)
+    fresh = tmp_path / 'fresh'
+    _train(_argv(base, paths, fresh, epochs=1), monkeypatch)
+    training = _load(fresh / 'checkpoint.pt')['training']
+    assert training['ema']['updates'] == 1 and json.loads(training['options']['weight_ema']) == DEFAULT
+    assert training['options']['weight_ema_resolution']['source'] == 'default'
+    assert json.loads(training['options']['matrix_telemetry']) == TELEMETRY
+    assert 'held_ema' in training['metrics']
+    # A historical parent without an EMA: its continuation adopts the default from the parent's weights at that step.
+    old = tmp_path / 'old'
+    _train(_argv(base, paths, old, epochs=1, extra=['--weight-ema', 'off', '--matrix-telemetry', 'off']), monkeypatch)
+    assert 'ema' not in _load(old / 'checkpoint.pt')['training']
+    adopted = tmp_path / 'adopted'
+    _train(_argv(base, paths, adopted, epochs=2, extra=['--continue-from', str(old / 'checkpoint.pt')]), monkeypatch)
+    training = _load(adopted / 'checkpoint.pt')['training']
+    initialized = training['ema']['provenance']['events'][0]
+    assert initialized['event'] == 'initialized' and initialized['global_step'] == 1
+    assert initialized['checkpoint_sha256'] == hashlib.sha256((old / 'checkpoint.pt').read_bytes()).hexdigest()
+    assert training['ema']['updates'] == 1
+    reference = training['options']['matrix_norm_reference']
+    assert reference['source'] == 'parent-continuation' and reference['global_step'] == 1

@@ -20,7 +20,7 @@ evaluation, selection and release candidates read (plans/neuralese/TRAINING_INSI
 
 Declaration (JSON, ``--weight-ema``): ``{"decay": 0.999, "warmup": 10, "eval": "raw"|"ema"|"both", "seed": 0}``.
 ``warmup`` N >= 2 uses ``min(decay, (1 + n) / (N + n))`` at the n-th update (0 disables it). ``"off"`` explicitly
-discards an EMA carried by the parent.
+opts out and discards an EMA carried by the parent. Omitted, the EMA is on by default (``resolve_weight_ema``).
 """
 
 from __future__ import annotations
@@ -65,6 +65,40 @@ def parse_weight_ema(text):
     if type(seed) is not int:
         raise ValueError('weight EMA seed must be an integer')
     return {'decay': float(decay), 'warmup': warmup, 'eval': mode, 'seed': seed}
+
+
+DEFAULT = {'decay': 0.999, 'warmup': 10, 'eval': 'both', 'seed': 0}
+
+
+def resolve_weight_ema(spec, saved_state, *, recorded_option=None, diloco=False, fp8_training=False):
+    """The effective EMA of a launch (owner 2026-10-28: on by default for new runs, resumes and continuations).
+
+    ``spec`` is the parsed declaration (``None`` when omitted). Omitted: a carried EMA continues with its recorded
+    decay/warmup/seed and evaluation mode; without one, ``DEFAULT`` starts from the current weights (its provenance
+    records the step and parent checkpoint of that transition). FP8 training backends evaluate raw weights (EMA
+    evaluation is not qualified there). A DiLoCo learner keeps no local EMA: the coordinator keeps the EMA of the
+    global versions, and a carried learner EMA is handed over explicitly (recorded, never silent).
+    Returns ``(spec, resolution)``."""
+    if spec is not None:
+        return spec, {'source': 'declared-off' if spec.get('off') else 'declared'}
+    if diloco:
+        if saved_state is None:
+            return None, {'source': 'diloco-learner-coordinator-ema'}
+        return {'off': True}, {'source': 'diloco-learner-coordinator-ema', 'transition': 'carried-ema-not-continued',
+                               'carried_updates': int(saved_state.get('updates', 0))}
+    if saved_state is not None:
+        recorded = None
+        if isinstance(recorded_option, str) and recorded_option not in ('', 'off'):
+            recorded = parse_weight_ema(recorded_option)
+        mode = (recorded or {}).get('eval', DEFAULT['eval'])
+        if fp8_training and mode != 'raw':
+            mode = 'raw'
+        return ({'decay': float(saved_state['decay']), 'warmup': int(saved_state['warmup']), 'eval': mode,
+                 'seed': int(saved_state['seed'])}, {'source': 'carried'})
+    result = dict(DEFAULT)
+    if fp8_training:
+        result['eval'] = 'raw'
+    return result, {'source': 'default', 'started_from': 'current-weights'}
 
 
 decay_at = ema_decay_at  # one schedule for the trainer EMA and the DiLoCo coordinator EMA

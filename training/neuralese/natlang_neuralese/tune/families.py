@@ -178,15 +178,24 @@ def fit(plan, out):
         turns = [json.loads(line) for line in Path(plan['rows']).read_text().splitlines() if line.strip()]
         if {turn['binding'] for turn in turns} - set(members):
             raise TuneMathError('family rows name bindings outside the family')
-        rows = balance_rows(lower_rows(engine, turns, prompt_weight=plan.get('recipe', {}).get('prompt_weight', .1)))
+        state_path = out / 'state.json'
+        state = json.loads(state_path.read_text()) if state_path.exists() else None
+        from .trainer import LEGACY_PROMPT_WEIGHT, resolve_prompt_weight
+        prompt_weight = resolve_prompt_weight(plan.get('recipe', {}), state)
+        rows = balance_rows(lower_rows(engine, turns, prompt_weight=prompt_weight))
         recipe = {key: value for key, value in plan.get('recipe', {}).items() if key != 'prompt_weight'}
         rank = recipe.pop('rank', 8)
-        recipe = Recipe.from_json({**recipe, 'ranks': {'tree': rank, 'folder': 0, 'lambda': 0}})
+        # Family fits bound before 2026-10-28 recorded the then-default 0.1 in their recipe identity whatever the
+        # rows used; they finish with that identity. New fits record the weight their rows actually use.
+        identity_weight = (state or {}).get('family_recipe_identity_prompt_weight')
+        if state is not None and identity_weight is None and 'recipe_prompt_weight' not in state:
+            identity_weight = state['family_recipe_identity_prompt_weight'] = LEGACY_PROMPT_WEIGHT
+            state['recipe_prompt_weight'] = prompt_weight
+        recipe = Recipe.from_json({**recipe, 'ranks': {'tree': rank, 'folder': 0, 'lambda': 0},
+                                   'prompt_weight': prompt_weight if identity_weight is None else identity_weight})
         manifest = family_manifest(dict(engine.native_identity), members)
-        state_path = out / 'state.json'
         from .build import import_archive
         import_archive(engine, [out / 'artifacts'], [out / 'states'])
-        state = json.loads(state_path.read_text()) if state_path.exists() else None
         trainer = JointTrainer(engine, manifest, rows, recipe, state=state)
         save = lambda: (persist_artifacts(engine, [*trainer.state['node_artifacts'].values(),
                                                    *trainer.state['optimizer_states'].values()], out / 'artifacts'),

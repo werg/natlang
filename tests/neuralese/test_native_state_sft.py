@@ -1487,7 +1487,9 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
     def run(out, resume=None):
         argv = ['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
             '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),
-            '--epochs', '3', '--eval-every', '1', '--checkpoint-every', '1', '--seed', '23', '--out', str(out)]
+            '--epochs', '3', '--eval-every', '1', '--checkpoint-every', '1', '--seed', '23', '--out', str(out),
+            # One held evaluation per cadence (the default weight EMA adds a second, EMA-weight measurement).
+            '--weight-ema', 'off']
         if resume:
             argv += ['--continue-from', str(resume)]
         return trainer.main(argv)

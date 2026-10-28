@@ -131,6 +131,6 @@ def evidence_weight(turn):
     raise TuneMathError('a turn from an unsuccessful root is not a positive target')
 
 
-def lower_rows(engine, rows, *, prompt_weight=.1, soft=None):
+def lower_rows(engine, rows, *, prompt_weight=0., soft=None):
     return [turn_graph(engine, row, prompt_weight=prompt_weight, soft=soft) if row.get('schema') == TURN_SCHEMA else row
             for row in rows]

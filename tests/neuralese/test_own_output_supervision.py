@@ -347,3 +347,60 @@ def test_conversion_time_objective_matches_load_time_and_is_verified():
     w = converted['nodes'][0]['target_weights']
     boundary = ordinary['supervised_suffix_start']
     assert sum(w[:boundary]) == 0 and sum(w[boundary:]) == pytest.approx(1.)
+
+
+def test_own_outputs_are_the_default_objective_and_continuations_adopt_them_with_a_recorded_transition():
+    from test_native_graph_conversion import ChatRoleAsciiTokenizer
+    from natlang_neuralese.data.native_graph_conversion import text_row_graph
+    from natlang_neuralese.train.native_supervision import apply_policy
+    tok = ChatRoleAsciiTokenizer()
+    tok.chat_template = ASCII_TEMPLATE
+    default, reason = own.default_objective(tok, tokenizer_fingerprint='b' * 64)
+    assert reason is None and default['name'] == own.NAME and default['reasoning_share'] == own.DEFAULT_REASONING_SHARE
+    bare = ChatRoleAsciiTokenizer()
+    bare.chat_template = None
+    assert own.default_objective(bare, tokenizer_fingerprint='b' * 64)[0] is None
+    # No bound policy (fresh): a synthesized policy carries the default; no transition without a parent.
+    synthesized, resolution = own.with_default_objective(None, default)
+    assert synthesized['objective'] == default and 'objective_transition' not in synthesized
+    assert resolution['source'] == 'default' and resolution['bound_policy'] is False
+    assert own.continuation_identity({}, synthesized)[1] is None
+    # A row-weight parent (no recorded objective) adopts it through an explicit, recorded transition.
+    legacy = own.identity(own.resolve(None))
+    adopted, _ = own.with_default_objective({'schema': 'x', 'sources': [{'sha256': 'a' * 64}]}, default,
+                                            previous_options={'stage_id': 'old'})
+    assert adopted['objective_transition'] == {'from': legacy['sha256']} and adopted['sources']
+    current, transition = own.continuation_identity({'stage_id': 'old'}, adopted)
+    assert transition['from'] == legacy and current['name'] == own.NAME
+    # The same default on a parent that already recorded it needs no transition.
+    again, _ = own.with_default_objective(None, default, previous_options={'supervision_objective': current})
+    assert 'objective_transition' not in again
+    # An explicit declaration (including the historical row weights) is kept; unavailable leaves the policy alone.
+    explicit = {'objective': {'name': own.LEGACY}, 'sources': []}
+    assert own.with_default_objective(explicit, default) == (explicit, {'source': 'declared'})
+    assert own.with_default_objective(None, None) == (None, {'source': 'unavailable'})
+    # The synthesized policy weights an undeclared row-weight source by own outputs.
+    prefix = '<|im_start|>user\nquestion<|im_end|><|im_start|>assistant\n'
+    text = prefix + 'answer<|im_end|>'
+    ordinary = {'id': 'o', 'split': 'train', 'source_groups': ['g'], 'tokenizer_sha256': 'a' * 64,
+                'text': text, 'token_ids': tok(text)['input_ids'], 'supervised_suffix_start': len(tok(prefix)['input_ids'])}
+    graph = text_row_graph(ordinary, source_tokenizer_fingerprint='a' * 64, tokenizer=tok,
+                           expanded_tokenizer_fingerprint='b' * 64)
+    assert sum(graph['nodes'][0]['target_weights'][:ordinary['supervised_suffix_start']]) > 0  # raw context weight
+    weighted = apply_policy(parse_graph(graph, tokenizer_fingerprint='b' * 64), graph, source_sha256='a' * 64,
+                            policy=synthesized)
+    boundary = ordinary['supervised_suffix_start']
+    assert sum(weighted.target_weights[:boundary]) == 0 and sum(weighted.target_weights) == pytest.approx(1.)
+
+
+def test_ce_policy_builder_defaults_to_own_outputs_and_opts_out_explicitly(tmp_path):
+    from scripts.neuralese_data.build_native_ce_supervision_policy import main
+    prior = tmp_path / 'prior.json'
+    prior.write_text(json.dumps({'schema': 'natlang.native-ce-supervision-policy/1',
+                                 'sources': [{'sha256': 'a' * 64, 'encoding': 'ordinary-suffix-raw-v1',
+                                              'context_weight': .05}]}))
+    with pytest.raises(ValueError, match='objective-tokenizer'):
+        main(['--prior-policy', str(prior), '--objective-reasoning-share', '0.2', '--out', str(tmp_path / 'x.json')])
+    with pytest.raises(ValueError, match='contradict'):
+        main(['--prior-policy', str(prior), '--objective', 'declared-row-weights', '--objective-reasoning-share', '0.2',
+              '--out', str(tmp_path / 'y.json')])

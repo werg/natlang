@@ -98,3 +98,11 @@ def test_diloco_export_writes_the_coordinator_ema_as_a_model_only_checkpoint(tmp
     state = torch.load(tmp_path / "ema-out" / "checkpoint.pt", weights_only=False)
     assert "training" not in state and state["ema_export"]["source"] == "diloco-coordinator-global-ema"
     assert state["ema_export"]["ema"] == {"decay": 0.5, "warmup": 0}
+
+
+def test_coordinator_cli_keeps_an_ema_by_default_with_an_explicit_opt_out():
+    from natlang_neuralese.train.native_diloco import DEFAULT_COORDINATOR_EMA, parse_coordinator_ema
+
+    assert parse_coordinator_ema(None) == DEFAULT_COORDINATOR_EMA == {"decay": 0.99, "warmup": 0}
+    assert parse_coordinator_ema("off") is None
+    assert parse_coordinator_ema('{"decay": 0.9, "warmup": 3}') == {"decay": 0.9, "warmup": 3}
