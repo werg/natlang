@@ -61,6 +61,9 @@ class DilocoSettings:
     wire_dtype: str = "bf16"
     allow_private_http: bool = False
     heartbeat_seconds: float = HEARTBEAT_SECONDS
+    # Start barrier: a fresh learner waits before update 0 until every learner has registered, or until a quorum has
+    # and this many seconds passed (sandboxes boot minutes apart; an early learner would otherwise run alone).
+    start_grace_seconds: float = 600.0
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -69,7 +72,8 @@ class DilocoSettings:
             raise ValueError("DiLoCo workers must be in [1, 256]")
         if min(self.local_steps, self.io_workers) < 1:
             raise ValueError("DiLoCo local_steps and io_workers must be positive")
-        if self.timeout_seconds <= 0 or self.max_offline_steps < 0 or self.heartbeat_seconds <= 0:
+        if self.timeout_seconds <= 0 or self.max_offline_steps < 0 or self.heartbeat_seconds <= 0 \
+                or self.start_grace_seconds < 0:
             raise ValueError("Invalid DiLoCo timeout/offline tolerance")
         if self.wire_dtype not in {"bf16", "fp32"}:
             raise ValueError("DiLoCo wire_dtype must be bf16 or fp32")
@@ -379,7 +383,7 @@ class DilocoLearner:
                     "session": self.session,
                     "steps": self.local_steps,
                     "tokens": self.local_tokens,
-                    "metrics": dict(self.report),
+                    "metrics": {**self.report, **({"start_wait": self.start_wait} if getattr(self, "start_wait", None) else {})},
                 }
                 self._update_status(self._with_lease(lambda: self.transport.json("POST", "/v1/progress", body)))
                 self.heartbeat_error = ""
@@ -409,12 +413,27 @@ class DilocoLearner:
         """
         self._adopt_ledger(self._lease())
         self._start_heartbeat()
+        self._start_barrier()
         for index in range(len(self.fragments)):
             update = self._fetch(index, -1)
             if update is not None and update[0] == 0:
                 if not torch.equal(update[1], pack_fragment(self.surface.masters, self.fragments[index])):
                     raise ValueError(f"DiLoCo seed fragment {index} differs from this learner's parent weights")
             self._install(index, update)
+
+    def _start_barrier(self) -> None:
+        """Wait (heartbeating) until all learners registered, or a quorum did and start_grace_seconds passed."""
+        began = time.time()
+        while True:
+            status = self.transport.json("GET", "/v1/status")
+            registered = len(status.get("registered", {}))
+            quorum = int(status.get("min_quorum", self.settings.workers))
+            waited = time.time() - began
+            if registered >= self.settings.workers or (registered >= quorum and waited >= self.settings.start_grace_seconds):
+                break
+            time.sleep(min(5.0, self.settings.heartbeat_seconds * 10))
+        self.start_wait = {"seconds": round(time.time() - began, 3), "registered": registered,
+                           "all": registered >= self.settings.workers}
 
     def resume(self, value: dict) -> None:
         if value["protocol"] != PROTOCOL or value["fingerprint"] != self.manifest["fingerprint"]:
@@ -725,6 +744,7 @@ class DilocoLearner:
             "diloco_merges": self.merges,
             "diloco_installs": self.installs,
             "diloco_offline_steps": self.offline_steps,
+            **({"diloco_start_wait": dict(self.start_wait)} if getattr(self, "start_wait", None) else {}),
         }
 
     def close(self) -> None:

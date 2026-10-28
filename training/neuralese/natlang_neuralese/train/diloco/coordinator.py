@@ -294,6 +294,7 @@ class Coordinator:
                 "session": session,
                 "expires": time.time() + self.manifest["lease_seconds"],
             }
+            self.progress.setdefault("registered", {}).setdefault(str(worker), time.time())
             self._write_progress()
         with self.lock:
             return {**self.status(), "sequences": self._sequences(worker)}
@@ -314,6 +315,9 @@ class Coordinator:
         return result
 
     def heartbeat(self, worker: int, session: str, steps: int, tokens: int, metrics: dict | None = None) -> dict:
+        if isinstance(metrics, dict) and isinstance(metrics.get("start_wait"), dict):
+            with self.progress_lock:
+                self.progress.setdefault("start_waits", {})[str(worker)] = metrics["start_wait"]
         with self.progress_lock:
             self._lease_valid(worker, session)
             if type(steps) is not int or type(tokens) is not int or steps < 0 or tokens < 0:
@@ -341,6 +345,11 @@ class Coordinator:
                 "versions": list(self.published_versions),
                 "live_workers": sum(x["expires"] >= time.time() for x in self.progress["leases"].values()),
                 "worker_progress": {k: dict(v) for k, v in self.progress["workers"].items()},
+                "registered": dict(self.progress.get("registered", {})),
+                "start_waits": dict(self.progress.get("start_waits", {})),
+                "min_quorum": self.manifest["min_quorum"],
+                "workers": self.manifest["workers"],
+                "recent_rounds": list(self.progress.get("rounds", []))[-8:],
                 **({"outer_schedule": self.manifest["outer_schedule"],
                     "outer_next": [outer_entry(self.manifest, v)[1] for v in sorted(set(self.published_versions))]}
                    if "outer_schedule" in self.manifest else {}),
@@ -459,7 +468,9 @@ class Coordinator:
             committed["ema"] = torch.lerp(data["ema"], theta, weight)
         # The authoritative fragment with its last_seq is the commit record;
         # proposals replayed after a crash are discarded by the ledger above.
-        record = {"version": str(version + 1), "last_seq": json.dumps(last_seq)}
+        windows = {item["worker"]: {"steps": int(item["steps"]), "tokens": int(item["tokens"]), "staleness": age}
+                   for _, item, age in proposals}
+        record = {"version": str(version + 1), "last_seq": json.dumps(last_seq), "windows": json.dumps(windows)}
         if "outer_schedule" in self.manifest:
             record["outer"] = json.dumps({"entry": entry_index, **entry}, sort_keys=True)
         save_tensors(path, committed, metadata=record)
@@ -473,6 +484,13 @@ class Coordinator:
             file.unlink(missing_ok=True)
         with self.progress_lock:
             self.progress["merges"] += 1
+            # One record per (fragment, version); fragment 0 stands for the round in the rolling view.
+            if index == 0:
+                steps = [w["steps"] for w in windows.values()]
+                rounds = self.progress.setdefault("rounds", [])
+                rounds.append({"version": version + 1, "at": time.time(), "final": final, "windows": windows,
+                               "step_imbalance": max(steps) / max(1, min(steps))})
+                del rounds[:-256]
             self._write_progress()
 
     def tick(self) -> None:

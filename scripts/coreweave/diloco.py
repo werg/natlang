@@ -90,6 +90,45 @@ def _keep(path: Path, value: str) -> None:
         stream.write(value)
 
 
+# Learners boot concurrently: placed one at a time with --wait, sandboxes came up 3-6 minutes apart and learner 0 ran
+# its shard alone before a quorum existed. Creates stay serialized by cwctl.throttled_create (file lock), a few
+# seconds apart unless NATLANG_CW_CREATE_INTERVAL says otherwise; input pushes and boots overlap.
+LEARNER_CREATE_INTERVAL_SECONDS = 5.0
+
+
+def launch_learners(run: dict, url: str, token: str, gateway: bytes, started: list[str]) -> list[str]:
+    """Create every learner sandbox in its own thread; any failure stops all of them (the caller stops ``started``)."""
+    import threading
+    if 'NATLANG_CW_CREATE_INTERVAL' not in os.environ:
+        cwctl.CREATE_INTERVAL_SECONDS = LEARNER_CREATE_INTERVAL_SECONDS
+    workers = run['settings']['workers']
+    results: dict[int, str] = {}
+    errors: list[BaseException] = []
+    lock = threading.Lock()
+
+    def one(worker: int) -> None:
+        try:
+            entry = cwctl.launch(learner_job(run, worker, url), False, True, None, Path(run['learners']['bundle_file']),
+                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway})
+            with lock:
+                started.append(entry['sandbox_id'])
+                if 'wait_error' in entry or 'push' not in entry:
+                    raise cwctl.ControllerError(f'learner {worker} did not start: {entry}')
+                results[worker] = entry['sandbox_id']
+        except BaseException as error:  # noqa: BLE001 - reported and re-raised by the caller
+            with lock:
+                errors.append(error)
+
+    threads = [threading.Thread(target=one, args=(worker,), name=f'learner-{worker}') for worker in range(workers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        raise errors[0]
+    return [results[worker] for worker in range(workers)]
+
+
 def launch(run: dict) -> dict:
     run = validate(run)
     record_path = RUNS / f"{run['id']}.json"
@@ -109,13 +148,7 @@ def launch(run: dict) -> dict:
         if 'service_url' not in coordinator:
             raise cwctl.ControllerError(f"coordinator {coordinator['sandbox_id']} did not start: {coordinator}")
         gateway = cwctl.share_token(coordinator['sandbox_id'])
-        learners = []
-        for worker in range(run['settings']['workers']):
-            entry = cwctl.launch(learner_job(run, worker, coordinator['service_url']), False, True, None,
-                                 Path(run['learners']['bundle_file']),
-                                 secrets={'diloco-token': token.encode(), 'diloco-gateway': gateway})
-            started.append(entry['sandbox_id'])
-            learners.append(entry['sandbox_id'])
+        learners = launch_learners(run, coordinator['service_url'], token, gateway, started)
     except BaseException:
         for sandbox_id in started:
             cwctl.passthrough(['stop', sandbox_id])
