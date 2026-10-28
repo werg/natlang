@@ -1,4 +1,5 @@
 """Minimal actual carrier witness for cached per-token finite-convolution fan-in."""
+import pytest
 import torch
 from torch import nn
 
@@ -193,3 +194,25 @@ def test_ordered_accumulation_preserves_contiguous_and_strided_inputs():
     assert torch.equal(bias_target, bias_expected)
     assert torch.equal(histories, history_before)
     assert torch.equal(gradients, gradients_before)
+
+
+@pytest.mark.gpu_heavy
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA address arithmetic')
+def test_ordered_gpu_accumulation_addresses_beyond_int32_element_offsets():
+    # The real 185k-token, seven-wide LFM3 history crosses 2**31 FP32
+    # elements. A sparse view exercises that address range with only 32k
+    # arithmetic contributions, for both history and gradient addressing.
+    rows, stride = 32770, 65536
+    storage = torch.empty((rows - 1) * stride + 1, dtype=torch.float32, device='cuda')
+    histories = storage.as_strided((1, rows, 1, 1), (0, stride, 1, 1))
+    histories.fill_(1.)
+    gradients = histories.squeeze(2)
+    assert (rows - 1) * histories.stride(1) > 2**31
+    weight = torch.full((1, 1, 1), 3.5, device='cuda')
+    bias = torch.full((1,), 7., device='cuda')
+    ordered_finite_convolution.ordered_finite_convolution_accumulate(
+        weight, histories, gradients, backend='device_fp32')
+    ordered_finite_convolution.ordered_finite_convolution_accumulate(
+        bias, None, gradients, backend='device_fp32', bias=True)
+    torch.testing.assert_close(weight, torch.full_like(weight, rows + 3.5), atol=0, rtol=0)
+    torch.testing.assert_close(bias, torch.full_like(bias, rows + 7.), atol=0, rtol=0)

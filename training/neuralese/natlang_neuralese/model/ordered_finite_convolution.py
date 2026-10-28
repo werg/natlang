@@ -26,7 +26,9 @@ def _kernels():
         target_offset = channel * ts_c + window * ts_w
         accumulator = tl.load(target_ptr + target_offset, valid, other=0.0)
         for step in range(q_count):
-            row = q_count - 1 - step
+            # A [Q,W,C] history can exceed 2**31 elements even when each
+            # dimension fits int32. Widen before multiplying by its strides.
+            row = (q_count - 1 - step).to(tl.int64)
             upstream = tl.load(gradient_ptr + row * gs_q + channel * gs_c, valid, other=0.0)
             history = tl.load(history_ptr + row * hs_q + window * hs_w + channel * hs_c,
                               valid, other=0.0)
@@ -44,7 +46,7 @@ def _kernels():
         valid = channel < channels
         accumulator = tl.load(target_ptr + channel * ts_c, valid, other=0.0)
         for step in range(q_count):
-            row = q_count - 1 - step
+            row = (q_count - 1 - step).to(tl.int64)
             contribution = tl.load(gradient_ptr + row * gs_q + channel * gs_c, valid, other=0.0)
             accumulator = accumulator + contribution.to(tl.float32)
         tl.store(target_ptr + channel * ts_c, accumulator, valid)
