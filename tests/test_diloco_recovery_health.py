@@ -2,7 +2,7 @@ import hashlib,json,os,subprocess,sys
 from test_diloco_recovery import load
 
 
-def test_health_identifies_actual_live_and_dead_owner():
+def test_health_identifies_actual_live_and_dead_owner(tmp_path):
     service=load('diloco_periodic_recovery')
     p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(20)'])
     boot=open('/proc/sys/kernel/random/boot_id').read().strip();ticks=open(f'/proc/{p.pid}/stat').read().split(') ',1)[1].split()[19]
@@ -21,6 +21,16 @@ def test_health_identifies_actual_live_and_dead_owner():
         value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
         assert value['0']['state']=='live' and value['0']['progress'] is None
         assert 'one trainer module' in value['0']['runtime_check_scope']
+        progress=tmp_path/'fresh-learner'/'progress.json';progress.parent.mkdir()
+        progress.write_text(json.dumps({'global_step':2513,'checkpoint_step':2512,'timestamp':123.}))
+        ownership['workers']['0']['progress_path']=str(progress)
+        value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
+        assert value['0']['progress']['global_step']==2513
+        assert value['0']['progress_path']==str(progress)
+        ownership['workers']['0']['progress_path']='relative/progress.json'
+        value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
+        assert value['0']['state']=='unavailable'
+        ownership['workers']['0']['progress_path']=str(progress)
         p.terminate();p.wait()
         value=service.health_snapshot(record,ownership,read_sandbox=lambda ident:Box())
         assert value['0']['state']=='dead-replaced-or-runtime-mismatch' and not value['0']['pid_alive']

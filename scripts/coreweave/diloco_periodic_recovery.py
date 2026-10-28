@@ -555,7 +555,7 @@ p=pathlib.Path('/proc')/str(expected['pid']); alive=False
 try:
  fields=(p/'stat').read_text().split(') ',1)[1].split();alive=boot==expected['boot_id'] and fields[19]==str(expected['start_ticks']) and fields[0]!='Z'
 except (OSError,ValueError,IndexError):pass
-progress=pathlib.Path('/work/diloco-learner/progress.json');value=None
+progress=pathlib.Path(expected['progress_path']);value=None
 try:
  value=json.loads(progress.read_text());value={k:value.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
 except (OSError,ValueError):pass
@@ -573,13 +573,19 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
         if role.get('sandbox_id')!=ident or not all(k in role for k in ('pid','boot_id','start_ticks')):
             return str(i),{'sandbox_id':ident,'state':'ownership-unavailable'}
         try:
+            progress_path=role.get('progress_path', '/work/diloco-learner/progress.json')
+            if (not isinstance(progress_path,str) or not Path(progress_path).is_absolute()
+                    or os.path.normpath(progress_path)!=progress_path):
+                raise ValueError('worker progress path must be absolute and normalized')
+            expected={**role,'progress_path':progress_path}
             box=read_sandbox(ident);box.get_status();status=str(getattr(box.status,'value',box.status)).lower()
             module=(ownership.get('runtime') or {}).get('module_path') or str(
                 paths.root('repo')/'training/neuralese/natlang_neuralese/train/native_state_sft.py')
-            r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role),module],timeout_seconds=30).result(timeout=40)
+            r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(expected),module],timeout_seconds=30).result(timeout=40)
             if r.returncode:raise ValueError('health probe failed')
             data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
             data['process_identity']={key:role[key] for key in ('pid','boot_id','start_ticks')}
+            data['progress_path']=progress_path
             expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
             data['runtime_matches']=bool(expected_sha and data.get('runtime_module_sha256')==expected_sha)
             data['runtime_check_scope']='one trainer module file; not an attestation of the full loaded process'
