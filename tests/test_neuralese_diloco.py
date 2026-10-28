@@ -79,6 +79,22 @@ def test_coordinator_dedups_replayed_sequence_and_rejects_stale(tmp_path):
     assert Coordinator(tmp_path / "c")._sequences(0)[0] == 1
 
 
+def test_heartbeat_reports_a_merge_at_once(tmp_path):
+    # The learner whose upload did not complete the quorum learns of the merge from heartbeat versions; reporting
+    # them only on the 1 s reconcile tick kept it training against its upload point, unable to send its next round.
+    model = _model()
+    _init(tmp_path / "c", model)
+    coordinator = Coordinator(tmp_path / "c")
+    sessions = ["0" * 8 + f"-0000-0000-0000-{worker:012d}" for worker in range(2)]
+    length = coordinator.fragments[0].length
+    update = tmp_path / "u.safetensors"
+    save_tensors(update, {"delta": torch.full((length,), 0.01)})
+    for worker, session in enumerate(sessions):
+        coordinator.lease(worker, session)
+        coordinator.submit(0, worker, session, 1, 0, 4, 100, update)
+    assert coordinator.heartbeat(0, sessions[0], 4, 100)["versions"][0] == 1
+
+
 def _free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

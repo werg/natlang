@@ -422,6 +422,11 @@ class Coordinator:
         # proposals replayed after a crash are discarded by the ledger above.
         save_tensors(path, committed, metadata={"version": str(version + 1), "last_seq": json.dumps(last_seq)})
         save_tensors(self._published(index), {"theta": theta}, metadata={"version": str(version + 1)})
+        # Heartbeats report these versions; a learner whose upload did not complete the quorum learns of the merge
+        # only from them. Publishing on the reconcile tick (1 s) left it training against its upload point meanwhile,
+        # unable to send its next round, so later merges combined unequal windows and overshot.
+        if len(self.published_versions) == len(self.fragments):
+            self.published_versions[index] = version + 1
         for file, _, _ in proposals:
             file.unlink(missing_ok=True)
         with self.progress_lock:

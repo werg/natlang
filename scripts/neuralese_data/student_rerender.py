@@ -241,8 +241,9 @@ def launch(args):
                                   else 'verify-failed')
             if item['status'] == 'graphing' and unit_state(item['graph_unit']) != 'active':
                 item['status'] = 'graphed' if graphs_done(item) else 'graph-failed'
-        running = [i for i in items.values() if i['status'] in ('running', 'verifying', 'graphing')]
-        slots = args.max_running - len(running)
+        # Two pools: renders, and the lighter verify/graph steps (which must not starve new renders).
+        post = args.max_post - sum(1 for i in items.values() if i['status'] in ('verifying', 'graphing'))
+        slots = post
         for item in items.values():  # verify rendered items first (cheap, and they unblock registration)
             if slots <= 0:
                 break
@@ -265,6 +266,7 @@ def launch(args):
                 subprocess.run(cmd, check=True, capture_output=True)
                 item.update(status='graphing', graph_unit=unit, graph_log=f'{logs}/{unit}.log')
                 slots -= 1
+        slots = args.max_running - sum(1 for i in items.values() if i['status'] == 'running')
         order = sorted((i for i in items.values() if i['status'] == 'pending' and i['tier'] <= args.tier),
                        key=lambda i: (i['tier'], i['reference_tokens']))
         for item in order:
@@ -548,6 +550,26 @@ def registry_entry(item: dict, student: str) -> dict:
     return new
 
 
+def register_graphed(args):
+    """Register every graphed (verified) render not yet registered, in one registration commit."""
+    import register_corpora
+    queue = load(args.queue)
+    items = [i for i in queue['items'].values() if i['status'] == 'graphed'
+             and load(REPO / i['out'] / 'student-verification.json').get('passed')]
+    if args.limit:
+        items = items[:args.limit]
+    if not items:
+        print(json.dumps({'registered': []}))
+        return
+    entries = [registry_entry(item, queue['student']) for item in items]
+    done = register_corpora.register(entries, f'Register {len(entries)} {queue["student"]} renders with native graph '
+                                     f'views (student_rerender.py)')
+    with Queue(args.queue) as live:
+        for item in items:
+            live['items'][item['id']]['status'] = 'registered'
+    print(json.dumps({'registered': done}))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -561,7 +583,8 @@ def main():
     p.add_argument('--cpus', type=int, default=4)
     p = sub.add_parser('launch')
     p.add_argument('--queue', required=True)
-    p.add_argument('--max-running', type=int, default=4)
+    p.add_argument('--max-running', type=int, default=4, help='concurrent renders')
+    p.add_argument('--max-post', type=int, default=4, help='concurrent verify/graph steps')
     p.add_argument('--cpus', type=int, default=4)
     p.add_argument('--budget-gb', type=int, default=20, help='ledger budget of the largest direct renders')
     p.add_argument('--verify-budget-gb', type=int, default=3)
@@ -576,8 +599,12 @@ def main():
     p = sub.add_parser('entry')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
+    p = sub.add_parser('register')
+    p.add_argument('--queue', required=True)
+    p.add_argument('--limit', type=int)
     args = ap.parse_args()
-    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry}[args.cmd](args)
+    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry,
+     'register': register_graphed}[args.cmd](args)
 
 
 if __name__ == '__main__':
