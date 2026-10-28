@@ -681,6 +681,21 @@ class DilocoLearner:
             raise RuntimeError(f"DiLoCo coordinator unreachable for too many updates: {self.last_error}")
         return {"updated": int(updated), "pending": len(self.pending), "merges": self.merges, "installs": self.installs}
 
+    def quiesce_for_checkpoint(self, *, timeout_seconds: float = 60, stop_requested=lambda: False) -> bool:
+        """Freeze transfer futures without sending unsent local windows.
+
+        Exact pending payloads and residual counters remain in state_dict. A
+        timed-out request must finish before the coordinator is snapshotted,
+        because it could otherwise commit after that snapshot.
+        """
+        deadline=time.monotonic()+timeout_seconds
+        while True:
+            futures=[entry.get('future') for entry in self.pending.values()]
+            futures += list(self.downloads.values())
+            if all(future is None or future.done() for future in futures):return True
+            if stop_requested() or time.monotonic()>=deadline:return False
+            time.sleep(.05)
+
     def declare_completion(self, *, drained: bool) -> None:
         body={'worker':self.worker,'session':self.session,'drained':drained}
         if drained:body['sequences']=list(self.sequences)

@@ -3022,8 +3022,8 @@ def _main(argv=None, *, requested_refresh):
                 try:
                     fence_request = recovery_fence.request(args.out, diloco.worker, diloco.manifest['fingerprint'])
                     if fence_request is not None:
-                        if not diloco.finish():
-                            raise RuntimeError('in-flight DiLoCo updates did not drain')
+                        if not diloco.quiesce_for_checkpoint(stop_requested=lambda: policy.signaled):
+                            raise RuntimeError('in-flight DiLoCo requests did not quiesce')
                         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                             global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                             source_hash=source_hash, source_row_bindings=source_row_bindings,
