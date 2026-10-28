@@ -37,6 +37,10 @@ export type ProgramSemantics = {
   required_actions?: import('./required-actions.js').RequiredAction[];
   /** A source-declared read-only world receipt certifying the final delivered state. */
   required_service_receipt?: import('./service-receipt.js').RequiredServiceReceipt;
+  /** Exact successful service calls required by the authenticated task contract. */
+  required_service_calls?: import('./service-calls.js').RequiredServiceCall[];
+  /** An explicitly required completed root iteration from the task's contract. */
+  required_root_iteration?: import('./required-iteration.js').RequiredRootIteration;
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 

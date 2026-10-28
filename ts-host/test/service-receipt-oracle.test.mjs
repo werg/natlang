@@ -16,3 +16,12 @@ test('a successful literal requires the real read-only delivery receipt', async 
   assert.equal(await checkRequiredServiceReceipt(spec, {}, 'delivered', same), false);
   await assert.rejects(checkRequiredServiceReceipt({service:'world', method:'drop'}, services, 'delivered', same));
 });
+
+test('greenhouse certificate reflects actual stabilized state', async () => {
+  let stable = false;
+  const services = {greenhouse: {certificate() { return stable ? 'stable-123' : null; }}};
+  const spec = {service:'greenhouse', method:'certificate'};
+  assert.equal(await checkRequiredServiceReceipt(spec, services, 'stable-123', same), false);
+  stable = true;
+  assert.equal(await checkRequiredServiceReceipt(spec, services, 'stable-123', same), true);
+});
