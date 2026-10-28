@@ -6,10 +6,13 @@ Functionality that could move the needle is enabled by default in new
 recipes, trainers, RL learners, serving and tools as soon as it works. Do not
 implement an improvement and then leave it behind an opt-in flag, a
 "pilot later" note or a report-only mode. Opt-out switches are fine; opt-in
-defaults are not. Historical lineages and bound rounds keep the exact
-behaviour they recorded (their identities already prevent silent reuse), but
-every new recipe, stage, round and launch gets the improvement. When a
-default could be harmful, measure and fix it; do not hide it behind a flag.
+defaults are not. "Default" means everything going forward, including
+continuations and resumes of existing lineages: they adopt the improvement
+through an explicit recorded transition at that step. Only replays or
+re-verification of already-completed work, and a unit of work already in
+flight (e.g. an RL round with a bound journal, which the next round then
+upgrades), keep their recorded behaviour. When a default could be harmful,
+measure and fix it; do not hide it behind a flag.
 
 ## Individual-program tuning (owner, 2026-10-26)
 
