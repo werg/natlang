@@ -1103,7 +1103,7 @@ def test_postseed_cache_keeps_live_markers_and_secrets(tmp_path):
     def item(path,content):return {'path':path,'sha256':hashlib.sha256(content).hexdigest(),'bytes':len(content)}
     manifest={'files':[item('data.json',b'important')], 'code':item('ignored',b'code')}
     (cw/'bundle.json').write_text(json.dumps(manifest))
-    def run():return subprocess.run([sys.executable,'-c',post.CACHE_PROGRAM,str(work),str(repo)],capture_output=True,text=True)
+    def run():return subprocess.run([sys.executable,'-c',post.CACHE_PROGRAM,str(work),str(repo),str(cw)],capture_output=True,text=True)
     result=run();assert result.returncode==0,result.stderr
     assert json.loads(result.stdout)['objects']==2
     assert (cw/'inputs-ready').read_text()=='live' and (cw/'secrets/token').read_text()=='secret'
@@ -1112,3 +1112,60 @@ def test_postseed_cache_keeps_live_markers_and_secrets(tmp_path):
     assert run().returncode==0
     (cw/'cas'/manifest['files'][0]['sha256']).write_bytes(b'corrupt')
     assert run().returncode!=0
+
+
+def test_restore_origin_uses_provider_get_sandbox_rpc(monkeypatch):
+    import asyncio
+    import types
+    from types import SimpleNamespace
+    recovery = load('recovery_snapshots')
+    class Request:
+        def __init__(self, sandbox_id): self.sandbox_id=sandbox_id
+    proto=types.ModuleType('cwsandbox._proto');proto.sandbox_pb2=SimpleNamespace(GetSandboxRequest=Request)
+    package=types.ModuleType('cwsandbox');package._proto=proto
+    monkeypatch.setitem(sys.modules,'cwsandbox',package)
+    monkeypatch.setitem(sys.modules,'cwsandbox._proto',proto)
+    calls=[]
+    class Stub:
+        async def GetSandbox(self, req, timeout, metadata):
+            calls.append((req.sandbox_id,timeout,metadata))
+            vol=SimpleNamespace(scratch=SimpleNamespace(restore_from_snapshot_id='actual-snapshot'),
+                                HasField=lambda name:name=='scratch')
+            return SimpleNamespace(spec=SimpleNamespace(volumes=[vol]))
+    class Destination:
+        _stub=Stub();_auth_metadata=[('auth','x')]
+        _loop_manager=SimpleNamespace(run_sync=lambda coro: asyncio.run(coro))
+        async def _ensure_client(self):pass
+    destination=Destination()
+    assert recovery.inspect_destination_snapshots(destination,'worker')==['actual-snapshot']
+    assert calls==[('worker',30,[('auth','x')])]
+
+
+def test_initial_seed_restored_snapshot_has_fresh_isolated_control(tmp_path):
+    diloco=load('diloco')
+    trainer=['python','-m','natlang_neuralese.train.native_state_sft','--continue-from','/work/new-parent.pt']
+    template=tmp_path/'job.json';template.write_text(json.dumps(base_job(id='job',kind='train',command=trainer,
+        scratch={'path':'/work','size':'300Gi','restore_from_snapshot_id':'failed-seed-snapshot'})))
+    run={'id':'fresh-run','settings':{'run_id':'fresh-run','workers':4},
+         'coordinator':{'parent':'/work/new-parent.pt','prepare_parent':['bash','prepare-new-seed.sh']},
+         'learners':{'job':str(template)}}
+    args=diloco.learner_job(run,0,'http://127.0.0.1:8080')['command'][len(diloco.TRAINER):-2]
+    cohost=diloco.cohosted_job(run,args)
+    request=diloco.jobs.sandbox_request(cohost,'bootstrap')
+    assert request['environment_variables']['NATLANG_CW_INSTANCE']=='fresh-run-learner-0'
+    assert request['environment_variables']['NATLANG_CW_SECRETS']=='/work/.coreweave/instances/fresh-run-learner-0/secrets'
+    assert 'prepare-new-seed.sh' in cohost['command'][-1]
+
+
+def test_postseed_cache_reads_actual_isolated_cohost_manifest(tmp_path):
+    import subprocess
+    post=load('diloco_post_seed');work=tmp_path/'work';repo=tmp_path/'repo';repo.mkdir()
+    global_cw=work/'.coreweave';instance=global_cw/'instances/new-run-learner-0';instance.mkdir(parents=True)
+    (global_cw/'bundle.json').write_text('{"files":[]}')
+    source=repo/'new';source.write_bytes(b'new-data')
+    sha=hashlib.sha256(b'new-data').hexdigest()
+    (instance/'bundle.json').write_text(json.dumps({'files':[{'path':'new','sha256':sha,'bytes':8}]}))
+    result=subprocess.run([sys.executable,'-c',post.CACHE_PROGRAM,str(work),str(repo),str(instance)],capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert (global_cw/'cas'/sha).read_bytes()==b'new-data'
+    assert json.loads(result.stdout)['objects']==1

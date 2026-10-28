@@ -124,10 +124,11 @@ def learner_job(run: dict, worker: int, url: str) -> dict:
         work = job['scratch']['path'].rstrip('/')
         if any(not path.startswith(work + '/') or os.path.normpath(path) != path for path in roots):
             raise cwctl.ControllerError('restored worker state directories must be canonical scratch paths')
-        verify = r'''import hashlib,json,os,pathlib,sys
+        verify = r'''import json,os,pathlib,sys
+from natlang_neuralese.common.hashing import sha256_file_hex
 p,want,instance,roots=sys.argv[1:]; roots=json.loads(roots)
 r=json.load(open(p+'.seed.json'))
-with open(p,'rb') as f: actual=hashlib.file_digest(f,'sha256').hexdigest()
+actual=sha256_file_hex(p)
 assert actual==want==r['sha256'], 'restored seed hash mismatch'
 assert r['global_step']>=r['requested_stop']>0 and r['full_optimizer_rng_exposure']
 control=pathlib.Path(os.environ.get('NATLANG_CW_WORK','/work'))/'.coreweave/instances'/instance

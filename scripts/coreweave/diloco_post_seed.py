@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
-import hashlib
 import json
 import os
 import re
@@ -25,11 +24,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwctl
 import diloco
 import recovery_snapshots
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+from natlang_neuralese.common import paths
+from natlang_neuralese.common.hashing import sha256_file_hex
 from recovery_inputs import durable_json
 
-CACHE_PROGRAM = r'''import hashlib,json,os,pathlib,shutil,sys,tempfile
-work=pathlib.Path(sys.argv[1]); cw=work/'.coreweave'; repo=pathlib.Path(sys.argv[2])
-manifest=json.loads((cw/'bundle.json').read_text()); cache=cw/'cas'; cache.mkdir(parents=True,exist_ok=True)
+CACHE_PROGRAM = r'''import json,os,pathlib,shutil,sys,tempfile
+work=pathlib.Path(sys.argv[1]); repo=pathlib.Path(sys.argv[2]); cw=pathlib.Path(sys.argv[3])
+sys.path.insert(0,str(repo/'training/neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex
+manifest=json.loads((cw/'bundle.json').read_text()); cache=work/'.coreweave/cas'; cache.mkdir(parents=True,exist_ok=True)
 items=[i for i in manifest['files'] if not i.get('url')]
 if manifest.get('code'): items.append(dict(manifest['code'],path=str(cw/'code.tar.gz')))
 records=[]
@@ -38,7 +42,7 @@ for item in items:
  target=cache/item['sha256']; expected=item['sha256']; size=item['bytes']
  def verify(p):
   if p.stat().st_size!=size:return False
-  with p.open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()==expected
+  return sha256_file_hex(p)==expected
  if target.exists():
   if not verify(target):raise ValueError('cache object corrupt: '+str(target))
  else:
@@ -59,13 +63,15 @@ print(json.dumps({'objects':len(records),'bytes':sum(i['bytes'] for i in records
 
 def bind(path):
     path = Path(path).resolve(strict=True)
-    with path.open('rb') as stream: sha = hashlib.file_digest(stream, 'sha256').hexdigest()
-    return {'path': str(path), 'sha256': sha, 'bytes': path.stat().st_size}
+    return {'path': str(path), 'sha256': sha256_file_hex(path), 'bytes': path.stat().st_size}
 
 
 class Cloud:
-    def __init__(self, sandbox_id, parent, backup_dir):
+    def __init__(self, sandbox_id, parent, backup_dir, instance=None):
         self.sandbox_id, self.parent, self.backup_dir = sandbox_id, parent, Path(backup_dir)
+        if instance and not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,62}', instance):
+            raise ValueError('invalid bootstrap control instance')
+        self.instance = instance
 
     def sandbox(self, ident=None): return cwctl.read_sandbox(ident or self.sandbox_id, patience=45)
 
@@ -78,7 +84,8 @@ class Cloud:
         return value
 
     def cache(self):
-        result = self.sandbox().exec(['python3','-c',CACHE_PROGRAM,'/work','/home/werg/natlang']).result()
+        control = '/work/.coreweave' + (f'/instances/{self.instance}' if self.instance else '')
+        result = self.sandbox().exec(['python3','-c',CACHE_PROGRAM,'/work',str(paths.root('repo')),control]).result()
         if result.returncode: raise RuntimeError('live bundle cache failed: ' + result.stderr[-1000:])
         return json.loads(result.stdout)
 
@@ -104,18 +111,16 @@ class Cloud:
                 "s=CheckpointPolicy.load(sys.argv[1]);t=s['training']; "
                 "assert t['global_step']==int(sys.argv[2]) and t['optimizer'] and t['rng'] and t['exposure_counts']; "
                 "print(json.dumps({'step':t['global_step']}))")
-        env = {**os.environ, 'PYTHONPATH':'/home/werg/natlang/training/neuralese:/home/werg/natlang'}
-        subprocess.run(['/home/werg/natlang/.venv-neuralese/bin/python','-c',code,actual['local'],str(receipt['global_step'])],
+        repo = paths.root('repo')
+        env = {**os.environ, 'PYTHONPATH':str(repo/'training/neuralese') + os.pathsep + str(repo)}
+        subprocess.run([str(repo/'.venv-neuralese/bin/python'),'-c',code,actual['local'],str(receipt['global_step'])],
                        env=env,check=True,capture_output=True,text=True)
         return actual
 
     def verify_restore(self, snapshot, worker, receipt):
-        from cwsandbox import Sandbox
         sandbox = self.sandbox(worker)
         def inspect_destination():
-            value = Sandbox.from_id(worker,auth=cwctl.sdk_auth()).result(timeout=45)
-            return [v.scratch.restore_from_snapshot_id for v in value.spec.volumes
-                    if v.scratch and v.scratch.restore_from_snapshot_id]
+            return recovery_snapshots.inspect_destination_snapshots(sandbox, worker)
         def execute(command):
             result = sandbox.exec(command).result(timeout=1800)
             if result.returncode: raise RuntimeError('restored file verification failed: '+result.stderr)
@@ -123,6 +128,44 @@ class Cloud:
         return recovery_snapshots.verify_restored_files(self.sandbox_id,snapshot,worker,
             [{'path':self.parent,'sha256':receipt['sha256'],'bytes':receipt['bytes']}],
             inspect_destination=inspect_destination,execute=execute)
+
+
+def ensure_snapshot(state, cloud, save, *, deadline, interval):
+    if not state.get('snapshot'):
+        state['cache'] = cloud.cache(); state['phase'] = 'cache-verified'; save()
+    if not state.get('snapshot_request_id'):
+        state['snapshot_request_id'] = uuid.uuid4().hex; state['phase'] = 'snapshot-intent'; save()
+    if not state.get('snapshot_id'):
+        state['snapshot_id'] = cloud.capture(state['snapshot_request_id']); state['phase'] = 'snapshot-requested'; save()
+    if not isinstance(state['snapshot_id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]+', state['snapshot_id']):
+        raise ValueError('invalid snapshot identifier')
+    while True:
+        snapshot = cloud.inspect(state['snapshot_id'])
+        if snapshot['source_sandbox_id'] != cloud.sandbox_id:
+            raise ValueError('snapshot source differs')
+        if snapshot['status'] == 'FAILED':
+            raise RuntimeError('workspace snapshot failed')
+        if snapshot['status'] == 'READY':
+            break
+        if time.monotonic() > deadline:
+            raise TimeoutError('workspace snapshot not READY')
+        time.sleep(interval)
+    state['snapshot'] = snapshot; state['phase'] = 'snapshot-ready'; save()
+    return snapshot
+
+
+def cache_snapshot(sandbox_id, journal_path, cloud, *, wait_seconds=21600, interval=5):
+    """Preserve a failed-but-running workspace without requiring a seed or touching live control files."""
+    journal_path = Path(journal_path); journal_path.parent.mkdir(parents=True, exist_ok=True)
+    with journal_path.with_suffix('.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = json.loads(journal_path.read_text()) if journal_path.exists() else {
+            'schema':'natlang.diloco-cache-snapshot/1', 'sandbox_id':sandbox_id, 'phase':'starting'}
+        if state.get('schema') != 'natlang.diloco-cache-snapshot/1' or state['sandbox_id'] != sandbox_id:
+            raise ValueError('cache-snapshot journal belongs to another sandbox')
+        def save(): durable_json(journal_path, state)
+        save(); ensure_snapshot(state, cloud, save, deadline=time.monotonic()+wait_seconds, interval=interval)
+        return state
 
 
 def run(record_path, journal_path, cloud, *, wait_seconds=21600, interval=5):
@@ -150,24 +193,7 @@ def run(record_path, journal_path, cloud, *, wait_seconds=21600, interval=5):
         state['seed']=receipt;state['phase']='seed-verified';save()
         with ThreadPoolExecutor(max_workers=2) as pool:
             future=pool.submit(cloud.download,receipt) if not state.get('download') else None
-            # The same sandbox ID can have an empty workspace after a reset: recheck the live cache
-            # until an actual READY snapshot is recorded, rather than trusting an old enqueue acknowledgement.
-            if not state.get('snapshot'):
-                state['cache']=cloud.cache();state['phase']='cache-verified';save()
-            if not state.get('snapshot_request_id'):
-                state['snapshot_request_id']=uuid.uuid4().hex;state['phase']='snapshot-intent';save()
-            if not state.get('snapshot_id'):
-                state['snapshot_id']=cloud.capture(state['snapshot_request_id']);state['phase']='snapshot-requested';save()
-            if not isinstance(state['snapshot_id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]+', state['snapshot_id']):
-                raise ValueError('invalid snapshot identifier')
-            while True:
-                snapshot=cloud.inspect(state['snapshot_id'])
-                if snapshot['source_sandbox_id']!=cloud.sandbox_id: raise ValueError('snapshot source differs')
-                if snapshot['status']=='FAILED': raise RuntimeError('seed snapshot failed')
-                if snapshot['status']=='READY': break
-                if time.monotonic()>deadline: raise TimeoutError('seed snapshot not READY')
-                time.sleep(interval)
-            state['snapshot']=snapshot;state['phase']='snapshot-ready';save()
+            ensure_snapshot(state, cloud, save, deadline=deadline, interval=interval)
             record=json.loads(record_path.read_text())
             if record['state']=='coordinator-ready':
                 old_path=Path(record['run']['learners']['job'])
@@ -204,12 +230,22 @@ def run(record_path, journal_path, cloud, *, wait_seconds=21600, interval=5):
 
 
 def main():
+    if len(sys.argv)>1 and sys.argv[1]=='cache-snapshot':
+        parser=argparse.ArgumentParser(description='Non-destructively cache and snapshot a live failed workspace')
+        parser.add_argument('action');parser.add_argument('sandbox_id');parser.add_argument('--journal',type=Path,required=True)
+        parser.add_argument('--wait-seconds',type=float,default=21600);parser.add_argument('--instance')
+        args=parser.parse_args();cwctl.load_env_file()
+        cloud=Cloud(args.sandbox_id, '', args.journal.parent, instance=args.instance)
+        print(json.dumps(cache_snapshot(args.sandbox_id,args.journal,cloud,wait_seconds=args.wait_seconds),indent=1))
+        return
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('run_id');parser.add_argument('--journal',type=Path,required=True)
     parser.add_argument('--backup-dir',type=Path,required=True);parser.add_argument('--wait-seconds',type=float,default=21600)
     args=parser.parse_args();cwctl.load_env_file()
     path=diloco.RUNS/(args.run_id+'.json');record=json.loads(path.read_text())
-    cloud=Cloud(record['coordinator'],record['run']['coordinator']['parent'],args.backup_dir)
+    template=json.loads(Path(record['run']['learners']['job']).read_text())
+    instance=(record['run']['id']+'-learner-0') if template.get('scratch',{}).get('restore_from_snapshot_id') else None
+    cloud=Cloud(record['coordinator'],record['run']['coordinator']['parent'],args.backup_dir,instance=instance)
     print(json.dumps(run(path,args.journal,cloud,wait_seconds=args.wait_seconds),indent=1))
 
 
