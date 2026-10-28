@@ -1,0 +1,40 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "lfm3-sft-seed-20261028",
+ "kind": "train",
+ "placement": {
+  "where": "coreweave",
+  "reason": "LFM3 joint-SFT seed sandbox (owner 2026-10-28, LFM3_COMMITTED_DECISIONS #6/#7): the authorized one-GPU local check on the real mixture (~200 updates: step-0 identity, real updates incl. learned rows, SIGTERM/restore/continue, reply CE) whose full state becomes the DiLoCo parent; its /work volume is snapshotted and restored into the coordinator and the 4 learners so nothing large crosses the DGX uplink (0.2-0.5 MB/s measured). Long-lived holder; jobs exec'ed; stopped after the DiLoCo launch."
+ },
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {
+  "gpu": 1,
+  "memory": "48Gi"
+ },
+ "lifetime_hours": 8,
+ "scratch": {
+  "path": "/work",
+  "size": "300Gi"
+ },
+ "env": {
+  "NATLANG_CW_COLLECT_WAIT": "1800",
+  "HF_HUB_CACHE": "/work/hf",
+  "TORCHINDUCTOR_CACHE_DIR": "/work/.cache/inductor",
+  "TRITON_CACHE_DIR": "/work/.cache/triton"
+ },
+ "outputs": [
+  "/work/seed-report"
+ ],
+ "command": [
+  "bash",
+  "scripts/coreweave/hold.sh",
+  "8"
+ ],
+ "needs": {
+  "gpu_memory_gb": 40,
+  "hours": 4,
+  "teacher": false,
+  "lineage_owner": "dgx",
+  "moves_active_lineage": true
+ }
+}
