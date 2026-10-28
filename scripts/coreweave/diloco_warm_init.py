@@ -72,8 +72,10 @@ def prepare(config):
 
 
 def defaults(config):
+    from natlang_neuralese.common.paths import root
     work=config.get('work','/work')
-    return {'work':work,'repo':'/home/werg/natlang','mirror_roots':['/home/werg','/mnt/external'],
+    repo=root('repo')
+    return {'work':work,'repo':str(repo),'mirror_roots':[str(repo.parent),str(root('data_hdd'))],
             'role_control':work+'/recovery-role-control','ready_path':work+'/recovery-role-control/initialization.json',
             'input_wait_seconds':1800,
             **config}
