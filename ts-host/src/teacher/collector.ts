@@ -1,5 +1,6 @@
 import { trajectoryTurn } from '../runtime/trajectory.js';
 import { checkRequiredActions } from './required-actions.js';
+import { checkRequiredServiceReceipt } from './service-receipt.js';
 export { trajectoryTurn } from '../runtime/trajectory.js';
 import { nativeStateRuntimeOptions } from '../model/native-state-client.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
@@ -1642,7 +1643,9 @@ export async function executeProgram(record: ProgramRecord, driver:(request: Mod
     const hostCertificateOk = !hostCertificateRequired ||
       (hostCertificateReadOk && hostCertificate !== null && hostCertificate !== undefined &&
         same(hostCertificate, record.semantics.expected) && same(actual, hostCertificate));
-    const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk;
+    const serviceReceiptOk = await checkRequiredServiceReceipt(record.semantics.required_service_receipt,
+      services, record.semantics.expected, same);
+    const worldOk = (!worldScore || worldScore.score >= 100) && hostCertificateOk && serviceReceiptOk;
     const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
       fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
     const oracle = authoring ? { accepted: authoring.ok, level: 'exact' as const, verdict: 'executable-authoring/1' } : record.semantics.trusted_exact_verifier ?

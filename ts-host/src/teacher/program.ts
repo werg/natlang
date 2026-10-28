@@ -35,6 +35,8 @@ export type ProgramSemantics = {
   function_checks?: import('./function-effects.js').FunctionEffectSpec;
   /** Exact root-side actions needed in addition to the returned value and other effects. */
   required_actions?: import('./required-actions.js').RequiredAction[];
+  /** A source-declared read-only world receipt certifying the final delivered state. */
+  required_service_receipt?: import('./service-receipt.js').RequiredServiceReceipt;
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };
 
