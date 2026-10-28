@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 import pytest
 from scripts.coreweave import diloco_warm_init as warm
@@ -71,6 +72,20 @@ def test_compiled_owner_initializes_before_supervisor(tmp_path):
     assert run.returncode==0,run.stderr
     assert 'owner-started' in run.stdout
     assert json.loads(Path(config['ready_path']).read_text())['pid']>0
+    source=(Path(__file__).parents[1]/'scripts/coreweave/diloco_role_supervisor.py').read_text()
+    process=subprocess.Popen([sys.executable,'-c',warm.owner_program(source,config)],
+                             env={**os.environ,'PATH':str(tmp_path)+':'+os.environ['PATH']},
+                             stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        owner=Path(config['role_control'])/'state.json';deadline=time.monotonic()+10
+        while not owner.exists() and time.monotonic()<deadline:
+            if process.poll() is not None:break
+            time.sleep(.05)
+        assert owner.exists(),process.communicate(timeout=2)[1]
+        state=json.loads(owner.read_text())
+        assert state['supervisor_pid']==process.pid and state['boot_id']==json.loads(Path(config['ready_path']).read_text())['boot_id']
+    finally:
+        process.terminate();process.wait(timeout=10)
 
 
 def test_readiness_requires_same_boot_and_actual_pid1_owner():
