@@ -611,7 +611,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-native-state-import: ${expected.length} prepared occurrence(s) for ${id} differ from the server prompt and import receipts`),
           { code: 'neuralese-native-state-import' });
     }
-    const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store);
+    const archived = await archiveNeuraleseReplyArtifacts(reply, remote, store, [preparedMessages]);
     const archiveIds = archived.native;
     for (const id of archiveIds) nativeUploaded.add(id);
     if(recorder){

@@ -1317,6 +1317,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           throw new AuthoredRootDidNotFinishError();
         } else response = await transport(request, persist);
       }
+      // Synthetic and handoff turns can bypass the server transport, but their
+      // input state still needs an exact local artifact for graph provenance.
+      if (nativeStore && replayRemote)
+        await archiveNeuraleseReplyArtifacts(response.raw_response ?? {}, replayRemote, nativeStore,
+          [request.messages, response.calls, response.text]);
       trajectory.push(trajectoryTurn(request, response));
       return response;
     }, valueRuntime ? { neuralese: true } : {});

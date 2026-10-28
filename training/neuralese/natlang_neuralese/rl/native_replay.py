@@ -875,8 +875,9 @@ class NativePolicyObjective:
         bank=invocation_actor_bank(self.engine.shared_model.port)
         if bank is None or bank.receipt()!=self.evaluation_invocation_actors:
             raise ValueError('native invocation external state requires the exact current actor bank')
-        from .jolt import actor_sources
+        from .jolt import actor_sources, twin_sources
         sources=actor_sources(self.rows[example.id])
+        twins=twin_sources(self.rows[example.id])
         captured=self.rows[example.id].get('external_invocations',{}).get(name)
         occurrences=[(node,span) for node in example.plan.invocations for span in node.imports if span.source==name]
         # A JOLT+ twin's import is the stop-gradient target of its sampled occurrence, not another behavior
