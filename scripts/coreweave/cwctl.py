@@ -129,7 +129,11 @@ def reexec_in_venv() -> None:
 
 
 def bootstrap_text() -> str:
-    return (HERE / 'bootstrap.sh').read_text()
+    script = (HERE / 'bootstrap.sh').read_text()
+    marker = '@@NATLANG_CODE_ARCHIVE_HELPER@@'
+    if script.count(marker) != 1:
+        raise ControllerError('bootstrap code archive helper marker is missing or duplicated')
+    return script.replace(marker, repr((HERE / 'code_archive.py').read_text()))
 
 
 def load_job(path: Path, bundle: str | None = None, bucket: str | None = None, resume: bool = False) -> dict:

@@ -104,12 +104,15 @@ if code:
             os.link(path, f'{work}/.coreweave/cas/{code["sha256"]}')  # reusable by a later bundle on this volume
     else:
         s3.download_file(bucket, code['key'], path)
-    digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
-    if digest != code['sha256']:
-        raise SystemExit(f'code snapshot sha256 {digest} != {code["sha256"]}')
+    with open(path, 'rb') as archive_stream:
+        code_digest = hashlib.file_digest(archive_stream, 'sha256').hexdigest()
+    if code_digest != code['sha256']:
+        raise SystemExit(f'code snapshot sha256 {code_digest} != {code["sha256"]}')
+    exec(@@NATLANG_CODE_ARCHIVE_HELPER@@)
     with tarfile.open(path) as tar:
-        tar.extractall(repo, filter='data')
-    print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': digest}))
+        reconciliation = extract_code_archive(tar, repo, work, code_digest)
+    print(json.dumps({'bootstrap': 'code', 'git_sha': code['git_sha'], 'sha256': code_digest,
+                      'reconciliation': reconciliation}))
 PY
   # 4. inputs, verified (pushed inbox objects first, then public URLs, then the bucket)
   python3 "$NATLANG_REPO/scripts/coreweave/bundle.py" fetch ${NATLANG_CW_BUCKET:+--bucket "$NATLANG_CW_BUCKET"} \

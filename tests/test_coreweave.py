@@ -1211,3 +1211,50 @@ def test_postseed_private_export_binds_actual_sandbox_and_independent_get(tmp_pa
     monkeypatch.setattr(post.subprocess,'run',bad_run)
     with pytest.raises(ValueError,match='independent full-object'):
         cloud.private_export(receipt,intent)
+
+
+def test_code_archive_removes_only_verified_predecessor_modules(tmp_path):
+    import io
+    import tarfile
+    archive=load('code_archive');repo=tmp_path/'repo';work=tmp_path/'work';repo.mkdir();work.mkdir()
+    package=repo/archive.PACKAGE;package.mkdir(parents=True)
+    def make_tar(name, files):
+        target=tmp_path/name
+        with tarfile.open(target,'w') as tar:
+            for path,data in files.items():
+                info=tarfile.TarInfo(path);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+        return target
+    old={'__init__.py':b'old-init','removed.py':b'old-file'}
+    first=make_tar('first.tar',{archive.PACKAGE+'/'+k:v for k,v in old.items()})
+    with tarfile.open(first) as tar:archive.extract_code_archive(tar,repo,work,'a'*64)
+    protected=repo/'data/source.json';protected.parent.mkdir();protected.write_text('preserve')
+    new={'__init__.py':b'new-init','added.py':b'new-file'}
+    second=make_tar('second.tar',{archive.PACKAGE+'/'+k:v for k,v in new.items()})
+    with tarfile.open(second) as tar:result=archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert result['removed_predecessor_files']==1 and not (package/'removed.py').exists()
+    assert protected.read_text()=='preserve' and (package/'added.py').read_bytes()==b'new-file'
+    extra=package/'untracked.py';extra.write_bytes(b'user-work')
+    with tarfile.open(second) as tar, pytest.raises(ValueError,match='untracked native Python'):
+        archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert extra.read_bytes()==b'user-work'
+
+
+def test_code_archive_refuses_to_delete_modified_predecessor(tmp_path):
+    import io
+    import tarfile
+    archive=load('code_archive');repo=tmp_path/'repo';work=tmp_path/'work';repo.mkdir();work.mkdir()
+    package=repo/archive.PACKAGE;package.mkdir(parents=True)
+    def add(name, files):
+        path=tmp_path/name
+        with tarfile.open(path,'w') as tar:
+            for k,v in files.items():
+                info=tarfile.TarInfo(archive.PACKAGE+'/'+k);info.size=len(v);tar.addfile(info,io.BytesIO(v))
+        return path
+    before=add('before.tar',{'__init__.py':b'x','retired.py':b'original'})
+    after=add('after.tar',{'__init__.py':b'x'})
+    with tarfile.open(before) as tar:archive.extract_code_archive(tar,repo,work,'a'*64)
+    (package/'retired.py').write_bytes(b'user-changes')
+    with tarfile.open(after) as tar, pytest.raises(ValueError,match='existing native code changed'):
+        archive.extract_code_archive(tar,repo,work,'b'*64)
+    assert (package/'retired.py').read_bytes()==b'user-changes'
+    assert '@@NATLANG_CODE_ARCHIVE_HELPER@@' not in cwctl.bootstrap_text()
