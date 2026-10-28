@@ -1271,7 +1271,33 @@
         "cases.jsonl",
         "provenance.json"
       ],
-      "note": "Protected DEVELOPMENT task packet for LFM3 checkpoint selection (2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md): the same 16 shapes as the held packet, 8 cases each (128), generated with ts-host/scripts/inline-curriculum/build.mjs --split test --no-hints at seed 71028 (used by no training build or held packet), one case per distinct world, every case reference-verified through the collector (verifyCases). The held packet natlang-held-task-packet-v3-20261012 stays confirmation-only; this packet is never a training source and its worlds never join the held side. Separation (provenance.json): 0 world/id/source-group/pair-group overlap with held v2/v3; exact content-window scan of the r2, r3, r9, r10, r11 and next-incremental-v2 LFM views found only shape templates and banks; edit_stream paragraphs are AG News test-partition rows (edit-stream.mjs split fix). The 8 edit_stream cases are refused by the runtime (family hold source_review_pending, since 2026-10-26) and are not executable until that hold is lifted; the 120 other cases are."
+      "note": "SUPERSEDED by natlang-dev-task-packet-v2-20261028 (edit_stream and contract_diagnosis oracles accepted wrong answers; v2 repairs only those 16 rows' oracles). Protected DEVELOPMENT task packet for LFM3 checkpoint selection (2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md): the same 16 shapes as the held packet, 8 cases each (128), generated with ts-host/scripts/inline-curriculum/build.mjs --split test --no-hints at seed 71028 (used by no training build or held packet), one case per distinct world, every case reference-verified through the collector (verifyCases). The held packet natlang-held-task-packet-v3-20261012 stays confirmation-only; this packet is never a training source and its worlds never join the held side. Separation (provenance.json): 0 world/id/source-group/pair-group overlap with held v2/v3; exact content-window scan of the r2, r3, r9, r10, r11 and next-incremental-v2 LFM views found only shape templates and banks; edit_stream paragraphs are AG News test-partition rows (edit-stream.mjs split fix). The 8 edit_stream cases are refused by the runtime (family hold source_review_pending, since 2026-10-26) and are not executable until that hold is lifted; the 120 other cases are."
+    },
+    {
+      "id": "natlang-dev-task-packet-v2-20261028",
+      "owner": "dgx",
+      "path": "runs/natlang-dev-task-packet-v2-20261028",
+      "admission": "evaluation-only-never-training",
+      "training_admission": false,
+      "split": "test (generated); role development",
+      "include": [
+        "cases.jsonl",
+        "provenance.json"
+      ],
+      "note": "Protected DEVELOPMENT task packet v2 for LFM3 checkpoint selection (2026-10-28, plans/neuralese/LFM3_RECIPE_20261028.md): natlang-dev-task-packet-v1-20261028 with only the oracle side of its 8 edit_stream and 8 contract_diagnosis rows regenerated from the same draws (seed 71028; every non-oracle field identical, the other 112 rows byte-identical). edit_stream: edit_fidelity constraint (the reference-edited document: paragraphs in order near-exact, renames counted exactly, deleted text absent); contract_diagnosis: function-effect oracle (line_total as the run left it repaired or untouched as required, correct on hidden lines, the returned total its sum). All 128 cases reference-verified through the collector (registry without the edit_stream hold); adversarial probe: 210/210 negatives rejected, 68/68 positives accepted (v1 oracles accepted 72 of the same negatives). Same worlds and separation as v1 (provenance.json). The 8 edit_stream cases stay refused by the runtime family hold until it is lifted through a reviewed registry change; the 120 other cases are executable. Never a training source."
+    },
+    {
+      "id": "natlang-held-task-packet-v4-20261012",
+      "owner": "dgx",
+      "path": "runs/natlang-held-task-packet-v4-20261012",
+      "admission": "evaluation-only-never-training",
+      "training_admission": false,
+      "split": "test (generated); role confirmation",
+      "include": [
+        "cases.jsonl",
+        "provenance.json"
+      ],
+      "note": "Held task-success packet v4 (2026-10-28, CANDIDATE successor of natlang-held-task-packet-v3-20261012, which is protected and unmodified): v3 with only the oracle side of its 4 edit_stream rows (edit_fidelity, derived from each row's stored document, steps and reference states) and 4 contract_diagnosis rows (function-effect oracle, regenerated from the same draws at seed 61012) replaced; the other 56 rows are byte-identical and every non-oracle field is unchanged. All 64 reference-verified through the collector (registry without the edit_stream hold); adversarial probe: 141/141 negatives rejected, 36/36 positives accepted (v3 oracles accepted 58 of the same negatives, including both 2026-10-26 recorded exploits). Current confirmation packet for LFM3 (plans/neuralese/LFM3_RECIPE_20261028.md); confirmation-only, never selection, never a training source."
     },
     {
       "id": "static-lambda-heldout-20261005-v1",
