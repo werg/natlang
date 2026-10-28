@@ -218,10 +218,11 @@
  "coding_mix": {
   "share": 0.1,
   "tier": 5,
-  "reason": "owner 2026-10-28: a small diverse coding mix, ~10% of the joint-SFT supervised tokens (scales with the natlang total); verified rows, own-outputs targets, one row per near-duplicate cluster, round-robin over repositories/tasks; render only the sampled subset after the teacher twins and tier-1 members; codeagent and first-wave are natlang directory-reducer ports (port_record_calls) and go through the normal tiers (2026-10-28 correction)",
+  "reason": "owner 2026-10-28: a small diverse coding mix, ~10% of the joint-SFT supervised tokens (scales with the natlang total); verified rows, own-outputs targets, one row per near-duplicate cluster, round-robin over repositories/tasks; render only the sampled subset after the teacher twins and tier-1 members",
   "sources": [
-   "swe-rebench-coding-mix",
-   "swe-rebench-bulk-"
+   "external-expansion-codeagent-native-20261014-v1",
+   "swe-rebench-bulk-",
+   "external-expansion-first-wave-20261014-v1"
   ]
  }
 }
