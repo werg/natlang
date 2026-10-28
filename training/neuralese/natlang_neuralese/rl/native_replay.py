@@ -563,11 +563,13 @@ def behavior_top_k_tensors(actions, k, device):
     return ids.to(device), logq.to(device)
 
 
-def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *, chunk_tokens=128, readout=None):
+def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *, chunk_tokens=128, readout=None,
+                               top_k=None):
     """Per-action score-centered/1 losses -R U over the same chunked, checkpointed readout as action_logps.
 
     Every sampled action (all producer and consumer turns of the replayed graph) is scored under its own exact
-    temperature/mask law; forced/imported positions are not actions and stay excluded.
+    temperature/mask law; forced/imported positions are not actions and stay excluded. ``top_k`` optionally
+    supplies behavior_top_k_tensors(actions, k, 'cpu') decoded once by the caller.
     """
     if chunk_tokens < 1:
         raise ValueError('native RL loss chunks must be positive')
@@ -588,7 +590,7 @@ def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *
         from ..common.sampling import masked_log_distribution
         log_probs = masked_log_distribution((readout or model.logits)(states), temperature, allowed=allowed, banned=banned)
         surrogate, details = score_centered_surrogate(log_probs, labels, behavior, ids, logq,
-            importance=policy_loss['importance'], eps=policy_loss['eps'])
+            importance=policy_loss['importance'], eps=policy_loss['eps'], masked=bool(allowed is not None or banned))
         return (surrogate, *(details[name] for name in _CENTERING_FIELDS))
     from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
     if active_reference_arithmetic() is not None:
@@ -601,7 +603,11 @@ def score_centered_action_loss(model, hidden, actions, advantage, policy_loss, *
             queries = torch.tensor([action['query'] for action in chosen], device=hidden.device)
             labels = torch.tensor([action['token_id'] for action in chosen], device=hidden.device)
             behavior = torch.tensor([action['behavior_logp'] for action in chosen], device=hidden.device, dtype=torch.float32)
-            ids, logq = behavior_top_k_tensors(chosen, policy_loss['k'], hidden.device)
+            if top_k is None:
+                ids, logq = behavior_top_k_tensors(chosen, policy_loss['k'], hidden.device)
+            else:
+                rows = torch.tensor(selected)
+                ids, logq = top_k[0][rows].to(hidden.device), top_k[1][rows].to(hidden.device)
             surrogate, *details = checkpoint(score, hidden[queries], labels, behavior, ids, logq,
                                              temperature, allowed, banned, use_reentrant=False)
             for index, value in zip(selected, (-a * surrogate).unbind()):
@@ -694,6 +700,7 @@ class NativePolicyObjective:
             raise ValueError('native policy objective declares a noncanonical or inapplicable policy loss')
         for row in self.rows.values():
             require_policy_loss_actions(row['actions'], self.policy_loss)
+        self._top_k_cache = {}  # decoded sampler top-k per admitted row (immutable objective bytes)
         for row in self.rows.values():
             names = row.get('episode_turns')
             if (not isinstance(names, list) or not names
@@ -955,8 +962,11 @@ class NativePolicyObjective:
                             if action['allowed_token_ids'] is not None else None}
                        for action in row['actions']]
             if self.policy_loss is not None:
+                if example.id not in self._top_k_cache:
+                    self._top_k_cache[example.id] = behavior_top_k_tensors(row['actions'], self.policy_loss['k'], 'cpu')
                 terms, centered = score_centered_action_loss(model, hidden, actions, row['advantage'],
-                    self.policy_loss, chunk_tokens=self.spec.get('chunk_tokens', 128))
+                    self.policy_loss, chunk_tokens=self.spec.get('chunk_tokens', 128),
+                    top_k=self._top_k_cache[example.id])
                 diagnostics.append(centered)
             else:
                 logps, behavior = action_logps(model, hidden, actions,

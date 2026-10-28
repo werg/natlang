@@ -64,7 +64,8 @@ def importance_weight(ratio, mode):
     raise ValueError('unsupported importance mode')
 
 
-def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6):
+def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6,
+                             masked=None):
     """Per-position surrogate U whose gradient is the score-centered estimator; the loss is -R U.
 
     ``log_probs`` [n, V]: the trainer's current normalized log distribution under the sampler's exact
@@ -79,6 +80,7 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
     evaluated in that exactly equivalent tail form and the trainer tail mass is summed over the tail directly,
     which avoids cancellation when the trainer's top-k holds nearly all mass. Entries with q_v = 0 (masked by the
     sampler) carry no weight. y may lie inside or outside H; its term is the same either way.
+    ``masked`` (optional) tells whether the law masks tokens (log p = -inf); None checks the values.
     Returns (U [n], detached per-position diagnostics).
     """
     if (log_probs.ndim != 2 or labels.shape != (log_probs.shape[0],)
@@ -86,35 +88,45 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
         raise ValueError('score-centered positions/labels/behavior shapes differ')
     if top_ids.shape != top_logq.shape or top_ids.ndim != 2 or top_ids.shape[0] != log_probs.shape[0]:
         raise ValueError('score-centered behavior top-k shapes differ from positions')
-    if (top_ids >= log_probs.shape[1]).any():
-        raise ValueError('behavior top-k names a token outside the current vocabulary')
+    width = log_probs.shape[1]
     log_probs = log_probs.float()
-    top_logq = top_logq.float()
-    valid = (top_ids >= 0) & (top_logq > float('-inf'))
-    safe_ids = top_ids.clamp(min=0)
-    logp_h = log_probs.gather(1, safe_ids)
-    if (valid & ~torch.isfinite(logp_h)).any():
-        raise ValueError('sampler top-k token has zero current probability: sampler and trainer masks differ')
-    zero = torch.zeros_like(logp_h)
     with torch.no_grad():
-        p_all = log_probs.detach().exp()
-        p_h = torch.where(valid, logp_h.detach().exp(), zero)
+        detached = log_probs.detach()
+        top_logq = top_logq.float()
+        valid = (top_ids >= 0) & (top_logq > float('-inf'))
+        safe_ids = top_ids.clamp(0, width - 1)
+        logp_h = detached.gather(1, safe_ids)
+        if bool(((top_ids >= width) | (valid & ~torch.isfinite(logp_h))).any()):
+            raise ValueError('sampler top-k names a token outside the vocabulary or with zero current probability: '
+                             'sampler and trainer masks/vocabularies differ')
+        zero = torch.zeros_like(logp_h)
+        p_h = torch.where(valid, logp_h.exp(), zero)
         q_h = torch.where(valid, top_logq.exp(), zero)
         ratio_h = p_h / q_h.clamp(min=torch.finfo(torch.float32).tiny)
         w_h = torch.where(valid, importance_weight(ratio_h, importance), zero)
-        in_h = torch.zeros_like(p_all).scatter_add(1, safe_ids, valid.float()) > 0
-        p_tail = torch.where(in_h, torch.zeros_like(p_all), p_all)
-        tail_p = p_tail.sum(1)
+        # Trainer tail: p with H removed, summed directly. Invalid pads point at a valid H member of their row;
+        # a row without a valid entry writes its own unchanged value back.
+        first = valid.float().argmax(1, keepdim=True)
+        fill_ids = torch.where(valid, safe_ids, safe_ids.gather(1, first))
+        weights = detached.exp()
+        held = torch.where(valid.any(1, keepdim=True), zero, weights.gather(1, fill_ids))
+        weights.scatter_(1, fill_ids, held)
+        tail_p = weights.sum(1)
         tail_q = 1 - q_h.sum(1)
         rho = tail_q.clamp(min=eps) / tail_p.clamp(min=eps)
         alpha = rho * importance_weight(1 / rho, importance)
-        coefficient = q_h * w_h
-    logp_y = log_probs.gather(1, labels[:, None]).squeeze(1)
-    with torch.no_grad():
-        w_y = importance_weight((logp_y.detach() - behavior_logp.float()).clamp(-20, 20).exp(), importance)
-    head = (coefficient * torch.where(valid, logp_h, zero)).sum(1)
-    tail = (p_tail * torch.where(p_tail > 0, log_probs, torch.zeros_like(log_probs))).sum(1)
-    surrogate = w_y * logp_y - head - alpha * tail
+        w_y = importance_weight((detached.gather(1, labels[:, None]).squeeze(1)
+                                 - behavior_logp.float()).clamp(-20, 20).exp(), importance)
+        # One dense stop-gradient weight per vocabulary entry:
+        #   U = w_y log p_y - sum_H q_v w_v log p_v - alpha sum_tail p_v log p_v.
+        weights.mul_(-alpha[:, None])
+        weights.scatter_add_(1, safe_ids, -(q_h * w_h))
+        weights.scatter_add_(1, labels[:, None], w_y[:, None])
+    # Masked tokens have p = 0, zero weight and log p = -inf; keep 0 * log 0 at zero value and gradient.
+    if masked is None:
+        masked = not bool(torch.isfinite(detached).all())
+    finite = torch.nan_to_num(log_probs, neginf=0.) if masked else log_probs
+    surrogate = (weights * finite).sum(1)
     diagnostics = {'rho': rho, 'alpha': alpha, 'tail_q': tail_q, 'tail_p': tail_p, 'w_y': w_y,
                    'y_in_top_k': (top_ids == labels[:, None]).any(1)}
     return surrogate, diagnostics
