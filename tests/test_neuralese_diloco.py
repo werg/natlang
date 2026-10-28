@@ -214,3 +214,65 @@ def test_export_merges_disjoint_learner_exposure_onto_the_parent():
         merged_exposure(parent, [{"a": 0}])
     argv = ["--out", "/work/out", "--diloco", '{"coordinator_url":"https://x"}', "--diloco={}", "--epochs", "1"]
     assert trainer_argv(argv) == ["--out", "/work/out", "--epochs", "1"]
+
+
+def test_outer_schedule_switches_at_its_round_with_a_fresh_momentum_buffer(tmp_path):
+    import json
+    from natlang_neuralese.train.diloco.coordinator import _metadata, validate_outer_schedule
+
+    with pytest.raises(ValueError):
+        validate_outer_schedule([{"from_round": 1, "lr": 1.0, "momentum": 0.0}])
+    schedule = [{"from_round": 0, "lr": 1.0, "momentum": 0.0}, {"from_round": 2, "lr": 0.5, "momentum": 0.5}]
+    manifest = _init(tmp_path / "c", _model(), workers=1, quorum=1, max_staleness=4, outer_schedule=schedule)
+    assert manifest["outer_schedule"] == schedule
+    session = "0" * 8 + "-0000-0000-0000-" + "0" * 12
+    coordinator = Coordinator(tmp_path / "c")
+    coordinator.lease(0, session)
+    fragment = coordinator.fragments[0]
+    start = pack_fragment(global_masters(tmp_path / "c")[0], fragment)
+    update = tmp_path / "u.safetensors"
+    save_tensors(update, {"delta": torch.full((fragment.length,), 0.01)})
+    # lr 1, momentum 0 twice; then a fresh buffer: v = d, step 0.75 d; v = 1.5 d, step 0.875 d.
+    expected = [0.01, 0.02, 0.0275, 0.03625]
+    for sequence in range(1, 5):
+        if sequence == 3:  # a restart between rounds keeps the schedule (it lives in the manifest)
+            coordinator = Coordinator(tmp_path / "c")
+        coordinator.submit(0, 0, session, sequence, sequence - 1, 4, 100, update)
+        assert json.loads(_metadata(coordinator._path(0))["outer"])["entry"] == (0 if sequence <= 2 else 1)
+        now = pack_fragment(global_masters(tmp_path / "c")[0], fragment)
+        assert torch.allclose(start - now, torch.full((fragment.length,), expected[sequence - 1]), atol=1e-6)
+    assert schedule[1] in coordinator.status()["outer_next"]
+
+
+def test_export_global_writes_fp32_masters_at_parameter_dtype(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import natlang_neuralese.train.checkpoint_policy as checkpoint_policy
+    import natlang_neuralese.train.native_diloco as native_diloco
+    import natlang_neuralese.train.weight_ema as weight_ema
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+
+    surface = TensorSurface.from_module(_model().to(torch.bfloat16))
+    parent = tmp_path / "parent.pt"
+    parent.write_bytes(b"parent")
+    initialize_coordinator(tmp_path / "c", run_id="unit", masters=surface.masters,
+                           identity={"parent_checkpoint_sha256": sha256_file_hex_cached(parent)}, workers=1,
+                           min_quorum=1, fragment_bytes=1024, ema={"decay": 0.5, "warmup": 0})
+    masters = global_masters(tmp_path / "c")[0]
+    assert all(value.dtype == torch.float32 for value in masters.values())  # FP32 globals from a BF16 parent
+    target = _model(seed=1).to(torch.bfloat16)
+    monkeypatch.setattr(native_diloco, "_trainable", lambda path, base: (target, list(target.named_parameters())))
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, "load", staticmethod(
+        lambda path: {"schema": "s", "model_config": {}, "training": {"global_step": 7}}))
+    written = {}
+
+    def write(model, config, schema, step, export, out):
+        written[out.name] = ({n: p.detach().clone() for n, p in model.named_parameters()}, step, export)
+
+    monkeypatch.setattr(weight_ema, "write_weights_checkpoint", write)
+    native_diloco.export_global(SimpleNamespace(root=tmp_path / "c", parent=parent, base=None,
+                                                out=tmp_path / "g", ema_out=tmp_path / "e"))
+    weights, step, export = written["g"]
+    assert step == 7 and set(export["fragment_versions"]) == {0}
+    assert all(torch.equal(weights[n], masters[n].to(torch.bfloat16)) for n in weights)
+    assert written["e"][2]["source"] == "diloco-coordinator-ema"
