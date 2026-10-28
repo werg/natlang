@@ -1437,6 +1437,28 @@
       "note": "Scheduling metadata is a curriculum prior, not an RL eligibility gate. Full 128-row task breadth remains included; pending 12-task executor qualification remains excluded. This is an RL task source, not neuralese SFT graph data."
     },
     {
+      "id": "decision-rich-train-20261016-v2-curriculum-corrected",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261016-v2-curriculum-corrected",
+      "include": [
+        "cases.jsonl",
+        "source-correction-proof.json",
+        "task-source-manifest.json"
+      ],
+      "source_class": "immutable-RL-task-source-correction-successor",
+      "split": "Train-only. Byte-preserving, order-preserving retained rows of decision-rich-train-20261016-v2-curriculum (76 of 128); the parent packet stays registered and intact as the hash-bound parent.",
+      "admission": "natlang.rl-task-source-correction/1 successor under predicate port-record-next-assistant-turn-unprovided-v2: quarantines the 52 curriculum_port_record_calls tasks whose items ask for the historical next assistant message without supplying it, so their exact recorded reply is an SFT label, not a valid RL reward.",
+      "training_admission": true,
+      "training_admission_reason": "Every retained row is an unchanged row of the admitted parent; the resolver re-derives the exact exclusion set from the parent and refuses any other omission. The parent's audit, selection and protection evidence carry over unchanged.",
+      "derived_from": [
+        "decision-rich-train-20261016-v2-curriculum"
+      ],
+      "task_source_manifest": "runs/decision-rich-train-20261016-v2-curriculum-corrected/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261016-v2-curriculum-corrected.json",
+      "license_provenance": "Inherited unchanged from the parent rows.",
+      "note": "RL task source, not native SFT graph data. The quarantined rows stay in the parent (and its SFT uses) with their source/split evidence."
+    },
+    {
       "id": "clef-rich-teacher-evidence-20261005-v1",
       "owner": "pop",
       "path": "runs",

@@ -398,11 +398,10 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     monkeypatch.setattr(recipe, 'resolve_recipe_data', production_recipe)
     runtime = tmp_path/'runtime/dist/teacher'; runtime.mkdir(parents=True)
     (runtime/'cli.js').write_text('// fixture build')
-    source_dir = tmp_path/'published-rl-task-source'
-    source_dir.mkdir()
-    published = Path(__file__).resolve().parents[2] / 'runs/decision-rich-train-20261016-v1'
-    for name in ('cases.jsonl', 'union-audit.json', 'broad-selection-proof.json', 'task-source-manifest.json'):
-        shutil.copyfile(published/name, source_dir/name)
+    published = Path(__file__).resolve().parents[2] / 'runs'
+    for name in ('decision-rich-train-20261016-v2-curriculum', 'decision-rich-train-20261016-v2-curriculum-corrected'):
+        shutil.copytree(published/name, tmp_path/'published-rl-task-source'/name)
+    source_dir = tmp_path/'published-rl-task-source/decision-rich-train-20261016-v2-curriculum-corrected'
     from natlang_neuralese.rl.task_source import resolve_task_source
     task_source = resolve_task_source(source_dir/'task-source-manifest.json')
     task_source_binding = {'manifest': str(task_source['manifest']),
