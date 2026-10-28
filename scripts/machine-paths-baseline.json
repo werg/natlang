@@ -1,7 +1,6 @@
 {
   "files": [
     "scripts/build_code_skill_episodes.py",
-    "scripts/build_neuralese_counterfactual_reader_proposal.py",
     "scripts/consolidate_dgx_checkout.py",
     "scripts/coord.py",
     "scripts/maple_llamacpp_parity.py",
