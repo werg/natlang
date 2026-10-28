@@ -425,7 +425,13 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     become files under $NATLANG_CW_SECRETS (the bootstrap makes them owner-only) and are never logged."""
     manifest = json.loads(manifest_path.read_text())
     sources = json.loads(manifest_path.with_suffix('.sources.json').read_text())
-    inbox = f"{job['scratch']['path']}/.coreweave/inbox"
+    instance = job.get('env', {}).get('NATLANG_CW_INSTANCE')
+    control = f"{job['scratch']['path']}/.coreweave" + (f'/instances/{instance}' if instance else '')
+    inbox = f'{control}/inbox'
+    made = sandbox.exec(['mkdir', '-p', inbox, f'{control}/secrets']).result()
+    if made.returncode != 0:
+        raise ControllerError('cannot create isolated input/secret directories')
+    sandbox.exec(['chmod', '700', f'{control}/secrets']).result()
     pushed, bytes_pushed = 0, 0
     items = [i for i in manifest['files'] if not i.get('url')] + ([manifest['code']] if manifest.get('code') else [])
     # Objects already in the volume's content store (a restored snapshot, an earlier bundle) are linked into the inbox
@@ -456,9 +462,9 @@ def push_inputs(sandbox, job: dict, manifest_path: Path, log=print, secrets: dic
     for name, value in (secrets or {}).items():
         if not SECRET_NAME.fullmatch(name):
             raise ControllerError(f'secret name {name!r}: lower-case letters, digits, dots and dashes')
-        sandbox.write_file(f"{job['scratch']['path']}/.coreweave/secrets/{name}", value).result()
-    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/bundle.json", manifest_path.read_bytes()).result()
-    sandbox.write_file(f"{job['scratch']['path']}/.coreweave/inputs-ready", b'').result()
+        sandbox.write_file(f'{control}/secrets/{name}', value).result()
+    sandbox.write_file(f'{control}/bundle.json', manifest_path.read_bytes()).result()
+    sandbox.write_file(f'{control}/inputs-ready', b'').result()
     return {'pushed': pushed, 'bytes': bytes_pushed}
 
 
@@ -493,13 +499,15 @@ def service_url(sandbox, timeout: float = 600) -> str:
 
 
 def collect(sandbox_id: str, scratch: str = '/work', mapping: list[tuple[str, str]] = (), timeout: float = 86400,
-            log=print) -> dict:
+            log=print, instance: str | None = None) -> dict:
     """File-API transport: wait for the bootstrap's outputs-ready, pull every output file, verify its sha256 against
     the manifest the sandbox wrote, place it (``mapping`` remaps path prefixes), then release the sandbox."""
     import bundle
     from cwsandbox import Sandbox
     sandbox = Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
-    base = f'{scratch}/.coreweave'
+    if instance and not jobs._ID.fullmatch(instance):
+        raise ControllerError('invalid control instance')
+    base = f'{scratch}/.coreweave' + (f'/instances/{instance}' if instance else '')
     deadline = time.time() + timeout
     while sandbox.exec(['test', '-f', f'{base}/outputs-ready']).result().returncode != 0:
         if time.time() > deadline:
@@ -678,6 +686,7 @@ def main(argv=None) -> int:
     p = sub.add_parser('collect', help='pull and verify a file-API job\'s outputs, then release its sandbox')
     p.add_argument('sandbox_id')
     p.add_argument('--scratch', default='/work')
+    p.add_argument('--instance', help='unique job id for snapshot-restored isolated control paths')
     p.add_argument('--map', action='append', default=[], help='OLD=NEW path prefix for where outputs land')
     p = sub.add_parser('logs', help='main-process logs through the gateway data plane')
     p.add_argument('sandbox_id')
@@ -708,7 +717,7 @@ def main(argv=None) -> int:
         return result.returncode
     elif args.command == 'collect':
         mapping = [tuple(m.split('=', 1)) for m in args.map]
-        print(json.dumps(collect(args.sandbox_id, args.scratch, mapping), indent=1))
+        print(json.dumps(collect(args.sandbox_id, args.scratch, mapping, instance=args.instance), indent=1))
     elif args.command == 'place':
         print(json.dumps(place(args.job, args.mode, args.model, args.write), indent=1))
     elif args.command == 'smoke' and args.attach:

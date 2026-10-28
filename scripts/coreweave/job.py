@@ -164,12 +164,16 @@ def tags(job: dict[str, Any]) -> list[str]:
 
 def bootstrap_env(job: dict[str, Any]) -> dict[str, str]:
     """Non-secret environment the bootstrap reads (bootstrap.sh documents each name)."""
+    instance = job.get('env', {}).get('NATLANG_CW_INSTANCE')
+    if instance is not None and (not _ID.fullmatch(instance) or instance != job['id']):
+        raise JobError('NATLANG_CW_INSTANCE must equal the unique job id')
+    cw = f"{job['scratch']['path']}/.coreweave" + (f'/instances/{instance}' if instance else '')
     env = {
         'NATLANG_CW_JOB': job['id'],
         'NATLANG_CW_WORK': job['scratch']['path'],
         'NATLANG_CW_TRANSPORT': job['transport'],
         # Secret files cwctl delivers with the inputs (push_inputs); never environment values.
-        'NATLANG_CW_SECRETS': f"{job['scratch']['path']}/.coreweave/secrets",
+        'NATLANG_CW_SECRETS': f'{cw}/secrets',
         'PYTHONUNBUFFERED': '1',
         'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True',
     }

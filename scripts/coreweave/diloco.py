@@ -105,8 +105,48 @@ def learner_job(run: dict, worker: int, url: str) -> dict:
                          '--resident-geometry-qualification', run['resident']['geometry_qualification']]
         if any(flag in job['command'] for flag in ('--resident-data-directory', '--resident-geometry-qualification')):
             raise cwctl.ControllerError('declare resident paths in the run, not twice in the trainer command')
-    job.update(id=f"{run['id']}-learner-{worker}", env={**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)},
-               command=[*job['command'], *resident_args, '--diloco', json.dumps(settings, sort_keys=True)])
+    ident = f"{run['id']}-learner-{worker}"
+    environment = {**job['env'], 'NATLANG_DILOCO_WORKER_ID': str(worker)}
+    if job['scratch'].get('restore_from_snapshot_id'):
+        environment['NATLANG_CW_INSTANCE'] = ident
+    command = [*job['command'], *resident_args, '--diloco', json.dumps(settings, sort_keys=True)]
+    expected = environment.get('NATLANG_DILOCO_SEED_SHA256')
+    if job['scratch'].get('restore_from_snapshot_id') and expected:
+        import re
+        if not re.fullmatch('[0-9a-f]{64}', expected):
+            raise cwctl.ControllerError('restored seed needs its exact SHA-256')
+        parent = run['coordinator']['parent']
+        roots = []
+        if '--out' in command:
+            roots.append(command[command.index('--out') + 1])
+        if isinstance(run.get('resident'), dict):
+            roots.append(run['resident']['directory'])
+        work = job['scratch']['path'].rstrip('/')
+        if any(not path.startswith(work + '/') or os.path.normpath(path) != path for path in roots):
+            raise cwctl.ControllerError('restored worker state directories must be canonical scratch paths')
+        verify = r'''import hashlib,json,os,pathlib,sys
+p,want,instance,roots=sys.argv[1:]; roots=json.loads(roots)
+r=json.load(open(p+'.seed.json'))
+with open(p,'rb') as f: actual=hashlib.file_digest(f,'sha256').hexdigest()
+assert actual==want==r['sha256'], 'restored seed hash mismatch'
+assert r['global_step']>=r['requested_stop']>0 and r['full_optimizer_rng_exposure']
+control=pathlib.Path(os.environ.get('NATLANG_CW_WORK','/work'))/'.coreweave/instances'/instance
+marker=control/'clone-sanitized.json'; expected={'roots':roots,'seed_sha256':want}
+if marker.exists():
+ assert json.loads(marker.read_text())==expected, 'restored state quarantine identity changed'
+else:
+ quarantine=control/'inherited'; quarantine.mkdir(parents=True,exist_ok=True)
+ for i,name in enumerate(roots):
+  source=pathlib.Path(name); target=quarantine/str(i)
+  if source.is_symlink(): raise ValueError('inherited state root is a symlink')
+  if source.exists():
+   if target.exists(): raise ValueError('inherited state quarantine already exists')
+   os.rename(source,target)
+ with marker.open('x') as f:
+  json.dump(expected,f,sort_keys=True); f.flush(); os.fsync(f.fileno())
+'''
+        command = ['bash', '-c', f'{shlex.join(["python3", "-c", verify, parent, expected, ident, json.dumps(roots)])} && exec {shlex.join(command)}']
+    job.update(id=ident, env=environment, command=command)
     return jobs.validate(job)
 
 
