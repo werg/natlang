@@ -80,10 +80,10 @@ def cas_path(sha256: str) -> Path:
     return CAS / sha256[:2] / f'{sha256}.tar.gz'
 
 
-def git_trees(code_sha: str, repo: Path = REPO) -> dict[str, str]:
-    """Git object ids of the ts-host build inputs at a commit (blob or tree id; '' when absent)."""
+def git_trees(code_sha: str, repo: Path = REPO, paths=TSHOST_INPUTS) -> dict[str, str]:
+    """Git object ids of build inputs at a commit (blob or tree id; '' when absent)."""
     out = {}
-    for path in TSHOST_INPUTS:
+    for path in paths:
         result = subprocess.run(['git', '-C', str(repo), 'rev-parse', f'{code_sha}:{path}'], capture_output=True,
                                 text=True)
         out[path] = result.stdout.strip() if result.returncode == 0 else ''
@@ -124,14 +124,18 @@ def bundle_entries(names: list[str], code_sha: str | None, registry_path: Path =
         item = registry['artifacts'].get(name)
         if item is None:
             raise PrebuiltError(f'no prebuilt artifact {name!r}; registered: {", ".join(sorted(registry["artifacts"]))}')
-        if item['kind'] == 'ts-host':
+        if item['kind'] == 'ts-host' and not item.get('inputs'):
+            raise PrebuiltError('a ts-host artifact must record its source trees (inputs)')
+        if item.get('inputs'):  # ts-host sources; the wheelhouse's requirements.txt
             if not code_sha:
-                raise PrebuiltError('ts-host is bound to its source trees: plan it with --code-sha')
-            actual = git_trees(code_sha, repo)
-            if actual != item.get('inputs'):
-                changed = sorted(p for p in TSHOST_INPUTS if actual.get(p) != (item.get('inputs') or {}).get(p))
-                raise PrebuiltError(f'ts-host artifact was built from other sources ({", ".join(changed)} differ at '
-                                    f'{code_sha}); rebuild: prebuilt.py build-tshost --code-sha {code_sha}')
+                raise PrebuiltError(f'{name} is bound to its source trees: plan it with --code-sha')
+            actual = git_trees(code_sha, repo, tuple(item['inputs']))
+            if actual != item['inputs']:
+                changed = sorted(p for p in item['inputs'] if actual.get(p) != item['inputs'][p])
+                hint = (f'prebuilt.py build-tshost --code-sha {code_sha}' if item['kind'] == 'ts-host'
+                        else 'scripts/coreweave/jobs/prebuilt-build.json')
+                raise PrebuiltError(f'{name} artifact was built from other sources ({", ".join(changed)} differ at '
+                                    f'{code_sha}); rebuild: {hint}')
         source = cas_path(item['sha256'])
         if not source.is_file():
             raise PrebuiltError(f'{name}: CAS object {source} is missing')

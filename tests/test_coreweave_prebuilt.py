@@ -73,11 +73,11 @@ def test_tshost_artifact_is_refused_for_other_sources(tmp_path, cas, monkeypatch
     tar = make_tar(tmp_path / 't.tar.gz', {'ts-host/dist/index.js': b'1'})
     trees = {path: 'a' * 40 for path in prebuilt.TSHOST_INPUTS}
     prebuilt.register('ts-host', 'ts-host', tar, None, {'inputs': trees}, registry_path=cas)
-    monkeypatch.setattr(prebuilt, 'git_trees', lambda sha, repo=None: dict(trees))
+    monkeypatch.setattr(prebuilt, 'git_trees', lambda sha, repo=None, paths=None: dict(trees))
     assert len(prebuilt.bundle_entries(['ts-host'], 'HEAD', registry_path=cas)) == 2
     with pytest.raises(prebuilt.PrebuiltError, match='--code-sha'):
         prebuilt.bundle_entries(['ts-host'], None, registry_path=cas)
-    monkeypatch.setattr(prebuilt, 'git_trees', lambda sha, repo=None: {**trees, 'ts-host': 'b' * 40})
+    monkeypatch.setattr(prebuilt, 'git_trees', lambda sha, repo=None, paths=None: {**trees, 'ts-host': 'b' * 40})
     with pytest.raises(prebuilt.PrebuiltError, match='ts-host differ'):
         prebuilt.bundle_entries(['ts-host'], 'HEAD', registry_path=cas)
 

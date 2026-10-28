@@ -12,5 +12,5 @@
  "command": ["bash", "scripts/coreweave/lfm3_serve.sh", "eval", "runs/@@EVAL_ID@@",
              "scripts/coreweave/jobs/lfm3/dev-packet-spec.json", "@@GGUF_URL@@", "@@GGUF_SHA256@@"],
  "needs": {"gpu_memory_gb": 20, "hours": 2, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
- "bundle_plan": "bundle.py plan --code-sha SHA --prebuilt llama-cpp-neuralese-sm120 --prebuilt wheelhouse --prebuilt ts-host --extra runs/natlang-dev-task-packet-v2-20261028 [--extra GGUF] -o BUNDLE.json. For the official base use GGUF_PATH /work/models/LFM3-1.7B-BF16.gguf with its HF URL/sha256; for an exported checkpoint bundle its GGUF and pass file:// is not needed: LFM3_GGUF names the bundled path and the sha256 is checked."
+ "bundle_plan": "bundle.py plan --code-sha SHA --prebuilt llama-cpp-neuralese-sm120 --prebuilt wheelhouse --prebuilt ts-host --extra runs/natlang-dev-task-packet-v2-20261028 [--extra GGUF] -o BUNDLE.json. For the official base: GGUF_PATH /work/models/LFM3-1.7B-BF16.gguf with its HF URL and sha256 (downloaded in the sandbox). For an exported checkpoint: bundle its GGUF with --extra and set GGUF_PATH to that absolute path (no download; the sha256 is still checked)."
 }

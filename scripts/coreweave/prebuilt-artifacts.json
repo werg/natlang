@@ -18,6 +18,55 @@
    "node": "v24.0.1",
    "build_seconds": 12.2,
    "architecture_independent": true
+  },
+  "llama-cpp-neuralese-sm120": {
+   "kind": "llama-cpp",
+   "sha256": "cb3da79dca388b9ca4d194324907dbaaee8638b621b3ba1a0d94734de48d1f2c",
+   "bytes": 198727937,
+   "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+   "registered": "2026-10-28T08:54:24Z",
+   "git_sha": "85a2e7167fcf578e7823f639971ff51b79549a96",
+   "branch": "neuralese-lfm3",
+   "cuda_architectures": "120a-real",
+   "build_seconds": 178.3,
+   "build_sandbox": "6695c278-1f89-4a10-8930-58230c46de9a",
+   "build_nproc": 33,
+   "binaries": [
+    "llama-server",
+    "llama-state-span-dump",
+    "llama-logits-dump",
+    "llama-bench",
+    "llama-quantize",
+    "llama-cli",
+    "llama-perplexity"
+   ],
+   "linkage": "static ggml/llama; dynamic libcudart.so.13/libcublas.so.13/libcublasLt.so.13 from the image, libcuda.so.1 from the driver"
+  },
+  "llama-cpp-neuralese-fat": {
+   "kind": "llama-cpp",
+   "sha256": "84bb29d80f869bd1d87d63f1d8300123ae0652742a90d598a312a7d5789c9840",
+   "bytes": 472412318,
+   "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+   "registered": "2026-10-28T08:54:25Z",
+   "git_sha": "85a2e7167fcf578e7823f639971ff51b79549a96",
+   "branch": "neuralese-lfm3",
+   "cuda_architectures": "90a-real;100a-real;120a-real",
+   "build_seconds": 333.8,
+   "build_sandbox": "6695c278-1f89-4a10-8930-58230c46de9a",
+   "build_nproc": 33,
+   "note": "for H100/B200-class assignments; 2.4x the bytes of the sm120 artifact"
+  },
+  "wheelhouse": {
+   "kind": "wheelhouse",
+   "sha256": "eb8025dc5cf97b9ca8d72a36d4e260968fbfe5f0d2385b5798927cd37bebda2b",
+   "bytes": 50306185,
+   "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+   "registered": "2026-10-28T08:54:25Z",
+   "inputs": {"training/neuralese/docker/requirements.txt": "1421aca9ac4e42ee270fd337f053b7396bbb2a76"},
+   "code_sha": "9cbdb648b4a9debbcfb151ca43f9201aeaadaf2c",
+   "packages": 31,
+   "build_sandbox": "6695c278-1f89-4a10-8930-58230c46de9a",
+   "resolved_against": "the image pip constraints (/etc/pip/constraint.txt)"
   }
  }
 }
