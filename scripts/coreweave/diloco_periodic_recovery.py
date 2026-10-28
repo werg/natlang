@@ -506,14 +506,14 @@ progress=pathlib.Path('/work/diloco-learner/progress.json');value=None
 try:
  value=json.loads(progress.read_text());value={k:value.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
 except (OSError,ValueError):pass
-module=pathlib.Path('/home/werg/natlang/training/neuralese/natlang_neuralese/train/native_state_sft.py')
+module=pathlib.Path(sys.argv[2])
 try: module_sha=hashlib.sha256(module.read_bytes()).hexdigest()
 except OSError: module_sha=None
 print(json.dumps({'boot_id':boot,'pid_alive':alive,'progress':value,'runtime_module_sha256':module_sha}))"""
 
 def health_snapshot(record, ownership, *, read_sandbox=None):
     """Actual sandbox status, boot/PID ownership and last optimizer progress."""
-    read_sandbox=read_sandbox or cwctl.read_sandbox
+    read_sandbox=read_sandbox or (lambda ident: cwctl.read_sandbox(ident, patience=30))
     workers=ownership.get('workers') or {};ids=record['learners']
     def check(i):
         role=workers.get(str(i)) or {};ident=ids[i]
@@ -521,7 +521,9 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
             return str(i),{'sandbox_id':ident,'state':'ownership-unavailable'}
         try:
             box=read_sandbox(ident);box.get_status();status=str(getattr(box.status,'value',box.status)).lower()
-            r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role)],timeout_seconds=30).result(timeout=40)
+            module=(ownership.get('runtime') or {}).get('module_path') or str(
+                paths.root('repo')/'training/neuralese/natlang_neuralese/train/native_state_sft.py')
+            r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role),module],timeout_seconds=30).result(timeout=40)
             if r.returncode:raise ValueError('health probe failed')
             data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
             expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
