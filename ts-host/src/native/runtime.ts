@@ -572,7 +572,7 @@ export const runSeedKey = (options: { runId: string; runLabel?: string; seedId?:
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; returnErrorText?: ReturnErrorText };
+  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; runLabel?: string; seedId?: string; parentCallId?: string; returnErrorText?: ReturnErrorText };
   readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -598,7 +598,8 @@ export class NativeRuntime {
     this.untrusted = options.frame ? scopedUntrusted(options.frame.task) : new UntrustedRegistry(hostUntrusted);
     const run = runIdentity(options);
     this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: run.runId,
-      ...(run.runLabel !== undefined ? { runLabel: run.runLabel } : {}), seedId: options.seedId, returnErrorText: options.returnErrorText };
+      ...(run.runLabel !== undefined ? { runLabel: run.runLabel } : {}), seedId: options.seedId,
+      parentCallId: options.parentCallId, returnErrorText: options.returnErrorText };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
     this.episodeBudget = options.sharedEpisodeBudget ?? { used: 0 };

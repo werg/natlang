@@ -1169,7 +1169,7 @@ export class NativeToolAgent {
         throw new NeuraleseUnsupportedError('this model backend cannot apply weight adapters');
       // model-call-kind: decision-readout -- training/model-call-kinds.json
       scores = await runInFrame(session.runtime.frame, () => decide({ messages: encoded.messages, options: replies,
-        ...(callId ? { invocation_id: callId, invocation_role: (session.runtime.frame?.chain.length ?? 0) > 0 ? 'child' as const : 'root' as const } : {}),
+        ...(callId ? { invocation_id: callId, invocation_role: session.runtime.options.parentCallId ? 'child' as const : 'root' as const } : {}),
         ...(capturedGuidance ? { x_natlang_privileged_context: capturedGuidance } : {}),
         ...(adapters.length ? { adapters } : {}) }, session.runtime.signal));
     } catch (error) {
