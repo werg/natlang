@@ -1408,13 +1408,12 @@ def configure_native(args):
     policy_loss = declared_loss or recipe_loss
     if policy_loss is None:
         # Improvements ship on by default (owner 2026-10-28): new configs get JOLT+ with score-centered
-        # outcome terms; per-invocation coefficient actors and semantic codec graphs do not have privileged
-        # twins yet and get score-centered/1.
+        # outcome terms (per-invocation coefficient actors included: a twin runs its sampled invocation's
+        # actor); semantic codec graphs do not have privileged twins yet and get score-centered/1.
         from .policy_math import default_policy_loss, DEFAULT_SCORE_CENTERED
-        policy_loss = (dict(DEFAULT_SCORE_CENTERED) if (getattr(args, 'coefficient_policy', None) is not None or semantic)
-                       else default_policy_loss())
-    elif policy_loss['schema'] == 'jolt-plus/1' and (getattr(args, 'coefficient_policy', None) is not None or semantic):
-        raise ValueError('JOLT+ privileged twins are not yet supported for coefficient or semantic actors')
+        policy_loss = dict(DEFAULT_SCORE_CENTERED) if semantic else default_policy_loss()
+    elif policy_loss['schema'] == 'jolt-plus/1' and semantic:
+        raise ValueError('JOLT+ privileged twins are not yet supported for semantic codec actors')
     parameters = {key: value for key, value in parameters.items()
                   if key in HANDLERS['native_offline_preference' if stages[0]['kind']=='native_offline_preference' else 'native_state_sft']['parameters'] and value is not None}
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent

@@ -57,7 +57,8 @@ class Recipe:
     - `epochs` (passes over the admitted rows of all objectives) can replace `steps`.
     - `objectives`: logical step k trains objective objectives[k % n] (each with its own cursor), so ["sft", "rl"]
       alternates supervised and policy updates of the same state; one step never mixes objectives. "sft" supervises
-      the teacher's turns; "rl" is the clipped group-relative policy objective over whole recorded episodes; "rft" is
+      the teacher's turns; "rl" is the shared whole-graph policy objective over whole recorded episodes (`rl_policy_loss`,
+      default JOLT+ with score-centered/TIS outcome terms, rl.policy_math.default_policy_loss); "rft" is
       global supervision of whole successful episodes (quality >= `rft_min_quality`): teacher-forced loss on every
       action of the episode's complete graph, backpropagated through every producer/consumer dependency (Neuralese
       spans and soft states included) into every node and state that ran. An objective without admitted rows or
@@ -90,6 +91,9 @@ class Recipe:
     objectives: list = field(default_factory=lambda: ['sft'])
     basis: str | None = None
     rft_min_quality: float = 1.
+    # The "rl" policy loss (rl.policy_math.policy_loss_declaration). None: the shared default for a new or continued
+    # fit (JOLT+); an in-flight fit resuming its own state keeps the loss it was bound with (`bound_rl_policy_loss`).
+    rl_policy_loss: dict | None = None
 
     @classmethod
     def from_json(cls, value):
@@ -122,6 +126,12 @@ class Recipe:
             raise TuneMathError('objectives is a nonempty list of sft, rl and rft')
         if type(recipe.rft_min_quality) not in (int, float) or not 0 < recipe.rft_min_quality <= 1:
             raise TuneMathError('rft_min_quality is a quality in (0, 1]')
+        if recipe.rl_policy_loss is not None:
+            from ..rl.policy_math import policy_loss_declaration
+            try:
+                recipe.rl_policy_loss = policy_loss_declaration(recipe.rl_policy_loss)
+            except ValueError as error:
+                raise TuneMathError(str(error)) from error
         return recipe
 
     def as_json(self):
@@ -134,6 +144,33 @@ LEGACY_PROMPT_WEIGHT = .1  # the Recipe default before 2026-10-28
 def bound_prompt_weight(state):
     """The prompt weight an existing trainer state was bound with (states before 2026-10-28 used the 0.1 default)."""
     return float(state.get('recipe_prompt_weight', LEGACY_PROMPT_WEIGHT))
+
+
+LEGACY_RL_POLICY_LOSS = {'schema': 'clipped-ratio/1'}  # the "rl" objective before 2026-10-28
+
+
+def bound_rl_policy_loss(state):
+    """The RL policy loss a trainer state was bound with: its recorded loss; states before 2026-10-28 that trained
+    RL used the clipped ratio loss; None for a state that never trained RL."""
+    if 'recipe_rl_policy_loss' in state:
+        return state['recipe_rl_policy_loss']
+    if any(key.startswith('rl:') for key in state.get('exposure', {})) or state.get('rl_epoch') or state.get('rl_position'):
+        return dict(LEGACY_RL_POLICY_LOSS)
+    return None
+
+
+def resolve_rl_policy_loss(recipe, state=None):
+    """The effective RL policy loss: an in-flight fit resuming its own ``state`` finishes with the loss it was bound
+    with (an explicit different recipe loss is refused); a new or continued fit gets the recipe's loss, else the
+    shared default."""
+    from ..rl.policy_math import default_policy_loss
+    if state is not None:
+        bound = bound_rl_policy_loss(state)
+        if bound is not None:
+            if recipe.rl_policy_loss is not None and recipe.rl_policy_loss != bound:
+                raise TuneMathError('a resumed fit keeps its bound RL policy loss; continue it as a new fit to adopt another')
+            return bound
+    return recipe.rl_policy_loss if recipe.rl_policy_loss is not None else default_policy_loss()
 
 
 def resolve_prompt_weight(recipe_json, state=None):
@@ -252,6 +289,7 @@ class JointTrainer:
         if set(self.pinned) & set(self.warm):
             raise TuneMathError('a node is either pinned or warm-started, not both')
         self._soft_initial = {}
+        self.rl_policy_loss = None
         from .rl import ROLLOUT_SCHEMA
         rollouts = [row for row in rows if isinstance(row, dict) and row.get('schema') == ROLLOUT_SCHEMA]
         sft = [row for row in rows if not (isinstance(row, dict) and row.get('schema') == ROLLOUT_SCHEMA)]
@@ -264,10 +302,12 @@ class JointTrainer:
             if workdir is None:
                 raise TuneMathError('RL admission needs a work directory for its behavior bundle and objective')
             from .rl import RLEpisodes
+            self.rl_policy_loss = resolve_rl_policy_loss(recipe, state)
             for kind in sorted(episodic):
                 # Each objective archives its own behavior bundle and registered objective.
                 self.episodes[kind] = RLEpisodes(engine, rollouts, Path(workdir) / kind if kind == 'rft' else workdir,
-                                                 mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality)
+                                                 mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality,
+                                                 policy_loss=self.rl_policy_loss if kind == 'rl' else None)
             self._admit_rl()
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
@@ -347,8 +387,12 @@ class JointTrainer:
     @property
     def input_sha256(self):
         # The step budget is where to stop, not what a step does: extending it continues the same run.
-        recipe = {key: value for key, value in self.recipe.as_json().items() if key not in ('steps', 'epochs')}
+        recipe = {key: value for key, value in self.recipe.as_json().items()
+                  if key not in ('steps', 'epochs', 'rl_policy_loss')}
+        # The effective RL loss binds the input; the historical clipped loss keeps pre-2026-10-28 inputs unchanged.
+        loss = self.rl_policy_loss if 'rl' in self.episodes and self.rl_policy_loss != LEGACY_RL_POLICY_LOSS else None
         return canonical_json_sha256_hex({'manifest': self.manifest, 'recipe': recipe,
+            **({'rl_policy_loss': loss} if loss is not None else {}),
             'rows': [[row['binding'], row['occurrence'], row['evidence_weight'], canonical_json_sha256_hex(row['graph']),
                       *([row['bindings']] if 'bindings' in row else [])] for row in self.rows], 'targets': self.target_names,
             **({'pinned': self.pinned} if self.pinned else {}), **({'warm': self.warm} if self.warm else {}),
@@ -453,6 +497,8 @@ class JointTrainer:
                  'rl_epoch': 0, 'rl_position': 0, 'exposure': {}, 'losses': []}
         if self.pinned or self.warm:
             state['incremental'] = incremental
+        if 'rl' in self.episodes:
+            state['recipe_rl_policy_loss'] = self.rl_policy_loss
         state['input_sha256'] = self.input_sha256
         return state
 
@@ -483,8 +529,18 @@ class JointTrainer:
             # A continued round adopts the current prompt weight; the change is recorded, never silent.
             transitions.append({'prompt_weight': {'from': bound_prompt_weight(parent), 'to': float(self.recipe.prompt_weight)},
                                 'parent_input_sha256': parent['input_sha256'], 'parent_step': parent['step']})
+        parent_loss = bound_rl_policy_loss(parent)
+        if 'rl' in self.episodes and parent_loss is not None and parent_loss != self.rl_policy_loss:
+            # A continued fit adopts the current RL policy loss (owner 2026-10-28: improvements on by default,
+            # continuations included); its optimizer history carries over and the change is recorded.
+            transitions.append({'rl_policy_loss': {'from': parent_loss, 'to': self.rl_policy_loss},
+                                'parent_input_sha256': parent['input_sha256'], 'parent_step': parent['step']})
         if transitions:
             state['recipe_transitions'] = transitions
+        if 'rl' in self.episodes:
+            state['recipe_rl_policy_loss'] = self.rl_policy_loss
+        elif parent_loss is not None:
+            state['recipe_rl_policy_loss'] = parent_loss
         state['recipe_prompt_weight'] = float(self.recipe.prompt_weight)
         state['input_sha256'] = self.input_sha256
         return state

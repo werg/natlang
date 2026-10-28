@@ -223,6 +223,22 @@ def privileged_source(rollouts, *, cases, rendering, custody, fetch_text=None, t
     return build
 
 
+def twin_sources(row):
+    """{twin invocation: the sampled invocation it mirrors} of one admitted objective row ({} without a twin).
+
+    A twin runs the actor of its sampled invocation: per-invocation coefficient actors (tuning stacks) declare the
+    same adapters for both, and the twin is a stop-gradient target, never a separately sampled actor.
+    """
+    info = row.get('jolt') or {}
+    suffix = PRIVILEGED_SUFFIX.get(info.get('role'))
+    result = {}
+    for name in info.get('twin_turns') or ():
+        if suffix is None or not name.endswith(suffix) or not name[:-len(suffix)]:
+            raise ValueError('JOLT+ twin turn does not name its sampled invocation')
+        result[name] = name[:-len(suffix)]
+    return result
+
+
 def _renamed(invocations, suffix):
     """The same invocations under twin names; imports from twinned invocations follow their twins."""
     from dataclasses import replace

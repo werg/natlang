@@ -65,7 +65,10 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
             raise ValueError('immutable invocation admission archive changed its source binding')
         write_json_durable(destination,rebound)
         return prepare_objective(rollouts,identity=identity,roles=RoleTokens(*marker_ids),fetch_block=fetch,
-                                 block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss)
+                                 block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss,
+                                 privileged=_jolt_source(policy_loss,mode,rows=rollouts,tokenizer=tokenizer,cases=jolt_cases,
+                                                         roles=RoleTokens(*marker_ids),tokenizer_fingerprint=fingerprint,
+                                                         fetch_text=lambda state_id: fetch(state_id).text))
     policies = [turn['sampling']['policy'] for row in rollouts if row.get('reward') is not None
                 for turn in row.get('turns', []) if (turn.get('sampling') or {}).get('policy')]
     actor_decl = json.loads(Path(actors).read_text()) if actors is not None else None
@@ -100,20 +103,25 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     def fetch(block_id):
         if reader is None:raise ValueError('native RL state requires its durable actor bundle')
         return reader.state(block_id)
-    from .policy_math import policy_loss_declaration
-    declared = policy_loss_declaration(policy_loss)
-    privileged = None
-    if declared is not None and declared['schema'] == 'jolt-plus/1' and mode == 'grpo':
-        privileged = jolt_privileged_source(rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
-                                            tokenizer_fingerprint=fingerprint,
-                                            fetch_text=lambda state_id: fetch(state_id).text)
+    privileged = _jolt_source(policy_loss, mode, rows=rollouts, tokenizer=tokenizer, cases=jolt_cases, roles=roles,
+                              tokenizer_fingerprint=fingerprint, fetch_text=lambda state_id: fetch(state_id).text)
+
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
         privileged=privileged, actors=actor_decl)
 
 
+def _jolt_source(policy_loss, mode, **options):
+    from .policy_math import policy_loss_declaration
+    declared = policy_loss_declaration(policy_loss)
+    if declared is None or declared['schema'] != 'jolt-plus/1' or mode != 'grpo':
+        return None
+    return jolt_privileged_source(**options)
+
+
 def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None, fetch_text=None):
-    """Verified captured guidance (rl.privileged_context) for JOLT+; custody fails closed per episode.
+    """Verified captured guidance for JOLT+; custody fails closed per episode.
+
 
     Without readable protected packets or bound training cases every student episode is refused a privileged
     teacher (recorded per row) and keeps its outcome term; nothing is dropped from RL.
