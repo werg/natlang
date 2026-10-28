@@ -175,6 +175,45 @@ def _trainable(path, base):
     return model, native_trainable_parameters(model)
 
 
+def _checkpoint_surface(path, base):
+    """Map the full checkpoint's optimizer-bound trainable surface without a CPU model copy.
+
+    The checkpoint is mmap-backed; coordinator fragments cast only as needed.
+    Learners still independently verify the complete name/shape fingerprint.
+    """
+    from ..model.native_model import CHECKPOINT_SCHEMA, base_inventory
+    from ..common.hashing import canonical_json_sha256_hex
+    from .checkpoint_policy import CheckpointPolicy
+    state=CheckpointPolicy.load(path)
+    config=state.get('model_config') or {};training=state.get('training') or {}
+    if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture')!='lfm3':
+        raise ValueError('streamed coordinator seed requires an LFM3 full native checkpoint')
+    if not training.get('rng') or not training.get('exposure_counts') or not training.get('source_receipts'):
+        raise ValueError('streamed coordinator seed requires full RNG/exposure/source custody')
+    inventory=base_inventory(base or config.get('base'))
+    if inventory!=config.get('base_inventory') or canonical_json_sha256_hex(inventory)!=config.get('base_inventory_sha256'):
+        raise ValueError('coordinator checkpoint base inventory differs')
+    groups=(training.get('optimizer') or {}).get('param_names')
+    if not isinstance(groups,dict) or not groups or not all(isinstance(v,list) for v in groups.values()):
+        raise ValueError('coordinator checkpoint lacks named optimizer bindings')
+    names=[name for group in groups.values() for name in group]
+    if not names or len(names)!=len(set(names)) or not all(isinstance(name,str) for name in names):
+        raise ValueError('coordinator checkpoint parameter bindings are invalid')
+    backbone=state.get('backbone_state') or {};interface=state.get('interface_state') or {};masters={}
+    for name in names:
+        if name.startswith('backbone.'):
+            value=backbone.get(name.removeprefix('backbone.'))
+        elif name.startswith('interface.adapter.'):
+            value=(interface.get('adapter') or {}).get(name.removeprefix('interface.adapter.'))
+        elif name.startswith('interface.'):
+            value=interface.get(name.removeprefix('interface.'))
+        else:raise ValueError('unknown coordinator parameter binding '+name)
+        if not isinstance(value,torch.Tensor) or not value.is_floating_point():
+            raise ValueError('missing floating coordinator parameter '+name)
+        masters[name]=value
+    return masters
+
+
 DEFAULT_COORDINATOR_EMA = {'decay': 0.99, 'warmup': 0}
 
 
@@ -190,9 +229,9 @@ def parse_coordinator_ema(text):
 
 def init(args):
     settings = DilocoSettings.from_dict(json.loads(args.settings))
-    _, named = _trainable(args.parent, args.base)
+    masters = _checkpoint_surface(args.parent, args.base)
     manifest = initialize_coordinator(
-        args.root, run_id=settings.run_id, masters={name: p.detach() for name, p in named},
+        args.root, run_id=settings.run_id, masters=masters,
         identity=identity(args.parent, json.loads(args.trainer_argv), settings),
         workers=settings.workers, min_quorum=args.quorum or settings.workers, fragment_bytes=args.fragment_mib << 20,
         outer_lr=args.outer_lr, outer_momentum=args.outer_momentum, grace_seconds=args.grace_seconds,
