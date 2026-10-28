@@ -106,7 +106,9 @@ def load_scores(files):
                 'chars': row.get('natlang_chars', 0) + row.get('generic_tool_chars', 0) + row.get('chat_chars', 0),
                 'markers': row.get('text_neuralese_markers', 0), 'reducer': bool(row.get('reducer')),
                 'folder_apply': row.get('folder_apply_calls', 0), 'reducer_cursor': bool(row.get('reducer_iterate_cursor')),
-                'domain': row.get('domain'), 'task_kind': row.get('task_kind'), 'child': bool(row.get('child'))}
+                'domain': row.get('domain'), 'task_kind': row.get('task_kind'), 'child': bool(row.get('child')),
+                'family_text': ' '.join(str(row.get(k) or '') for k in ('family', 'curriculum_family', 'task_kind',
+                                                                          'program'))}
             trajectories[decisions[row['id']]['trajectory']].append(row['id'])
             census[f'{row["category"]}:{"positive" if not reasons else "excluded"}'] += 1
             for reason in reasons:
@@ -174,6 +176,41 @@ def holds(condition: dict, features: dict) -> bool:
         if 'lt' in test and not value < test['lt']:
             return False
     return True
+
+
+class OracleRegradeHold:
+    """Rows of task families graded by superseded (exploitable) oracles stay out until a regrade passes them
+    (policy ``oracle_regrade_hold``; 2026-10-28: edit_stream / contract_diagnosis, inventory
+    plans/neuralese/oracle-repair-20261028/old-oracle-admitted-sources.json). Reference replays (generator references,
+    correct by construction, e.g. static-lambda) are exempt; ``regrade_passed`` files (JSON lines with ``id``: a source
+    record / teacher decision id) re-admit regraded rows."""
+
+    def __init__(self, hold: dict | None):
+        self.hold = hold or {}
+        self.pattern = re.compile('|'.join(map(re.escape, self.hold.get('families', []))) or r'(?!)')
+        exempt = list(self.hold.get('exempt_path_markers', []))
+        inventory = self.hold.get('inventory')
+        if inventory and (REPO / inventory).exists():
+            for item in json.loads((REPO / inventory).read_text()).get('corpora_with_family_mentions_in_scanned_files', []):
+                if str(item.get('kind', '')).startswith('reference replay'):
+                    exempt.append(item['corpus'])
+        self.exempt = exempt
+        self.passed = set()
+        for listed in self.hold.get('regrade_passed', []):
+            if (REPO / listed).exists():
+                for _, raw in iter_lines(REPO / listed):
+                    self.passed.add(json.loads(raw)['id'])
+
+    def reason(self, path, known: list, ids: list) -> str | None:
+        if not self.hold:
+            return None
+        if not any(self.pattern.search(k.get('family_text') or f"{k.get('family')} {k.get('task_kind')}") for k in known):
+            return None
+        if any(marker in str(path) for marker in self.exempt):
+            return None
+        if ids and all(i in self.passed for i in ids):
+            return None
+        return 'oracle regrade hold: family graded by a superseded oracle, not yet regraded'
 
 
 def classify(features: dict, policy: dict):
@@ -293,6 +330,7 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
         seen |= prior[3]
     carve = policy.get('held_carve')
     feature_cache = {}
+    regrade = OracleRegradeHold(policy.get('oracle_regrade_hold'))
     inputs = [('render', view, path) for render in config['renders'] for view, path in graph_files(render, 'train')]
     inputs += [('teacher', 'teacher-turn', REPO / p) for p in config.get('teacher_graphs', [])]
     for kind, view, path in inputs:
@@ -323,6 +361,10 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
                 continue
             if not all(k['positive'] for k in known):
                 omitted[f'{view}: holds a non-positive decision (unverified, un-awaited nl, failed action, hold)'] += 1
+                continue
+            held_back = regrade.reason(path, known, ids)
+            if held_back:
+                omitted[held_back] += 1
                 continue
             if any(d in covered for d in ids):
                 omitted[f'{view}: decision already taken by another sample'] += 1
