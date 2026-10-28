@@ -135,7 +135,8 @@ def test_two_http_learners_train_and_merge(tmp_path):
         learner = DilocoLearner(settings, surface=surface, identity={"objective": "toy"}, output=tmp_path / f"w{worker}", transport=Transport(settings.coordinator_url, TOKEN, 5))
         learners.append((model, torch.optim.AdamW(model.parameters(), lr=1e-2), learner))
     # Start barrier: learner 0 boots first and waits until its peer has registered.
-    starter = threading.Thread(target=learners[0][2].start)
+    learners[0][2].start()  # Returns before quorum so qualification can run.
+    starter = threading.Thread(target=learners[0][2].await_training_start)
     starter.start()
     time.sleep(0.5)
     assert starter.is_alive()

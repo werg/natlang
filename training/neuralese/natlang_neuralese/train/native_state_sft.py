@@ -2791,6 +2791,10 @@ def _main(argv=None, *, requested_refresh):
                             collect_accuracy=False, allow_communication_prefixes=backend is None))
                 finally:
                     restore_training_rng_state(calibration_rng, args.device)
+            # Qualification and calibration can run while peers register.  Preserve
+            # the common starting point by waiting before the first optimizer update.
+            if diloco is not None:
+                diloco.await_training_start()
             try:
                 if logit_probe is not None:
                     from ..model.attention_probe import probing

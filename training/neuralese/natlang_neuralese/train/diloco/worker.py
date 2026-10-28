@@ -413,13 +413,19 @@ class DilocoLearner:
         """
         self._adopt_ledger(self._lease())
         self._start_heartbeat()
-        self._start_barrier()
+        self._start_barrier_pending = True
         for index in range(len(self.fragments)):
             update = self._fetch(index, -1)
             if update is not None and update[0] == 0:
                 if not torch.equal(update[1], pack_fragment(self.surface.masters, self.fragments[index])):
                     raise ValueError(f"DiLoCo seed fragment {index} differs from this learner's parent weights")
             self._install(index, update)
+
+    def await_training_start(self) -> None:
+        """Wait only at the first optimizer update, after read-only qualification."""
+        if getattr(self, '_start_barrier_pending', False):
+            self._start_barrier()
+            self._start_barrier_pending = False
 
     def _start_barrier(self) -> None:
         """Wait (heartbeating) until all learners registered, or a quorum did and start_grace_seconds passed."""
