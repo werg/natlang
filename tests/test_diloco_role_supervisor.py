@@ -132,3 +132,51 @@ def test_actor_owner_refuses_live_orphan_after_owner_crash(tmp_path):
         if child:
             try: os.kill(child, signal.SIGTERM)
             except ProcessLookupError: pass
+
+
+def test_uncommitted_spawn_intent_blocks_duplicate_start(tmp_path):
+    supervisor=Path(__file__).parents[1]/'scripts/coreweave/diloco_role_supervisor.py'
+    control=tmp_path/'control';control.mkdir()
+    state={'schema':'natlang.diloco-role-supervisor/1','generation':0,'roles':{},
+           'pending_start':{'request_id':'start-worker','role':'worker','owner_id':'old',
+                            'argv_sha256':'a'*64},'events':[]}
+    path=control/'state.json';path.write_text(json.dumps(state))
+    result=subprocess.run([sys.executable,str(supervisor),str(control)],capture_output=True,text=True,timeout=8)
+    assert result.returncode!=0 and 'died during a role start' in result.stderr
+    assert json.loads(path.read_text())==state
+
+
+def test_real_owner_crash_between_spawn_and_pid_commit_keeps_start_intent(tmp_path):
+    repo=Path(__file__).parents[1];control=tmp_path/'control';marker=tmp_path/'child-pid'
+    script="""import os,sys,subprocess
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import diloco_role_supervisor as owner
+real=subprocess.Popen
+def crash_after_spawn(*args,**kwargs):
+ real(*args,**kwargs)
+ os._exit(77)
+owner.subprocess.Popen=crash_after_spawn
+owner.main(Path(sys.argv[2]))"""
+    proc=subprocess.Popen([sys.executable,'-c',script,str(repo/'scripts/coreweave'),str(control)])
+    child=None
+    try:
+        deadline=time.monotonic()+10
+        while not (control/'state.json').exists() and time.monotonic()<deadline:time.sleep(.02)
+        state=json.loads((control/'state.json').read_text())
+        request={'schema':'natlang.diloco-role-request/1','id':'gap','role':'worker','action':'start',
+                 'owner_id':state['owner_id'],'expected_generation':state['generation'],
+                 'argv':[sys.executable,'-c','import os,pathlib,sys,time;pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));time.sleep(60)',str(marker)]}
+        tmp=control/'request.tmp';tmp.write_text(json.dumps(request));os.replace(tmp,control/'request.json')
+        assert proc.wait(timeout=10)==77
+        while not marker.exists() and time.monotonic()<deadline:time.sleep(.02)
+        child=int(marker.read_text())
+        assert json.loads((control/'state.json').read_text())['pending_start']['request_id']=='gap'
+        second=subprocess.run([sys.executable,str(repo/'scripts/coreweave/diloco_role_supervisor.py'),str(control)],
+                              capture_output=True,text=True,timeout=8)
+        assert second.returncode!=0 and 'died during a role start' in second.stderr
+    finally:
+        if proc.poll() is None:proc.kill();proc.wait()
+        if child:
+            try:os.kill(child,signal.SIGTERM)
+            except ProcessLookupError:pass

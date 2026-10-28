@@ -28,6 +28,8 @@ def main(directory: Path) -> None:
     roles={};stopping=False
     path=directory/'state.json'
     previous=json.loads(path.read_text()) if path.exists() else {}
+    if previous.get('pending_start'):
+        raise RuntimeError('previous supervisor died during a role start; reconcile its recorded intent before replacement')
     if previous.get('boot_id') == boot:
         for role, info in previous.get('roles', {}).items():
             if info.get('alive'):
@@ -79,8 +81,14 @@ def main(directory: Path) -> None:
                     if not isinstance(env,dict) or not all(isinstance(k,str) and isinstance(x,str) for k,x in env.items()):raise ValueError('invalid environment')
                     child_env={**os.environ,**env}
                     if role=='coordinator':child_env['CUDA_VISIBLE_DEVICES']=''
+                    state['pending_start']={'request_id':v['id'],'role':role,'owner_id':owner_id,
+                        'argv_sha256':hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()}
+                    save()
                     log=(directory/(role+'.log')).open('ab',buffering=0)
-                    try:roles[role]=subprocess.Popen(argv,env=child_env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+                    try:
+                        try:roles[role]=subprocess.Popen(argv,env=child_env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+                        except Exception:
+                            state.pop('pending_start',None);save();raise
                     finally:log.close()
                 elif action=='stop':
                     if not prior or prior.poll() is not None:raise ValueError('role not alive')
@@ -91,6 +99,7 @@ def main(directory: Path) -> None:
                 event={'event':action,'role':role,'request_id':v['id'],'pid':roles[role].pid}
                 if action=='start':event['argv_sha256']=hashlib.sha256(json.dumps(argv,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
                 state['events'].append(event)
+                if action=='start':state.pop('pending_start',None)
                 save();_atomic(directory/'result.json',{'id':v['id'],'accepted':True,'generation':generation,'pid':roles[role].pid})
             except Exception as e:
                 _atomic(directory/'result.json',{'id':v.get('id') if isinstance(v,dict) else None,'accepted':False,'error':str(e)[:500],'generation':generation})
