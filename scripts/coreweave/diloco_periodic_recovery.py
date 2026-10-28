@@ -17,6 +17,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import threading
 import uuid
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
@@ -493,15 +494,69 @@ def run_once(record,state_path,backend):
         return state
 
 
+
+_HEALTH_PROBE = r"""import json,pathlib,sys
+expected=json.loads(sys.argv[1]);boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+p=pathlib.Path('/proc')/str(expected['pid']); alive=False
+try:
+ fields=(p/'stat').read_text().split(') ',1)[1].split();alive=boot==expected['boot_id'] and fields[19]==str(expected['start_ticks']) and fields[0]!='Z'
+except (OSError,ValueError,IndexError):pass
+progress=pathlib.Path('/work/diloco-learner/progress.json');value=None
+try:
+ value=json.loads(progress.read_text());value={k:value.get(k) for k in ('global_step','step','timestamp','checkpoint_step')}
+except (OSError,ValueError):pass
+print(json.dumps({'boot_id':boot,'pid_alive':alive,'progress':value}))"""
+
+def health_snapshot(record, ownership, *, read_sandbox=None):
+    """Actual sandbox status, boot/PID ownership and last optimizer progress."""
+    read_sandbox=read_sandbox or cwctl.read_sandbox
+    workers=ownership.get('workers') or {};ids=record['learners']
+    def check(i):
+        role=workers.get(str(i)) or {};ident=ids[i]
+        if role.get('sandbox_id')!=ident or not all(k in role for k in ('pid','boot_id','start_ticks')):
+            return str(i),{'sandbox_id':ident,'state':'ownership-unavailable'}
+        try:
+            box=read_sandbox(ident);box.get_status();status=str(getattr(box.status,'value',box.status)).lower()
+            r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(role)],timeout_seconds=30).result(timeout=40)
+            if r.returncode:raise ValueError('health probe failed')
+            data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
+            data['state']='live' if status=='running' and data['pid_alive'] else 'dead-or-replaced'
+            return str(i),data
+        except Exception as error:return str(i),{'sandbox_id':ident,'state':'unavailable','error_type':type(error).__name__}
+    with ThreadPoolExecutor(max_workers=len(ids)) as pool:return dict(pool.map(check,range(len(ids))))
+
+def health_loop(record, ownership_path, destination, interval):
+    while True:
+        try:
+            ownership=json.loads(Path(ownership_path).read_text());workers=health_snapshot(record,ownership)
+            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'at':time.time(),'workers':workers}
+            durable_json(destination,value)
+            print(json.dumps({'event':'worker_health','workers':workers},sort_keys=True),flush=True)
+        except Exception as error:
+            print(json.dumps({'event':'worker_health_unavailable','error_type':type(error).__name__}),flush=True)
+        time.sleep(interval)
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
     p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
     p.add_argument('--parent-qualification',type=Path,required=True);p.add_argument('--parent-copy-receipt',type=Path,required=True);p.add_argument('--interval',type=float,default=1800)
-    p.add_argument('--once',action='store_true');args=p.parse_args()
+    p.add_argument('--once',action='store_true');p.add_argument('--ownership-journal',type=Path);p.add_argument('--health-interval',type=float,default=60);p.add_argument('--wait-worker-progress',action='store_true');args=p.parse_args()
     if args.interval <= 0:p.error('interval must be positive')
     cwctl.load_env_file()
     import diloco
     record=json.loads((diloco.RUNS/(args.run_id+'.json')).read_text())
+    if args.health_interval<=0:p.error('health interval must be positive')
+    if args.ownership_journal:
+        health_path=args.state.with_name(args.state.stem+'-health.json')
+        threading.Thread(target=health_loop,args=(record,args.ownership_journal,health_path,args.health_interval),daemon=True).start()
+    if args.wait_worker_progress:
+        if not args.ownership_journal:p.error('waiting for worker progress requires an ownership journal')
+        while True:
+            try:
+                health=json.loads(health_path.read_text());workers=health['workers']
+                if len(workers)==len(record['learners']) and all(v['state']=='live' and isinstance(v.get('progress'),dict) and type(v['progress'].get('global_step')) is int for v in workers.values()):break
+            except (OSError,ValueError,KeyError):pass
+            time.sleep(args.health_interval)
     backend=Backend(record,args.storage,args.parent_local,args.parent_qualification,args.parent_copy_receipt)
     while True:
         try:
