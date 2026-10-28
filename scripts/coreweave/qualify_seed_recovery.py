@@ -2,7 +2,7 @@
 """Decode and verify an independently downloaded full seed in its own ledger unit."""
 import argparse
 from pathlib import Path
-from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.checkpoint_digest import verified_checkpoint_digest
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
@@ -13,7 +13,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('checkpoint',type=Path);parser.add_argument('sha256');parser.add_argument('bytes',type=int)
     parser.add_argument('step',type=int);parser.add_argument('out',type=Path);args=parser.parse_args()
-    if args.checkpoint.stat().st_size!=args.bytes or sha256_file_hex(args.checkpoint,drop_cache=True)!=args.sha256:
+    if args.checkpoint.stat().st_size!=args.bytes or verified_checkpoint_digest(args.checkpoint)!=args.sha256:
         raise ValueError('independent seed copy differs from exact size/hash')
     state=CheckpointPolicy.load(args.checkpoint);training=state.get('training') or {}
     if (state.get('schema')!=CHECKPOINT_SCHEMA or training.get('schema')!=TRAINING_SCHEMA
