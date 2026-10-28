@@ -122,7 +122,7 @@ fi
 # Privileged facts through the shared JOLT+ mechanism; custody against every registered evaluation-only packet of
 # this checkout's registry, read under PROTECTED_ROOT (the checkout holding runs/<packet>/cases.jsonl; fails closed).
 stage supply "$STAGE_BUDGET_GB" privileged $ENV $PY -m natlang_neuralese.tune.supply privileged --programs "$PROGRAMS" \
-  --registry "$REPO/training/neuralese_corpora.json" --root "${PROTECTED_ROOT:-$REPO}"
+  --registry "$REPO/training/protected-worlds.json" --root "${PROTECTED_ROOT:-$REPO}"
 
 # Program tunes, one ledger unit per program (CoreWeave sandboxes can run disjoint program shards of this loop).
 mapfile -t TUNE_PROGRAMS < <(python3 -c 'import json,sys; [print(sys.argv[1] + "/" + item["program"]) for item in json.load(open(sys.argv[1] + "/programs-prepared.json"))["programs"]]' "$PROGRAMS")

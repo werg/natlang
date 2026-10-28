@@ -579,11 +579,11 @@ def privileged_rows(directory, program, custody):
 def write_privileged(programs_dir, names=None, *, registry=None, root=None, custody=None):
     """Write `tune.privileged.jsonl` beside each prepared program (identical content is left alone; a different
     existing file is an error: references bind the split and custody they were derived from). Custody is the shared
-    `ProtectedWorlds.from_registry(registry, root)` (default: this checkout's corpus registry), failing closed."""
-    from ..rl.privileged_context import ProtectedWorlds
+    `ProtectedWorlds.load(root, registry)` (default: the shared protected-worlds registry), failing closed."""
+    from ..common.custody import ProtectedWorlds
     if custody is None:
         root = Path(root or Path(__file__).resolve().parents[4])
-        custody = ProtectedWorlds.from_registry(Path(registry or root / 'training' / 'neuralese_corpora.json'), root)
+        custody = ProtectedWorlds.load(root=root, registry=registry)
     programs_dir = Path(programs_dir)
     prepared = json.loads((programs_dir / 'programs-prepared.json').read_text())
     summary = []
@@ -620,7 +620,7 @@ def main(argv=None):
         parser = argparse.ArgumentParser(description='privileged training references of prepared programs')
         parser.add_argument('--programs', required=True)
         parser.add_argument('--names', nargs='*')
-        parser.add_argument('--registry', help='corpus registry naming the protected packets (default: this checkout)')
+        parser.add_argument('--registry', help='protected-worlds registry (default: training/protected-worlds.json)')
         parser.add_argument('--root', help='directory the registry paths resolve against (default: this checkout)')
         args = parser.parse_args(argv[1:])
         manifest = write_privileged(args.programs, args.names, registry=args.registry, root=args.root)

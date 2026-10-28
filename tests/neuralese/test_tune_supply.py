@@ -42,7 +42,7 @@ def _persist_split(directory, partitions=('train', 'train', 'development', 'conf
 
 
 def _custody(rows=({'id': 'held-0', 'split': 'test', 'source_groups': ['held:world-0']},)):
-    from natlang_neuralese.rl.privileged_context import ProtectedWorlds
+    from natlang_neuralese.common.custody import ProtectedWorlds
     return ProtectedWorlds.from_cases({'protected-packet': ('0' * 64, list(rows))})
 
 
