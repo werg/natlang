@@ -2307,6 +2307,15 @@ def _main(argv=None, *, requested_refresh):
     anneal = None
     lineage_checkpoint_sha = (sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                               if parent_continuation or policy.slot.exists() else None)
+    if diloco is not None and ema_spec and ema_spec.get('off') and saved_ema is not None:
+        if not parent_continuation or not lineage_checkpoint_sha:
+            raise ValueError('retiring carried learner EMA requires an exact full parent checkpoint')
+        checkpoint_options['weight_ema_resolution'] = {
+            **ema_resolution, 'transition': 'local-ema-retired-for-coordinator-ema',
+            'parent_checkpoint': {'path': str(args.continue_from), 'sha256': lineage_checkpoint_sha},
+            'parent_ema': {key: saved_ema.get(key) for key in ('schema', 'updates', 'decay', 'warmup', 'seed', 'provenance')},
+            'weights_optimizer_rng_exposure': 'preserved',
+            'coordinator_ema': 'separate-global-version-history'}
     if ema_spec and not ema_spec.get('off'):
         from .weight_ema import WeightEMA
         ema_eval_mode = ema_spec['eval']

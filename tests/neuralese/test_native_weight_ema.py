@@ -499,3 +499,48 @@ def test_weight_ema_and_telemetry_are_on_by_default_and_a_continuation_without_a
     assert training['ema']['updates'] == 1
     reference = training['options']['matrix_norm_reference']
     assert reference['source'] == 'parent-continuation' and reference['global_step'] == 1
+
+
+def test_full_parent_resumes_as_diloco_with_explicit_ema_handoff(tmp_path, monkeypatch):
+    import socket, threading, time
+    from natlang_neuralese.train import native_diloco, native_state_sft
+    from natlang_neuralese.train.diloco.coordinator import serve_coordinator, read_manifest
+    from natlang_neuralese.train.diloco.worker import DilocoSettings
+    base, paths = _fixture(tmp_path)
+    seed=tmp_path/'seed'
+    _train(_argv(base, paths, seed, epochs=1, extra=['--weight-ema','{"decay":0.9,"warmup":0}']), monkeypatch)
+    parent=seed/'checkpoint.pt'; parent_before=_load(parent); parent_sha=hashlib.sha256(parent.read_bytes()).hexdigest()
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    settings={'run_id':'ema-resume','workers':1,'worker_id':0,'coordinator_url':f'http://127.0.0.1:{port}',
+              'local_steps':8,'wire_dtype':'fp32','allow_private_http':True,'start_grace_seconds':0}
+    worker=tmp_path/'worker'
+    args=_argv(base, paths, worker, epochs=2, extra=['--continue-from',str(parent),'--weight-ema','off',
+                                                      '--diloco',json.dumps(settings)])
+    coord=tmp_path/'coord'
+    assert native_diloco.main(['init','--root',str(coord),'--parent',str(parent),'--base',str(base),
+             '--trainer-argv',json.dumps(args),'--settings',json.dumps(settings),'--quorum','1',
+             '--ema','{"decay":0.88,"warmup":0}']) is None
+    assert read_manifest(coord)['ema']=={'decay':0.88,'warmup':0}
+    token='test-diloco-ema-token-at-least-32-characters'
+    monkeypatch.setenv('NATLANG_DILOCO_TOKEN',token)
+    stop=threading.Event();thread=threading.Thread(target=serve_coordinator,args=(coord,'127.0.0.1',port,token),
+                                                    kwargs={'stop':stop},daemon=True);thread.start()
+    for _ in range(100):
+        try:
+            with socket.create_connection(('127.0.0.1',port),timeout=.1):break
+        except OSError:time.sleep(.02)
+    try:
+        monkeypatch.setattr('sys.argv',['trainer',*args])
+        assert native_state_sft.main(args)==0
+    finally:
+        stop.set();thread.join(timeout=5)
+    trained=_load(worker/'checkpoint.pt')['training']
+    assert trained['global_step']>parent_before['training']['global_step']
+    assert trained['options']['weight_ema']=='off' and 'ema' not in trained
+    custody=trained['options']['weight_ema_resolution']
+    assert custody['parent_checkpoint']['sha256']==parent_sha
+    assert custody['parent_ema']['updates']==parent_before['training']['ema']['updates']
+    assert custody['weights_optimizer_rng_exposure']=='preserved'
+    assert trained['diloco']['worker']==0 and trained['optimizer'] and trained['rng'] and trained['exposure_counts']
+    assert hashlib.sha256(parent.read_bytes()).hexdigest()==parent_sha
