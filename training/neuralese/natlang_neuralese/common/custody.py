@@ -200,6 +200,9 @@ class ProtectedWorlds:
             loader = LOADERS.get(source.get('kind'))
             if loader is None:
                 raise CustodyError(f'unknown protected source kind {source.get("kind")!r}; custody fails closed')
+            if 'root' in source:  # a logical data root (common.paths), never a machine path in the registry
+                from .paths import resolve
+                source = {**source, 'path': str(resolve(source['root'], source['path']))}
             if 'sha256' in source:
                 target = _source_path(source['path'], root)
                 if not target.is_file() or sha256_file_hex(target) != source['sha256']:

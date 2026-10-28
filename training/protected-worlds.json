@@ -5,10 +5,10 @@
   {"kind": "evaluation-packets", "id": "registered-evaluation-only-packets",
    "registry": "training/neuralese_corpora.json"},
   {"kind": "source-groups", "id": "held-union-source-groups",
-   "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl",
+   "root": "data_nvme", "path": "e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl",
    "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac"},
   {"kind": "source-groups", "id": "quality-source-groups",
-   "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl",
+   "root": "data_nvme", "path": "e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl",
    "sha256": "8138b7bb7315b4c04d7ead764fbc041cd90bea7d5502deb47732e9167d942dae"},
   {"kind": "decision-holds", "id": "training-decision-holds", "path": "training/decision-holds"},
   {"kind": "split-reservations", "id": "explicit-test-reservations", "path": "training/source-split-reservations.json"}
