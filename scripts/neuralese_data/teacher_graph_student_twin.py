@@ -123,6 +123,39 @@ def _calls(raw_calls):
     return out
 
 
+def program_header_parity(tokenizer, context, target, tools, turn, text, token_ids, boundary, checks):
+    """None when the program-header row equals strip_row(full row), else the omission reason; header telemetry."""
+    sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
+    from system_tool_sections import strip_row
+    from strip_generic_system_prompt import split_system
+    from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import render_teacher_packet
+    parts = split_system(text)
+    header = len(parts[1]) if parts else 0
+    checks['header_chars_total'] += header
+    checks['header_chars_max'] = max(checks['header_chars_max'], header)
+    checks['header_over_2000_chars'] += header > 2000
+    packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn, prompt_rendering='full')
+    if omission is not None:
+        return 'program-header parity: full rendering unavailable: ' + str(omission.get('reason'))
+    (full_text, full_ids, full_boundary), _ = packet
+    full = {'text': full_text, 'token_ids': full_ids, 'supervised_suffix_start': full_boundary}
+    im_start, im_end = tokenizer.convert_tokens_to_ids('<|im_start|>'), tokenizer.convert_tokens_to_ids('<|im_end|>')
+    stripped, reason, _info = strip_row(full, tokenizer, im_start, im_end)
+    if stripped is None:
+        if reason == 'no leading system turn' and (full_text, full_ids) == (text, token_ids):
+            checks['parity_equal_no_system_turn'] += 1
+            return None
+        return 'program-header parity: strip_failed: ' + str(reason)
+    if (stripped['text'], stripped['token_ids'], stripped['supervised_suffix_start']) == (text, token_ids, boundary):
+        checks['parity_equal'] += 1
+        return None
+    if stripped['text'] == text and (tokenizer.decode(stripped['token_ids'][stripped['supervised_suffix_start']:])
+                                     == tokenizer.decode(token_ids[boundary:])):
+        checks['parity_equal_text_serving_token_boundaries'] += 1  # serving tokenization kept, as the renderer does
+        return None
+    return 'program-header parity: renderer_and_strip_script_differ'
+
+
 def view_dir(model_key: str, prompt_rendering: str = 'full') -> str:
     """Output view directory: ``<model_key>`` (full system prompt) or ``<model_key>-program-header`` (serving mode)."""
     return model_key if prompt_rendering == 'full' else f'{model_key}-{prompt_rendering}'
@@ -199,6 +232,14 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
                     omit(omission.get('reason'), detail=omission)
                     continue
                 (text, token_ids, boundary), _emulation = packet
+                if prompt_rendering == 'program-header':
+                    # Same parity as render_native_turn_corpus.py: the serving renderer's program-header row must
+                    # equal the strip script's derivation from the full row; a mismatch is an omission.
+                    reason = program_header_parity(tokenizer, context, target, tools, turn, text, token_ids,
+                                                   boundary, checks)
+                    if reason is not None:
+                        omit(reason)
+                        continue
                 mask_history = bool(decision.get('parent_quality_hold') or decision.get('guided_parent_review'))
                 guard = None
                 if mask_history or failed_policy == 'mask-runtime-failures':
@@ -280,6 +321,12 @@ def convert(package_id: str, model_key: str, out_root: Path, *, reference_key: s
         problems.append('emitted + omitted rows differ from the reference rows')
     receipt = {'schema': SCHEMA, 'package_id': package_id, 'model_key': model_key, 'model_id': identity['model_id'],
                'prompt_rendering': prompt_rendering,
+               **({'prompt_piece_table': {'path': 'training/prompt-pieces/pieces.json',
+                                          'sha256': sha256_file_hex(ROOT / 'training/prompt-pieces/pieces.json')},
+                   'program_header_parity': 'render_native_turn_corpus rule: serving program-header row equals '
+                                            'system_tool_sections.strip_row(full row) (text and target; serving token '
+                                            'boundaries kept), else an explicit omission'}
+                  if prompt_rendering == 'program-header' else {}),
                'tokenizer': {k: identity[k] for k in ('source_fingerprint', 'expanded_fingerprint',
                                                       'role_token_ids', 'history_reasoning')},
                'reference': {'model_key': reference_key, 'model_id': reference.get('model_id'),
@@ -421,15 +468,19 @@ def collect(args):
             totals[f'rows:{split}'] += output['rows']
             totals[f'tokens:{split}'] += output['tokens']
             totals['cross_package_duplicates'] += len(duplicates)
-            files.append({'package_id': package_id, 'registry_id': f'{package_id}-{queue["model_key"]}',
+            files.append({'package_id': package_id,
+                          'registry_id': f'{package_id}-{view_dir(queue["model_key"], queue.get("prompt_rendering", "full"))}',
+                          'prompt_rendering': queue.get('prompt_rendering', 'full'),
                           'split': split, 'path': output['path'], 'sha256': output['sha256'],
                           'rows': output['rows'], 'tokens': output['tokens'],
                           'reference_tokens': receipt['verification']['checks'].get('reference_tokens'),
                           'in_lfm25_production_sources': in_production,
                           'cross_package_duplicate_ids': [d['id'] for d in duplicates]})
     _save(args.outputs, {'schema': 'natlang.teacher-graph-student-twin-outputs/1', 'model_key': queue['model_key'],
-                         'model_id': files and _load(out_root / files[0]['package_id'] / queue['model_key'] /
-                                                     'receipt.json')['model_id'],
+                         'prompt_rendering': queue.get('prompt_rendering', 'full'),
+                         'model_id': files and _load(out_root / files[0]['package_id'] /
+                                                     view_dir(queue['model_key'], queue.get('prompt_rendering', 'full'))
+                                                     / 'receipt.json')['model_id'],
                          'totals': dict(totals), 'files': files,
                          'duplicates_note': 'exact graph content (tokens + weights) already emitted by an earlier '
                                             'package in registry order; exclude those ids to avoid double exposure'})
@@ -452,7 +503,8 @@ def entries(args):
     registry = {e['id']: e for e in _load(REGISTRY)['corpora']}
     result = []
     for package_id, item in sorted(queue['items'].items()):
-        new_id = f'{package_id}-{queue["model_key"]}'
+        view = view_dir(queue['model_key'], queue.get('prompt_rendering', 'full'))
+        new_id = f'{package_id}-{view}'
         if item.get('status') != 'converted' or new_id in registry:
             continue
         source = registry[package_id]
@@ -461,18 +513,19 @@ def entries(args):
         directory = out_root / package_id
         rel = str(directory.relative_to(ROOT)) if directory.is_relative_to(ROOT) else str(directory)
         keep = ('source_class', 'split', 'license', 'license_provenance', 'training_admission_reason')
-        mk = queue['model_key']
+        mk = view
         result.append({
             'id': new_id, 'owner': 'dgx', 'path': rel,
             'include': [f'{mk}/receipt.json', f'{mk}/train/native-graphs.jsonl.zst', f'{mk}/test/native-graphs.jsonl.zst'],
             **{k: source[k] for k in keep if k in source},
-            'admission': (f'{mk} student twin of {package_id} (scripts/neuralese_data/teacher_graph_student_twin.py): '
+            'prompt_rendering': queue.get('prompt_rendering', 'full'),
+            'admission': (f'{queue["model_key"]} ({queue.get("prompt_rendering", "full")} rendering) student twin of {package_id} (scripts/neuralese_data/teacher_graph_student_twin.py): '
                           f'the reference {queue["reference_key"]} view\'s admitted teacher actions re-rendered from '
                           'the exact source trajectories; inherits its admission, splits, deduplication and decision '
                           f'omissions; {receipt["verification"]["omitted_rows"]} explicit render omissions'),
             'training_admission': source.get('training_admission'),
             'derived_from': [package_id],
-            'source_binding': {'model_id': receipt['model_id'], 'model_key': mk,
+            'source_binding': {'model_id': receipt['model_id'], 'model_key': queue['model_key'],
                                'tokenizer': {k: receipt['tokenizer'][k] for k in
                                              ('source_fingerprint', 'expanded_fingerprint', 'role_token_ids')},
                                'source_trajectories_sha256': receipt['source']['sha256'],
