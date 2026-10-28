@@ -266,6 +266,14 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
             info=tarfile.TarInfo('metadata.json');info.size=len(data);tar.addfile(info,io.BytesIO(data))
         assert any(x['path']==str(pin) and x['sha256']==sha(pin) for x in control_bindings(archive))
         assert stage_input_args({'standalone_diloco_parent':binding},'native_state_sft',target='portable')==['--standalone-diloco-parent',str(pin)]
+        from natlang_neuralese.train.recipe import _data_continuation
+        role=lambda path,digest:{'path':path,'sha256':digest,'binding':{'declared':True}}
+        previous={'native_graphs':role('old','old'), 'held_native_graphs':role('held','held')}
+        successor={'native_graphs':role('new','new'), 'held_native_graphs':previous['held_native_graphs'],
+                   'continued_native_graphs':previous['native_graphs'], 'standalone_diloco_parent':role(str(pin),sha(pin))}
+        assert _data_continuation(previous,successor)
+        successor['standalone_diloco_parent']['sha256']=''
+        assert not _data_continuation(previous,successor)
         assert trainer.main(resumed)==0
         assert len(torch.load(out/'checkpoint.pt',weights_only=False)['training']['options']['standalone_diloco_history'])==1
     finally:stop.set();server.join(timeout=3)
