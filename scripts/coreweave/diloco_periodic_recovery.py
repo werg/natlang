@@ -340,6 +340,7 @@ class Backend:
         external={};external_receipts=[]
         if self.direct:
             bindings.extend(self.direct['bindings'])
+            bindings.extend({'path':str(path),'sha256':sha256_file_hex(path,drop_cache=True)} for path in (bundle,sources))
             plan=next(item for item in self.direct['bindings'] if item['path']==self.direct['plan_path'])
             bindings.extend(declared_bindings(json.loads(Path(plan['path']).read_text())))
             parent=cycle['parent_reference']
@@ -388,6 +389,7 @@ class Backend:
         source_map=json.loads(sources.read_text());manifest=json.loads(bundle.read_text());candidates={}
         for key,value in source_map.items():candidates.setdefault(key.rsplit('/',1)[-1],[]).append(value)
         bindings=list(self.direct['bindings'])
+        bindings.extend({'path':str(path),'sha256':sha256_file_hex(path,drop_cache=True)} for path in (bundle,sources))
         bindings.extend(declared_bindings(json.loads(Path(self.direct['plan_path']).read_text())))
         for i in range(len(self.workers)):bindings.extend(cycle['components']['worker-'+str(i)]['required_dependencies'])
         bindings.extend(cycle['parent_reference'][name] for name in ('pin','receipt','qualification','copy_receipt'))
