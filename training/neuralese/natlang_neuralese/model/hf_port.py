@@ -2,7 +2,9 @@
 
 Same interface as the LFM2 ``PortBackbone`` (embed, logits, run_layers over a layer range with a ``PortCache``,
 forward_embeds with a cutoff), so the shared trainer, heads and server use the same mechanisms. Qwen3 and Maple use
-attention layers; Qwen3.5 dispatches each configured full/sliding-attention or linear-attention layer. The output
+attention layers; Qwen3.5 dispatches each configured full/sliding-attention or linear-attention layer; LFM3
+(``lfm3_port.Lfm3PortBackbone``) adds gated short-convolution layers, a per-head output gate and sandwich norms, all
+declared forms of this shared runner (``attention_gate``, ``sandwich_norm``, ``conv`` layer types). The output
 head may be untied (then the two Neuralese markers get their own trainable output rows), and the Qwen marker IDs
 remain unused vocabulary rows shared by Maple and Qwen3.
 """
