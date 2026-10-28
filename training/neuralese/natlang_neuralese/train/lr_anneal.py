@@ -93,6 +93,44 @@ class LrAnneal:
                 group['qat_latent_lr'] = qat
 
 
+class LrWarmup:
+    """Linear learning-rate warmup over the lineage's first ``updates`` optimizer updates (``--lr-warmup N``).
+
+    The update that follows ``global_step`` earlier updates trains every group at ``rate * min(1, (global_step + 1) /
+    N)``; from update N on the rate is the declared constant. The factor multiplies whatever rate the group holds for
+    that update (so it composes with an anneal) and the groups get their rates back afterwards, so the saved optimizer
+    state is shaped exactly like the lineage's. It is a function of the lineage ``global_step`` only: a resume or a
+    continuation past N trains at the constant rate, and a DiLoCo learner warms up over its own local updates."""
+
+    def __init__(self, optimizer, updates):
+        from .optim_restore import _children
+        if type(updates) is not int or updates < 0:
+            raise ValueError('lr warmup is a non-negative number of updates')
+        self.updates = updates
+        self.groups = [group for _, child in _children(optimizer) for group in child.param_groups]
+        self.saved = None
+
+    def factor(self, global_step):
+        return 1.0 if self.updates == 0 else min(1.0, (int(global_step) + 1) / self.updates)
+
+    def scale(self, global_step):
+        factor = self.factor(global_step)
+        if factor < 1.0:
+            self.saved = [(group, group['lr'], group.get('qat_latent_lr')) for group in self.groups]
+            for group, base, qat in self.saved:
+                group['lr'] = base * factor
+                if qat is not None:
+                    group['qat_latent_lr'] = qat * factor
+        return factor
+
+    def restore(self):
+        for group, base, qat in self.saved or ():
+            group['lr'] = base
+            if qat is not None:
+                group['qat_latent_lr'] = qat
+        self.saved = None
+
+
 # Launcher ---------------------------------------------------------------------------------------------------------
 
 # Production publication, resident adoption and DiLoCo membership belong to the main lineage.

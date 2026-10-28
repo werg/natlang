@@ -1119,6 +1119,9 @@ def build_parser():
     parser.add_argument('--lr-anneal', default=None,
         help='JSON {"steps":N,"shape":"linear|cosine","floor":0.0}: anneal branch off a --continue-from full state into '
              'its own --out namespace, then stop (train/lr_anneal.py launches it)')
+    parser.add_argument('--lr-warmup', type=int, default=0,
+        help='linear learning-rate warmup over the lineage\'s first N optimizer updates (by global step), then the '
+             'declared constant rate (train/lr_anneal.LrWarmup); 0 = none')
     parser.add_argument('--matrix-telemetry', default=None,
         help='JSON {"every":100,"norms":true,"attention_logits":true,"layers":null}: per-matrix norm growth and max '
              'attention logit (train/matrix_telemetry.py)')
@@ -2059,6 +2062,11 @@ def _main(argv=None, *, requested_refresh):
             'adopt_as_lineage_parent': False}
     elif saved_lr_anneal is not None:
         raise ValueError('this rolling checkpoint is an lr anneal branch; resume it with its --lr-anneal declaration')
+    warmup = None
+    if args.lr_warmup:
+        from .lr_anneal import LrWarmup
+        warmup = LrWarmup(optimizer, args.lr_warmup)
+        checkpoint_options['lr_warmup'] = {'updates': args.lr_warmup}
     matrix_reference = saved_norm_reference
     if telemetry_spec is not None and matrix_reference is None:
         from .matrix_telemetry import frobenius_norms, matrix_inventory, reference_record
@@ -2422,6 +2430,7 @@ def _main(argv=None, *, requested_refresh):
             cursor = indices[-1] + 1
             exception_boundary_safe = False
             anneal_factor = anneal.scale(global_step) if anneal is not None else None
+            warmup_factor = warmup.scale(global_step) if warmup is not None else None
             telemetry_due = telemetry_spec is not None and (step + 1) % telemetry_spec['every'] == 0
             logit_probe = None
             if telemetry_due and telemetry_spec['attention_logits']:
@@ -2438,6 +2447,8 @@ def _main(argv=None, *, requested_refresh):
                     loss, details = native_training_update(model, optimizer, batch, backend=backend,
                         checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
             finally:
+                if warmup is not None:
+                    warmup.restore()
                 if anneal is not None:
                     anneal.restore()
             step += 1
@@ -2480,6 +2491,8 @@ def _main(argv=None, *, requested_refresh):
             if anneal is not None:
                 progress['lr_anneal'] = {'multiplier': anneal_factor, 'update': global_step - anneal.start,
                                          'steps': anneal.spec['steps'], 'branch': True}
+            if warmup is not None:
+                progress['lr_warmup'] = {'multiplier': warmup_factor, 'updates': warmup.updates}
             if weight_ema is not None:
                 progress['weight_ema'] = weight_ema.summary()
             if telemetry_due:
