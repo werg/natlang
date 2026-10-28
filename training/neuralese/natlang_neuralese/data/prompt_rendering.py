@@ -88,7 +88,7 @@ def checkpoint_prompt_rendering(identity: dict, *, serving_mode: str | None = No
             system_mode = row.get("system_prompt_mode")
             system_mode_key = system_mode if isinstance(system_mode, str) else "absent"
             system_mode_counts[system_mode_key] = system_mode_counts.get(system_mode_key, 0) + 1
-            if "List of tools:" in str(row.get("text", "")):
+            if "List of tools:" in str(row.get("text", "")) or "\n<tools>\n" in str(row.get("text", "")):
                 rows_with_tool_schemas += 1
                 if row.get("prompt_rendering") is None:
                     undeclared_rows_with_tool_schemas += 1

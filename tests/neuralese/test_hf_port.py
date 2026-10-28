@@ -78,7 +78,7 @@ def test_maple_renderer_matches_chat_template():
     from natlang_neuralese.model.hf_port import qwen_controls
 
     tokenizer = AutoTokenizer.from_pretrained(MAPLE_TOKENIZER)
-    renderer = Renderer(tokenizer, qwen_controls(tokenizer))
+    renderer = Renderer(tokenizer, qwen_controls(tokenizer), model_type="maple")  # tokenizer-only dir: declared
     assert renderer.special.bos is None
     messages = [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Add 2 and 3."}]
     expected = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) + "\n</think>\n\n"

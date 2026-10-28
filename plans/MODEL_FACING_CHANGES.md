@@ -1,5 +1,17 @@
 # Model-facing changes and their measurement
 
+### 2026-10-28 — LFM3-1.7B history reasoning pinned to `keep` (`preserve_thinking=true`)
+
+`serve/chat.py` declares `BACKBONE_HISTORY_REASONING['lfm3'] = 'keep'`, so every LFM3 training render and serving
+prompt passes `preserve_thinking=true` to its chat template. The template default rewrites assistant turns before
+the last user message to `<think></think>` + content; with `keep` they render their recorded reasoning. Natlang
+invocations (one user message, then a tool loop) render identically under both settings; what changes is
+multi-user-turn conversations (harness chat, multi-exchange sources), where earlier reasoning is now visible and
+the rendering is prefix-stable. The 13/16 base reference (`LFM3_1P7B_BASE_EVAL_20261027.md`) ran on llama.cpp with
+reasoning preserved. Status: **unmeasured** on multi-turn sources; measure base task success with and without
+`preserve_thinking` on a multi-exchange set in the next teacher window (target 5 of the recipe's "measure before
+training" list), before training on multi-exchange LFM3 renders.
+
 ### 2026-10-27 — learned optimizer revision operations and service requests
 
 `adapt/chooseRevision.nl` offers only the operations the services implement (`reencode`, `replace-skill`, `weights`,

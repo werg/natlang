@@ -351,7 +351,8 @@ def make_handler(engine: Engine):
                     body = self._object()
                     g = body.get("guidance") or {}
                     guide = Guide(Settings(tools=g.get("tools") or None, repeat=int(g.get("repeat", 3)),
-                                           syntax=bool(g.get("syntax", True)), run=int(g.get("run", 4))))
+                                           syntax=bool(g.get("syntax", True)), run=int(g.get("run", 4)),
+                                           call_format="xml" if getattr(engine, "tool_call_format", None) == "xml" else "pythonic"))
                     reply = body.get("reply") or ""
                     for end in range(1, len(reply) + 1):
                         verdict = guide.check(reply[:end])
@@ -417,7 +418,7 @@ def make_handler(engine: Engine):
                 # native_default_adapters a second time.
                 adapters=body.get('x_natlang_adapters'),
                 guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
-                                     body.get("tool_choice")))
+                                     body.get("tool_choice"), getattr(engine, "tool_call_format", None)))
             if body.get("stream"):
                 return self._stream(request)
             try:
@@ -477,7 +478,8 @@ def make_handler(engine: Engine):
             # Text streams as content deltas until a tool call opens; the call markup is held back and the parsed
             # calls arrive as `tool_calls` deltas at the end (OpenAI streaming), so clients that only read deltas see
             # the same message as a non-streaming request.
-            # Call markup is LFM2's Pythonic `<|tool_call_start|>` or the Qwen family's `<tool_call>` (chat.build_message).
+            # Call markup is LFM2's Pythonic `<|tool_call_start|>` or `<tool_call>` (Qwen/Mellum JSON, LFM3/Qwen3.5 XML;
+            # chat.build_message parses both forms after the stream ends).
             markers, streamed, pending, in_call = ("<|tool_call_start|>", "<tool_call>"), "", "", False
             while True:
                 try:
