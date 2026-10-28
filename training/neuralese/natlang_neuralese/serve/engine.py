@@ -1083,7 +1083,10 @@ class Engine:
             if seq.request.rl_top_k is not None and not forced and seq.request.temperature > 0:
                 top_k_receipt, seq.native_sample_top_k = seq.native_sample_top_k, None
                 if top_k_receipt is None:
-                    raise RequestError('rl-top-k-unavailable', 'the sampler did not record its requested top-k log-probs')
+                    # A sampler that did not record its distribution: the same normalized law over these logits.
+                    from ..common.sampling import encode_top_k, masked_log_distribution
+                    top_k_receipt = encode_top_k(masked_log_distribution(seq.logits[0], seq.request.temperature,
+                        banned=sorted(seq.bans.get(seq.native_own_position, ()))), seq.request.rl_top_k)
             sample_index = len(seq.rl_samples)
             # The next-token query is the output position of the last own
             # input; imported KV slots do not contribute to this index.
