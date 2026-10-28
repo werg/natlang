@@ -6,7 +6,9 @@ Output the printed path/SHA binding as the stage's memory_qualification recipe p
 """
 import argparse
 import json
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 from natlang_neuralese.train.native_resident import binding, bound
 from natlang_neuralese.common.jsonio import write_json_durable
 
