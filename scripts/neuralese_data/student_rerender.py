@@ -252,7 +252,7 @@ def launch(args):
             if item['status'] == 'rendered':
                 unit = short_unit('lfm3-data-v', item['id']) + f'-{int(time.time()) % 100000}'
                 cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(args.verify_budget_gb),
-                       '--priority', 'low', '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
+                       '--priority', args.priority, '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
                        '--', 'bash', '-c',
                        f'PYTHONPATH={PYTHONPATH} nice -n 10 {VENV_PY} {Path(__file__).resolve()} verify '
                        f'--queue {Path(args.queue).resolve()} --id {item["id"]} > {logs}/{unit}.log 2>&1']
@@ -263,7 +263,7 @@ def launch(args):
                 unit = short_unit('lfm3-data-g', item['id']) + f'-{int(time.time()) % 100000}'
                 script = graph_script(item, queue['student'])
                 cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(args.verify_budget_gb),
-                       '--priority', 'low', '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
+                       '--priority', args.priority, '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
                        '--', 'bash', '-c', f'nice -n 10 bash {script} > {logs}/{unit}.log 2>&1']
                 subprocess.run(cmd, check=True, capture_output=True)
                 item.update(status='graphing', graph_unit=unit, graph_log=f'{logs}/{unit}.log')
@@ -285,11 +285,11 @@ def launch(args):
                          + ' '.join(shell(w) for w in item['command'][:2]) + ' '
                          + ' '.join(shell(w) for w in item['command'][2:]) + f' --workers {args.cpus}')
                 cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', str(budget),
-                       '--priority', 'low', '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
+                       '--priority', args.priority, '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO),
                        '--container', container, '--stop-seconds', '90', '--', 'bash', '-c', f'{inner} > {log} 2>&1']
             else:  # parts coordinator: small, it launches one ledger unit per part itself
                 inner = f'PYTHONPATH={PYTHONPATH} ' + ' '.join(shell(w) for w in item['command'])
-                cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', '2', '--priority', 'low',
+                cmd = ['python3', str(LEDGER), 'run', '--unit', unit, '--budget-gb', '2', '--priority', args.priority,
                        '--resumable', '--wait', '86400', '--detach', '--workdir', str(REPO), '--',
                        'bash', '-c', f'{inner} > {log} 2>&1']
             subprocess.run(cmd, check=True, capture_output=True)
@@ -587,6 +587,8 @@ def main():
     p.add_argument('--queue', required=True)
     p.add_argument('--max-running', type=int, default=4, help='concurrent renders')
     p.add_argument('--max-post', type=int, default=4, help='concurrent verify/graph steps')
+    p.add_argument('--priority', default='high', choices=('low', 'medium', 'high'),
+                   help='ledger priority (2026-10-28: data conversion is the LFM3 critical path: high)')
     p.add_argument('--cpus', type=int, default=4)
     p.add_argument('--budget-gb', type=int, default=20, help='ledger budget of the largest direct renders')
     p.add_argument('--verify-budget-gb', type=int, default=3)
