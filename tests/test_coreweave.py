@@ -1465,8 +1465,10 @@ def test_parent_read_secret_requires_verified_receipt_and_binds_capability(tmp_p
     remote=SimpleNamespace(size=123,url='https://storage.googleapis.com/private/object?signature=SECRET')
     fake=SimpleNamespace(Api=lambda:SimpleNamespace(run=lambda x:SimpleNamespace(file=lambda y:remote)))
     monkeypatch.setitem(sys.modules,'wandb',fake)
-    run={'parent_transfer':{'pin':str(pin_path),'receipt':str(receipt_path)},'coordinator':{'parent':pin['path']},'learners':{'job':str(job_path)}}
+    run={'parent_transfer':{'pin':str(pin_path),'pin_sha256':hashlib.sha256(pin_path.read_bytes()).hexdigest(),'receipt':str(receipt_path),'receipt_sha256':hashlib.sha256(receipt_path.read_bytes()).hexdigest()},'coordinator':{'parent':pin['path']},'learners':{'job':str(job_path)}}
     cap=json.loads(diloco.parent_read_secret(run)['parent-read'])
     assert cap['sha256']==pin['sha256'] and cap['global_step']==59 and cap['url']==remote.url
     receipt['independent_verification']={'sha256':'b'*64,'bytes':123};receipt_path.write_text(json.dumps(receipt))
+    with pytest.raises(diloco.cwctl.ControllerError,match='binding changed'):diloco.parent_read_secret(run)
+    run['parent_transfer']['receipt_sha256']=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
     with pytest.raises(ValueError,match='independent verification'):diloco.parent_read_secret(run)

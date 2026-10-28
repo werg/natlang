@@ -269,7 +269,12 @@ def parent_read_secret(run):
     from private_export_guard import validate_receipt
     import requests, wandb
     from urllib.parse import urlparse
-    pin=json.loads(Path(transfer['pin']).read_text());receipt=json.loads(Path(transfer['receipt']).read_text())
+    import hashlib
+    pin_path=Path(transfer['pin']);receipt_path=Path(transfer['receipt'])
+    if (hashlib.sha256(pin_path.read_bytes()).hexdigest()!=transfer['pin_sha256']
+            or hashlib.sha256(receipt_path.read_bytes()).hexdigest()!=transfer['receipt_sha256']):
+        raise cwctl.ControllerError('private parent pin or receipt binding changed')
+    pin=json.loads(pin_path.read_text());receipt=json.loads(receipt_path.read_text())
     identity={'sha256':pin['sha256'],'bytes':pin['bytes']}
     validate_receipt(receipt,identity)
     expected=_template(run['learners']['job'])['env'].get('NATLANG_DILOCO_SEED_SHA256')
