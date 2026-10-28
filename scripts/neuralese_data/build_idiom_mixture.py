@@ -254,6 +254,7 @@ def candidates(config, policy, decisions, trajectories, held):
             category = min((k['category'] for k in known), key=ORDER.index)
             fit = sum(k['fit'] for k in known) / len(known)
             out.append({'tier': tier, 'category': category, 'fit': fit, 'id': row['id'], 'file': str(path),
+                        'trajectory': trajectory,
                         'line': number, 'decisions': len(ids), 'view': view, 'features': features})
     return out, omitted
 
@@ -264,13 +265,15 @@ def apply_caps(cands, policy):
     for tier in sorted({c['tier'] for c in cands}):
         rows = sorted((c for c in cands if c['tier'] == tier),
                       key=lambda c: (-c['fit'], hashlib.sha256(c['id'].encode()).hexdigest()))
-        clusters, survivors = collections.Counter(), []
+        # The cluster cap counts source trajectories (tasks): the chains and decisions of one admitted trajectory
+        # are different invocations of that task, not near-duplicates of each other.
+        clusters, survivors = collections.defaultdict(set), []
         for c in rows:
-            cluster = c['features']['near_duplicate_cluster']
-            if clusters[cluster] >= caps['near_duplicate_per_tier']:
+            members = clusters[c['features']['near_duplicate_cluster']]
+            if c['trajectory'] not in members and len(members) >= caps['near_duplicate_per_tier']:
                 dropped[f'tier {tier}: near-duplicate cluster cap'] += 1
                 continue
-            clusters[cluster] += 1
+            members.add(c['trajectory'])
             survivors.append(c)
         total = len(survivors)
         families = collections.Counter()
@@ -282,6 +285,21 @@ def apply_caps(cands, policy):
                 continue
             families[c['features']['family']] += 1
             kept.append(c)
+    # Category caps per tier (the idiom split is a cap, not a target).
+    shares = policy['category_caps']
+    capped = []
+    for tier in sorted({c['tier'] for c in kept}):
+        rows = sorted((c for c in kept if c['tier'] == tier),
+                      key=lambda c: (-c['fit'], hashlib.sha256(c['id'].encode()).hexdigest()))
+        limit = {c: math.ceil(share / 100. * len(rows)) for c, share in shares.items()}
+        taken = collections.Counter()
+        for c in rows:
+            if taken[c['category']] >= limit[c['category']]:
+                dropped[f'tier {tier}: category cap ({c["category"]})'] += 1
+                continue
+            taken[c['category']] += 1
+            capped.append(c)
+    kept = capped
     limits = caps.get('tier_row_limits') or {}
     if '4' in limits:
         allowed = sum(1 for c in kept if c['tier'] < 4)
@@ -349,19 +367,16 @@ def main(argv=None):
     chosen, cap_drops = apply_caps(cands, policy)
     resolved = objective(config, policy)
 
-    # Cohort files per (tier, category): category keeps its allocation, tiers inside it weighted by rows * weight.
-    allocation = policy['category_allocation']
+    # Cohort files per (tier, category): tiers weighted by rows * tier weight; categories inside a tier by rows.
     natlang_share = 1 - policy['communication_share'] / 100. if config.get('communication') else 1.
-    total_alloc = sum(allocation.values())
     weights = {int(k): v for k, v in policy['tier_weights'].items()}
     cells = collections.Counter((c['tier'], c['category']) for c in chosen)
+    tier_rows = collections.Counter(c['tier'] for c in chosen)
+    denominator = sum(n * weights[t] for t, n in tier_rows.items())
     cell_files = {}
-    for category in ORDER:
-        denominator = sum(n * weights[t] for (t, c), n in cells.items() if c == category)
-        for (tier, c), n in cells.items():
-            if c == category and denominator:
-                mass = natlang_share * allocation[category] / total_alloc * n * weights[tier] / denominator
-                cell_files[(tier, category)] = max(1, round(mass / policy['cohort_unit']))
+    for (tier, category), n in cells.items():
+        mass = natlang_share * tier_rows[tier] * weights[tier] / denominator * n / tier_rows[tier]
+        cell_files[(tier, category)] = max(1, round(mass / policy['cohort_unit']))
     assign = {}
     for (tier, category), files in cell_files.items():
         rows = sorted((c for c in chosen if (c['tier'], c['category']) == (tier, category)),
