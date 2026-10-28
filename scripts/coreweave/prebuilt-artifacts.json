@@ -1,0 +1,23 @@
+{
+ "schema": "natlang.coreweave-prebuilt/1",
+ "cas": "/home/werg/data/coreweave-prebuilt/cas",
+ "artifacts": {
+  "ts-host": {
+   "kind": "ts-host",
+   "sha256": "bcf3c272b4d5de6d115c0b124e9511692278800a6d1162aa7615d2d750b07ab2",
+   "bytes": 31927069,
+   "image": null,
+   "registered": "2026-10-28T08:45:34Z",
+   "git_sha": "9cbdb648b4a9debbcfb151ca43f9201aeaadaf2c",
+   "inputs": {
+    "ts-host": "b216be230a5a98fefc87595d197a7a977dfad81e",
+    "applications/program-improver": "ad329ef2ff553d2ee2487b072a7fa8cfa9c0d81e",
+    "scripts/stage-npm-package.mjs": "d69453f53aa0b5100007c60a9160e57c6466c672",
+    "examples/adaptation": "8ad4423672bf4025d00858e0fe06dc453864130f"
+   },
+   "node": "v24.0.1",
+   "build_seconds": 12.2,
+   "architecture_independent": true
+  }
+ }
+}

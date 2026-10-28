@@ -128,6 +128,19 @@ def validate(job: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(snapshot, str) or not snapshot.strip() or snapshot != snapshot.strip():
             raise JobError('scratch.restore_from_snapshot_id must be a nonempty snapshot ID')
         job['scratch']['restore_from_snapshot_id'] = snapshot
+    recovery = job.get('recovery')
+    if recovery is not None:
+        # AGENTS.md "Sandbox recovery coverage": production sandboxes declare a recovery workspace volume and a snapshot
+        # schedule (cwctl.launch starts recovery_snapshots.py for it). Snapshots supplement private full-state exports.
+        if not isinstance(recovery, dict) or set(recovery) - {'snapshot_interval_seconds', 'keep'}:
+            raise JobError('recovery: {"snapshot_interval_seconds": N, "keep": K} (at least two kept)')
+        if storage != 'volume':
+            raise JobError('recovery snapshots need the scratch volume: scratch.storage "volume"')
+        interval = recovery.get('snapshot_interval_seconds', 3600)
+        keep = recovery.get('keep', 2)
+        if not isinstance(interval, (int, float)) or interval <= 0 or type(keep) is not int or keep < 2:
+            raise JobError('recovery: positive snapshot_interval_seconds and keep >= 2')
+        job['recovery'] = {'snapshot_interval_seconds': interval, 'keep': keep}
     job['env'] = env
     job.setdefault('transport', 'bucket' if bucket else 'api')
     if job['transport'] not in ('bucket', 'api') or (job['transport'] == 'bucket' and not bucket):

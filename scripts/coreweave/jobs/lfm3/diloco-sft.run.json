@@ -1,0 +1,9 @@
+{
+ "schema": "natlang.coreweave-diloco/1",
+ "id": "@@RUN_ID@@",
+ "settings": {"run_id": "@@RUN_ID@@", "workers": 4, "local_steps": 128, "wire_dtype": "bf16"},
+ "coordinator": {"job": "@@OUT@@/diloco-coordinator.job.json", "bundle_file": "@@COORDINATOR_BUNDLE@@",
+                 "parent": "@@PARENT@@",
+                 "args": ["--quorum", "3", "--outer-lr", "1.0", "--outer-momentum", "0.0", "--max-staleness", "2"]},
+ "learners": {"job": "@@OUT@@/diloco-learner.job.json", "bundle_file": "@@LEARNER_BUNDLE@@"}
+}
