@@ -23,16 +23,16 @@
    "summary": "A finite-typed call answered by scoring every allowed JSON value as the reply (readout: decision, decisionReadout: finite-returns, decide()).",
    "model_output": "scored-options",
    "endpoints": ["/v1/neuralese/decide", "/v1/neuralese/decide_many", "/v1/natlang/score"],
-   "sft": {"status": "gap", "owner": "decide", "section": "decision-readout"},
-   "rl": {"status": "gap", "owner": "decide", "section": "decision-readout"},
-   "parity": {"status": "gap", "owner": "decide", "section": "decision-readout"}
+   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/data/decision_graph.py", "training/neuralese/natlang_neuralese/train/decision_supervision.py", "scripts/neuralese_data/build_decision_graphs.py", "tests/neuralese/test_decision_supervision.py"]},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
+   "parity": {"status": "covered", "evidence": ["tests/neuralese/test_decision_supervision.py"]}
   },
   "refinement-judge-scored": {
    "summary": "A refinement predicate (Is<T, P>, refine) judged by one scoring pass over true/false with JUDGE_SYSTEM_PROMPT (native/refinement.ts decisionJudge), when the driver can score.",
    "model_output": "scored-options",
    "endpoints": ["/v1/neuralese/decide", "/v1/neuralese/decide_many", "/v1/natlang/score"],
-   "sft": {"status": "gap", "owner": "lfm3-mixture", "section": "refinement-judge-scored"},
-   "rl": {"status": "gap", "owner": "decide", "section": "refinement-judge-scored"},
+   "sft": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/data/decision_graph.py", "training/neuralese/natlang_neuralese/train/decision_supervision.py", "scripts/neuralese_data/build_decision_graphs.py", "tests/neuralese/test_decision_supervision.py"]},
+   "rl": {"status": "covered", "evidence": ["training/neuralese/natlang_neuralese/rl/decision_policy.py", "training/neuralese/natlang_neuralese/rl/native_replay.py", "ts-host/src/tune/rollouts.ts", "tests/neuralese/test_decision_supervision.py"]},
    "parity": {"status": "covered", "evidence": ["tests/test_refine_data_judge.py"]}
   },
   "careful-review": {

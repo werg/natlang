@@ -24,6 +24,25 @@ from dataclasses import dataclass
 import math
 
 LABEL_SOURCES = ('exact-oracle', 'verified-trajectory')
+# The runtime's decision readout prompt (ts-host/src/native/decision.ts), byte for byte; parity:
+# tests/neuralese/test_decision_supervision.py::test_decision_prompt_parity_with_the_typescript_runtime.
+DECISION_SYSTEM_PROMPT = ('You are running one call of a natural-language function. Carry out its '
+                          "instructions yourself for this call's argument values, judging the visible inputs. Your reply is "
+                          "the function's return value: one JSON value of the declared type, with nothing else.")
+
+
+def decision_prompt(replies):
+    return ('Answer this call now, without tools. Reply with exactly one of these JSON values and nothing else: '
+            + ', '.join(replies) + '.')
+
+
+def decision_messages(opening, values, *, guidance=''):
+    """The readout's messages for a finite-typed call (agent.ts decisionReadout): the decision system prompt (plus
+    program guidance), the call's opening without its system turn and the answer request over the JSON values."""
+    import json
+    replies = [json.dumps(value, ensure_ascii=False, separators=(',', ':')) for value in values]
+    return ([{'role': 'system', 'content': DECISION_SYSTEM_PROMPT + guidance}, *opening[1:],
+             {'role': 'user', 'content': decision_prompt(replies)}], replies)
 _FIELDS = {'name', 'options', 'prompt_tokens', 'label', 'probabilities', 'label_source', 'values'}
 
 

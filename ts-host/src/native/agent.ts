@@ -1122,7 +1122,7 @@ export class NativeToolAgent {
     const failures = containsRefinement(lam.type.returns, session.env) ?
       await options.checker.checkValue(value, lam.type.returns, session.env,
         { phase: 'return', judge: options.judge, escalation: options.escalation, callId, signal: session.runtime.signal,
-          emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }) : [];
+          trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }) : [];
     if (options.returnGuard) failures.push(...await options.returnGuard(session.runtime.options.runId));
     return failures.length ? failures : undefined;
   }
@@ -1301,7 +1301,7 @@ export class NativeToolAgent {
     if (refinement) session.refinementCheck = async (value, type, path) => {
       const failures = await refinement.checker.checkValue(value, type, session.env,
         { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
-          signal: session.runtime.signal, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
+          signal: session.runtime.signal, trace: session.runtime.trace, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
       if (path === 'return' && refinement.returnGuard)
         failures.push(...await refinement.returnGuard(session.runtime.options.runId));
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;

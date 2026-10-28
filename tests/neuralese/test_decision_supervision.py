@@ -308,3 +308,26 @@ def test_sampled_decision_turns_enter_the_whole_episode_policy_objective(tmp_pat
     spec, _, _ = admit(engine, tmp_path, argmax, {'schema': 'score-centered/1', 'k': 8}, 'argmax')
     assert all('decision_actions' not in row for row in spec['rows'].values())
     engine.store.close()
+
+
+def test_decision_prompt_parity_with_the_typescript_runtime():
+    """Python oracle builders author the runtime's exact decision readout prompt (ts-host/src/native/decision.ts)."""
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+    from natlang_neuralese.data.decision_graph import DECISION_SYSTEM_PROMPT, decision_messages
+    module = Path(__file__).resolve().parents[2] / 'ts-host/dist/native/decision.js'
+    if not module.exists() or shutil.which('node') is None:
+        pytest.skip('ts-host not built')
+    values = [True, False, 'red "x"', None, 3, 'é☃']
+    script = (f"import {{ DECISION_SYSTEM_PROMPT, decisionPrompt }} from {json.dumps(str(module))};"
+              f"const values = {json.dumps(values)};"
+              "console.log(JSON.stringify({system: DECISION_SYSTEM_PROMPT, "
+              "prompt: decisionPrompt(values.map(v => JSON.stringify(v))), replies: values.map(v => JSON.stringify(v))}));")
+    out = json.loads(subprocess.run(['node', '--input-type=module', '-e', script], capture_output=True, text=True,
+                                    check=True).stdout)
+    opening = [{'role': 'system', 'content': 'call system'}, {'role': 'user', 'content': 'args'}]
+    messages, replies = decision_messages(opening, values)
+    assert out['system'] == DECISION_SYSTEM_PROMPT and replies == out['replies']
+    assert messages == [{'role': 'system', 'content': out['system']}, opening[1], {'role': 'user', 'content': out['prompt']}]
