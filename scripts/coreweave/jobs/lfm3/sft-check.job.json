@@ -1,6 +1,6 @@
 {
  "schema": "natlang.coreweave-job/1",
- "id": "lfm3-sft-check-20261028a",
+ "id": "lfm3-sft-check-20261028b",
  "kind": "train",
  "placement": {
   "where": "coreweave",
