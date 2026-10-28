@@ -50,8 +50,8 @@ class OuterRecipe:
     key_optimizer: dict = field(default_factory=lambda: {'name': 'adam', 'learning_rate': 1e-4})
     bank_optimizer: dict = field(default_factory=lambda: {'learning_rate': 1e-4, 'weight_decay': 0.})
     train_keys: bool = True
-    train_bank: bool = False
-    train_basis: bool = False
+    train_bank: bool = True
+    train_basis: bool = True
     publish_every: int = 50
     weights: dict = field(default_factory=lambda: {'distill': 1., 'downstream': 0., 'instruction_state': .1,
                                                    'skill_state': .1, 'mixture': .2, 'gain': .05, 'core': .05,
@@ -99,10 +99,20 @@ class OuterTrainer:
         if self.state['schema'] != STATE_SCHEMA or self.state['bank'] != bank.snapshot:
             raise LearnedOptimizerError('trainer state belongs to another bank snapshot or schema')
         previous_recipe = self.state.get('recipe', {})
-        for key in ('train_bank', 'train_basis'):
-            if previous_recipe.get(key, False) != getattr(recipe, key):
-                raise LearnedOptimizerError(f'resuming with a changed {key} requires an explicit optimizer transition')
+        self.bank_transition = {key: (bool(previous_recipe.get(key, False)), getattr(recipe, key))
+                                for key in ('train_bank', 'train_basis')
+                                if bool(previous_recipe.get(key, False)) != getattr(recipe, key)}
         self._restore()
+        if self.bank_transition:
+            previous_bank_optimizer = self.state.get('bank_optimizer')
+            self.state['bank_optimizer'] = (_save_optimizer(self.engine, self.bank_optimizer, 'bank', self.owner)
+                                            if self.bank_optimizer is not None else None)
+            self.state.setdefault('recipe_transitions', []).append({
+                'schema': 'natlang.lopt.bank-trainability-transition/1', 'step': self.state['step'],
+                'changes': {key: {'from': old, 'to': new} for key, (old, new) in self.bank_transition.items()},
+                'previous_bank_optimizer': previous_bank_optimizer,
+                'optimizer_history': 'preserved-for-unchanged-parameters;new-parameters-start-without-moments'})
+            self.state['recipe'] = self.recipe.as_json()
         if self.state.get('rng') is not None:
             _restore_rng(self.state['rng'])
 
@@ -131,18 +141,34 @@ class OuterTrainer:
         if self.state['head_optimizer']:
             self.head_optimizer.load_state_dict(_load_optimizer(store, self.state['head_optimizer'], self.head_optimizer))
         self.bank_leaves = None
-        if self.recipe.train_bank or self.recipe.train_basis:
+        self.bank_optimizer = None
+        if self.recipe.train_bank or self.recipe.train_basis or self.state.get('bank_tensors'):
             self.bank_leaves = _bank_leaves(self.bank, self.recipe)
             if self.state.get('bank_tensors'):
                 _restore_bank_leaves(self.engine, self.bank, self.bank_leaves, self.state['bank_tensors'], self.state['step'])
             elif self.state.get('bank_optimizer'):
                 raise LearnedOptimizerError('bank optimizer history has no saved parameter snapshot; exact resume is unavailable')
             params = [v for v in self.bank_leaves['factors'].values() for v in v] + list(self.bank_leaves['basis'].values())
-            self.bank_optimizer = torch.optim.AdamW([p for p in params if p.requires_grad],
-                                                    lr=self.recipe.bank_optimizer['learning_rate'],
-                                                    weight_decay=self.recipe.bank_optimizer.get('weight_decay', 0.))
-            if self.state['bank_optimizer']:
-                self.bank_optimizer.load_state_dict(_load_optimizer(store, self.state['bank_optimizer'], self.bank_optimizer))
+            trainable = [p for p in params if p.requires_grad]
+            if trainable:
+                self.bank_optimizer = torch.optim.AdamW(trainable, lr=self.recipe.bank_optimizer['learning_rate'],
+                                                        weight_decay=self.recipe.bank_optimizer.get('weight_decay', 0.))
+            if self.state['bank_optimizer'] and self.bank_optimizer is not None:
+                saved = _load_optimizer(store, self.state['bank_optimizer'], self.bank_optimizer)
+                if self.bank_transition:
+                    old = self.state.get('recipe', {})
+                    factor_count = sum(len(v) for v in self.bank_leaves['factors'].values())
+                    basis_count = len(self.bank_leaves['basis'])
+                    old_names = ([('factor', i) for i in range(factor_count)] if old.get('train_bank', False) else []) + \
+                                ([('basis', i) for i in range(basis_count)] if old.get('train_basis', False) else [])
+                    new_names = ([('factor', i) for i in range(factor_count)] if self.recipe.train_bank else []) + \
+                                ([('basis', i) for i in range(basis_count)] if self.recipe.train_basis else [])
+                    if any(index >= len(old_names) for index in saved['state']):
+                        raise LearnedOptimizerError('saved bank optimizer parameter inventory differs from its recorded recipe')
+                    positions = {name: index for index, name in enumerate(new_names)}
+                    saved['state'] = {positions[old_names[index]]: value for index, value in saved['state'].items()
+                                      if old_names[index] in positions}
+                self.bank_optimizer.load_state_dict(saved)
 
     # -- batches -------------------------------------------------------------------------------------------------
     def _next_batch(self):
@@ -374,7 +400,7 @@ class OuterTrainer:
                 self.state['key_optimizers'][new] = optimizer_state
         if key_moves:
             updated['keys'] = len(key_moves)
-        if self.bank_leaves is not None and any(p.grad is not None for group in self.bank_optimizer.param_groups for p in group['params']):
+        if self.bank_optimizer is not None and any(p.grad is not None for group in self.bank_optimizer.param_groups for p in group['params']):
             self.bank_optimizer.step()
             self.bank_optimizer.zero_grad(set_to_none=True)
             self.state['bank_dirty'] = True
@@ -390,7 +416,8 @@ class OuterTrainer:
         self.state['head_optimizer'] = _save_optimizer(engine, self.head_optimizer, 'head', self.owner)
         if self.bank_leaves is not None:
             self.state['bank_tensors'] = _save_bank_leaves(engine, self.bank, self.bank_leaves, self.state['step'], self.owner)
-            self.state['bank_optimizer'] = _save_optimizer(engine, self.bank_optimizer, 'bank', self.owner)
+            self.state['bank_optimizer'] = (_save_optimizer(engine, self.bank_optimizer, 'bank', self.owner)
+                                            if self.bank_optimizer is not None else None)
             if self.state['step'] % recipe.publish_every == 0 and self.state.get('bank_dirty'):
                 self.publish_bank()
         record = {'step': self.state['step'], 'targets': records, 'updated': updated, 'head': self.head.identity()}

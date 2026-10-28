@@ -91,10 +91,10 @@ def test_privileged_references_cover_training_roots_only_with_shared_facts(tmp_p
 
 def test_privileged_references_refuse_worlds_related_to_protected_packets(tmp_path):
     import pytest
-    from natlang_neuralese.rl.privileged_context import CustodyError
+    from natlang_neuralese.common.custody import CustodyError
     supply.write_programs(tmp_path, domains=['access-request'], variants=1, worlds=4)
     groups = _persist_split(tmp_path / 'access-request', ('train',))
-    with pytest.raises(CustodyError, match='protected packet'):
+    with pytest.raises(CustodyError, match='protected world'):
         supply.write_privileged(tmp_path, custody=_custody([{'id': 'held-x', 'split': 'test', 'source_groups': [groups[0]]}]))
 
 
@@ -114,12 +114,12 @@ def test_privileged_references_refuse_an_example_whose_oracle_changed(tmp_path):
 
 def test_privileged_command_line_fails_closed_without_readable_protected_packets(tmp_path, capsys):
     import pytest
-    from natlang_neuralese.rl.privileged_context import CustodyError
+    from natlang_neuralese.common.custody import CustodyError
     supply.write_programs(tmp_path / 'programs', domains=['access-request'], variants=1, worlds=4)
     _persist_split(tmp_path / 'programs' / 'access-request', ('train', 'development'))
     registry = tmp_path / 'registry.json'
-    registry.write_text(json.dumps({'corpora': [{'id': 'held', 'admission': 'evaluation-only-never-training',
-                                                 'path': 'held', 'include': ['cases.jsonl']}]}))
+    registry.write_text(json.dumps({'schema':'natlang.protected-worlds-registry/1',
+                                    'sources':[{'kind':'source-groups','id':'held','path':'held/cases.jsonl'}]}))
     with pytest.raises(CustodyError, match='fails closed'):
         supply.main(['privileged', '--programs', str(tmp_path / 'programs'), '--registry', str(registry), '--root', str(tmp_path)])
     (tmp_path / 'held').mkdir()

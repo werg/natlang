@@ -155,7 +155,9 @@ def log_softmax(logits, dim=-1, *, policy=None, compute_dtype=None):
     z_at_max = z.gather(-1, imax)
     shifted = torch.where(is_max, torch.zeros_like(z), z - z_at_max)
     others = shifted.masked_fill(is_max, float('-inf'))
-    sp = F.softplus(torch.logsumexp(others, -1, keepdim=True))
+    has_other = torch.isfinite(others).any(-1, keepdim=True)
+    safe_others = torch.where(has_other, others, torch.zeros_like(others))
+    sp = torch.where(has_other, F.softplus(torch.logsumexp(safe_others, -1, keepdim=True)), torch.zeros_like(z_at_max))
     return (shifted - sp).movedim(-1, dim)
 
 

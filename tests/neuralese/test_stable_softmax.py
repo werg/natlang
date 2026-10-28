@@ -92,6 +92,14 @@ def test_selected_ids_repeat_weights_ignore_and_chunks():
                                F.cross_entropy(z.flatten(0, 1), labels.flatten()))
 
 
+def test_masked_single_choice_has_zero_finite_gradient():
+    logits = torch.tensor([0., float('-inf'), float('-inf')], requires_grad=True)
+    probability = S.softmax(logits)
+    probability[0].backward()
+    assert torch.equal(probability, torch.tensor([1., 0., 0.]))
+    assert torch.equal(logits.grad, torch.zeros_like(logits))
+
+
 def test_log_softmax_matches_and_exact_zero_at_max():
     torch.manual_seed(1)
     z = torch.randn(4, 30) * 5

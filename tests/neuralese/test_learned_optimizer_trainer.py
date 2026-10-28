@@ -146,6 +146,34 @@ def test_expected_score_update_moves_mass_toward_the_better_token(tmp_path):
         assert later[position] > before[position]
 
 
+def test_resume_enables_basis_by_default_and_keeps_bank_moments(tmp_path):
+    engine, bank, target = setup(tmp_path, 'lfm')
+    old = recipe_for(train_bank=True, train_basis=False, publish_every=99)
+    trainer = OuterTrainer(engine, bank, old, [target])
+    trainer.step()
+    previous = trainer.state['bank_optimizer']
+    assert previous is not None
+    old_state = trainer.bank_optimizer.state_dict()['state']
+    updated = recipe_for(publish_every=99)
+    resumed = OuterTrainer(engine, bank, updated, [target], state=json.loads(json.dumps(trainer.state)))
+    assert resumed.recipe.train_bank and resumed.recipe.train_basis
+    transition = resumed.state['recipe_transitions'][-1]
+    assert transition['step'] == 1 and transition['previous_bank_optimizer'] == previous
+    assert transition['changes'] == {'train_basis': {'from': False, 'to': True}}
+    new_state = resumed.bank_optimizer.state_dict()['state']
+    assert old_state.keys() == new_state.keys()
+    for index in old_state:
+        for field in old_state[index]:
+            torch.testing.assert_close(old_state[index][field], new_state[index][field], check_dtype=field != 'step')
+    from natlang_neuralese.tune.learned.trainer import _bank_tensor_map
+    before = {name: tensor.detach().clone() for name, tensor in _bank_tensor_map(resumed.bank_leaves).items()}
+    frozen = OuterTrainer(engine, bank, recipe_for(train_bank=False, train_basis=False, publish_every=99), [target],
+                          state=json.loads(json.dumps(resumed.state)))
+    assert frozen.bank_optimizer is None
+    for name, tensor in _bank_tensor_map(frozen.bank_leaves).items():
+        torch.testing.assert_close(tensor, before[name])
+
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_bank_and_optimizer_resume_matches_uninterrupted_updates(tmp_path, family):
     from natlang_neuralese.tune.learned.trainer import _bank_tensor_map
