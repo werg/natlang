@@ -124,9 +124,12 @@ def resident_pin(directory, archive):
         shutil.rmtree(staging, ignore_errors=True)
         archive.with_name(archive.name + '.tmp').unlink(missing_ok=True)
 
-def _inventory(root):
+def _inventory(root, *, include_public=False):
     root=Path(root);result={}
-    names=['manifest.json','seed.safetensors','progress.json','fragments','public','pending']
+    # public/ is a derived serving cache; Coordinator._sync_public rebuilds it
+    # from authoritative fragment theta/version on every coordinator startup.
+    names=['manifest.json','seed.safetensors','progress.json','fragments','pending']
+    if include_public:names.append('public')
     for name in names:
         entry=root/name
         if not entry.exists():
@@ -196,7 +199,9 @@ def coordinator_pin(root, archive, package, *, attempts=5, tree_only=False):
 def archive_coordinator_tree(tree, archive, identity):
     tree,archive=Path(tree),Path(archive)
     expected={k:tuple(v) for k,v in json.loads(Path(identity).read_text()).items()}
-    if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed before archive')
+    # Already pinned trees may use the older inventory that included public/.
+    include_public=any(k.startswith('public/') for k in expected)
+    if _inventory(tree,include_public=include_public)!=expected:raise ValueError('coordinator hardlink tree changed before archive')
     seal=archive.with_name(archive.name+'.seal.json')
     identity_sha=sha256_file_hex(identity)
     if archive.exists() and seal.exists():
@@ -209,7 +214,7 @@ def archive_coordinator_tree(tree, archive, identity):
     temp=archive.with_name(archive.name+'.tmp');temp.unlink(missing_ok=True)
     try:
         with open_recovery_tar(temp) as tar:tar.add(tree,arcname='diloco-coordinator')
-        if _inventory(tree)!=expected:raise ValueError('coordinator hardlink tree changed during archive')
+        if _inventory(tree,include_public=include_public)!=expected:raise ValueError('coordinator hardlink tree changed during archive')
         os.link(temp,archive);temp.unlink()
         result={'path':str(archive),'sha256':_hash(archive),'bytes':archive.stat().st_size}
         from natlang_neuralese.common.jsonio import write_json_durable
