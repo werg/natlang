@@ -76,6 +76,7 @@ def test_real_backend_constructs_from_nonresident_control(tmp_path,monkeypatch):
 def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
     service=load('diloco_periodic_recovery');mod=load('diloco_direct_recovery');descriptor,control,recipe,roles=fixture(tmp_path)
     record=mod.record_from_control(descriptor,'run');direct=mod.load_control(descriptor,record)
+    first_control_export=[True]
     class Backend:
         workers=record['learners']
         def __init__(self):self.direct=direct
@@ -98,9 +99,15 @@ def test_direct_fenced_five_component_cycle_has_no_fake_residents(tmp_path):
         def component_storage(self,name):return (tmp_path,0)
         def prepare_dependencies(self,cycle):assert len(cycle['components'])==5;return {'path':'deps'}
         def prepare_cohort_control(self,state,cycle):return {'path':'catalog','sha256':'e'*64,'bytes':1}
-        def export_dependencies(self,intent):return {'name':'deps'}
+        def export_dependencies(self,intent):
+            if intent['path']=='catalog' and first_control_export[0]:
+                first_control_export[0]=False;raise RuntimeError('temporary catalog PUT failure')
+            return {'name':'deps'}
         def present(self,receipt):return True
-    state=service.run_once(record,tmp_path/'state.json',Backend());cycle=state['cycles'][-1]
+    backend=Backend();first=service.run_once(record,tmp_path/'state.json',backend)
+    assert first['pending']['phase']=='incomplete' and 'cohort-control' in first['pending']['errors']
+    assert first['pending']['cohort_control_intent']['path']=='catalog'
+    state=service.run_once(record,tmp_path/'state.json',backend);cycle=state['cycles'][-1]
     assert cycle['phase']=='verified-components-and-dependencies' and len(cycle['components'])==5
     assert cycle['cohort_control_receipt']['name']=='deps'
     assert cycle['compatibility']['compatible'] and not any(k.startswith('resident-') for k in cycle['components'])
