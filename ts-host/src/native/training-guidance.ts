@@ -134,7 +134,7 @@ export class TrainingGuidance {
 
   private async compute(session: NativeSession, callId: string, text: string): Promise<Record<string, unknown> | undefined> {
     const trace = session.runtime.trace, pkg = this.writerPackage;
-    const role = callId === session.runtime.options.runId ? 'root' as const : 'child' as const;
+    const role = (session.runtime.frame?.chain.length ?? 0) > 0 ? 'child' as const : 'root' as const;
     const consumer: GuidanceConsumer = { name: callId, role, text };
     const visible = pkg.visibleFacts(consumer, this.run.facts);
     const emit = (phase: string, data: Record<string, unknown> = {}) =>

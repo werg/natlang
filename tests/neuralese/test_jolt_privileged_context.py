@@ -5,6 +5,7 @@ privileged content. The fixture episode has a root that imports a child's produc
 in-run guidance writers (``writeGuidance`` producer turns) whose states the consumers import after their leading
 system turn (``import``), only record (``write-only``, a student attempt) or replace by the text fallback (``text``).
 """
+import copy
 import re
 import zlib
 from types import SimpleNamespace

@@ -118,8 +118,10 @@ async function episode({ role = 'teacher', selection, select = ids => ids, write
   const traces = [];
   let result;
   try {
-    const runtime = interpreter({ runId: 'run-1', calls: false, neuralese, agent: session => agent.run(session),
-      trace: trace => traces.push(trace) });
+    const runtime = interpreter({ runId: 'run-1', calls: false, neuralese, agent: session => {
+      traces.push(session.runtime.trace);
+      return agent.run(session);
+    } });
     result = await runtime.run(lambda({ type: '() => string', instructions: 'Ask the helper.',
       codebase: { helper: nl('helper', { args: { q: 'string' }, returns: 'string', instructions: 'Answer q.' }) } }));
   } finally { setRecorderSource(() => undefined); }

@@ -6,6 +6,7 @@
  */
 import { visible, visibleFacts } from './visibility.js';
 import { CRISP_SELECTION_IDENTITY, crispSelection } from './crispSelection.js';
+import type { GuidanceConsumer, GuidanceFact, TeacherAttempts, TeacherGroup } from './types.js';
 
-export type { GuidanceConsumer, GuidanceFact, TeacherAttempts, TeacherGroup } from './types.js';
+export type { GuidanceConsumer, GuidanceFact, TeacherAttempts, TeacherGroup };
 export { visible, visibleFacts, CRISP_SELECTION_IDENTITY, crispSelection };
