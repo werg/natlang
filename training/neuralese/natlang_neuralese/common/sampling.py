@@ -5,6 +5,11 @@ import torch
 
 
 def masked_log_distribution(logits,temperature,*,allowed=None,banned=None):
+    return torch.log_softmax(masked_logits(logits,temperature,allowed=allowed,banned=banned),dim=-1)
+
+
+def masked_logits(logits,temperature,*,allowed=None,banned=None):
+    """Temperature-scaled FP32 logits with masked tokens at -inf (the sampling law before normalization)."""
     if not math.isfinite(float(temperature)) or temperature<=0:
         raise ValueError('sample temperature must be finite and positive')
     width=logits.shape[-1]
@@ -16,7 +21,7 @@ def masked_log_distribution(logits,temperature,*,allowed=None,banned=None):
         values=values.masked_fill(~mask,float('-inf'))
     elif banned:
         values=values.index_fill(-1,torch.tensor(banned,device=logits.device),float('-inf'))
-    return torch.log_softmax(values,dim=-1)
+    return values
 
 
 def token_mask(width,*,allowed=None,banned=None):

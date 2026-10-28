@@ -324,3 +324,30 @@ def test_engine_teacher_attempt_captures_its_privileged_block(tmp_path, monkeypa
     assert prompt[0]['token_ids'] == engine.tokenizer(text, add_special_tokens=False)['input_ids']
     assert not any(segment.get('privileged') for segment in plain['x_natlang_rl_capture']['prompt'])
     assert prompt[1:] == plain['x_natlang_rl_capture']['prompt']
+
+
+@pytest.mark.parametrize('scale', [1.0, 1e-4])
+def test_reverse_kl_from_logits_matches_float64_reference_including_near_agreement(scale):
+    from natlang_neuralese.rl.jolt import reverse_kl
+    generator = torch.Generator().manual_seed(4)
+    # FP32 inputs (what the trainer has); the float64 reference uses exactly those values.
+    logits = (torch.randn(6, 50, generator=generator) * 4).double()
+    twin = (logits.float() + scale * torch.randn(6, 50, generator=generator)).double()
+    logits[0, 3] = twin[0, 3] = float('-inf')  # a shared mask
+    def reference(z):
+        lp, lq = torch.log_softmax(z, -1), torch.log_softmax(twin, -1)
+        return (lp.exp() * torch.where(torch.isfinite(lp), lp - lq, torch.zeros_like(lp))).sum(-1)
+    z64 = logits.clone().requires_grad_(True)
+    expected = reference(z64)
+    (expected * torch.arange(1., 7., dtype=torch.float64)).sum().backward()
+    z32 = logits.float().clone().requires_grad_(True)
+    actual = reverse_kl(z32, twin.float())
+    (actual * torch.arange(1., 7.)).sum().backward()
+    # Near agreement (KL ~ 1e-9) the FP32 result stays within 2% (subtracting rounded log-probabilities is off by
+    # several hundred times the value).
+    tolerance, relative = (1e-12, 2e-2) if scale < 1 else (1e-6, 1e-3)
+    torch.testing.assert_close(actual.double(), expected.detach(), rtol=relative, atol=tolerance)
+    grad = torch.where(torch.isfinite(logits), z64.grad, torch.zeros_like(z64.grad))
+    torch.testing.assert_close(z32.grad.double(), grad, rtol=relative, atol=tolerance * 10)
+    with pytest.raises(ValueError, match='mask'):
+        reverse_kl(z32.detach(), torch.zeros_like(z32))

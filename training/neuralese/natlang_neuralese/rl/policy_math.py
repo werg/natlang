@@ -109,48 +109,58 @@ def score_centered_surrogate(log_probs, labels, behavior_logp, top_ids, top_logq
         raise ValueError('score-centered positions/labels/behavior shapes differ')
     if top_ids.shape != top_logq.shape or top_ids.ndim != 2 or top_ids.shape[0] != log_probs.shape[0]:
         raise ValueError('score-centered behavior top-k shapes differ from positions')
-    width = log_probs.shape[1]
     log_probs = log_probs.float()
-    with torch.no_grad():
-        detached = log_probs.detach()
-        top_logq = top_logq.float()
-        valid = (top_ids >= 0) & (top_logq > float('-inf'))
-        safe_ids = top_ids.clamp(0, width - 1)
-        logp_h = detached.gather(1, safe_ids)
-        if bool(((top_ids >= width) | (valid & ~torch.isfinite(logp_h))).any()):
-            raise ValueError('sampler top-k names a token outside the vocabulary or with zero current probability: '
-                             'sampler and trainer masks/vocabularies differ')
-        zero = torch.zeros_like(logp_h)
-        p_h = torch.where(valid, logp_h.exp(), zero)
-        q_h = torch.where(valid, top_logq.exp(), zero)
-        ratio_h = p_h / q_h.clamp(min=torch.finfo(torch.float32).tiny)
-        w_h = torch.where(valid, importance_weight(ratio_h, importance), zero)
-        # Trainer tail: p with H removed, summed directly. Invalid pads point at a valid H member of their row;
-        # a row without a valid entry writes its own unchanged value back.
-        first = valid.float().argmax(1, keepdim=True)
-        fill_ids = torch.where(valid, safe_ids, safe_ids.gather(1, first))
-        weights = detached.exp()
-        held = torch.where(valid.any(1, keepdim=True), zero, weights.gather(1, fill_ids))
-        weights.scatter_(1, fill_ids, held)
-        tail_p = weights.sum(1)
-        tail_q = 1 - q_h.sum(1)
-        rho = tail_q.clamp(min=eps) / tail_p.clamp(min=eps)
-        alpha = rho * importance_weight(1 / rho, importance)
-        w_y = importance_weight((detached.gather(1, labels[:, None]).squeeze(1)
-                                 - behavior_logp.float()).clamp(-20, 20).exp(), importance)
-        # One dense stop-gradient weight per vocabulary entry:
-        #   U = w_y log p_y - sum_H q_v w_v log p_v - alpha sum_tail p_v log p_v.
-        weights.mul_(-alpha[:, None])
-        weights.scatter_add_(1, safe_ids, -(q_h * w_h))
-        weights.scatter_add_(1, labels[:, None], w_y[:, None])
+    detached = log_probs.detach()
+    weights, diagnostics = score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq,
+                                                   importance=importance, eps=eps)
     # Masked tokens have p = 0, zero weight and log p = -inf; keep 0 * log 0 at zero value and gradient.
     if masked is None:
         masked = not bool(torch.isfinite(detached).all())
     finite = torch.nan_to_num(log_probs, neginf=0.) if masked else log_probs
     surrogate = (weights * finite).sum(1)
+    return surrogate, diagnostics
+
+
+@torch.no_grad()
+def score_centering_weights(detached, labels, behavior_logp, top_ids, top_logq, *, importance='none', eps=1e-6):
+    """Dense stop-gradient coefficients c [n, V] with grad U = sum_v c_v s_v (single switch point for the shared
+    stable-softmax module): c = w_y e_y - sum_H q_v w_v e_v - alpha p_tail. The tail term uses the trainer tail
+    probabilities directly (no 1 - sum_H p cancellation)."""
+    width = detached.shape[1]
+    detached = detached.float()
+    top_logq = top_logq.float()
+    valid = (top_ids >= 0) & (top_logq > float('-inf'))
+    safe_ids = top_ids.clamp(0, width - 1)
+    logp_h = detached.gather(1, safe_ids)
+    if bool(((top_ids >= width) | (valid & ~torch.isfinite(logp_h))).any()):
+        raise ValueError('sampler top-k names a token outside the vocabulary or with zero current probability: '
+                         'sampler and trainer masks/vocabularies differ')
+    zero = torch.zeros_like(logp_h)
+    p_h = torch.where(valid, logp_h.exp(), zero)
+    q_h = torch.where(valid, top_logq.exp(), zero)
+    ratio_h = p_h / q_h.clamp(min=torch.finfo(torch.float32).tiny)
+    w_h = torch.where(valid, importance_weight(ratio_h, importance), zero)
+    # Trainer tail: p with H removed, summed directly. Invalid pads point at a valid H member of their row;
+    # a row without a valid entry writes its own unchanged value back.
+    first = valid.float().argmax(1, keepdim=True)
+    fill_ids = torch.where(valid, safe_ids, safe_ids.gather(1, first))
+    weights = detached.exp()
+    held = torch.where(valid.any(1, keepdim=True), zero, weights.gather(1, fill_ids))
+    weights.scatter_(1, fill_ids, held)
+    tail_p = weights.sum(1)
+    tail_q = 1 - q_h.sum(1)
+    rho = tail_q.clamp(min=eps) / tail_p.clamp(min=eps)
+    alpha = rho * importance_weight(1 / rho, importance)
+    w_y = importance_weight((detached.gather(1, labels[:, None]).squeeze(1)
+                             - behavior_logp.float()).clamp(-20, 20).exp(), importance)
+    # One dense stop-gradient weight per vocabulary entry:
+    #   U = w_y log p_y - sum_H q_v w_v log p_v - alpha sum_tail p_v log p_v.
+    weights.mul_(-alpha[:, None])
+    weights.scatter_add_(1, safe_ids, -(q_h * w_h))
+    weights.scatter_add_(1, labels[:, None], w_y[:, None])
     diagnostics = {'rho': rho, 'alpha': alpha, 'tail_q': tail_q, 'tail_p': tail_p, 'w_y': w_y,
                    'y_in_top_k': (top_ids == labels[:, None]).any(1)}
-    return surrogate, diagnostics
+    return weights, diagnostics
 
 
 def score_centered_token_loss(log_probs, labels, behavior_logp, top_ids, top_logq, advantage, *,

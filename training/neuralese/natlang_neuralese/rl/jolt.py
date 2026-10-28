@@ -290,21 +290,50 @@ def twin_queries(actions, plan, twins, shift, external_sizes, *, role):
 
 # ---- loss ----
 
-def jolt_terms(log_probs, twin_log_probs, labels, behavior_logp, top_ids, top_logq, advantage, *, beta, outcome,
+class _ReverseKL(torch.autograd.Function):
+    """KL(p || sg q) from logits, gradient g = p (delta - E_p delta) with delta from logit differences.
+
+    delta_v = (z_v - z~_v) - (lse z - lse z~) is formed from the logits themselves rather than by subtracting two
+    rounded log-probabilities, which matters near agreement (the self-teacher is the same model with extra
+    context). Masked tokens (-inf in both laws) contribute nothing. Single switch point for the shared
+    stable-softmax module.
+    """
+    @staticmethod
+    def forward(ctx, logits, twin_logits):
+        z, t = logits.float(), twin_logits.float()
+        finite = torch.isfinite(z)
+        if bool((finite != torch.isfinite(t)).any()):
+            raise ValueError('JOLT+ twin and sampled view must share the exact token mask')
+        lse = torch.logsumexp(z, -1, keepdim=True)
+        p = torch.where(finite, (z - lse).exp(), torch.zeros_like(z))
+        difference = torch.where(finite, z - t, torch.zeros_like(z))
+        # lse(t) - lse(z) = log E_p exp(-(z - t)), evaluated as log1p(E_p expm1(-(z - t))) so that near agreement
+        # the first-order terms cancel analytically instead of between two rounded log-normalizers.
+        shift = torch.log1p((p * torch.expm1(-difference)).sum(-1, keepdim=True))
+        delta = torch.where(finite, difference + shift, torch.zeros_like(z))
+        kl = (p * delta).sum(-1)
+        ctx.save_for_backward(p, delta, kl)
+        return kl
+
+    @staticmethod
+    def backward(ctx, grad):
+        p, delta, kl = ctx.saved_tensors
+        return grad[:, None] * p * (delta - kl[:, None]), None
+
+
+def reverse_kl(logits, twin_logits):
+    """KL(softmax(logits) || sg softmax(twin_logits)) per row; both are temperature-scaled masked logits."""
+    return _ReverseKL.apply(logits, twin_logits.detach())
+
+
+def jolt_terms(logits, twin_logits, labels, behavior_logp, top_ids, top_logq, advantage, *, beta, outcome,
                masked):
-    """Per-position JOLT+ loss pieces: (outcome loss -A U, KL(p || sg p~), weighted total, diagnostics)."""
+    """Per-position JOLT+ loss pieces from scaled/masked logits: (outcome -A U, KL(p || sg p~), total, details)."""
     from .policy_math import score_centered_surrogate
-    twin = twin_log_probs.detach().float()
-    current = log_probs.float()
-    p = current.exp()
-    # KL(p || q~) = sum_v p_v (log p_v - log q~_v); masked tokens (p = 0) contribute nothing.
-    difference = current - twin
-    if masked:
-        difference = torch.where(p > 0, difference, torch.zeros_like(difference))
-    kl = (p * difference).sum(1)
+    kl = reverse_kl(logits, twin_logits)
     if advantage != 0:
-        surrogate, details = score_centered_surrogate(current, labels, behavior_logp, top_ids, top_logq,
-            importance=outcome['importance'], eps=outcome['eps'], masked=masked)
+        surrogate, details = score_centered_surrogate(torch.log_softmax(logits.float(), -1), labels, behavior_logp,
+            top_ids, top_logq, importance=outcome['importance'], eps=outcome['eps'], masked=masked)
         outcome_loss = -float(advantage) * surrogate
     else:
         outcome_loss, details = torch.zeros_like(kl), {}
@@ -370,12 +399,12 @@ def jolt_action_loss(model, hidden, actions, row, declaration, *, chunk_tokens=1
     terms = [None] * len(actions)
     sums = {'outcome': 0., 'kl': 0.}
     def score(states, twin_states, labels, behavior, ids, logq, temperature, allowed, banned):
-        from ..common.sampling import masked_log_distribution
+        from ..common.sampling import masked_logits
         head = readout or model.logits
-        log_probs = masked_log_distribution(head(states), temperature, allowed=allowed, banned=banned)
+        logits = masked_logits(head(states), temperature, allowed=allowed, banned=banned)
         with torch.no_grad():  # the twin is a stop-gradient target; recomputed rather than stored
-            twin = masked_log_distribution(head(twin_states), temperature, allowed=allowed, banned=banned)
-        outcome_loss, kl, total, _ = jolt_terms(log_probs, twin, labels, behavior, ids, logq, advantage,
+            twin = masked_logits(head(twin_states), temperature, allowed=allowed, banned=banned)
+        outcome_loss, kl, total, _ = jolt_terms(logits, twin, labels, behavior, ids, logq, advantage,
             beta=beta, outcome=outcome, masked=bool(allowed is not None or banned))
         return total, outcome_loss.detach(), kl.detach()
     from ..common.native_higher_order import capture_reference_execution, active_reference_arithmetic
