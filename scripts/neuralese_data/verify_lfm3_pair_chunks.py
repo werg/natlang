@@ -9,7 +9,7 @@ import argparse,hashlib,json
 from pathlib import Path
 from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_file_hex
-from natlang_neuralese.common.jsonio import canonical_json_str,iter_jsonl_rows
+from natlang_neuralese.common.jsonio import canonical_json_str,iter_jsonl_rows,write_json_durable
 from natlang_neuralese.common import line_backbones
 from natlang_neuralese.data.native_graph_schema import parse_graph
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
@@ -169,6 +169,15 @@ def main():
                            roles=roles,blocked=blocked,holds=holds)
     result=verify_chunks(rows,out=a.out,identity=identity,validate_identity=validate,chunk_rows=a.chunk_rows,
         verify=checked)
-    print(json.dumps(result),flush=True)
+    if result['rows']!=declared.get('rows'):raise ValueError('verified count differs from conversion receipt')
+    validate(identity)
+    chunks=[binding(x) for x in sorted(a.out.glob('chunk-*.receipt.json'))]
+    report={'schema':'natlang.lfm3-train-pair-verification/1','identity':identity,'identity_sha256':digest(identity),
+            'rows':result['rows'],'chunks':chunks,'passed':True,'scope':'train pairs only; held pairs are not verified',
+            'training_exposure':0,'optimizer_updates':0}
+    path=a.out/'train-verification.json'
+    if path.exists() and json.loads(path.read_text())!=report:raise ValueError('existing train verification differs')
+    if not path.exists():write_json_durable(path,report)
+    print(json.dumps({'result':result,'verification':binding(path)}),flush=True)
 
 if __name__=='__main__':main()
