@@ -21,6 +21,17 @@ def owner_readback_reserve_bytes(environ=None):
     return int(value)
 
 
+def has_owner_readback(receipt):
+    """Cloud readback cannot satisfy a later workstation-readback request."""
+    verification=receipt.get('independent_verification') or {}
+    location=verification.get('readback_location')
+    mechanism=verification.get('owner_stream_mechanism') or {}
+    owner=(location=='owner' or (location is None and bool(mechanism.get('path'))
+        and bool(re.fullmatch('[0-9a-f]{64}',mechanism.get('sha256','')))))
+    identity=receipt.get('identity') or {}
+    return owner and all(verification.get(key)==identity.get(key) for key in ('sha256','bytes'))
+
+
 def commit_uploaded_run_file(api, run_path, name):
     """Use the SDK's upload notification; callers still verify the full GET.
 

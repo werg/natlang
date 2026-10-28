@@ -18,6 +18,18 @@ def test_destination_reserve_is_explicit_and_rejects_invalid_values():
     for bad in ('-1','45GiB','1.5','nan',''):
         with pytest.raises(ValueError):owner_readback_reserve_bytes({'CW_EXPORT_OWNER_RESERVE_BYTES':bad})
 
+
+def test_cloud_verified_receipt_cannot_skip_required_owner_get():
+    from private_export_guard import has_owner_readback
+    value=receipt()
+    assert not has_owner_readback(value)
+    value['independent_verification']['readback_location']='sandbox'
+    assert not has_owner_readback(value)
+    value['independent_verification']['readback_location']='owner'
+    assert has_owner_readback(value)
+    value['independent_verification']['bytes']-=1
+    assert not has_owner_readback(value)
+
 IDENTITY={'sha256':'a'*64,'bytes':48_000_000_000}
 
 
