@@ -1,0 +1,16 @@
+{
+ "schema": "natlang.coreweave-job/1",
+ "id": "@@RUN_ID@@-dev-eval",
+ "kind": "eval",
+ "placement": {"where": "coreweave", "reason": "Development-packet monitoring of a running LFM3 DiLoCo stage (LFM3_COMMITTED_DECISIONS #15, monitoring only): pulls the global and EMA versions over the coordinator API every N rounds, converts them to GGUF and runs dev packet v2 on the prebuilt llama.cpp-neuralese server. Restored from the stage's seed snapshot (parent, base, cached code/wheelhouse), so nothing large crosses the DGX uplink. Stopped with the stage."},
+ "image": "nvcr.io/nvidia/pytorch@sha256:f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d",
+ "resources": {"gpu": 1, "memory": "48Gi"},
+ "lifetime_hours": 24,
+ "scratch": {"path": "/work", "size": "200Gi", "restore_from_snapshot_id": "@@SNAPSHOT@@"},
+ "env": {"NATLANG_CW_COLLECT_WAIT": "3600", "HF_HUB_OFFLINE": "1"},
+ "outputs": ["/work/dev-evals"],
+ "command": ["bash", "scripts/coreweave/lfm3_dev_eval_global.sh", "@@EVERY@@"],
+ "needs": {"gpu_memory_gb": 30, "hours": 24, "teacher": false, "lineage_owner": "dgx", "moves_active_lineage": false},
+ "resource_notes": "One GPU plus a RAM minimum: export-global holds the FP32 global (~6.8 GB) and a BF16 model on CPU; the GGUF conversion holds an FP32 HF copy (~6.8 GB). 48Gi.",
+ "bundle_plan": "bundle.py plan --code-sha SHA --prebuilt llama-cpp-neuralese-sm120 --prebuilt wheelhouse --prebuilt ts-host --extra runs/natlang-dev-task-packet-v2-20261028 --extra <absolute .development-source-snapshots/llama.cpp-85a2e716> -o BUNDLE.json (code and wheelhouse are linked from the restored volume's content store)"
+}

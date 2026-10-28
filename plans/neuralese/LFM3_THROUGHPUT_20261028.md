@@ -147,8 +147,26 @@ Cost per 13.2k-token update on GB10 (plain + compile, chunk 1024; 7.25 s at BF16
 | Pass | s/update | vs BF16 |
 |---|---|---|
 | FP8 λ = 1 | 7.3-7.4 | +2% |
-| NVFP4 λ = 1 | 8.4 | +16% |
-| Sampled mix (weights 1/0.5/1) | ~7.7 expected | ~+6% |
+| NVFP4 λ = 1 | 8.4, then **7.7** after the branch-free encode | +16%, then **+5%** |
+| Sampled mix (weights 1/0.5/1) | ~7.5 expected | ~+3% |
+
+The NVFP4 weight encoder branched on `float(scale_2) == 0`. That host synchronization broke the compiled per-pass
+ramp, so most of the codec ran eagerly; the profile showed it as int64 adds and copies. Writing the encoder
+branch-free (`torch.where`; bit-identical, and the parity tests pass) removed most of the NVFP4 pass overhead, so
+no hand-written activation kernel was needed.
+
+Resuming inside a calibration window (fixed in 3fc0e91f1): the open window is saved in the quantization state
+(start, batches, running maxima) and continues exactly on resume. Only the BF16 calibration forwards observe;
+before the fix, the window's quantized training passes also widened the static ranges.
+
+Batched Newton-Schulz (measured, not adopted): stacking same-shape LFM3 matrices gives bit-identical results, but
+on GB10 it is 0.6x the speed of per-matrix NS (2.42 s vs 1.46 s for all 168 matrices). Re-measure on the RTX PRO 6000
+before reconsidering.
+
+Real FP8 GEMMs (not adopted): the deployed FP8_BLOCK format has per-128 activation-group scales and 128x128 weight
+block scales. A rowwise `_scaled_mm` (one scale per token and per output row) cannot represent those values, so it
+would train against a different quantizer than the one deployed. Matching exactly would need one K = 128 GEMM per
+block column, 16 per projection, which is slower than BF16. The FP8 pass costs only +2% as fake quant.
 
 ## Remaining ideas, ranked by expected gain
 
@@ -157,9 +175,10 @@ Cost per 13.2k-token update on GB10 (plain + compile, chunk 1024; 7.25 s at BF16
 2. Real FP8 GEMMs in the forward once the FP8 QAT point is at λ = 1 (rowwise FP8 is 1.9-2.1x BF16 on both GPUs).
    This is not an exact match to the FP8_BLOCK deploy scaling, which the hardware does not support, so it needs its
    own parity check. Could be ~25-35% of GEMM time.
-3. NVFP4 activation codec (+16% per NVFP4 pass, ~6% averaged): a hand-written Triton group quantizer, or real
-   NVFP4 GEMMs (`F.scaled_mm`, 4.5x on GB10, 2.8x on the sandbox) once λ = 1.
-4. Batched Newton-Schulz over same-shape matrices after backward (~0.2-0.3 s of 1.44 s).
+3. Real NVFP4 forward GEMMs once λ = 1 (`F.scaled_mm` BlockWise1x16 + TensorWise is exactly the NVFP4 deploy
+   format; 4.5x on GB10, 2.8x on the sandbox). This would speed up the FFN forward and recompute of NVFP4 passes
+   only, worth roughly 0.3-0.5 s per NVFP4 pass on GB10.
+4. Batched Newton-Schulz: slower on GB10 (above); check on the sandbox.
 5. Selective activation checkpointing in the graph forward (keep the top K layers): at most ~7% (no checkpointing at
    all measured 6.6 vs 7.1 s), at ~3 GB per 1k tokens.
 6. Fused linear + cross-entropy readout (vocab 128k): ~0.3 s.

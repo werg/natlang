@@ -139,12 +139,14 @@ def test_resume_inside_calibration_window_continues_it_exactly(base):
     assert 'window' not in resumed.state_dict()
 
 
-def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base):
+@pytest.mark.parametrize('backend', ['plain', 'cpu_file'])
+def test_quantized_update_routes_straight_through_gradients_to_bf16_latents(base, backend):
     from natlang_neuralese.train.native_state_sft import make_native_optimizer, native_training_update
     example = graph()
     deltas = {}
     for point, mix in (('bf16', 0.0), ('fp8', 0.0), ('fp8', 1.0)):
         model, quantization = model_with_points(base)
+        model.native_cotangent_accumulator_backend = backend
         optimizer, _ = make_native_optimizer(model, lr=1e-2, weight_decay=0., learned_row_lr=1e-2)
         weights = {name: parameter for name, parameter in model.named_parameters()
                    if name.endswith(('feed_forward.w1.weight', 'self_attn.q_proj.weight'))}

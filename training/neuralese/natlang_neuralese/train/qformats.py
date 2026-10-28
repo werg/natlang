@@ -112,14 +112,14 @@ def nvfp4_weight_encode(weight: torch.Tensor, group: int = NVFP4_GROUP, global_a
     blocks = _groups(w, group)
     scale_2 = nvfp4_global_scale(w.abs().amax() if global_amax is None else torch.as_tensor(global_amax))
     amax = blocks.abs().amax(dim=-1).float()
-    if float(scale_2) == 0.0:
-        scales = torch.ones_like(amax).to(torch.float8_e4m3fn)
-        codes = torch.zeros(blocks.shape, dtype=torch.uint8, device=w.device)
-    else:
-        per_group = amax / (FP4_MAX * scale_2)
-        per_group[per_group == 0] = 1.0
-        scales = per_group.to(torch.float8_e4m3fn)
-        codes = e2m1_codes(blocks.float() / (scales.float() * scale_2).unsqueeze(-1))
+    # Branch-free (no host synchronization; one compiled graph in the training ramp): a zero weight has unit scales
+    # and zero codes, a zero group a unit scale.
+    zero = scale_2 == 0
+    per_group = amax / (FP4_MAX * scale_2)
+    per_group = torch.where(zero | (per_group == 0), torch.ones_like(per_group), per_group)
+    scales = per_group.to(torch.float8_e4m3fn)
+    codes = e2m1_codes(blocks.float() / (scales.float() * scale_2).unsqueeze(-1))
+    codes = torch.where(zero, torch.zeros_like(codes), codes)
     return pack_fp4(codes.reshape(w.shape)), scales, scale_2
 
 
