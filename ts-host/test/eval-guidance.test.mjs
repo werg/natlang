@@ -265,3 +265,12 @@ test('nl called as a function is shown its own call in the tag form', async () =
     ['return_result', { status: 'success', value: 'hi' }]]);
   assert.match(results[0], /nl-not-tag: nl is a template tag, not a function taking a string: put the template right after nl and the arguments after it, as in nl<boolean>`Decide whether name is short\.`\(name\)\./);
 });
+
+test('read_code of a bare service member shows the service declaration, calling only functions functions', async () => {
+  const { results } = await script([['read_code', { name: 'price' }], ['read_code', { name: 'Cart' }],
+    ['return_result', { status: 'success', value: 'hi' }]], 'string', {
+    services: { shop: { price: () => 3, Cart: class Cart {} } },
+    serviceDeclarations: { shop: 'export function price(item: string): number;\nexport class Cart { total(): number; }' } });
+  assert.match(results[0], /^price is a function of the shop service; call it in eval as shop\.price\(\.\.\.\)\./);
+  assert.match(results[1], /^Cart is declared by the shop service:\n/);
+});

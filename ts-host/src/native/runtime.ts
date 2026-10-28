@@ -1735,7 +1735,10 @@ export class NativeSession {
           requested in (value as object))?.[0] : undefined;
       if (owner) {
         const declaration = this.runtime.declarations[owner]!;
-        const text = `${requested} is a function of the ${owner} service; call it in eval as ${owner}.${requested}(...).\n${declaration}`;
+        // A class or other exported type of the service is not called through it: name it as part of the declaration.
+        const isFunction = new RegExp(`\\bfunction\\s+${requested}\\s*[<(]`).test(declaration);
+        const text = isFunction ? `${requested} is a function of the ${owner} service; call it in eval as ${owner}.${requested}(...).\n${declaration}` :
+          `${requested} is declared by the ${owner} service:\n${declaration}`;
         return { kind: 'ok', text, value: declaration };
       }
       // A source file name (`resolve.js`, `ticket_kind.nl`) names the function it defines: show that function.
