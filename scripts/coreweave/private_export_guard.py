@@ -12,6 +12,15 @@ import re
 import tempfile
 
 
+def owner_readback_reserve_bytes(environ=None):
+    """Explicit destination reserve; defaults to the external recovery floor."""
+    environ=os.environ if environ is None else environ
+    value=environ.get('CW_EXPORT_OWNER_RESERVE_BYTES', str(80 << 30))
+    if not isinstance(value,str) or not re.fullmatch(r'[0-9]+',value):
+        raise ValueError('CW_EXPORT_OWNER_RESERVE_BYTES must be a nonnegative integer byte count')
+    return int(value)
+
+
 def commit_uploaded_run_file(api, run_path, name):
     """Use the SDK's upload notification; callers still verify the full GET.
 

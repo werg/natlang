@@ -562,7 +562,18 @@ except (OSError,ValueError):pass
 module=pathlib.Path(sys.argv[2])
 try: module_sha=hashlib.sha256(module.read_bytes()).hexdigest()
 except OSError: module_sha=None
-print(json.dumps({'boot_id':boot,'pid_alive':alive,'progress':value,'runtime_module_sha256':module_sha}))"""
+result={'boot_id':boot,'pid_alive':alive,'progress':value,'runtime_module_sha256':module_sha}
+if 'http_port' in expected:
+ import urllib.request
+ result['http_ok']=False
+ try:
+  token=(pathlib.Path(expected['secrets_directory'])/'diloco-token').read_text().strip()
+  request=urllib.request.Request('http://127.0.0.1:'+str(expected['http_port'])+'/v1/status',headers={'Authorization':'Bearer '+token})
+  with urllib.request.urlopen(request,timeout=3) as response: status=json.load(response)
+  result['http_ok']=status.get('run_id')==expected['run_id']
+  result['coordinator_status']={k:status.get(k) for k in ('run_id','merges','versions','global_tokens','live_workers')}
+ except Exception as error: result['http_error_type']=type(error).__name__
+print(json.dumps(result))"""
 
 def health_snapshot(record, ownership, *, read_sandbox=None):
     """Actual sandbox status, boot/PID ownership and last optimizer progress."""
@@ -579,20 +590,37 @@ def health_snapshot(record, ownership, *, read_sandbox=None):
                 raise ValueError('worker progress path must be absolute and normalized')
             expected={**role,'progress_path':progress_path}
             box=read_sandbox(ident);box.get_status();status=str(getattr(box.status,'value',box.status)).lower()
-            module=(ownership.get('runtime') or {}).get('module_path') or str(
+            module=role.get('module_path') or (ownership.get('runtime') or {}).get('module_path') or str(
                 paths.root('repo')/'training/neuralese/natlang_neuralese/train/native_state_sft.py')
             r=box.exec(['python3','-c',_HEALTH_PROBE,json.dumps(expected),module],timeout_seconds=30).result(timeout=40)
             if r.returncode:raise ValueError('health probe failed')
             data=json.loads(r.stdout);data.update(sandbox_id=ident,sandbox_status=status)
             data['process_identity']={key:role[key] for key in ('pid','boot_id','start_ticks')}
             data['progress_path']=progress_path
-            expected_sha=(ownership.get('runtime') or {}).get('new_module_sha256')
+            expected_sha=role.get('module_sha256') or (ownership.get('runtime') or {}).get('new_module_sha256')
             data['runtime_matches']=bool(expected_sha and data.get('runtime_module_sha256')==expected_sha)
             data['runtime_check_scope']='one trainer module file; not an attestation of the full loaded process'
             data['state']='live' if status=='running' and data['pid_alive'] and data['runtime_matches'] else 'dead-replaced-or-runtime-mismatch'
+            if data['state']=='live' and 'http_port' in expected and not data.get('http_ok'):
+                data['state']='coordinator-http-unavailable'
             return str(i),data
         except Exception as error:return str(i),{'sandbox_id':ident,'state':'unavailable','error_type':type(error).__name__}
     with ThreadPoolExecutor(max_workers=len(ids)) as pool:return dict(pool.map(check,range(len(ids))))
+
+
+def coordinator_health_snapshot(record, ownership, *, read_sandbox=None):
+    """Check the real coordinator process and authenticated local API separately."""
+    role=ownership.get('coordinator') or {}
+    ident=record.get('coordinator')
+    port=role.get('http_port');secrets=role.get('secrets_directory')
+    run_id=(record.get('run') or {}).get('settings',{}).get('run_id') or ownership.get('run_id')
+    if (not ident or not run_id or role.get('sandbox_id')!=ident
+            or type(port) is not int or not 1<=port<=65535
+            or not isinstance(secrets,str) or not Path(secrets).is_absolute() or os.path.normpath(secrets)!=secrets
+            or not role.get('module_path') or not role.get('module_sha256') or not role.get('progress_path')):
+        return {'sandbox_id':ident,'state':'coordinator-configuration-unavailable'}
+    configured={**ownership,'workers':{'0':{**role,'run_id':run_id}}}
+    return health_snapshot({'learners':[ident]},configured,read_sandbox=read_sandbox)['0']
 
 def observe_optimizer_progress(workers, previous, now):
     """Report observed movement without treating elapsed time as process death."""
@@ -635,7 +663,8 @@ def health_loop(record, ownership_path, destination, interval):
             except (OSError,ValueError):previous=None
             if not isinstance(previous,dict) or previous.get('run_id')!=record['run']['id']:previous=None
             workers=observe_optimizer_progress(workers,previous,now)
-            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'journal_state':current.get('state'),'at':now,'workers':workers}
+            coordinator=coordinator_health_snapshot(record,ownership)
+            value={'schema':'natlang.diloco-worker-health/1','run_id':record['run']['id'],'journal_state':current.get('state'),'at':now,'workers':workers,'coordinator':coordinator}
             durable_json(destination,value)
             print(json.dumps({'event':'worker_health','workers':workers},sort_keys=True),flush=True)
         except Exception as error:

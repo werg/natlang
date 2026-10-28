@@ -10,6 +10,14 @@ import pytest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/coreweave'))
 from private_export_guard import export_lease
 
+
+def test_destination_reserve_is_explicit_and_rejects_invalid_values():
+    from private_export_guard import owner_readback_reserve_bytes
+    assert owner_readback_reserve_bytes({})==80<<30
+    assert owner_readback_reserve_bytes({'CW_EXPORT_OWNER_RESERVE_BYTES':str(45<<30)})==45<<30
+    for bad in ('-1','45GiB','1.5','nan',''):
+        with pytest.raises(ValueError):owner_readback_reserve_bytes({'CW_EXPORT_OWNER_RESERVE_BYTES':bad})
+
 IDENTITY={'sha256':'a'*64,'bytes':48_000_000_000}
 
 
