@@ -117,8 +117,8 @@ def test_private_full_state_export_binds_box_hash_get_and_local_copy(tmp_path,mo
     intent={'sandbox_id':'actual','path':'/work/pin/checkpoint.pt','sha256':sha,'bytes':len(payload),'global_step':51}
     class Result:
         returncode=0
-        def result(self):return self
-    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:SimpleNamespace(exec=lambda args:Result()))
+        def result(self,**kwargs):return self
+    monkeypatch.setattr(service.cwctl,'read_sandbox',lambda ident:SimpleNamespace(exec=lambda args,**kwargs:Result()))
     def run(argv,env,check):
         assert env['CW_EXPORT_SANDBOX_ID']=='actual' and env['CW_EXPORT_VERIFY_ON_OWNER']=='1'
         assert env['CW_EXPORT_EXPECTED_SHA256']==sha and env['CW_EXPORT_EXPECTED_BYTES']==str(len(payload))
