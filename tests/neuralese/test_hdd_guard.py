@@ -314,3 +314,19 @@ def test_directory_rl_bundle_staging_preserves_real_bundle_reader_and_repairs_ta
     assert restored.get_native_tensor_artifact(ident).artifact.tensors['layer.weight'].tolist() == [1., 2.]
     with pytest.raises(ValueError, match='directory input .*declared SHA-256'):
         hdd_guard.input_path('rl_block_bundle', bundle, '0' * 64)
+
+
+def test_portable_stage_argv_keeps_logical_inputs_and_local_uses_staging(monkeypatch):
+    from natlang_neuralese.train import recipe
+    source = {'path': '/home/werg/logical/train-sources.json', 'sha256': 'a' * 64}
+    resolved = {'native_graphs': source, 'foundation_native_graphs': source}
+    monkeypatch.setattr(recipe, '_staged_inputs', lambda values: {
+        key: {**value, 'path': '/private/staged/tree/train-sources.json'}
+        for key, value in values.items()})
+    portable = recipe.stage_input_args(resolved, 'native_state_sft', target='portable')
+    assert portable == ['--native-graphs', source['path'], '--foundation-native-graphs', source['path']]
+    local = recipe.stage_input_args(resolved, 'native_state_sft')
+    assert local == ['--native-graphs', '/private/staged/tree/train-sources.json',
+                     '--foundation-native-graphs', '/private/staged/tree/train-sources.json']
+    with pytest.raises(ValueError, match='local or portable'):
+        recipe.stage_input_args(resolved, 'native_state_sft', target='unknown')
