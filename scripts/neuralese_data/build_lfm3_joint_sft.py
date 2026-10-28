@@ -93,7 +93,10 @@ def build(args):
     out = (REPO / args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     renders, scores, waiting = render_inputs()
-    twins = [(d, r) for d, r in teacher_twins() if teacher_score_file(r['source']['path']).exists()]
+    # The serving mode is program-header (policy serving_mode): twins rendered with the full system prompt stay out
+    # until they are re-rendered; --include-teachers takes program-header twins only.
+    twins = [(d, r) for d, r in teacher_twins() if teacher_score_file(r['source']['path']).exists()
+             and args.include_teachers and r.get('prompt_rendering') == 'program-header']
     scores += sorted({str(teacher_score_file(r['source']['path'])) for _, r in twins})
     teacher_graphs = [str((d / 'train/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
     teacher_test = [str((d / 'test/native-graphs.jsonl.zst').relative_to(REPO)) for d, _ in twins]
@@ -155,6 +158,8 @@ def main():
     sub.add_parser('score-teachers')
     b = sub.add_parser('build')
     b.add_argument('--out', required=True)
+    b.add_argument('--include-teachers', action='store_true',
+                   help='include teacher twins whose receipt declares prompt_rendering program-header')
     b.add_argument('--prior', action='append', default=[],
                    help='earlier version mixture dir (e.g. runs/lfm3-mixture/joint-sft-v1/mixture): an append keeps '
                         'its train sources unchanged and its rows/decisions/held groups taken')

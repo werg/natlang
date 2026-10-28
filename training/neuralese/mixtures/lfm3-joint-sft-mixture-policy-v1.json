@@ -20,11 +20,12 @@
   "domain": "curriculum domain",
   "family": "program/world family",
   "task_shape": "task kind + curriculum family",
-  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)"
+  "near_duplicate_cluster": "sha256 of the root task's normalized instructions (digits -> 0, whitespace collapsed, first 400 chars)",
+  "choice_call": "decision / scored-judge / progress-judge call kinds (family or task shape matches judge|decision|decide|refine|progress)"
  },
  "drop_rules": [
   {
-   "reason": "no natlang program structure (answer-only, plain QA or chat)",
+   "reason": "no natlang program structure (answer-only, plain QA or chat); decision and scored-judge calls (choice_call) are exempt: their supervised output is the choice",
    "all": {
     "evals": {
      "max": 0
@@ -34,6 +35,9 @@
     },
     "neuralese_edges": {
      "max": 0
+    },
+    "choice_call": {
+     "eq": false
     }
    }
   },
@@ -192,6 +196,11 @@
   "fraction": 0.015,
   "max_rows": 1500,
   "salt": "lfm3-joint-sft-held-v1:",
-  "rule": "teacher-twin rows only: a source group is held when sha256(salt+group) < fraction, closed over groups shared by teacher rows; a component that touches any render train group (possibly trained in an earlier version) is not carved; carved rows are held (split test, conversion.held_carve) in every version; beyond max_rows they are dropped, never trained"
+  "rule": "a source group is held when sha256(salt+group) < fraction, closed over groups shared by this version's new train rows (renders and teacher twins); a component touching any group an earlier version trained on is never carved; carved rows are held (split test, conversion.held_carve) in every version; beyond max_rows they are dropped, never trained"
+ },
+ "zero_target_rows": "refused (not written), counted in mixture.json cap_drops",
+ "serving_mode": {
+  "prompt_rendering": "program-header",
+  "rule": "train/held rows come from program-header or whole-trajectory (program-header) renderings; teacher twins rendered with the full system prompt are excluded until re-rendered in program-header mode (coverage audit G7)"
  }
 }

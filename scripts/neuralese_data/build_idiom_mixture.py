@@ -30,6 +30,7 @@ import collections
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -147,9 +148,15 @@ def graph_edges(row) -> int:
     return sum(len(node.get('imports') or []) for node in row.get('nodes') or [])
 
 
+CHOICE_FAMILY = re.compile(r'judge|decision|decide|refine|progress', re.I)
+
+
 def derive(features: dict) -> dict:
     deep = features['max_depth'] >= 2 or features['max_branching'] >= 2
     return {**features, 'deep_or_branching': deep,
+            # Decision and scored-judge calls: their supervised output is the choice itself (G3 of the 2026-10-28
+            # coverage audit), so answer-only is their natlang structure, not plain QA.
+            'choice_call': bool(CHOICE_FAMILY.search(f'{features.get("family")} {features.get("task_shape")}')),
             'neuralese_or_reducer': bool(features['neuralese_edges'] or features['text_neuralese_markers']
                                          or features['reducer']),
             'deep_or_branching_or_reducer': bool(deep or features['reducer'])}
@@ -215,20 +222,18 @@ def carved(groups, carve) -> bool:
     return any(int(hashlib.sha256((carve['salt'] + g).encode()).hexdigest()[:8], 16) < limit for g in groups)
 
 
-def carve_groups(config, policy) -> set:
-    """Source groups of the permanent held slice, closed over shared groups. Only teacher-twin rows are carved, and
-    never a group that any render train row (possibly trained in an earlier version) carries."""
+def carve_groups(config, policy, trained_groups=frozenset()) -> set:
+    """Source groups of the permanent held slice, closed over groups shared by train rows; a component touching any
+    group an earlier version trained on is never carved."""
     carve = policy.get('held_carve')
     if not carve:
         return set()
-    render_groups = set()
-    for render in config['renders']:
-        for _, path in graph_files(render, 'train'):
-            for _, raw in iter_lines(path):
-                render_groups.update(json.loads(raw).get('source_groups') or [])
+    render_groups = set(trained_groups)
     rows = []
-    for item in config.get('teacher_graphs', []):
-        for _, raw in iter_lines(REPO / item):
+    paths = [path for render in config['renders'] for _, path in graph_files(render, 'train')]
+    paths += [REPO / item for item in config.get('teacher_graphs', [])]
+    for path in paths:
+        for _, raw in iter_lines(path):
             rows.append(frozenset(json.loads(raw).get('source_groups') or ()))
     chosen = {g for groups in rows if carved(groups, carve) for g in groups}
     while True:  # closure: a row touching a held group is held whole
@@ -251,7 +256,7 @@ def carve_groups(config, policy) -> set:
 def prior_versions(config):
     """Earlier mixture versions this one appends to: their train sources stay in the manifest unchanged, their rows,
     decisions and graphs are taken, and their held groups stay held."""
-    sources, ids, decisions, keys, groups = [], set(), set(), set(), set()
+    sources, ids, decisions, keys, groups, trained = [], set(), set(), set(), set(), set()
     for prior in config.get('prior', []):
         root = (REPO / prior).resolve()
         manifest = json.loads((root / 'train-sources.json').read_text())
@@ -271,11 +276,12 @@ def prior_versions(config):
                                  else conversion.get('source_record_ids') or [])
                 ids.add(row['id'])
                 keys.add(content_key(row))
+                trained.update(row.get('source_groups') or [])
         held_manifest = json.loads((root / 'held-sources.json').read_text())
         for source in held_manifest['sources']:
             for _, raw in iter_lines(root / source['path']):
                 groups.update(json.loads(raw).get('source_groups') or [])
-    return sources, ids, decisions, keys, groups
+    return sources, ids, decisions, keys, groups, trained
 
 
 def candidates(config, policy, decisions, trajectories, held, carve_out=None, carve_set=frozenset(), prior=None):
@@ -298,7 +304,7 @@ def candidates(config, policy, decisions, trajectories, held, carve_out=None, ca
             if set(row.get('source_groups') or ()) & held:
                 omitted['shares a held/dev source group'] += 1
                 continue
-            if kind == 'teacher' and set(row.get('source_groups') or ()) & carve_set:
+            if set(row.get('source_groups') or ()) & carve_set:
                 if carve_out is not None and len(carve_out) < carve['max_rows']:
                     carve_out.append((str(path), number))
                     omitted['carved into the permanent held slice'] += 1
@@ -447,8 +453,8 @@ def main(argv=None):
         for _, raw in iter_lines(path):
             held.update(json.loads(raw).get('source_groups') or [])
 
-    carve_out, carve_set = [], carve_groups(config, policy)
     prior = prior_versions(config)
+    carve_out, carve_set = [], carve_groups(config, policy, prior[5])
     held |= prior[4]
     cands, omitted = candidates(config, policy, decisions, trajectories, held, carve_out, carve_set, prior)
     chosen, cap_drops = apply_caps(cands, policy)
@@ -486,6 +492,9 @@ def main(argv=None):
             tier, category, cohort, item = lines[number]
             row = json.loads(raw)
             reply, reasoning, processed = own_tokens(row, resolved)
+            if reply + reasoning == 0:  # nothing the objective would train: refused, counted
+                cap_drops['refused: zero own-output target tokens'] += 1
+                continue
             writers[(tier, category, cohort)].write(raw)
             f = item['features']
             for key in (f'tier{tier}', f'tier{tier}:{category}', f'category:{category}', 'all'):
