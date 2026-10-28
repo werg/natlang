@@ -54,7 +54,7 @@ def _load_examples(path, tokenizer_fingerprint, *, required_split):
 
 
 def communication_exposure(entries, counts, quotas):
-    selected = [entry for entry in entries if entry.get('communication')]
+    selected = [entry for entry in entries if entry.get('communication') and entry['id'] in quotas]
     return {'graphs': len(selected),
             'required_graph_visits': sum(quotas[entry['id']] for entry in selected),
             'graph_visits': sum(counts.get(entry['id'], 0) for entry in selected),
@@ -2830,6 +2830,9 @@ def _main(argv=None, *, requested_refresh):
             # checkpoint remains the authority for committed resume/exposure; logs
             # can include work subsequently replayed after an uncheckpointed crash.
             train_loss = float(loss.detach())
+            if diloco is not None:
+                # Account for the completed update before any optional telemetry can fail.
+                diloco.after_step(tokens=batch_tokens, report={'loss': train_loss, 'global_step': global_step})
             seconds = time.monotonic() - update_started
             supervised_tokens = sum(sum(weight > 0 for weight in item.target_weights) for item in batch)
             progress = {'schema': 'natlang.native-training-progress/1', 'kind': 'native',
@@ -2905,7 +2908,6 @@ def _main(argv=None, *, requested_refresh):
                     from .own_output_supervision import progress_telemetry
                     progress['own_output_ce'] = progress_telemetry(details, graphs=len(batch))
             if diloco is not None:
-                diloco.after_step(tokens=batch_tokens, report={'loss': train_loss, 'global_step': global_step})
                 progress['diloco'] = diloco.metrics()
             if str(args.device).startswith('cuda'):
                 progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),

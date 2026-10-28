@@ -1672,3 +1672,12 @@ def test_current_held_coverage_retention_is_exact_and_does_not_reuse_certificate
     assert list(metrics)==['held_coverage']
     metrics['held_coverage']['classes']['ordinary']['visits'][0]=3
     assert prior['metrics']['held_coverage']['classes']['ordinary']['visits']==[2]
+
+
+def test_communication_exposure_uses_only_assigned_shard():
+    from natlang_neuralese.train.native_state_sft import communication_exposure
+    entries = [{'id':'mine','communication':True},{'id':'peer','communication':True},
+               {'id':'ordinary','communication':False}]
+    assert communication_exposure(entries, {'mine':1,'peer':7}, {'mine':2,'ordinary':1}) == {
+        'graphs':1, 'required_graph_visits':2, 'graph_visits':1, 'complete':False}
+    assert communication_exposure(entries, {'mine':2,'peer':7}, {'mine':2})['complete']
