@@ -249,25 +249,42 @@ def test_opt_out_keeps_historical_objective_and_student_privileged_capture_is_re
         prepare(rollouts(flagged), episode, roles, identity)
 
 
-def test_engine_teacher_attempt_inserts_its_block_at_the_declared_place(tmp_path):
+def test_engine_teacher_attempt_renders_each_invocations_block_at_the_declared_place(tmp_path):
     from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.rl.privileged_context import Fact, render_block
     from natlang_neuralese.serve.engine import GenerationRequest
     engine = engine_fixture(tmp_path, 'lfm')
-    block = {'insert_at': 1, 'token_ids': [5, 6, 7]}
+    facts = [{'id': 'expected_result:0', 'kind': 'expected_result', 'text': 'The verified result is t6.'},
+             {'id': 'child_value:0', 'kind': 'child_value', 'text': 'The answer is t9.', 'match': ['t5']}]
+    custody = {'split': 'train', 'protected_sha256': 'c' * 64}
+    messages = [{'role': 'system', 'content': 't7'}, {'role': 'user', 'content': 't4 t5'}]
+    def context(role):
+        return {'schema': 'natlang.privileged-request/1', 'custody': custody, 'facts': facts,
+                'invocation': {'name': 'run-1#turn1', 'role': role}}
     engine.start()
     try:
-        reply = engine.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=.9,
-            seed=5, max_tokens=4, rl_capture=True, rl_top_k=8, privileged_block=block))
-        plain = engine.generate(GenerationRequest(messages=[{'role': 'user', 'content': 't4 t5'}], temperature=.9,
-            seed=5, max_tokens=4, rl_capture=True))
+        replies = {role: engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
+                   rl_capture=True, rl_top_k=8, privileged_context=context(role))) for role in ('root', 'child')}
+        plain = engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
+                                                  rl_capture=True))
+        with pytest.raises(Exception, match='invocation'):
+            engine.generate(GenerationRequest(messages=messages, temperature=.9, seed=5, max_tokens=4,
+                rl_capture=True, privileged_context={**context('root'), 'invocation': {'name': 'x'}}))
     finally:
         engine.stop()
-    prompt = reply['x_natlang_rl_capture']['prompt']
-    flagged = [segment for segment in prompt if segment.get('privileged')]
-    assert len(flagged) == 1 and flagged[0]['token_ids'] == [5, 6, 7]
     own = lambda segments: [t for s in segments if s['kind'] == 'tokens' for t in s['token_ids']]
     expected = own(plain['x_natlang_rl_capture']['prompt'])
-    assert own(prompt) == expected[:1] + [5, 6, 7] + expected[1:]
+    for role, reply in replies.items():
+        # The learner's rebuild (shared rendering, selection and insertion point) on the student tokens.
+        block = render_block(engine._privileged_rendering(), invocation={'name': 'run-1#turn1', 'role': role,
+            'text': 't7\nt4 t5'}, token_ids=expected, facts=tuple(Fact(f['id'], f['kind'], f['text'], None,
+            tuple(f.get('match') or ())) for f in facts), custody_receipt=custody)
+        prompt = reply['x_natlang_rl_capture']['prompt']
+        flagged = [segment for segment in prompt if segment.get('privileged')]
+        assert len(flagged) == 1 and tuple(flagged[0]['token_ids']) == block.token_ids
+        assert own(prompt) == expected[:block.insert_at] + list(block.token_ids) + expected[block.insert_at:]
+        assert [fact['id'] for fact in block.receipt['facts']] == (
+            ['expected_result:0'] if role == 'root' else ['child_value:0'])
 
 
 @pytest.mark.parametrize('scale', [1.0, 1e-4])
@@ -310,3 +327,31 @@ def test_root_calls_come_from_the_execution_graph_not_turn_order():
               {'kind': 'invocation', 'node': 'call:b', 'inputs': [{'node': 'call:a', 'port': 'caller'}]}]
     with pytest.raises(ValueError, match='no root invocation'):
         root_calls({'execution_graph': cyclic}, turns)
+
+
+def test_teacher_attempt_entries_carry_the_worlds_facts_and_the_groups_feedback(tmp_path):
+    from natlang_neuralese.rl.jolt import group_feedback, teacher_entries
+    from natlang_neuralese.rl.privileged_context import case_facts
+    from natlang_neuralese.rl.task_rollouts import build_queue
+    case = train_case()
+    cases = tmp_path / 'cases.jsonl'
+    cases.write_text(json.dumps(case) + '\n' + json.dumps(protected_case()) + '\n')
+    config = tmp_path / 'sampling-config.json'
+    config.write_text(json.dumps({'guidance': False, 'x_natlang_rl_capture': True}))
+    entries = build_queue(tmp_path / 'packet.jsonl', 2, 2, tmp_path, temperature=1., case_seconds=60,
+                          max_model_requests=8, max_turns=8, seed_base=700000)
+    students = [{'task_id': case['id'], 'group': 0, 'sample': 0, 'reward': {'quality': 0., 'feedback': 'wrong count'}},
+                {'task_id': case['id'], 'group': 0, 'sample': 1, 'reward': {'quality': 0.}},
+                {'task_id': protected_case()['id'], 'group': 1, 'sample': 0, 'reward': {'quality': 1.}}]
+    result = teacher_entries(entries, students, cases=cases, config=config, out=tmp_path, attempts=1,
+                             seed_base=700000, custody=custody())
+    assert result['refusal'] is None and len(result['entries']) == 1  # the protected world gets no teacher
+    entry = result['entries'][0]
+    assert (entry['jolt_role'], entry['group'], entry['sample'], entry['key']) == ('teacher', 0, 2, 's7-task-000-t00')
+    assert entry['seed'] not in {e['seed'] for e in entries}
+    controls = json.loads(open(entry['chat_request_config']).read())
+    assert controls['x_natlang_rl_capture'] is True
+    context = controls['x_natlang_privileged_context']
+    receipt, facts = case_facts(case, custody=custody(), attempt_feedback=group_feedback(case, students[:2], 2))
+    assert context['custody'] == receipt and [f['id'] for f in context['facts']] == [f.id for f in facts]
+    assert any(f['kind'] == 'attempt_feedback' for f in context['facts'])

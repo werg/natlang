@@ -124,6 +124,22 @@ def attempt_feedback(rollout):
     return '; '.join(parts)[:MAX_FEEDBACK_CHARS]
 
 
+def group_feedback(case, students, sample):
+    """Attempt feedback an episode's privileged teacher sees: its group's earlier scored student attempts.
+
+    The actor (teacher-attempt collection) and the learner (privileged twin rebuild) both use this selection, so a
+    teacher attempt carries exactly the block its learner rebuilds.
+    """
+    feedback = []
+    for row in sorted(students, key=lambda item: item['sample'] if type(item.get('sample')) is int else -1):
+        if (type(row.get('sample')) is int and type(sample) is int and row['sample'] < sample
+                and row.get('reward') is not None):
+            text = attempt_feedback(row)
+            if text:
+                feedback.append({'case_id': case.get('id'), 'attempt': row['sample'], 'feedback': text})
+    return feedback[-MAX_FEEDBACK_ATTEMPTS:]
+
+
 def root_calls(rollout, turns):
     """The episode's root invocation ids, read from its execution graph.
 
@@ -167,17 +183,11 @@ def privileged_source(rollouts, *, cases, rendering, custody, teacher_trajectori
         if case is None:
             raise CustodyError('episode has no bound training world')
         group = students.get((rollout['task_id'], json.dumps(rollout.get('group'), sort_keys=True)), [])
-        feedback = []
-        for row in sorted(group, key=lambda item: item['sample'] if type(item.get('sample')) is int else -1):
-            if (type(row.get('sample')) is int and type(rollout.get('sample')) is int
-                    and row['sample'] < rollout['sample'] and row.get('reward') is not None):
-                text = attempt_feedback(row)
-                if text:
-                    feedback.append({'case_id': case.get('id'), 'attempt': row['sample'], 'feedback': text})
         invocations = graph_invocations(replay, turns, root_calls=root_calls(rollout, turns))
         return privileged_blocks(rendering, case, invocations,
             custody=custody, teacher_trajectories=(teacher_trajectories or {}).get(rollout['task_id'], ()),
-            attempt_feedback=feedback[-MAX_FEEDBACK_ATTEMPTS:], command=command, policy_root=policy_root)
+            attempt_feedback=group_feedback(case, group, rollout.get('sample')), command=command,
+            policy_root=policy_root)
     return build
 
 
@@ -243,6 +253,10 @@ def add_privileged_twin(replay, rollout, graph, source, *, turns):
             # invocation's messages) are the same on the teacher-role tokens, so the learner rebuilds the exact
             # blocks; student_form verifies the attempt carried them token for token.
             blocks = source(rollout, replay, turns)
+            # Decision readouts are scored without privileged context during teacher attempts.
+            decisions = {turn.get('graph_turn') for turn in turns
+                         if (turn.get('sampling') or {}).get('schema') == 'natlang.native-decision-capture/1'}
+            blocks = {name: block for name, block in blocks.items() if name not in decisions}
             if not any(block.token_ids for block in blocks.values()):
                 raise CustodyError('no privileged fact fits any invocation of this teacher attempt')
             try:
@@ -360,3 +374,66 @@ def summarize_jolt(parts, count):
     result['mean_kl'] = {role: (sum(p['kl_sum'] for p in parts if p['role'] == role) / result['positions'][role]
                                 if result['positions'][role] else None) for role in ('student', 'teacher')}
     return result
+
+
+TEACHER_SEED_OFFSET = 900
+
+
+def teacher_entries(student_entries, student_rows, *, cases, config, out, attempts, seed_base, custody=None):
+    """JOLT+ teacher-attempt collector entries for the scored student groups of one collection.
+
+    Each attempt samples the same world after its group's students, with the controls ``config`` plus
+    ``x_natlang_privileged_context``: the custody-checked facts of the world (``case_facts`` with the group's
+    ``group_feedback``). The native server renders each invocation's block from its own prompt with the learner's
+    rendering and selection, so the learner rebuilds exactly the blocks the attempt carried. Returns
+    ``{'entries': [...], 'refusal': None | reason}``; a world without custody or facts gets no teacher attempt.
+    """
+    import copy
+    from pathlib import Path
+    from ..common.jsonio import iter_jsonl_rows, write_json_durable
+    from .privileged_context import CustodyError, ProtectedWorlds, case_facts
+    if type(attempts) is not int or attempts < 1:
+        raise ValueError('JOLT+ teacher attempts must be a positive integer')
+    if custody is None:
+        repo = Path(__file__).resolve().parents[4]
+        try:
+            custody = ProtectedWorlds.from_registry(repo / 'training/neuralese_corpora.json', repo)
+        except CustodyError as error:
+            return {'entries': [], 'refusal': str(error)}
+    worlds = {case.get('id'): case for _, case in iter_jsonl_rows(Path(cases))}
+    base = json.loads(Path(config).read_text())
+    by_group = {}
+    for row in student_rows:
+        by_group.setdefault(row.get('group'), []).append(row)
+    entries, out = [], Path(out)
+    for first in sorted((entry for entry in student_entries if entry.get('sample') == 0), key=lambda e: e['group']):
+        members = by_group.get(first['group'], [])
+        case = worlds.get(members[0]['task_id']) if members else None
+        if case is None:
+            continue
+        size = max(entry['sample'] for entry in student_entries if entry['group'] == first['group']) + 1
+        for attempt in range(attempts):
+            sample = size + attempt
+            try:
+                receipt, facts = case_facts(case, custody=custody,
+                                            attempt_feedback=group_feedback(case, members, sample))
+            except CustodyError:
+                break
+            if not facts:
+                break
+            directory = out / f"row-{first['group']:03d}" / f'teacher-{attempt:02d}'
+            directory.mkdir(parents=True, exist_ok=True)
+            controls = directory / 'chat-request-config.json'
+            write_json_durable(controls, {**base, 'x_natlang_privileged_context': {
+                'schema': 'natlang.privileged-request/1', 'custody': receipt,
+                'facts': [{'id': fact.id, 'kind': fact.kind, 'text': fact.text, 'invocation': fact.invocation,
+                           'match': list(fact.match)} for fact in facts]}})
+            entry = copy.deepcopy(first)
+            entry.pop('rl_endpoint', None)
+            entry.update(key=f"s7-task-{first['group']:03d}-t{attempt:02d}", sample=sample,
+                         seed=seed_base + 1000 * first['group'] + TEACHER_SEED_OFFSET + attempt,
+                         jobs=str(directory / 'jobs'), log=str(directory / 'collector.log'),
+                         output=str(directory / 'results.jsonl'), chat_request_config=str(controls),
+                         jolt_role='teacher')
+            entries.append(entry)
+    return {'entries': entries, 'refusal': None}

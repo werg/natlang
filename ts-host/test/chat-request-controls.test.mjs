@@ -18,3 +18,15 @@ test('RL collection explicitly captures behavior and disables guided sampling', 
   assert.throws(() => chatRequestControls({x_natlang_rl_capture:'yes'}), /must be boolean/);
   assert.throws(() => chatRequestControls({guidance:true}), /only disable/);
 });
+
+test('JOLT+ teacher attempts carry the world privileged context alongside RL capture', () => {
+  const context = { schema: 'natlang.privileged-request/1', custody: { split: 'train' },
+    facts: [{ id: 'expected_result:0', kind: 'expected_result', text: 'The verified result is 2.' }] };
+  assert.deepEqual(chatRequestControls({ x_natlang_rl_capture: true, x_natlang_privileged_context: context })
+    .x_natlang_privileged_context, context);
+  assert.throws(() => chatRequestControls({ x_natlang_privileged_context: context }), /privileged_context/);
+  assert.throws(() => chatRequestControls({ x_natlang_rl_capture: true,
+    x_natlang_privileged_context: { ...context, facts: [] } }), /privileged_context/);
+  assert.throws(() => chatRequestControls({ x_natlang_rl_capture: true,
+    x_natlang_privileged_block: { insert_at: 1, token_ids: [5] } }), /unsupported chat request control/);
+});
