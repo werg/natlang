@@ -8,6 +8,8 @@ Inputs are the shards written by ts-host/scripts/inline-curriculum/build.mjs (--
      failure is dropped whole, and every failure id and reason is kept in the receipt;
   2. a group whose visible-world fingerprints (scripts/replenish_luna_held_shapes.world) all occurred already is a
      duplicate world and is dropped whole (fixed banks saturate), so every kept group is a distinct world;
+  2b. a group whose source groups intersect the current held/quality projections or whose ids hit a decision hold
+     is dropped whole (dataset-sourced families);
   3. every kept row gets `curriculum.rl = {level, family, basis, score, reason}` from a structural score of the
      reference execution (no live-model qualification is claimed, so `qualification` stays absent: the production
      selector accepts only None or 'qualified', and 'qualified' denotes a live window);
@@ -27,6 +29,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve  # noqa: E402
 from replenish_luna_held_shapes import world  # noqa: E402  (the one visible-world fingerprint)
 
 LEVEL_THRESHOLDS = (6.5, 8.5, 11.0)  # score <= 6.5: level 0, <= 8.5: 1, <= 11: 2, else 3
@@ -65,6 +69,27 @@ def level_of(total: float, hinted: bool) -> int:
     return max(0, level - 1) if hinted else level
 
 
+HELD = resolve('data_nvme', 'e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl')
+QUALITY = resolve('data_nvme', 'e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl')
+
+
+def group_set(path: Path) -> set[str]:
+    out: set[str] = set()
+    for line in path.read_text().splitlines():
+        if line.strip():
+            out.update(json.loads(line).get('source_groups', []))
+    return out
+
+
+def decision_hold_ids() -> set[str]:
+    out: set[str] = set()
+    for path in sorted((ROOT / 'training/decision-holds').glob('*.jsonl')):
+        for line in path.read_text().splitlines():
+            if line.strip() and isinstance(json.loads(line).get('id'), str):
+                out.add(json.loads(line)['id'])
+    return out
+
+
 def read_rows(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
@@ -75,13 +100,21 @@ def main() -> int:
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--seed', default='s81028')
     a = ap.parse_args()
-    order = [line.split()[0] for line in (a.gen_dir / 'plan.txt').read_text().splitlines() if line.strip()]
+    order = [line.split()[0] for name in ('plan.txt', 'plan2.txt') if (a.gen_dir / name).exists()
+             for line in (a.gen_dir / name).read_text().splitlines() if line.strip()]
+    held_groups, quality_groups = group_set(HELD), group_set(QUALITY)
+    hold_ids = decision_hold_ids()
     seen_worlds: set[str] = set()
     rows_out: list[dict] = []
     receipt: dict = {'families': {}, 'dropped': {}}
     ids: set[str] = set()
     for family in order:
         path = a.gen_dir / f'{family}.jsonl'
+        if not (a.gen_dir / f'{family}.jsonl.report.json').exists():
+            receipt['families'][family] = {'generated_records': 0, 'generated_groups': 0, 'failed_records': 0,
+                                           'failure_reasons': [], 'failed_ids': [], 'kept_groups': 0,
+                                           'no_output': 'generator crashed or produced no report'}
+            continue
         report = json.loads((a.gen_dir / f'{family}.jsonl.report.json').read_text())
         rows = read_rows(path) if path.exists() else []
         failed_ids = {item['id'] for item in report['failures']}
@@ -98,6 +131,12 @@ def main() -> int:
             marker = f":{members[0]['curriculum']['family']}:{members[0]['curriculum']['shape']}:"
             if any(marker in failed for failed in failed_ids):
                 stats['groups_dropped_incomplete_after_failure'] += 1
+                continue
+            # Source-backed groups are dropped whole when any member touches protected held/quality source groups or
+            # a decision hold (procedural groups carry only their own s81028 group id).
+            if any(set(m.get('source_groups', [])) & (held_groups | quality_groups)
+                   or ({m['id']} | set(m.get('source_ids', []))) & hold_ids for m in members):
+                stats['groups_dropped_protected_source'] += 1
                 continue
             fps = tuple(sorted({world(m) for m in members}))
             if all(fp in seen_worlds for fp in fps):
