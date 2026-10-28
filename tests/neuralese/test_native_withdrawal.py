@@ -250,6 +250,18 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         assert final['exposure_counts']=={'good':1,'extra':1,'later':1} and final['global_step']>result['global_step']
         assert final['options']['withdrawal_history'][0]['rows'][0]['consumed_visits']==1
         assert len(json.loads((root/'progress.json').read_text())['identity_transitions']['0'])==3
+        # A different correction must coexist with the authenticated historical proof.
+        filtered=tmp_path/'filtered-again.jsonl'
+        filtered.write_text(''.join(line for line in later.read_text().splitlines(keepends=True) if json.loads(line)['id']!='extra'))
+        second=tmp_path/'withdrawal-second.json'
+        second.write_text(json.dumps({'schema':'natlang.native-graph-withdrawal/1','model_id':config['architecture']+':'+config['base_inventory_sha256'],
+            'evidence':{'path':'audit.json','sha256':sha(evidence)},'rows':[{'id':'extra','binding':final['source_row_bindings']['extra'],'source_sha256':sha(later),'reason':'new held connection'}]}))
+        corrected=list(appended);corrected[corrected.index('--native-graphs')+1]=str(filtered);corrected[corrected.index('--continued-native-graphs')+1]=str(later);corrected += ['--withdrawn-native-graphs',str(second)]
+        assert trainer.main(corrected)==0
+        twice=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+        assert twice['optimizer'] and twice['rng'] and 'extra' not in twice['source_row_bindings']
+        assert len(twice['options']['withdrawal_history'])==2 and twice['options']['withdrawal_history'][0]['proof_sha256']==sha(withdrawal) and twice['options']['withdrawal_history'][1]['proof_sha256']==sha(second)
+        assert twice['options']['withdrawal_history'][1]['rows'][0]['consumed_visits']==1
     finally:stop.set();server.join(timeout=3)
 
 
