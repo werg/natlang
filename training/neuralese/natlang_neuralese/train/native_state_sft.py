@@ -1981,7 +1981,7 @@ def _main(argv=None, *, requested_refresh):
     if args.withdrawn_native_graphs:
         if resume is None:
             raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
-        from .native_continuation import withdraw_ordinary_rows
+        from .native_continuation import withdraw_native_rows
         origins={}
         applied=any(item.get('proof_sha256')==sha256_file_hex_cached(args.withdrawn_native_graphs)
             for item in (resume.get('options') or {}).get('withdrawal_history') or [])
@@ -1996,7 +1996,7 @@ def _main(argv=None, *, requested_refresh):
                     for child in source.children:leaf_origins(child)
                 else:origins.update({key:source.file_sha256 for key in source.bindings})
             leaf_origins(old_source)
-        resume=withdraw_ordinary_rows(resume,args.withdrawn_native_graphs,
+        resume=withdraw_native_rows(resume,args.withdrawn_native_graphs,
             current_bindings=source_row_bindings,
             model_id=config['architecture']+':'+config['base_inventory_sha256'],source_origins=origins)
         carried_progress=collect_sft_progress(resume)

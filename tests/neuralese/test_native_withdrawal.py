@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
-from natlang_neuralese.train.native_continuation import withdraw_ordinary_rows, collect_sft_progress, progress_obligations, reject_withdrawn_targets
+from natlang_neuralese.train.native_continuation import withdraw_native_rows, collect_sft_progress, progress_obligations, reject_withdrawn_targets
 
 
 def proof(tmp_path, rows):
@@ -30,7 +30,7 @@ def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_oblig
     older=copy.deepcopy(old['sft_progress']['full']);older['exposure_counts']['bad']=5
     old['sft_progress']['earlier']=older
     path=proof(tmp_path,[{'id':'bad','binding':'b','source_sha256':'physical','reason':'unexecuted'}])
-    new=withdraw_ordinary_rows(old,path,current_bindings={'good':'g','comm':'c','extra':'e'},
+    new=withdraw_native_rows(old,path,current_bindings={'good':'g','comm':'c','extra':'e'},
         model_id='model:pin',source_origins={'bad':'physical'})
     assert new['optimizer'] is old['optimizer'] and new['rng'] is old['rng']
     assert new['step']==7 and new['global_step']==11 and old['exposure_counts']['bad']==2
@@ -42,7 +42,7 @@ def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_oblig
     assert old['sft_progress']['full']['exposure_counts']['bad']==2
     assert old['sft_progress']['earlier']['exposure_counts']['bad']==5
     assert 'withdrawal_history' not in old['options']
-    assert withdraw_ordinary_rows(new,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin') is new
+    assert withdraw_native_rows(new,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin') is new
     with pytest.raises(ValueError,match='reintroduced'):
         reject_withdrawn_targets(new,{'bad':'b'})
     reject_withdrawn_targets(new,{'good':'g'})
@@ -53,21 +53,49 @@ def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_oblig
     {'id':'unknown'},{'reason':''}])
 def test_withdrawal_rejects_wrong_identity_source_communication_and_missing_reason(tmp_path,change):
     row={'id':'bad','binding':'b','source_sha256':'physical','reason':'rejected'};row.update(change)
-    with pytest.raises(ValueError,match='exact removed ordinary'):
-        withdraw_ordinary_rows(state(),proof(tmp_path,[row]),current_bindings={'good':'g'},
+    with pytest.raises(ValueError,match='exact removed native'):
+        withdraw_native_rows(state(),proof(tmp_path,[row]),current_bindings={'good':'g'},
             model_id='model:pin',source_origins={'bad':'physical','comm':'physical'})
+
+
+def test_communication_withdrawal_preserves_history_and_removes_classification(tmp_path):
+    old=state();old['exposure_counts']['comm']=2
+    old['options']['_producer_consumer_ids']=['comm']
+    old['sft_progress']=collect_sft_progress(old)
+    row={'id':'comm','binding':'c','source_sha256':'physical','reason':'held connected','communication':True}
+    new=withdraw_native_rows(old,proof(tmp_path,[row]),current_bindings={'good':'g','bad':'b'},
+        model_id='model:pin',source_origins={'comm':'physical'})
+    assert new['optimizer'] is old['optimizer'] and new['rng'] is old['rng']
+    assert new['options']['_communication_ids']==[] and new['options']['_producer_consumer_ids']==[]
+    assert new['sft_progress']['full']['options']['_communication_ids']==[]
+    assert new['options']['withdrawal_history'][0]['rows'][0]['consumed_visits']==2
+    assert old['options']['_communication_ids']==['comm']
+    with pytest.raises(ValueError,match='reintroduced'):
+        reject_withdrawn_targets(new,{'comm':'c'})
+
+
+def test_communication_withdrawal_rejects_false_classification_and_carried_mismatch(tmp_path):
+    row={'id':'comm','binding':'c','source_sha256':'physical','reason':'held connected','communication':False}
+    with pytest.raises(ValueError,match='exact removed native'):
+        withdraw_native_rows(state(),proof(tmp_path,[row]),current_bindings={},model_id='model:pin',source_origins={'comm':'physical'})
+    row['communication']=True
+    old=state();old['sft_progress']=collect_sft_progress(old)
+    old['sft_progress']['full']['options']['_communication_ids']=[]
+    with pytest.raises(ValueError,match='carried stage classification'):
+        withdraw_native_rows(old,proof(tmp_path,[row]),current_bindings={},model_id='model:pin',source_origins={'comm':'physical'})
 
 
 def test_withdrawal_cannot_reintroduce_targets_or_accept_corrupt_evidence(tmp_path):
     path=proof(tmp_path,[{'id':'bad','binding':'b','source_sha256':'physical','reason':'rejected'}])
     with pytest.raises(ValueError):
-        withdraw_ordinary_rows(state(),path,current_bindings={'bad':'b'},model_id='model:pin',source_origins={'bad':'physical'})
+        withdraw_native_rows(state(),path,current_bindings={'bad':'b'},model_id='model:pin',source_origins={'bad':'physical'})
     (tmp_path/'audit.json').write_text('changed')
     with pytest.raises(ValueError,match='evidence hash'):
-        withdraw_ordinary_rows(state(),path,current_bindings={},model_id='model:pin',source_origins={'bad':'physical'})
+        withdraw_native_rows(state(),path,current_bindings={},model_id='model:pin',source_origins={'bad':'physical'})
 
 
-def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path):
+@pytest.mark.parametrize("communication", [False, True])
+def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path, communication):
     from test_native_model import tiny_source
     from test_native_state_sft import graph
     from natlang_neuralese.model.native_model import load_native_model
@@ -76,6 +104,9 @@ def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path):
     _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
     fp=config['tokenizer_fingerprint'];old=tmp_path/'old.jsonl';new=tmp_path/'new.jsonl';held=tmp_path/'held.jsonl'
     rows=[dict(graph(key),tokenizer_fingerprint=fp) for key in ('good','bad')]
+    if communication:
+        from test_native_graph import row as communication_row
+        rows[1]={**communication_row(), 'id':'bad', 'source_groups':['source-bad'], 'tokenizer_fingerprint':fp}
     old.write_text(''.join(json.dumps(row)+'\n' for row in rows))
     new.write_text(json.dumps(rows[0])+'\n'+json.dumps(dict(graph('extra'),tokenizer_fingerprint=fp))+'\n')
     held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
@@ -84,7 +115,7 @@ def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path):
     assert main(args)==0
     prior=torch.load(tmp_path/'out/checkpoint.pt',weights_only=False)['training']
     path=proof(tmp_path,[{'id':'bad','binding':prior['source_row_bindings']['bad'],
-        'source_sha256':sha(old),'reason':'rejected'}])
+        'source_sha256':sha(old),'reason':'rejected', **({'communication':True} if communication else {})}])
     d=json.loads(path.read_text());d['model_id']=config['architecture']+':'+config['base_inventory_sha256'];path.write_text(json.dumps(d))
     args[args.index('--native-graphs')+1]=str(new)
     args+=['--continued-native-graphs',str(old),'--withdrawn-native-graphs',str(path)]
