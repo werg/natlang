@@ -2339,11 +2339,18 @@ def _main(argv=None, *, requested_refresh):
             'outer_history':'historical-only', 'standalone_outer_credit':False})
     elif args.standalone_diloco_parent is not None:
         pin = args.standalone_diloco_parent.resolve(strict=True)
-        if ((args.diloco is not None and not parent_continuation) or not prior_outer_history or
+        if (not prior_outer_history or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('path') != str(pin) or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('sha256') != sha256_file_hex_cached(pin) or
                 (prior_outer_history[-1].get('checkpoint') or {}).get('bytes') != pin.stat().st_size):
             raise ValueError('standalone DiLoCo custody pin does not match committed history')
+    saved_rejoin = ((resume or {}).get('options') or {}).get('standalone_diloco_rejoin')
+    if args.diloco is not None and not parent_continuation and prior_outer_history:
+        if (not isinstance(saved_rejoin,dict) or saved_rejoin.get('schema')!='natlang.diloco-standalone-rejoin/1'
+                or saved_rejoin.get('outer_history')!='new' or not (resume or {}).get('diloco')
+                or saved_rejoin.get('historical_outer_checkpoint')!=prior_outer_history[-1]['checkpoint']):
+            raise ValueError('DiLoCo resume requires the committed standalone rejoin and outer state')
+        checkpoint_options['standalone_diloco_rejoin']=saved_rejoin
     if prior_outer_history:
         checkpoint_options['standalone_diloco_history'] = prior_outer_history
         if args.diloco is not None and parent_continuation:

@@ -336,5 +336,12 @@ def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monke
             assert final['diloco'] and final['options']['standalone_diloco_rejoin']['outer_history']=='new'
             assert final['options']['standalone_diloco_history'][0]['checkpoint']['sha256']==sha(pin)
             assert final['global_step']>result['global_step'] and final['exposure_counts']['rejoin']==1
+            assert trainer.main(rejoin)==0  # Existing worker resumes with committed rejoin custody.
+            later2=tmp_path/'rejoin-append.jsonl';later2.write_text(later.read_text()+json.dumps(dict(graph('rejoin-later'),tokenizer_fingerprint=fp))+'\n')
+            follow=list(rejoin);follow[follow.index('--native-graphs')+1]=str(later2);follow[follow.index('--continued-native-graphs')+1]=str(later)
+            assert trainer.main(follow)==0
+            newest=torch.load(new_out/'checkpoint.pt',weights_only=False)['training']
+            assert newest['exposure_counts']['rejoin-later']==1 and newest['global_step']>final['global_step']
+            assert newest['options']['standalone_diloco_rejoin']==final['options']['standalone_diloco_rejoin']
         finally:new_stop.set();new_server.join(timeout=3)
     finally:stop.set();server.join(timeout=3)
