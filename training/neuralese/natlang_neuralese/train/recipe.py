@@ -880,7 +880,12 @@ def _data_continuation(old, new):
         classification_changed=old.get(classification)!=new.get(classification)
         if classification_changed and not _classification_proof_extension(old,new):
             return False
-        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired}
+        standalone = 'standalone_diloco_parent'
+        if old.get(standalone) != new.get(standalone):
+            if old.get(standalone) is not None or not all(
+                    new.get(standalone, {}).get(k) for k in ('path', 'sha256', 'binding')):
+                return False
+        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal,retired,standalone}
         if classification_changed:excluded.add(classification)
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
