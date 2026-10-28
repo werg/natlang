@@ -550,6 +550,26 @@ def registry_entry(item: dict, student: str) -> dict:
     return new
 
 
+def register_graphed(args):
+    """Register every graphed (verified) render not yet registered, in one registration commit."""
+    import register_corpora
+    queue = load(args.queue)
+    items = [i for i in queue['items'].values() if i['status'] == 'graphed'
+             and load(REPO / i['out'] / 'student-verification.json').get('passed')]
+    if args.limit:
+        items = items[:args.limit]
+    if not items:
+        print(json.dumps({'registered': []}))
+        return
+    entries = [registry_entry(item, queue['student']) for item in items]
+    done = register_corpora.register(entries, f'Register {len(entries)} {queue["student"]} renders with native graph '
+                                     f'views (student_rerender.py)')
+    with Queue(args.queue) as live:
+        for item in items:
+            live['items'][item['id']]['status'] = 'registered'
+    print(json.dumps({'registered': done}))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -579,8 +599,12 @@ def main():
     p = sub.add_parser('entry')
     p.add_argument('--queue', required=True)
     p.add_argument('--id', required=True)
+    p = sub.add_parser('register')
+    p.add_argument('--queue', required=True)
+    p.add_argument('--limit', type=int)
     args = ap.parse_args()
-    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry}[args.cmd](args)
+    {'plan': plan, 'launch': launch, 'status': status, 'verify': verify, 'entry': entry,
+     'register': register_graphed}[args.cmd](args)
 
 
 if __name__ == '__main__':
