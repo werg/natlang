@@ -12,8 +12,14 @@ set -euo pipefail
 stopped=0
 trap 'stopped=1; docker stop -t 30 "${NAME:-}" >/dev/null 2>&1 || true' TERM INT
 REPO=/home/werg/natlang
-LFM=$REPO/models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f
-MELLUM=/home/werg/data/models/mellum21-12b-a2.5b-thinking
+# Students rendered (scripts/neuralese_data/student_tokenizers.py; default the production pair). An LFM3 render of the
+# same selection: STUDENTS="lfm3" (or "lfm25 mellum21 lfm3"); pinned tokenizer bytes are verified before the run.
+SELF_DIR=$(cd "$(dirname "$0")" && pwd)
+read -r -a STUDENT_LIST <<< "${STUDENTS:-lfm25 mellum21}"
+ARGS_TEXT=$(python3 "$SELF_DIR/student_tokenizers.py" args "${STUDENT_LIST[@]}")  # set -e: a pin mismatch stops here
+MOUNTS_TEXT=$(python3 "$SELF_DIR/student_tokenizers.py" mounts "${STUDENT_LIST[@]}")
+read -r -a TOKENIZER_ARGS <<< "$ARGS_TEXT"
+read -r -a TOKENIZER_MOUNTS <<< "$MOUNTS_TEXT"
 OUT=$(realpath "$1"); shift
 mkdir -p "$OUT"
 # Named container, stopped with the unit: a ledger preemption (or systemctl stop) must not leave an orphan
@@ -39,9 +45,10 @@ docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memor
   -e "PYTHONPATH=$REPO:$REPO/training/neuralese" \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$REPO:$REPO:ro" -v /mnt/external:/mnt/external:ro -v /home/werg/data:/home/werg/data:ro -v "$OUT:$OUT" \
+  "${TOKENIZER_MOUNTS[@]}" \
   -w "$REPO" --entrypoint python3 natlang-neuralese:26.09 \
   scripts/neuralese_data/render_native_turn_corpus.py \
-  --tokenizer lfm25="$LFM" --tokenizer mellum21="$MELLUM" --out-dir "$OUT" "$@" \
+  "${TOKENIZER_ARGS[@]}" --out-dir "$OUT" "$@" \
   2> >(tee "$ERRLOG" >&2) &
 PID=$!
 wait $PID && status=0 || status=$?  # (set -e must not end the script here)

@@ -868,7 +868,7 @@ def full_sample(strata: dict, fraction: float) -> list[str] | None:
 def _init(tokenizers, pieces=None, history_policies=None):
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
     from natlang_neuralese.serve.chat import bind_history_reasoning
-    from strip_generic_system_prompt import strip_row
+    from system_tool_sections import strip_row  # legacy strip_row plus the LFM3 closing tool section
     _G['strip_row'] = strip_row
     _G['pieces'] = pieces or {}  # exact source pieces, keyed by their registered names
     _G['tok'] = {}
@@ -2479,6 +2479,7 @@ def main(argv=None):
                            for name, path in tokenizers.items()},
             'renderer_code': {str(path.relative_to(ROOT)): file_sha(path) for path in (
                 Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py',
+                ROOT / 'scripts/neuralese_data/system_tool_sections.py',
                 ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py',
                 ROOT / 'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
                 ROOT / 'training/prompt-pieces/pieces.json',

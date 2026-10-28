@@ -72,6 +72,12 @@ def _init(src_tok, twin_tok, package, reasoning=None):
     _G["tc"] = text_corpus
     _G["src"] = AutoTokenizer.from_pretrained(src_tok, local_files_only=True, trust_remote_code=False)
     _G["twin"] = AutoTokenizer.from_pretrained(twin_tok, local_files_only=True, trust_remote_code=False)
+    # The twin renders under its backbone's declared history-reasoning policy and tool-call format (serve.chat;
+    # LFM3: keep, XML calls); an undeclared backbone is an error, not a silent template default.
+    # A historical pinned renderer snapshot (--renderer-package-root) predates the binding; it renders as it did.
+    from natlang_neuralese.serve import chat
+    if hasattr(chat, "bind_history_reasoning"):
+        chat.bind_history_reasoning(_G["twin"], require_declared=True)
     src = _G["src"]
     # Structure tokens: every added token the template can emit as one ID. Content spellings of the
     # renderer's escaped specials are tokenized split, so an unsplit ID here is template structure.
@@ -381,7 +387,10 @@ def main():
         "source_text": {"path": str(args.source_text), "sha256": file_sha(args.source_text), "rows": len(lines)},
         "twin_text": {"path": "text-data.jsonl", "sha256": file_sha(out / "text-data.jsonl"), "rows": len(twin_ident)},
         "source_tokenizer": {"path": args.source_tokenizer, "fingerprint": tc.tokenizer_fingerprint(_G["src"])},
-        "twin_tokenizer": {"path": args.twin_tokenizer, "fingerprint": tc.tokenizer_fingerprint(_G["twin"])},
+        "twin_tokenizer": {"path": args.twin_tokenizer, "fingerprint": tc.tokenizer_fingerprint(_G["twin"]),
+                           "history_reasoning": getattr(_G["twin"], "natlang_history_reasoning", None),
+                           "tool_call_format": (tc.tokenizer_call_format(_G["twin"])
+                                                if hasattr(tc, "tokenizer_call_format") else None)},
         "renderer": {"package_root": str(args.renderer_package_root),
                      "text_corpus_sha256": file_sha(args.renderer_package_root / "natlang_neuralese/data/text_corpus.py"),
                      "chat_sha256": file_sha(args.renderer_package_root / "natlang_neuralese/serve/chat.py"),

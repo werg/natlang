@@ -361,11 +361,27 @@ def test_scan_partial_and_malformed_calls():
     assert 'tool_calls' not in message and '<tool_call>' in message['content']  # malformed: left as content
 
 
-def test_records_flag_leaked_xml_calls():
+@needs_lfm3
+def test_program_header_strips_the_closing_lfm3_tool_section(tokenizer):
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'neuralese_data'))
-    from records import residual_markup, strip_markup
-    leaked = 'ok <tool_call>\n<function=eval>\n<parameter=code>\nx\n</parameter>\n</function>\n</tool_call>'
-    assert residual_markup(leaked)
-    assert not residual_markup('a doc that mentions <tool_call> and </parameter> tags')
-    assert strip_markup(leaked) == leaked
+    from system_tool_sections import closing_tool_section, strip_row
+    from natlang_neuralese.data.text_corpus import native_gold_packet
+    system = {'role': 'system', 'content': 'Generic runtime prose that program-header rendering keeps verbatim.'}
+    user = {'role': 'user', 'content': 'You are inside this call: f(): string'}
+    target = {'role': 'assistant', 'content': '', 'tool_calls': [
+        {'type': 'function', 'function': {'name': 'eval', 'arguments': json.dumps({'code': 'return "x";'})}}]}
+    text, ids, start = native_gold_packet(tokenizer, [system, user], target, EVAL_TOOLS)
+    row = {'id': 'r', 'split': 'train', 'text': text, 'token_ids': ids, 'supervised_suffix_start': start}
+    ph_text, ph_ids, ph_start = native_gold_packet(tokenizer, [system, user], target, EVAL_TOOLS,
+                                                   prompt_rendering='program-header')
+    assert '<tools>' in text and '<tools>' not in ph_text
+    content = text[text.index('system\n') + len('system\n'):text.index('<|im_end|>')]
+    prose, section = closing_tool_section(content)
+    assert prose == system['content'] and section.startswith('<tools>\n') and section.endswith('\n</tools>')
+    assert closing_tool_section('prose mentioning <tools>\nnot json\n</tools>') is None
+    im_start, im_end = tokenizer.convert_tokens_to_ids(['<|im_start|>', '<|im_end|>'])
+    stripped, reason, info = strip_row(row, tokenizer, im_start, im_end)
+    assert reason is None and info['retokenization_checked']
+    assert stripped['text'] == ph_text
+    assert stripped['token_ids'][stripped['supervised_suffix_start']:] == ph_ids[ph_start:]
