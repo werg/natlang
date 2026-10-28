@@ -14,7 +14,7 @@ from ..common.hashing import sha256_file_hex_cached
 
 def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coefficient_policy=None,
             expected_history_reasoning_policy=None, expected_history_binding_sha256=None,
-            expected_history_binding_path=None, policy_loss=None, jolt_cases=None):
+            expected_history_binding_path=None, policy_loss=None, jolt_cases=None, actors=None):
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
@@ -68,9 +68,19 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
                                  block_bundle=destination,mode=mode,behavior_policy=behavior,policy_loss=policy_loss)
     policies = [turn['sampling']['policy'] for row in rollouts if row.get('reward') is not None
                 for turn in row.get('turns', []) if (turn.get('sampling') or {}).get('policy')]
+    actor_decl = json.loads(Path(actors).read_text()) if actors is not None else None
+    if actor_decl is not None:
+        # Declared stale/quantized actors (rl.actors): the learner identity is theirs with its own checkpoint.
+        from .actors import actor_declaration
+        learner_sha = sha256_file_hex_cached(checkpoint)
+        known = set((actor_decl.get('actors') or {}) if isinstance(actor_decl, dict) else ())
+        policies = [{**policy, 'checkpoint_sha256': learner_sha} if policy.get('checkpoint_sha256') in known
+                    else policy for policy in policies]
     if not policies or any(policy != policies[0] for policy in policies):
         raise ValueError('native RL requires one exact captured actor identity')
     identity = policies[0]
+    if actor_decl is not None:
+        actor_decl = actor_declaration(actor_decl, learner_identity=identity)
     if any((turn.get('sampling') or {}).get('adapter_binding') for row in rollouts for turn in row.get('turns', [])):
         raise ValueError('adapted actors require native coefficient-policy learning; full-backbone trainer export/rebinding is not yet supported')
     if (identity['checkpoint_sha256'] != sha256_file_hex_cached(checkpoint)
@@ -82,11 +92,11 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
         raise ValueError('native RL tokenizer lacks its four distinct role markers')
     roles = RoleTokens(*marker_ids)
     archive = json.loads(Path(bundle).read_text()) if bundle else None
-    if archive and (archive.get('schema') != 'natlang.rl-block-bundle/1' or
-                    archive.get('policy_id') != identity['checkpoint_sha256']):
+    owners = {identity['checkpoint_sha256'], *((actor_decl or {}).get('actors') or ())}
+    if archive and (archive.get('schema') != 'natlang.rl-block-bundle/1' or archive.get('policy_id') not in owners):
         raise ValueError('native RL archive does not bind the sampled policy')
     from .graph_replay import NativeBundleStore
-    reader=NativeBundleStore(bundle,policy_id=identity['checkpoint_sha256'],manifest=archive) if bundle else None
+    reader=NativeBundleStore(bundle,policy_id=archive['policy_id'],manifest=archive) if bundle else None
     def fetch(block_id):
         if reader is None:raise ValueError('native RL state requires its durable actor bundle')
         return reader.state(block_id)
@@ -98,7 +108,7 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
                                             tokenizer_fingerprint=fingerprint)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode, policy_loss=policy_loss,
-        privileged=privileged)
+        privileged=privileged, actors=actor_decl)
 
 
 def jolt_privileged_source(*, rows, tokenizer, cases, roles, tokenizer_fingerprint, registry=None):
@@ -145,6 +155,8 @@ def main(argv=None):
     # JOLT+ privileged context: the exact train-split cases of the rollouts; custody against every registered
     # evaluation-only packet (rl.privileged_context.ProtectedWorlds).
     parser.add_argument('--jolt-cases', type=Path)
+    parser.add_argument('--rl-actors', type=Path, help='natlang.rl-actors/1 declaration admitting stale or quantized '
+                        'actors of earlier lineage checkpoints (importance-corrected)')
     parser.add_argument('--rl-block-bundle', type=Path)
     parser.add_argument('--coefficient-policy',type=Path)
     parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'))
@@ -189,7 +201,7 @@ def _admit_and_train(args,trainer):
         expected_history_reasoning_policy=args.history_reasoning_policy,
         expected_history_binding_sha256=args.history_reasoning_binding_sha256,
         expected_history_binding_path=args.history_reasoning_binding_path,
-        policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases)
+        policy_loss=args.rl_policy_loss, jolt_cases=args.jolt_cases, actors=args.rl_actors)
     if not graphs:
         raise ValueError('no useful native policy episodes: route flat failures to verified graph SFT seeding')
     args.out.mkdir(parents=True, exist_ok=True)

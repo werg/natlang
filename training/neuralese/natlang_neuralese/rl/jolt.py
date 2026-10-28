@@ -37,7 +37,7 @@ PRIVILEGED_SUFFIX = {'student': '#privileged', 'teacher': '#unprivileged'}
 # student's policy by at most about e^2 for |A| <= 1, keeping teacher guidance followable. Development
 # measurements tune both; they are recipe parameters.
 DEFAULT_JOLT = {'schema': JOLT_SCHEMA, 'beta_s': 1.0, 'beta_t': 0.5,
-                'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}}
+                'outcome': {'schema': 'score-centered/1', 'k': 128, 'importance': 'tis', 'eps': 1e-6}}
 MAX_FEEDBACK_ATTEMPTS = 3
 MAX_FEEDBACK_CHARS = 800
 

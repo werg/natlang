@@ -131,7 +131,7 @@ def test_importance_weights_and_masked_entries_and_loss_sign():
 def test_policy_loss_declaration_is_canonical_and_strict():
     assert policy_loss_declaration(None) is None
     assert policy_loss_declaration({'schema': 'score-centered/1'}) == {
-        'schema': 'score-centered/1', 'k': 128, 'importance': 'none', 'eps': 1e-6}
+        'schema': 'score-centered/1', 'k': 128, 'importance': 'tis', 'eps': 1e-6}
     assert policy_loss_declaration('{"schema":"score-centered/1","k":32,"importance":"tis"}')['k'] == 32
     for bad in ({'schema': 'grpo'}, {'schema': 'score-centered/1', 'k': 0},
                 {'schema': 'score-centered/1', 'importance': 'is'}, {'schema': 'score-centered/1', 'clip': 1}):

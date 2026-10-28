@@ -24,7 +24,7 @@ def clipped_token_loss(logps, old_logps, advantage, *, clip_low=0.2, clip_high=0
 SCORE_CENTERED = 'score-centered/1'
 CLIPPED_RATIO = 'clipped-ratio/1'
 IMPORTANCE_MODES = ('none', 'tis', 'mis')
-DEFAULT_SCORE_CENTERED = {'schema': SCORE_CENTERED, 'k': 128, 'importance': 'none', 'eps': 1e-6}
+DEFAULT_SCORE_CENTERED = {'schema': SCORE_CENTERED, 'k': 128, 'importance': 'tis', 'eps': 1e-6}
 
 
 def default_policy_loss():
@@ -43,7 +43,7 @@ def objective_policy_loss(declaration):
 def policy_loss_declaration(value):
     """Canonical declared RL policy loss; None keeps the clipped GRPO loss bit-identical.
 
-    ``{"schema": "score-centered/1", "k": 128, "importance": "none"|"tis"|"mis", "eps": 1e-6}``. Omitted fields
+    ``{"schema": "score-centered/1", "k": 128, "importance": "tis"|"mis"|"none", "eps": 1e-6}``. Omitted fields
     take these defaults; the canonical full form is what objectives, checkpoints and round journals bind.
     """
     import math
