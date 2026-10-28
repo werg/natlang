@@ -78,3 +78,33 @@ Learned-bank refit/adoption controller (lane on HOLD), world-runtime custody for
 ALFWorld/ScienceWorld actors, full `check-main` PASS, LFM held behavior failure (missing `kind`,
 repeated `return result`): needs fresh training worlds, and the teacher needs a reviewed
 one-slot plan.
+
+## Training closed (owner, 2026-10-28 06:30)
+
+Owner: "free disk space and bring all training to a close including Mellum, retrieve all state and close the
+sandboxes and do a deep clean of accumulated storage, checkpoints, data etc", and "continually be freeing space on
+our drive, all the time".
+
+- **Root disk filled overnight** (~01:00 and 01:50). Casualties: the LFM tensor-core r6 learner (died during a
+  checkpoint save; updates 41023–41052 lost), the Mellum r6 lifetime guardian (so the 05:37 drain did not happen),
+  the LFM independent exporter, the LFM progress monitor, Mellum supplemental snapshots and the Mellum local
+  recovery download. The failure Monitor had expired, so none of this was noticed until 06:34.
+- **LFM2.5 final state:** full-state step 41022,
+  `/home/werg/data/lfm-local-recovery-20261024/rl/cycles/cycle-000066/native_full_sft/learner/checkpoint.pt`.
+  Not restarted. Last independently exported: 40954 `ae294685` (local `backups/` + W&B).
+- **Mellum final state:** guardian relaunched 06:36 and drained the learner at 06:39. Final head step 39257
+  (`8e2fcae1…`, 48.3 GB) privately exported and independently verified at 07:10. Closed controller archive verified
+  at 07:11. The periodic exporter was stopped so the final head got the upload lease. r7 rollover stopped; no new
+  sandbox. Local copy of 39257 downloading to `/mnt/external/natlang-active-lineage/mellum-resume-20261025/`;
+  the prior local copy (37632, `c430d318`) is kept until it lands.
+- **Invoice whole-graph job** `97f6c79f…` stays paused at step 70; its 47-step parent job is kept.
+- **Deleted:** superseded LFM checkpoints and controller history (old cycles/rounds, control backups v2–v12), four
+  old Mellum local copies plus a partial download, old eval payloads (160 GB), October legacy checkpoint
+  archives, test/bench scratch on both disks, dgxops eval/quality/diagnostic roots without data, unreferenced old
+  `runs/` directories, superseded program-tuning jobs/releases (kept active + newest + Invoice parent/job), stale
+  /tmp scratch. Exact lists are in the session scratchpad. Exact immutable duplicates in /home/werg/data were
+  hardlinked (1.3 GB).
+- **Moved, not deleted:** the finished megatoken agent job scratch `~/.claude/jobs/86f8d5f1/tmp` (86 GB, another
+  project's dataset sweep), moved to `/mnt/external/megatoken-job-workspaces/claude-job-86f8d5f1-tmp` with a symlink.
+- **Not touched (other projects):** bgkit data/checkpoints, hindsight-kb-recovery, megatoken-runs, ComfyUI/SparkyUI.
+- **Continuous sweep:** `scripts/storage_sweep.sh` via `natlang-storage-sweep.timer` every 30 min (84c200d39).
