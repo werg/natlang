@@ -1,5 +1,29 @@
 # Model-facing changes and their measurement
 
+### 2026-10-28 — learned optimizer component-token decision (unmeasured debt)
+
+The joint learned optimizer's LoRA mixture is now a component-token distribution (owner decision 2026-10-28;
+`tune/learned/mixture.py`, `writer.Writer._array`). What the writer model sees per scope changed: the rendered scope
+label ` {scope}=` followed by the native keys of the view's AVAILABLE components only (each between consume markers),
+and nothing else; the decision is read from the final hidden state, so no number tokens, brackets, separators or
+per-slot cues of the removed integer grid are rendered or generated, and dropped/ineligible components are not shown
+at all. Status: **unmeasured**; measure on the trained LFM3 optimizer: in-bank label KL and planted-mixture recovery
+with keys in view order versus keys in a shuffled order (negative control) and with a short textual component header
+before each key.
+
+### 2026-10-28 — privileged self-teaching block (tune collection, unmeasured debt)
+
+`ts-host/src/tune/selfteach.ts` renders the shared JOLT+ declaration (`rl/privileged_context.PrivilegedRendering`,
+`natlang.jolt-privileged-rendering/1`): one system turn after the leading system turn of every model turn of a
+self-taught TRAINING root, the header `Verified reference for this call (training only):` followed by the facts the
+shared crisp policy selects for that invocation (`expected_result`, matched `child_value`s, decisive helper values).
+The recorded training rows never contain it (the student learns the plain task), and a root whose reply echoes the
+header is not a target. What the student sees while collecting is still model-facing: the wording decides how often
+the privileged student follows the program's steps instead of shortcutting to the final value. Status:
+**unmeasured**; measure with the JOLT+ fact-policy entry below on the trained LFM3 (about 48 training roots per
+variant across several supply families): oracle-verified rate, rate of trajectories that call every declared stage,
+and echo rate. The rendering identity is part of the self teacher's identity, so a change recollects.
+
 ### 2026-10-28 — LFM3-1.7B history reasoning pinned to `keep` (`preserve_thinking=true`)
 
 `serve/chat.py` declares `BACKBONE_HISTORY_REASONING['lfm3'] = 'keep'`, so every LFM3 training render and serving

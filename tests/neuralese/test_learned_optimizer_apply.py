@@ -3,11 +3,10 @@ import dataclasses
 import json
 
 from test_learned_optimizer_bank import _component
-from test_learned_optimizer_writer import GRID
 from test_tune_soft_states import soft_engine
 from test_tune_trainer import manifest_for, rows_for
 from natlang_neuralese.serve.store import TensorStore
-from natlang_neuralese.tune.learned import numbers as N
+from natlang_neuralese.tune.learned.mixture import MixtureFormat
 from natlang_neuralese.tune.learned.apply import main, service
 from natlang_neuralese.tune.learned.bank import new_bank, save_bank, weight_svd_basis
 from natlang_neuralese.tune.learned.bundle import verify_bundle
@@ -21,12 +20,12 @@ def operation(tmp_path):
     engine.store.close()
     engine.store = TensorStore(store)
     names = sorted(target_parameters(engine.shared_model))[:6]
-    bank = new_bank(engine, weight_svd_basis(engine, names, 4), N.NumberFormat(.08))
+    bank = new_bank(engine, weight_svd_basis(engine, names, 4), MixtureFormat())
     components = [dataclasses.replace(_component(bank, seed), key=engine.native_write_text(f't{40 + seed} t{50 + seed}')['id'])
                   for seed in (1, 2, 3)]
     bank = bank.with_components(components, reason='planted')
     (tmp_path / 'bank.json').write_text(json.dumps({'bank': save_bank(engine, bank)}))
-    trainer = OuterTrainer(engine, bank, GRID, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
+    trainer = OuterTrainer(engine, bank, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
     (tmp_path / 'state.json').write_text(json.dumps(trainer.state))
     manifest = manifest_for(engine)
     engine.store.close()
@@ -37,8 +36,7 @@ def operation(tmp_path):
     plan = {'schema': 'natlang.tune-plan/v1', 'manifest': manifest, 'rows': 'turns.jsonl',
             'student': {'checkpoint': str(tmp_path / 'native.pt'), 'engine': {}}, 'softStates': False, 'exports': [],
             'learned': {'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'), 'store': str(store),
-                        'scopes': {'lambda': 3, 'folder': 3}, 'steps': 3, 'patience': 3, 'seed': 1,
-                        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}}}
+                        'scopes': {'lambda': 3, 'folder': 3}, 'steps': 3, 'patience': 3, 'seed': 1}}
     (tmp_path / 'plan.json').write_text(json.dumps(plan))
     return str(tmp_path / 'plan.json'), bank, store
 
@@ -50,7 +48,7 @@ def test_apply_writes_a_build_result_with_the_complete_episode(tmp_path):
     assert result['schema'] == 'natlang.tune.build-result/1'
     receipt = result['receipt']
     assert receipt['bank'] == bank.snapshot and len(receipt['history']) >= 1
-    assert receipt['history'][0]['behavior']['sampled'] is False  # the first proposal decodes deterministically
+    assert receipt['history'][0]['behavior']['choose'] is None  # the first proposal executes the mixture itself
     if receipt['selected']:
         assert {item['node'] for item in result['artifacts']} == {'folder:a', 'folder:b', 'lambda:x', 'lambda:y'}
         assert all((tmp_path / 'out' / 'artifacts' / f"{item['artifact']}.nnt").exists() for item in result['artifacts'])

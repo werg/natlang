@@ -16,9 +16,9 @@ def test_publication_reexpresses_components_without_changing_updates(tmp_path, f
     from natlang_neuralese.model.native_adapters import target_parameters
     from natlang_neuralese.tune.targets import module_map
     from natlang_neuralese.tune.learned.bank import new_bank, weight_svd_basis
-    from natlang_neuralese.tune.learned.numbers import NumberFormat
+    from natlang_neuralese.tune.learned.mixture import MixtureFormat
     names, _ = module_map(sorted(target_parameters(engine.shared_model)))
-    bank = new_bank(engine, weight_svd_basis(engine, sorted(names)[:6], 4), NumberFormat(.5))
+    bank = new_bank(engine, weight_svd_basis(engine, sorted(names)[:6], 4), MixtureFormat())
     bank = bank.with_components([_component(bank, seed) for seed in (1, 2)], reason='fixture')
     trainer = object.__new__(OuterTrainer)
     trainer.bank, trainer.engine, trainer.owner = bank, engine, None

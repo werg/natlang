@@ -7,13 +7,12 @@ from pathlib import Path
 import torch
 
 from test_learned_optimizer_bank import _component
-from test_learned_optimizer_writer import GRID
 from test_native_serving_adapters import engine_fixture
 from test_tune_trainer import manifest_for, rows_for
 from natlang_neuralese.model.native_adapters import target_parameters
 from natlang_neuralese.serve.store import TensorStore
 from natlang_neuralese.tune.build import main as build, persist_artifacts
-from natlang_neuralese.tune.learned import numbers as N
+from natlang_neuralese.tune.learned.mixture import MixtureFormat
 from natlang_neuralese.tune.learned.__main__ import main as learned
 from natlang_neuralese.tune.learned.apply import Context, release_fragment, service
 from natlang_neuralese.tune.learned.bank import load_bank, new_bank, save_bank, weight_svd_basis
@@ -35,12 +34,12 @@ def operation(tmp_path):
     engine.store.close()
     engine.store = TensorStore(store)
     names, _ = module_map(sorted(target_parameters(engine.shared_model)))
-    bank = new_bank(engine, weight_svd_basis(engine, sorted(names), 4), N.NumberFormat(.08))
+    bank = new_bank(engine, weight_svd_basis(engine, sorted(names), 4), MixtureFormat())
     bank = bank.with_components([dataclasses.replace(_component(bank, seed), key=engine.native_write_text(f't{40 + seed} t{50 + seed}')['id'])
                                  for seed in (1, 2, 3)], reason='planted')
     write(tmp_path / 'bank.json', {'bank': save_bank(engine, bank)})
     persist_artifacts(engine, [bank.basis_artifact], tmp_path / 'bank-artifacts')
-    trainer = OuterTrainer(engine, bank, GRID, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
+    trainer = OuterTrainer(engine, bank, OuterRecipe(writer={'kind': 'free-lora', 'rank': 2, 'alpha': 2.}), [])
     write(tmp_path / 'state.json', trainer.state)
     manifest = manifest_for(engine)
     rows = rows_for(engine, 'bx', 3) + rows_for(engine, 'by', 2, offset=2)
@@ -53,8 +52,7 @@ def operation(tmp_path):
         'recipe': {'steps': 2, 'batch_rows': 5, 'prompt_weight': 0, 'basis': bank.basis_artifact,
                    'ranks': {'tree': 4, 'folder': 2, 'lambda': 2}},
         'learned': {'bank': str(tmp_path / 'bank.json'), 'state': str(tmp_path / 'state.json'), 'store': str(store),
-                    'scopes': {'tree': 3, 'folder': 3, 'lambda': 3}, 'steps': 2, 'patience': 2, 'seed': 1,
-                    'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}}})
+                    'scopes': {'tree': 3, 'folder': 3, 'lambda': 3}, 'steps': 2, 'patience': 2, 'seed': 1}})
     assert build(['--plan', plan, '--out', str(tmp_path / 'fit')]) == 0
     return plan, store, bank
 
@@ -91,7 +89,6 @@ def test_tuner_on_the_bank_basis_yields_exact_bank_coordinates_and_targets(tmp_p
     spec = write(tmp_path / 'targets-spec.json', {
         'checkpoint': str(tmp_path / 'native.pt'), 'store': str(store), 'bank': str(tmp_path / 'bank.json'),
         'out': str(tmp_path / 'targets.jsonl'), 'work': str(tmp_path / 'work'), 'fit': {'steps': 2, 'refine_steps': 1},
-        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)},
         'programs': [{'plan': plan, 'build': str(tmp_path / 'fit'), 'subsets': 2}]})
     assert learned(['targets', '--spec', spec]) == 0
     targets = [json.loads(line) for line in (tmp_path / 'targets.jsonl').read_text().splitlines()]
@@ -109,7 +106,7 @@ def test_tuner_on_the_bank_basis_yields_exact_bank_coordinates_and_targets(tmp_p
     train = write(tmp_path / 'train-spec.json', {
         'checkpoint': str(tmp_path / 'native.pt'), 'store': str(store), 'bank': str(tmp_path / 'bank.json'),
         'targets': str(tmp_path / 'targets.jsonl'), 'state': str(tmp_path / 'outer.json'), 'receipt': str(tmp_path / 'receipt.json'),
-        'steps': 2, 'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)},
+        'steps': 2,
         'recipe': {'writer': {'kind': 'free-lora', 'rank': 2, 'alpha': 2.}, 'batch_targets': 2}})
     assert learned(['train', '--spec', train]) == 0
     assert json.loads((tmp_path / 'receipt.json').read_text())['step'] == 2
@@ -133,8 +130,8 @@ def test_optimizer_revises_the_tuned_bundle_it_releases(tmp_path):
         for scope, mixture in bundle['loraMixtures'].items():
             assert mixture['incoming'] == state['node_artifacts'][scope]
         verify_bundle(context.engine, bundle, context.bank)
-        # A proposal whose mixture is all zero executes exactly the tuned bundle.
-        if all(not any(mixture['weights']) for mixture in bundle['loraMixtures'].values()):
+        # A proposal whose mixture is all null executes exactly the tuned bundle.
+        if all(not any(mixture['distribution'][1:]) for mixture in bundle['loraMixtures'].values()):
             assert abs(context.evaluate(bundle) - tuned) < 1e-5
     finally:
         context.close()
@@ -151,13 +148,12 @@ def test_planted_controls_compare_the_optimizer_with_the_in_bank_reference(tmp_p
     spec = write(tmp_path / 'controls-spec.json', {
         'checkpoint': str(tmp_path / 'native.pt'), 'store': str(store), 'bank': str(tmp_path / 'bank.json'),
         'state': str(tmp_path / 'state.json'), 'plan': plan, 'work': str(tmp_path / 'controls'), 'out': str(tmp_path / 'controls.json'),
-        'trials': 2, 'prompts': 2, 'prompt_tokens': 3, 'fit': {'steps': 2, 'refine_steps': 1},
-        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}})
+        'trials': 2, 'prompts': 2, 'prompt_tokens': 3, 'fit': {'steps': 2, 'refine_steps': 1}})
     assert learned(['controls', '--spec', spec]) == 0
     report = json.loads((tmp_path / 'controls.json').read_text())
     assert len(report['trials']) == 2
     for trial in report['trials']:
-        assert sum(1 for value in trial['planted'] if value) == 2
+        assert sum(1 for value in trial['planted'] if value) == 2 and abs(sum(trial['planted']) - 1) < 1e-9
         assert len(trial['optimizer']) == len(trial['planted']) == len(trial['inBankFit'])
         assert 0 <= trial['optimizerRecovery']['supportRecall'] <= 1
 
@@ -174,7 +170,7 @@ def test_corpus_rebinds_an_earlier_students_plan_and_labels_targets(tmp_path):
         'checkpoint': str(tmp_path / 'native.pt'), 'store': str(store), 'bank': str(tmp_path / 'bank.json'),
         'work': str(tmp_path / 'corpus'), 'out': str(tmp_path / 'corpus' / 'targets.jsonl'), 'rebase': True,
         'recipe': {'steps': 2, 'ranks': {'tree': 4, 'folder': 2, 'lambda': 2}}, 'fit': {'steps': 1, 'refine_steps': 1}, 'subsets': 1,
-        'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}, 'programs': [{'name': 'p', 'plan': old}]})
+        'programs': [{'name': 'p', 'plan': old}]})
     assert learned(['corpus', '--spec', spec]) == 0
     plan = json.loads((tmp_path / 'corpus' / 'p' / 'plan.json').read_text())
     assert plan['rebasedFrom'] == earlier and plan['manifest']['base']['checkpoint_sha256'] != '0' * 64

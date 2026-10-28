@@ -1,21 +1,27 @@
 """The outer learner-training operation (plan "The outer learner-training operation", "One continuous training
-operation", "Gradients for native states, numerical tokens and the shared bank").
+operation", "Gradients for native states, component tokens and the shared bank").
 
-``theta`` = the writer adapter on the executor's base, the coefficient head, the component keys (native states) and,
-when the recipe trains them, the bank's component factors and basis. One logical update over a batch of complete
-target tuples runs three phases against ONE parameter snapshot (see DECOMPOSITION.md, "Gradient path"):
+``theta`` = the writer adapter on the executor's base, the mixture head (component rows and group-gain readout,
+`mixture.MixtureHead`), the component keys (native states) and, when the recipe trains them, the bank's component
+factors and basis. One logical update over a batch of complete target tuples runs three phases against ONE parameter
+snapshot (see DECOMPOSITION.md, "Gradient path"):
 
-A. writer forward under the writer adapter without gradients; states, decision hidden states and decision logits
-   are detached into leaves;
-B. executor objectives with those leaves: distillation against the target bundle on its training-role histories,
-   state/decoded-weight/head auxiliaries. Composed cores are live functions of the head outputs (realized integers,
-   or `token-expectation-v1`) and the bank leaves; backward yields the leaves' cotangents;
-C. writer forward again under the writer adapter with gradients, ``backward(outputs, cotangents)`` plus the
-   writer-local mixture-token CE. Exact cotangent replay: the plan's sanctioned split form.
+A. writer forward under the writer adapter without gradients; states and decision hidden states are detached into
+   leaves (base dropout drops each available component with the recipe's probability, recorded per step);
+B. executor objectives with those leaves: the mixture head turns each decision leaf into component-token logits and
+   gains; composed cores are live functions of the truncated distribution, the gains and the bank leaves.
+   Distillation against the target bundle on its training-role histories, the state/decoded-weight auxiliaries, the
+   KL to the fitted distribution and gain labels, and the batch load balance; backward yields the leaves' cotangents
+   and the head's gradients;
+C. writer forward again under the writer adapter with gradients and ``backward(outputs, cotangents)``. Exact
+   cotangent replay: the plan's sanctioned split form.
 
 Then every active group updates once: the writer adapter through `optimize_adapter` (immutable lineage, continued
-moments), keys through `optimize_state`, head and bank through AdamW with FP32 masters. Bank/basis changes publish a
-new snapshot only every ``publish_every`` updates; labels are then marked stale for refitting.
+moments), keys through `optimize_state`, the mixture head through `AdamWSR` (BF16 rows with stochastic rounding, FP32
+gain readout) and the bank through AdamW with FP32 masters. Bank/basis changes publish a new snapshot only every
+``publish_every`` updates and only when they changed; labels are then marked stale for refitting.
+
+`policy_step` is the exact expected-score update (`expected-score-v1`) over scored finite token sets.
 """
 from __future__ import annotations
 
@@ -26,12 +32,11 @@ from dataclasses import dataclass, field
 import torch
 
 from . import LearnedOptimizerError
+from . import mixture as M
 from . import objectives as O
-from .head import CoefficientHead, executed, expected, refinement, modulation, shares_from_norms
-from .numbers import expectation
 from .writer import ArrayWrite, StateWrite, Writer
 
-STATE_SCHEMA = 'natlang.lopt.trainer-state/1'
+STATE_SCHEMA = 'natlang.lopt.trainer-state/2'
 
 
 @dataclass
@@ -49,12 +54,11 @@ class OuterRecipe:
     train_basis: bool = False
     publish_every: int = 50
     weights: dict = field(default_factory=lambda: {'distill': 1., 'downstream': 0., 'instruction_state': .1,
-                                                   'skill_state': .1, 'mixture_tokens': .2, 'core': .05, 'head': .05})
-    coefficients: str = 'realized'        # 'realized' | 'token-expectation-v1'
-    head_mode: str = 'head'               # 'head' | 'head-off'
-    beta: float = .5
+                                                   'skill_state': .1, 'mixture': .2, 'gain': .05, 'core': .05,
+                                                   'balance': .01})
     cue: bool = True
-    zero_share: float = .5
+    dropout: float = .1            # base dropout of available components per training step (0 disables)
+    row_init: float = 4.           # initial component-row logit range against the decision state
 
     @classmethod
     def from_json(cls, value):
@@ -62,10 +66,10 @@ class OuterRecipe:
         if unknown:
             raise LearnedOptimizerError(f'unknown outer recipe fields {sorted(unknown)}')
         recipe = cls(**value)
-        if recipe.coefficients not in ('realized', 'token-expectation-v1') or recipe.head_mode not in ('head', 'head-off'):
-            raise LearnedOptimizerError('coefficients is realized|token-expectation-v1; head_mode is head|head-off')
         if set(recipe.weights) - set(O.TERMS):
             raise LearnedOptimizerError('objective weights name unknown terms')
+        if not 0 <= recipe.dropout < 1:
+            raise LearnedOptimizerError('dropout lies in [0, 1)')
         return recipe
 
     def as_json(self):
@@ -79,8 +83,8 @@ def _hex(tensor):
 class OuterTrainer:
     """Resumable outer trainer over admitted joint target records (`assemble.training_target`, any tier)."""
 
-    def __init__(self, engine, bank, grid, recipe, targets, *, state=None, owner=None, extra_token=None):
-        self.engine, self.bank, self.grid, self.recipe, self.owner = engine, bank, grid, recipe, owner
+    def __init__(self, engine, bank, recipe, targets, *, state=None, owner=None, extra_token=None):
+        self.engine, self.bank, self.recipe, self.owner = engine, bank, recipe, owner
         self.targets = list(targets)  # empty when the trainer only applies the optimizer (`episode.propose`)
         for target in self.targets:
             if target['bank'] != bank.snapshot:
@@ -89,8 +93,8 @@ class OuterTrainer:
                 raise LearnedOptimizerError(f'{target["id"]} is a request context without labels, not a target')
         self._factors = {}
         width = engine.shared_model.port.embedding_weight.shape[1]
-        self.head = CoefficientHead(width, len(bank.group_labels), beta=recipe.beta)
-        self.writer = Writer(engine, grid, cue=recipe.cue, extra_token=extra_token)
+        self.head = M.MixtureHead(width, len(bank.group_labels), bank.ids, bank.mixture_format, row_init=recipe.row_init)
+        self.writer = Writer(engine, cue=recipe.cue, extra_token=extra_token)
         self.state = state or self._initial_state()
         if self.state['schema'] != STATE_SCHEMA or self.state['bank'] != bank.snapshot:
             raise LearnedOptimizerError('trainer state belongs to another bank snapshot or schema')
@@ -112,17 +116,18 @@ class OuterTrainer:
                                 self.owner)
         return {'schema': STATE_SCHEMA, 'bank': self.bank.snapshot, 'step': 0, 'epoch': 0, 'position': 0,
                 'writer': writer.id, 'writer_optimizer': None, 'writer_history': [writer.id],
-                'head': None, 'head_optimizer': None, 'keys': {c.id: c.key for c in self.bank.components},
-                'key_optimizers': {}, 'bank_tensors': None, 'bank_optimizer': None, 'labels_stale': False,
-                'exposure': {}, 'losses': [], 'recipe': self.recipe.as_json(), 'rng': _capture_rng()}
+                'head': None, 'head_components': list(self.bank.ids), 'head_optimizer': None,
+                'keys': {c.id: c.key for c in self.bank.components},
+                'key_optimizers': {}, 'bank_tensors': None, 'bank_optimizer': None, 'bank_dirty': False,
+                'labels_stale': False, 'exposure': {}, 'losses': [], 'recipe': self.recipe.as_json(), 'rng': _capture_rng()}
 
     def _restore(self):
         store = self.engine.store
+        if self.state.get('head_components', self.bank.ids) != self.bank.ids:
+            raise LearnedOptimizerError('the saved mixture head belongs to another component list; adopt the bank first')
         if self.state['head']:
-            tensors = store.get_native_tensor_artifact(self.state['head']).artifact.tensors
-            self.head.load_state_dict({'readout.weight': tensors['weight'], 'readout.bias': tensors['bias']})
-        self.head_optimizer = torch.optim.AdamW(self.head.parameters(), lr=self.recipe.head_optimizer['learning_rate'],
-                                                weight_decay=self.recipe.head_optimizer.get('weight_decay', 0.))
+            self.head.load(store.get_native_tensor_artifact(self.state['head']).artifact.tensors)
+        self.head_optimizer = _head_optimizer(self.head, self.recipe)
         if self.state['head_optimizer']:
             self.head_optimizer.load_state_dict(_load_optimizer(store, self.state['head_optimizer'], self.head_optimizer))
         self.bank_leaves = None
@@ -154,13 +159,24 @@ class OuterTrainer:
             position += 1
         return batch, epoch, position
 
-    def _writer_inputs(self, target):
+    def _views(self, items, dropout_seed=None):
+        """Each array's view with base dropout applied to its availability (``dropout_seed`` None: none)."""
+        views = {}
+        for number, item in enumerate(items):
+            view = dict(item['view'])
+            if dropout_seed is not None and self.recipe.dropout:
+                generator = torch.Generator().manual_seed(dropout_seed * 1009 + number)
+                retained = (torch.rand(len(view['available']), generator=generator) >= self.recipe.dropout).tolist()
+                view['available'] = [bool(a and r) for a, r in zip(view['available'], retained)]
+            views[view['scope']] = view
+        return views
+
+    def _writer_inputs(self, target, views):
         writes = [StateWrite(w['key'], w['kind'], w['text'], w.get('extra_slots', 0)) for w in target['writes']]
         arrays = []
-        for item in target['arrays']:
-            view = item['view']
-            keys = tuple(self.state['keys'][component] for component in view['componentIds']) if self.recipe.cue else (None,) * len(view['componentIds'])
-            arrays.append(ArrayWrite(view['scope'], tuple(view['available']), keys, tuple(item['integers'])))
+        for scope, view in views.items():
+            keys = tuple(self.state['keys'][c] for c in view['componentIds']) if self.recipe.cue else (None,) * len(view['componentIds'])
+            arrays.append(ArrayWrite(scope, tuple(view['available']), keys))
         return writes, arrays
 
     def _target_factors(self, adapter):
@@ -174,110 +190,104 @@ class OuterTrainer:
     def _key_overrides(self, live_keys):
         return {state: block for state, (block, _) in live_keys.items()}
 
+    def _live(self):
+        store = self.engine.store
+        writer_values = {k: v.detach().clone().requires_grad_(True)
+                         for k, v in store.get_native_tensor_artifact(self.state['writer']).artifact.tensors.items()}
+        live_keys = {}
+        if self.recipe.train_keys and self.recipe.cue:
+            from ...serve.native_grad import _leaf_block
+            for state in sorted(set(self.state['keys'].values()) - {None}):
+                live_keys[state] = _leaf_block(store.get_native_state(state).block)
+        return writer_values, [{'id': self.state['writer'], 'scale': 1.}], live_keys
+
+    def _decide(self, hidden, view):
+        logits = self.head.logits(hidden, view['componentIds'], view['available'])
+        probs, keep = M.distribution(logits, self.bank.mixture_format.top_p)
+        return logits, probs, keep, self.head.gains(hidden)
+
     # -- one logical update -------------------------------------------------------------------------------------
     def step(self):
         from ...model.native_adapters import run_native
         from ...serve.native_grad import _leaf_block
         if self.state.get('labels_stale'):
             raise LearnedOptimizerError('published bank needs freshly refitted labels before another update')
-        engine, recipe, store = self.engine, self.recipe, self.engine.store
+        engine, recipe = self.engine, self.recipe
         batch, epoch, position = self._next_batch()
-        writer_values = {k: v.detach().clone().requires_grad_(True)
-                         for k, v in store.get_native_tensor_artifact(self.state['writer']).artifact.tensors.items()}
-        writer_entries = [{'id': self.state['writer'], 'scale': 1.}]
-        live_keys = {}
-        if recipe.train_keys and recipe.cue:
-            for state in sorted(set(self.state['keys'].values()) - {None}):
-                live_keys[state] = _leaf_block(store.get_native_state(state).block)
-        shares_all = shares_from_norms(self.bank.group_norms())
-        records = []
-        for index in batch:
+        writer_values, writer_entries, live_keys = self._live()
+        items, usage = [], []
+        for number, index in enumerate(batch):
             target = self.targets[index]
-            writes, arrays = self._writer_inputs(target)
+            views = self._views(target['arrays'], self.state['step'] * 7919 + number + 1)
+            writes, arrays = self._writer_inputs(target, views)
             # A: detached writer outputs.
             with torch.no_grad():
                 out = run_native(engine, lambda: self.writer.run(target['messages'], writes, arrays,
-                                 state_overrides=self._key_overrides(live_keys) or None, branch=recipe.coefficients != 'realized'),
-                                 writer_entries)
-            leaves = {'states': {}, 'hidden': {}, 'sign': {}, 'digit': {}, 'other': {}}
-            for key, block in out.states.items():
-                leaves['states'][key] = _leaf_block(block)
-            for scope in out.integers:
-                leaves['hidden'][scope] = out.decision_hidden[scope].detach().float().clone().requires_grad_(True)
-                leaves['sign'][scope] = out.sign_logits[scope].detach().clone().requires_grad_(True)
-                leaves['digit'][scope] = out.digit_logits[scope].detach().clone().requires_grad_(True)
-                if scope in out.other_digit_logits:
-                    leaves['other'][scope] = out.other_digit_logits[scope].detach().clone().requires_grad_(True)
+                                 state_overrides=self._key_overrides(live_keys) or None), writer_entries)
+                if recipe.cue:
+                    for scope, view in views.items():
+                        self.head.initialize_rows([c for c, a in zip(view['componentIds'], view['available']) if a],
+                                                  out.key_hidden[scope], out.decision_hidden[scope])
+            leaves = {'states': {key: _leaf_block(block) for key, block in out.states.items()},
+                      'hidden': {scope: out.decision_hidden[scope].detach().float().clone().requires_grad_(True)
+                                 for scope in out.decision_hidden}}
             # B: executor objectives on the leaves.
-            terms, coefficients = self._executor_terms(target, leaves, shares_all, len(batch))
+            terms, used = self._executor_terms(target, views, leaves, len(batch))
+            usage.extend(used)
             local = {k: v for k, v in terms.items() if v.requires_grad and recipe.weights.get(k, 0)}
             if local:
-                (O.combine(local, recipe.weights) / len(batch)).backward()
-            routes = {kind: math.sqrt(sum(float(leaf.grad.float().pow(2).sum()) for leaf in leaves[kind].values()
-                                          if leaf.grad is not None)) for kind in ('hidden', 'sign', 'digit', 'other')}
-            routes['states'] = math.sqrt(sum(float(v.grad.float().pow(2).sum()) for _, values in leaves['states'].values()
-                                             for v in values.values() if v.grad is not None))
+                (O.combine(local, recipe.weights) / len(batch)).backward(retain_graph=True)
+            items.append((target, writes, arrays, leaves, terms))
+        balance = M.balance(usage) if recipe.weights.get('balance', 0) else None
+        if balance is not None:
+            (float(recipe.weights['balance']) * balance).backward()
+        records = []
+        for target, writes, arrays, leaves, terms in items:
+            routes = {'hidden': math.sqrt(sum(float(leaf.grad.float().pow(2).sum()) for leaf in leaves['hidden'].values()
+                                              if leaf.grad is not None)),
+                      'states': math.sqrt(sum(float(v.grad.float().pow(2).sum()) for _, values in leaves['states'].values()
+                                              for v in values.values() if v.grad is not None))}
             # C: replay the writer with gradients and push the cotangents into its producers.
-            def replay():
-                live = self.writer.run(target['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None,
-                                       branch=recipe.coefficients != 'realized')
+            def replay(target=target, writes=writes, arrays=arrays, leaves=leaves):
+                live = self.writer.run(target['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None)
                 outputs, grads = [], []
                 for key, block in live.states.items():
-                    for (_, values) in [leaves['states'][key]]:
-                        for name, leaf in values.items():
-                            if leaf.grad is not None:
-                                layer, field_name = name.split('.')[1:]
-                                outputs.append(block.layers[int(layer)][field_name]); grads.append(leaf.grad)
-                for scope in live.integers:
-                    for kind, tensor in (('hidden', live.decision_hidden[scope].float()), ('sign', live.sign_logits[scope]),
-                                         ('digit', live.digit_logits[scope]), ('other', live.other_digit_logits.get(scope))):
-                        leaf = leaves[kind].get(scope)
-                        if leaf is not None and leaf.grad is not None and tensor is not None:
-                            outputs.append(tensor); grads.append(leaf.grad)
-                local = sum((O.mixture_token_loss(self.grid, self.bank.number_format, live.sign_logits[a.scope], live.digit_logits[a.scope],
-                                                  a.targets, a.available, zero_share=recipe.zero_share)[0] for a in arrays),
-                            torch.zeros(()))
-                weight = float(recipe.weights.get('mixture_tokens', 0.)) / len(batch)
-                if weight:
-                    outputs.append(local * weight); grads.append(torch.ones(()))
+                    for name, leaf in leaves['states'][key][1].items():
+                        if leaf.grad is not None:
+                            layer, field_name = name.split('.')[1:]
+                            outputs.append(block.layers[int(layer)][field_name]); grads.append(leaf.grad)
+                for scope, hidden in live.decision_hidden.items():
+                    leaf = leaves['hidden'][scope]
+                    if leaf.grad is not None:
+                        outputs.append(hidden.float()); grads.append(leaf.grad)
                 if outputs:
                     torch.autograd.backward(outputs, grads)
-                return float(local.detach())
-            mixture = run_native(engine, replay, writer_entries, leaves={self.state['writer']: writer_values}, gradient_precision='fp32')
-            records.append({'target': target['id'], **{k: float(v.detach()) for k, v in terms.items()}, 'mixture_tokens': mixture,
-                            'cotangents': routes})
+            run_native(engine, replay, writer_entries, leaves={self.state['writer']: writer_values}, gradient_precision='fp32')
+            records.append({'target': target['id'], **{k: float(v.detach()) for k, v in terms.items()}, 'cotangents': routes})
+        if balance is not None:
+            records.append({'balance': float(balance.detach())})
         return self._apply(batch, epoch, position, writer_values, live_keys, records)
 
-    def _executor_terms(self, target, leaves, shares_all, batch_size):
+    def _executor_terms(self, target, views, leaves, batch_size):
         from ...model.native_adapters import run_native
         from ...data.native_graph_schema import parse_graph
-        recipe, bank, engine = self.recipe, self.bank, self.engine
-        cores_by_scope, terms, coefficients = {}, {}, {}
-        rho_delta = {}
+        recipe, bank, engine, fmt = self.recipe, self.bank, self.engine, self.bank.mixture_format
+        cores_by_scope, terms, used = {}, {}, []
+        mixture_terms, gain_terms = [], []
         for item in target['arrays']:
-            scope, view = item['view']['scope'], item['view']
+            scope = item['view']['scope']
+            view = views[scope]
             slots = [bank.index(c) for c in view['componentIds']]
-            shares = shares_all[slots]
-            u, v = self.head(leaves['hidden'][scope])
-            head_on = recipe.head_mode == 'head'
-            if recipe.coefficients == 'realized':
-                coefficient = executed(item['integers'], u, v, shares, step=bank.number_format.step, beta=recipe.beta, head=head_on)
-            else:
-                means, signed = [], []
-                for slot in range(len(slots)):
-                    negative = item['integers'][slot] < 0
-                    mean, sign_diff, _ = expectation(self.grid, bank.number_format, leaves['sign'][scope][slot],
-                                                     leaves['digit'][scope][slot], negative, leaves['other'][scope][slot])
-                    means.append(mean); signed.append(sign_diff)
-                available = torch.tensor(view['available'], dtype=torch.float32)
-                coefficient = expected(torch.stack(means) * available, torch.stack(signed) * available, u, v, shares,
-                                       step=bank.number_format.step, beta=recipe.beta, head=head_on)
-            coefficients[scope] = coefficient
-            factors = None
-            if self.bank_leaves is not None:
-                factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots}
-            cores_by_scope[scope] = bank.composed_cores(slots, coefficient, factors=factors, offset=bank.incoming(engine, target, scope))
-            rho_delta[scope] = (refinement(u), modulation(v, shares, recipe.beta), item)
+            logits, probs, _, gains = self._decide(leaves['hidden'][scope], view)
+            used.append((['null', *view['componentIds']], probs))
+            factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots} if self.bank_leaves is not None else None
+            cores_by_scope[scope] = bank.composed_cores(slots, M.coefficients(probs, gains), factors=factors,
+                                                        offset=bank.incoming(engine, target, scope))
+            if 'distribution' in item:
+                label = torch.tensor(item['distribution']) * torch.tensor([True, *view['available']])
+                if float(label.sum()) > 0:  # dropout can remove the whole fitted support: no mixture label then
+                    mixture_terms.append(M.mixture_kl(label / label.sum(), logits))
+                gain_terms.append(M.gain_loss(item['gain'], gains, fmt))
         placeholders = target['placeholders']
         distill = []
         for row in target['rows']:
@@ -317,19 +327,16 @@ class OuterTrainer:
             terms['instruction_state'] = torch.stack(state_terms['instruction']).mean()
         if state_terms['skill']:
             terms['skill_state'] = torch.stack(state_terms['skill']).mean()
-        core_terms, head_terms = [], []
-        for scope, cores in cores_by_scope.items():
-            adapter = (target.get('target_factors') or {}).get(scope)
-            if adapter:
-                core_terms.append(O.decoded_weight_loss(bank, cores, self._target_factors(adapter)))
-            rho, delta, item = rho_delta[scope]
-            if recipe.head_mode == 'head' and 'rho' in item:
-                head_terms.append(O.head_regression(rho, delta, torch.tensor(item['rho']), torch.tensor(item['delta']), item['view']['available']))
+        core_terms = [O.decoded_weight_loss(bank, cores, self._target_factors(adapter))
+                      for scope, cores in cores_by_scope.items()
+                      for adapter in [(target.get('target_factors') or {}).get(scope)] if adapter]
         if core_terms:
             terms['core'] = torch.stack(core_terms).mean()
-        if head_terms:
-            terms['head'] = torch.stack(head_terms).mean()
-        return terms, coefficients
+        if mixture_terms:
+            terms['mixture'] = torch.stack(mixture_terms).mean()
+        if gain_terms:
+            terms['gain'] = torch.stack(gain_terms).mean()
+        return terms, used
 
     def _apply(self, batch, epoch, position, writer_values, live_keys, records):
         from ...model.native_adapters import optimize_adapter
@@ -370,6 +377,7 @@ class OuterTrainer:
         if self.bank_leaves is not None and any(p.grad is not None for group in self.bank_optimizer.param_groups for p in group['params']):
             self.bank_optimizer.step()
             self.bank_optimizer.zero_grad(set_to_none=True)
+            self.state['bank_dirty'] = True
             updated['bank'] = True
         self.state['step'] += 1
         self.state.update(epoch=epoch, position=position)
@@ -377,124 +385,72 @@ class OuterTrainer:
             target = self.targets[index]['id']
             self.state['exposure'][target] = self.state['exposure'].get(target, 0) + 1
         self.state['head'] = store.put_native_tensor_artifact(NativeTensorArtifact('parameter-set', engine.native_identity,
-            {'weight': self.head.readout.weight.detach().cpu().clone(), 'bias': self.head.readout.bias.detach().cpu().clone()},
-            None, {'scope': 'natlang.lopt.coefficient-head/1', 'config': self.head.config(), 'step': self.state['step']}), self.owner).id
+            self.head.tensors(), None, {'scope': 'natlang.lopt.mixture-head/1', 'config': self.head.config(),
+                                        'step': self.state['step']}), self.owner).id
         self.state['head_optimizer'] = _save_optimizer(engine, self.head_optimizer, 'head', self.owner)
         if self.bank_leaves is not None:
             self.state['bank_tensors'] = _save_bank_leaves(engine, self.bank, self.bank_leaves, self.state['step'], self.owner)
             self.state['bank_optimizer'] = _save_optimizer(engine, self.bank_optimizer, 'bank', self.owner)
-            if self.state['step'] % recipe.publish_every == 0:
+            if self.state['step'] % recipe.publish_every == 0 and self.state.get('bank_dirty'):
                 self.publish_bank()
         record = {'step': self.state['step'], 'targets': records, 'updated': updated, 'head': self.head.identity()}
         self.state['losses'].append(record)
         self.state['rng'] = _capture_rng()
         return record
 
-    def policy_step(self, records, *, clip_low=.2, clip_high=.28):
-        """`joint-ratio-v1` on recorded proposals. Each record: ``context`` (assembled, with the executed query action
-        rows as ``rows``), ``behavior`` (from `episode.propose`), ``old_executor_logprob`` and a context-only
-        ``advantage``. The surrogate depends on theta only through ``log r = (log pi - log pi_old) + (log p_exec -
-        log p_exec_old)``, so its gradient is ``g * grad log r`` with the scalar ``g = d loss / d log r``: the executor
-        factor is regenerated from the same recorded tokens under current parameters (head, keys, writer, bank)."""
+    def policy_step(self, records):
+        """`expected-score-v1` on scored candidates. Each record: ``context`` (assembled), ``behavior`` (the mixture
+        proposal of `episode.propose`), ``candidate`` ``{scope, token}`` (a kept token executed alone, the other scopes
+        at their mixture) and ``reward`` (its paired total). Per context and scope the update is the exact gradient of
+        ``sum_k p_k R_k`` over the scored tokens, with ``p`` recomputed under current parameters and renormalized over
+        the scored set (`mixture.expected_score_loss`); records without a candidate are reported only."""
         from ...model.native_adapters import run_native
-        from ...serve.native_grad import _leaf_block
-        from ...data.native_graph_schema import parse_graph
-        from .episode import _labels
         from .meta_rl import check_replay
         if self.state.get('labels_stale'):
             raise LearnedOptimizerError('published bank needs freshly refitted labels before another update')
-        engine, recipe, store, bank = self.engine, self.recipe, self.engine.store, self.bank
-        writer_values = {k: v.detach().clone().requires_grad_(True)
-                         for k, v in store.get_native_tensor_artifact(self.state['writer']).artifact.tensors.items()}
-        writer_entries = [{'id': self.state['writer'], 'scale': 1.}]
-        live_keys = {}
-        if recipe.train_keys and recipe.cue:
-            for state in sorted(set(self.state['keys'].values()) - {None}):
-                live_keys[state] = _leaf_block(store.get_native_state(state).block)
-        shares_all = shares_from_norms(bank.group_norms())
-        summary = []
+        groups = {}
         for record in records:
+            if record.get('candidate') is None:
+                continue
             context, behavior = record['context'], record['behavior']
-            if behavior['bank'] != bank.snapshot:
+            if behavior['bank'] != self.bank.snapshot:
                 raise LearnedOptimizerError('the recorded proposal used another bank snapshot; collect fresh rollouts')
+            group = groups.setdefault(context['id'], {'context': context, 'behavior': behavior, 'scores': {}})
+            if group['behavior']['arrays'] != behavior['arrays']:
+                raise LearnedOptimizerError('candidates of one context come from different mixture proposals')
+            candidate = record['candidate']
+            group['scores'].setdefault(candidate['scope'], {})[json.dumps(candidate['token'])] = float(record['reward']['total'])
+        writer_values, writer_entries, live_keys = self._live()
+        summary = []
+        for group in groups.values():
+            context, behavior = group['context'], group['behavior']
+            views = {}
             for item in context['arrays']:
                 check_replay({'view': behavior['arrays'][item['view']['scope']]['view']}, {'view': item['view']})
-            writes = [StateWrite(w['key'], w['kind'], w['text'], w.get('extra_slots', 0)) for w in context['writes']]
-            arrays = [ArrayWrite(item['view']['scope'], tuple(item['view']['available']),
-                                 tuple(self.state['keys'][c] for c in item['view']['componentIds']) if recipe.cue else (None,) * len(item['view']['componentIds']),
-                                 tuple(behavior['arrays'][item['view']['scope']]['integers'])) for item in context['arrays']]
-            with torch.no_grad():
-                out = run_native(engine, lambda: self.writer.run(context['messages'], writes, arrays,
-                                 state_overrides=self._key_overrides(live_keys) or None, branch=False), writer_entries)
-            for scope, tokens in out.tokens.items():
-                if tokens != behavior['arrays'][scope]['tokens']:
-                    raise LearnedOptimizerError('replayed optimizer tokens differ from the recorded spelling')
-            old_pi = sum(float.fromhex(x) for a in behavior['arrays'].values() for x in a['logprobs'])
-            new_pi = float(sum(out.logprobs[scope].sum() for scope in out.logprobs))
-            state_leaves = {key: _leaf_block(block) for key, block in out.states.items()}
-            hidden = {scope: out.decision_hidden[scope].detach().float().clone().requires_grad_(True) for scope in out.integers}
-            def cores_for():
-                cores = {}
-                for item in context['arrays']:
-                    scope = item['view']['scope']
-                    slots = [bank.index(c) for c in item['view']['componentIds']]
-                    u, v = self.head(hidden[scope])
-                    coefficient = executed(behavior['arrays'][scope]['integers'], u, v, shares_all[slots],
-                                           step=bank.number_format.step, beta=recipe.beta, head=recipe.head_mode == 'head')
-                    factors = {k: self.bank_leaves['factors_by_component'][k] for k in slots} if self.bank_leaves is not None else None
-                    cores[scope] = bank.composed_cores(slots, coefficient, factors=factors, offset=bank.incoming(engine, context, scope))
-                return cores
-            def run_rows(weight):
-                total = 0.
-                for row in context['rows']:
-                    example = parse_graph(row['graph'], tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
-                    scales = context['manifest'].get('scales', {})
-                    ancestry = next(b['ancestry'] for b in context['manifest']['bindings'] if b['id'] == row['binding'])
-                    scopes = [s for s in ancestry if s in context['placeholders'] and scales.get(s, 1) != 0]
-                    entries = [{'id': context['placeholders'][s], 'scale': float(scales.get(s, 1))} for s in scopes]
-                    soft = row.get('soft') or {}
-                    blocks = {name: state_leaves[key][0] for name, key in soft.items() if key in state_leaves}
-                    labels = _labels(example)
-                    cores = cores_for()
-                    leaves = {context['placeholders'][s]: bank.adapter_tensors(cores[s]) for s in scopes if s in cores}
-                    # Execute with the same live basis as the supervised step: the ratio compares the live
-                    # parameters against the behavior, and the basis receives its policy gradient.
-                    if self.bank_leaves is not None and recipe.train_basis:
-                        leaves[bank.basis_artifact] = self.bank_leaves['basis']
-                    def execute():
-                        logp, w = O.supervised_logprobs(engine.shared_model, example, external_blocks=blocks or None,
-                                                        external_identity=_identities(engine, blocks))
-                        return logp.gather(-1, labels.to(logp.device)[:, None])[:, 0].sum()
-                    total += float(_backward_inside(engine, execute, entries, leaves, weight))
-                return total
-            new_exec = run_rows(0.)
-            log_ratio = (new_pi - old_pi) + (new_exec - record['old_executor_logprob'])
-            ratio = math.exp(max(min(log_ratio, 20.), -20.))
-            advantage = float(record['advantage'])
-            clipped = (advantage > 0 and ratio > 1 + clip_high) or (advantage < 0 and ratio < 1 - clip_low)
-            g = 0. if clipped else -advantage * ratio / len(records)
-            if g:
-                run_rows(g)
-                def replay():
-                    live = self.writer.run(context['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None,
-                                           branch=False)
-                    outputs, grads = [], []
-                    for scope in live.logprobs:
-                        outputs.append(live.logprobs[scope].sum()); grads.append(torch.tensor(g))
-                        if hidden[scope].grad is not None:
-                            outputs.append(live.decision_hidden[scope].float()); grads.append(hidden[scope].grad)
-                    for key, (_, values) in state_leaves.items():
-                        for name, leaf in values.items():
-                            if leaf.grad is not None:
-                                layer, field_name = name.split('.')[1:]
-                                outputs.append(live.states[key].layers[int(layer)][field_name]); grads.append(leaf.grad)
-                    torch.autograd.backward(outputs, grads)
-                run_native(engine, replay, writer_entries, leaves={self.state['writer']: writer_values}, gradient_precision='fp32')
-            summary.append({'logRatio': log_ratio, 'ratio': ratio, 'clipped': clipped, 'advantage': advantage,
-                            'optimizerLogRatio': new_pi - old_pi, 'executorLogRatio': new_exec - record['old_executor_logprob']})
+                views[item['view']['scope']] = item['view']
+            writes, arrays = self._writer_inputs(context, views)
+            def update(context=context, behavior=behavior, views=views, writes=writes, arrays=arrays, group=group):
+                live = self.writer.run(context['messages'], writes, arrays, state_overrides=self._key_overrides(live_keys) or None)
+                losses, report = [], {}
+                for scope, scores in group['scores'].items():
+                    view = views[scope]
+                    logits = self.head.logits(live.decision_hidden[scope], view['componentIds'], view['available'])
+                    tokens = [M.NULL, *range(len(view['componentIds']))]
+                    scored = [json.dumps(token) in scores for token in tokens]
+                    probs, _ = M.distribution(logits, 1., keep=scored)
+                    rewards = [scores.get(json.dumps(token), 0.) for token in tokens]
+                    losses.append(M.expected_score_loss(probs, rewards))
+                    report[scope] = {'scored': sum(scored), 'kept': sum(behavior['arrays'][scope]['kept']),
+                                     'expectedScore': float((probs.detach() * torch.tensor(rewards)).sum())}
+                loss = torch.stack(losses).sum() / len(groups)
+                loss.backward()
+                return report
+            report = run_native(self.engine, update, writer_entries, leaves={self.state['writer']: writer_values},
+                                gradient_precision='fp32')
+            summary.append({'context': context['id'], 'scopes': report})
         result = self._apply([], self.state['epoch'], self.state['position'], writer_values, live_keys,
                              [{'policy': item} for item in summary])
-        result['estimator'] = 'joint-ratio-v1'
+        result['estimator'] = 'expected-score-v1'
         return result
 
     def publish_bank(self):
@@ -538,6 +494,7 @@ class OuterTrainer:
         self.state['published_banks'] = self.state.get('published_banks', []) + [manifest]
         self.state['published'] = self.state.get('published', []) + [published.snapshot]
         self.state['labels_stale'] = True
+        self.state['bank_dirty'] = False
         return published
 
     def run(self, steps=None):
@@ -622,6 +579,50 @@ def _restore_bank_leaves(engine, bank, leaves, artifact_id, step):
             value.copy_(saved.to(value.device))
 
 
+ADOPTION_SCHEMA = 'natlang.lopt.bank-adoption/1'
+
+
+def adopt_published_bank(engine, state, recipe, owner=None):
+    """The explicit transition that continues outer training on its latest published bank snapshot.
+
+    Publication leaves the trainer stale (`labels_stale`): its targets were labeled against the previous snapshot. After
+    the operation refits the labels against the published bank, training continues from this transition: the state
+    binds the published snapshot, every component's live key moves to its published component ID, and the bank
+    parameters restart from the published tensors (the same composed updates; with ``train_basis`` the basis was
+    re-orthonormalized and factors re-expressed). When publication kept the coordinates (no basis training) the bank
+    optimizer moments continue exactly; otherwise the bank optimizer starts an honestly new history (saved moments are
+    never reinterpreted through the QR change of coordinates) and the old history is retained as transition provenance.
+    Component rows of the mixture head follow their components by position like the keys. Writer, head and key
+    optimizer histories, exposure, losses and RNG are unchanged. Returns ``(state, bank)``."""
+    from .bank import load_bank
+    if not state.get('labels_stale') or not state.get('published_banks'):
+        raise LearnedOptimizerError('no published bank awaits adoption')
+    published = load_bank(engine, state['published_banks'][-1])
+    old_snapshot = state['bank']
+    if published.parent != old_snapshot:
+        raise LearnedOptimizerError('the latest published bank does not descend from the trainer\'s bank snapshot')
+    # Component order is preserved by publication; keys follow their components by position.
+    old_ids = list(state['keys'])
+    if len(old_ids) != len(published.components):
+        raise LearnedOptimizerError('published bank changed the number of components; adopt through bank growth instead')
+    keys = {component.id: component.key for component in published.components}
+    # Without basis training, publication copies the live factors unchanged (`publish_bank`): same coordinates.
+    same_coordinates = not recipe.train_basis
+    transition = {'schema': ADOPTION_SCHEMA, 'step': state['step'], 'from': old_snapshot, 'to': published.snapshot,
+                  'basis_changed': not same_coordinates, 'old_bank_tensors': state.get('bank_tensors'),
+                  'old_bank_optimizer': state.get('bank_optimizer'),
+                  'bank_optimizer': 'continued' if same_coordinates else 'new-history-after-coordinate-change'}
+    adopted = {**state, 'bank': published.snapshot, 'keys': keys, 'labels_stale': False,
+               'head_components': [component.id for component in published.components],
+               'adoptions': [*state.get('adoptions', []), transition]}
+    if recipe.train_bank or recipe.train_basis:
+        leaves = _bank_leaves(published, recipe)
+        adopted['bank_tensors'] = _save_bank_leaves(engine, published, leaves, state['step'], owner)
+        if not same_coordinates:
+            adopted['bank_optimizer'] = None
+    return adopted, published
+
+
 def _capture_rng():
     return {'cpu': bytes(torch.get_rng_state().tolist()).hex(),
             'cuda': [bytes(value.tolist()).hex() for value in torch.cuda.get_rng_state_all()]
@@ -636,6 +637,12 @@ def _restore_rng(state):
         torch.cuda.set_rng_state_all([torch.tensor(list(bytes.fromhex(value)), dtype=torch.uint8) for value in state['cuda']])
 
 
+def _head_optimizer(head, recipe):
+    from ...train.optim import AdamWSR
+    return AdamWSR(head.parameters(), lr=recipe.head_optimizer['learning_rate'],
+                   weight_decay=recipe.head_optimizer.get('weight_decay', 0.))
+
+
 def _save_optimizer(engine, optimizer, scope, owner):
     from ...model.native_artifact import NativeTensorArtifact
     saved = optimizer.state_dict()
@@ -646,7 +653,7 @@ def _save_optimizer(engine, optimizer, scope, owner):
     if not tensors:
         return None
     return engine.store.put_native_tensor_artifact(NativeTensorArtifact('optimizer-state', engine.native_identity, tensors, None,
-        {'scope': f'natlang.lopt.{scope}-optimizer/1', 'optimizer': 'adamw', 'param_groups': json.loads(json.dumps(saved['param_groups'], default=str))}),
+        {'scope': f'natlang.lopt.{scope}-optimizer/1', 'optimizer': type(optimizer).__name__.lower(), 'param_groups': json.loads(json.dumps(saved['param_groups'], default=str))}),
         owner).id
 
 

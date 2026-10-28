@@ -7,7 +7,8 @@ are ordered by bank position, so a view is a stable positional mapping recorded 
 
 Availability is ``eligible AND retained``: stable scope/model eligibility and the sampled dropout mask are recorded
 separately. A dropout mask is sampled independently of the proposal from a recorded seed and probability and stays
-fixed on replay; no inverted-dropout rescaling is applied. Unavailable slots must return exactly zero.
+fixed on replay; it is the component-token mask applied before the softmax (`mixture.MixtureHead.logits`), so an
+unavailable slot has exactly zero probability and executes nothing. No inverted-dropout rescaling is applied.
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from ...common.hashing import canonical_json_sha256_hex
 from . import LearnedOptimizerError
 
 VIEW_SCHEMA = 'natlang.lopt.bank-view/1'
-MIXTURE_SCHEMA = 'natlang.lopt.lora-mixture/1'
+MIXTURE_SCHEMA = 'natlang.lopt.lora-mixture/2'
 SELECTION_POLICIES = ('gradient-probe-v1', 'key-similarity-v1', 'full-bank-v1', 'learned-retrieval-v1')
 
 
@@ -110,25 +111,25 @@ def with_dropout(view, probability, seed, *, all_disabled='allow-zero-episode'):
                     view.probe, view.selection, mask)
 
 
-def validate_array(view, bank, values):
-    """The returned grid integers for one scope: exact length, bank snapshot, finite grid values and zero at every
-    unavailable slot. Returns the integers; a violation is a recorded contract failure."""
+def validate_distribution(view, bank, probs):
+    """A scope's component-token distribution (null first, then one entry per view slot): exact length, bank snapshot,
+    a finite probability law and zero at every unavailable slot. Returns it as floats; a violation is a recorded
+    contract failure."""
     if view.snapshot != bank.snapshot:
-        raise LearnedOptimizerError('the weight array was bound to another bank snapshot')
+        raise LearnedOptimizerError('the mixture was bound to another bank snapshot')
     if tuple(bank.ids[k] for k in view.slots) != view.component_ids:
         raise LearnedOptimizerError('the bank view positions no longer map to the same components')
-    if not isinstance(values, (list, tuple)) or len(values) != len(view.slots):
-        raise LearnedOptimizerError(f'the weight array must have exactly {len(view.slots)} numbers, one per description')
+    if not isinstance(probs, (list, tuple)) or len(probs) != 1 + len(view.slots):
+        raise LearnedOptimizerError(f'the mixture must have exactly {1 + len(view.slots)} probabilities: null, then one per description')
     out = []
-    for slot, (value, free) in enumerate(zip(values, view.available)):
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value != int(value):
-            raise LearnedOptimizerError(f'weight {slot} must be a finite grid integer')
-        value = int(value)
-        if abs(value) > bank.number_format.max_int:
-            raise LearnedOptimizerError(f'weight {slot} is outside [-{bank.number_format.max_int}, {bank.number_format.max_int}]')
-        if not free and value != 0:
-            raise LearnedOptimizerError(f'weight {slot} names an unavailable component; it must be 0')
-        out.append(value)
+    for slot, value in enumerate(probs):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise LearnedOptimizerError(f'probability {slot} must be finite and nonnegative')
+        if slot and not view.available[slot - 1] and value != 0:
+            raise LearnedOptimizerError(f'probability {slot} names an unavailable component; it must be 0')
+        out.append(float(value))
+    if abs(sum(out) - 1) > 1e-5:
+        raise LearnedOptimizerError('the mixture probabilities must sum to one')
     return out
 
 
@@ -141,17 +142,20 @@ def view_recall(view, full_coefficients, bank):
     return inside / total
 
 
-def mixture_encoding(view, integers, head_receipt, executed, incoming=None):
-    """The bundle's `LoRAMixtureEncoding` for one scope; ``incoming`` names the adapter the mixture revises (its
-    cores are added exactly before the mixture; absent: the scope starts at zero)."""
+def mixture_encoding(view, receipt, executed, incoming=None):
+    """The bundle's `LoRAMixtureEncoding` for one scope: the executed component-token law (`mixture.receipt`) and its
+    coefficients; ``incoming`` names the adapter the mixture revises (its cores are added exactly before the mixture;
+    absent: the scope starts at zero)."""
     out = {'schema': MIXTURE_SCHEMA, 'bank': view.snapshot, 'view': view.id, 'componentIds': list(view.component_ids),
-           'eligible': list(view.eligible), 'dropoutMask': list(view.retained), 'weights': [int(x) for x in integers],
-           'head': head_receipt,
+           'eligible': list(view.eligible), 'dropoutMask': list(view.retained),
+           'distribution': [float.fromhex(x) for x in receipt['distribution']],
+           'gains': [float.fromhex(x) for x in receipt['gains']], 'mixture': receipt,
            'effective': [[float(x).hex() for x in row] for row in executed.detach().double().tolist()]}
     if incoming is not None:
         out['incoming'] = incoming
     return out
 
 
-def current_weights(view, integers):
-    return {component: value for component, value in zip(view.component_ids, integers) if value != 0}
+def current_weights(view, probs):
+    """Components the mixture uses (``probs``: null first): component ID -> probability."""
+    return {component: value for component, value in zip(view.component_ids, probs[1:]) if value != 0}

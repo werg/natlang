@@ -6,7 +6,6 @@ from pathlib import Path
 from test_native_serving_adapters import engine_fixture
 from test_tune_trainer import manifest_for, rows_for
 from test_learned_optimizer_trainer import soft_rows
-from test_learned_optimizer_writer import GRID
 from natlang_neuralese.tune.learned.__main__ import main
 from natlang_neuralese.tune.soft import soft_key
 
@@ -28,13 +27,13 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
     store = str(tmp_path / 'store')
     engine.store.close()
     engine.store = TensorStore(store)
-    common = {'checkpoint': checkpoint, 'store': store, 'grid_tokens': {**GRID.__dict__, 'digits': list(GRID.digits)}}
+    common = {'checkpoint': checkpoint, 'store': store}
     sources = [{'name': 'bx', 'kind': 'binding', 'rows': jsonl(tmp_path / 'bx.jsonl', rows_for(engine, 'bx', 2)),
                 'description': 't30 t31'},
                {'name': 'by', 'kind': 'binding', 'rows': jsonl(tmp_path / 'by.jsonl', rows_for(engine, 'by', 2, offset=2)),
                 'description': 't32 t33'}]
     bank_spec = write(tmp_path / 'bank-spec.json', {**common, 'out': str(tmp_path / 'bank.json'), 'rank': 4, 'per_source_rank': 2,
-                                                    'component_rank': 2, 'component_steps': 2, 'step': .08, 'sources': sources})
+                                                    'component_rank': 2, 'component_steps': 2, 'mixture': {'top_p': .9}, 'sources': sources})
     incoming = engine.native_write_text('t8 t9')['id']
     key = soft_key('bx', 'instructions', None)
     rows = soft_rows(engine, incoming, 2)
@@ -69,7 +68,9 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
                                                           'out': str(tmp_path / 'records.jsonl'), 'summary': str(tmp_path / 'collect.json')})
     assert main(['collect', '--spec', collect_spec]) == 0
     records = [json.loads(line) for line in (tmp_path / 'records.jsonl').read_text().splitlines()]
-    assert len(records) == 2 * len(labeled) and all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
+    # Per target: its mixture proposal, then at most perContext kept tokens per scope, each executed alone.
+    assert sum(1 for item in records if item['candidate'] is None) == len(labeled) and len(records) > len(labeled)
+    assert all(item['reward']['task'] is None and item['reward']['shaping'] is not None for item in records)
     # Real task outcomes: proposals become release fragments with one scoring request per program root; `collect`
     # then reads the proposals back with the outcomes `natlang tune --score-proposals` writes.
     proposals_spec = write(tmp_path / 'proposals-spec.json', {**json.loads(Path(collect_spec).read_text()), 'out': str(tmp_path / 'proposals.jsonl'),
@@ -79,7 +80,7 @@ def test_entrypoint_runs_the_whole_operation(tmp_path):
     request = json.loads(request_path.read_text())
     assert request['root'] == str((tmp_path / 'program').resolve()) and len(request['targets']) == len(labeled)
     for entry in request['targets']:
-        assert entry['support'] and len(entry['proposals']) == 2
+        assert entry['support'] and 2 <= len(entry['proposals']) <= 1 + 2 * len(labeled[0]['arrays'])
         for release in [entry['incoming'], *(item['release'] for item in entry['proposals'])]:
             result = json.loads((Path(release) / 'result.json').read_text())
             assert result['schema'] == 'natlang.tune.build-result/1' and result['artifacts']

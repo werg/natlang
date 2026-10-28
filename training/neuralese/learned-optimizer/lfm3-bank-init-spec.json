@@ -1,0 +1,18 @@
+{
+ "checkpoint": "{checkpoint}",
+ "store": "{op}/store",
+ "device": "cuda",
+ "dtype": "bfloat16",
+ "out": "{op}/bank.json",
+ "rank": 16,
+ "per_source_rank": 8,
+ "component_rank": 4,
+ "component_steps": 20,
+ "mixture": {
+  "gain_max": 2.0,
+  "gain_init": 0.25,
+  "temperature": 1.0,
+  "top_p": 0.95
+ },
+ "sources": "{sources}"
+}

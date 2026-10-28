@@ -1,12 +1,12 @@
 """Supervised objectives of the learned optimizer (plan "Behavior-first supervision", "Supervised matching of native
 states", "Adapter and structural supervision", "Downstream supervised behavior").
 
-``L_sup = l_D L_distill + l_P L_instruction-state + l_S L_skill-state + l_M L_mixture-tokens + l_C L_core/weight
-         + l_H L_head + l_A L_structure + l_B L_downstream``
+``L_sup = l_D L_distill + l_P L_instruction-state + l_S L_skill-state + l_M L_mixture + l_G L_gain + l_C L_core/weight
+         + l_L L_balance + l_A L_structure + l_B L_downstream``
 
-Distillation and downstream behavior carry the primary signal; the state, mixture-token, core and head terms are
-auxiliaries whose gradient shares are reported (`gradient_shares`) and kept a minority. Mixture-token CE covers only
-the free sign/digit tokens of available slots, a mask disjoint from the structural token terms.
+Distillation and downstream behavior carry the primary signal; the state, mixture (component-token KL to the fitted
+distribution, `mixture.mixture_kl`), gain, core and balance terms are auxiliaries whose gradient shares are reported
+(`gradient_shares`) and kept a minority.
 """
 from __future__ import annotations
 
@@ -15,9 +15,8 @@ import math
 import torch
 
 from . import LearnedOptimizerError
-from .numbers import magnitude_logprobs, sign_logprobs
 
-TERMS = ('distill', 'instruction_state', 'skill_state', 'mixture_tokens', 'core', 'head', 'structure', 'downstream')
+TERMS = ('distill', 'instruction_state', 'skill_state', 'mixture', 'gain', 'core', 'balance', 'structure', 'downstream')
 
 
 # -- executor behavior ---------------------------------------------------------------------------------------------
@@ -94,31 +93,7 @@ def state_loss(captured, target, scales, *, robust=None):
     return torch.stack(terms).mean(), report
 
 
-# -- weight arrays -------------------------------------------------------------------------------------------------
-def mixture_token_loss(grid, fmt, sign_logits, digit_logits, targets, available, *, zero_share=.5):
-    """Grammar-restricted CE of the target grid integers at available slots (realized branch teacher-forced).
-
-    Zero and nonzero targets are balanced: zeros carry ``zero_share`` of the weight whenever both kinds occur, so
-    abundant masked zeros do not dominate useful coefficient choices."""
-    free = [slot for slot, flag in enumerate(available) if flag]
-    if not free:
-        return sign_logits.new_zeros((), dtype=torch.float32), {}
-    losses, kinds = [], []
-    for slot in free:
-        n = int(targets[slot])
-        signs = sign_logprobs(grid, sign_logits[slot])
-        magnitude = magnitude_logprobs(grid, digit_logits[slot], negative=n < 0, max_int=fmt.max_int)
-        losses.append(-(signs[1 if n < 0 else 0] + magnitude[abs(n)]))
-        kinds.append(n == 0)
-    zeros, nonzeros = sum(kinds), len(kinds) - sum(kinds)
-    if zeros and nonzeros:
-        weights = [zero_share / zeros if kind else (1 - zero_share) / nonzeros for kind in kinds]
-    else:
-        weights = [1. / len(kinds)] * len(kinds)
-    loss = sum(w * l for w, l in zip(weights, losses))
-    return loss, {'slots': len(free), 'zero_targets': zeros}
-
-
+# -- weights -------------------------------------------------------------------------------------------------
 def decoded_weight_loss(bank, cores, targets, *, residuals=None, eps=1e-12):
     """``mean_m ||U C_hat V^T - Delta W*||^2 / (||Delta W*||^2 + eps)`` with targets as ``{m: (B, A)}`` factors,
     computed in basis coordinates without dense expansion (orthonormal ``U, V``):
@@ -136,16 +111,6 @@ def decoded_weight_loss(bank, cores, targets, *, residuals=None, eps=1e-12):
         error = (core ** 2).sum() - 2 * (core * projected).sum() + energy.to(core)
         terms.append(error / (energy.to(core) + eps))
     return torch.stack(terms).mean()
-
-
-def head_regression(rho, delta, target_rho, target_delta, available):
-    """Normalized regression of the head's refinement (grid steps, bound 1/2) and modulation (bound beta)."""
-    mask = torch.tensor(available, dtype=torch.bool, device=rho.device)
-    if not bool(mask.any()):
-        return rho.new_zeros(())
-    rho_term = ((rho - target_rho.to(rho)) ** 2)[mask].mean() / .25
-    delta_term = ((delta - target_delta.to(delta)) ** 2)[mask].mean()
-    return rho_term + delta_term
 
 
 # -- composition of the terms --------------------------------------------------------------------------------------

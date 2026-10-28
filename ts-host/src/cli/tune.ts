@@ -56,6 +56,7 @@ import { exportDistillation } from '../tune/distill.js';
 import { familyRegistry, familyStore, registerTunedProgram, runFamilies, type FamiliesReport, type FamilyProgram } from '../tune/families.js';
 import { calibrateTeachers, routedTeacherProfile, routeTeacher, saveTeacherChoice } from '../tune/teachers.js';
 import { currentSplit } from '../tune/pipeline.js';
+import { readPrivileged, selfTeacherId, SELF_TEACHER } from '../tune/selfteach.js';
 import { createNatlangRuntime } from '../runtime/runtime.js';
 import { loadNatlang } from '../runtime/node-files.js';
 import { requireNativeReaderIdentity } from '../model/index.js';
@@ -123,8 +124,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     // Several configured teachers: collection uses the calibrated, routed one; an explicit --teacher overrides.
     const teacherProfile = settings.teachers?.length && !value('--teacher')
       ? routedTeacherProfile(programRoot, settings.teachers.map(profile => ({ profile, id: identityOf(profile) }))) : settings.teacher;
-    const teacherConfig = loadModelConfiguration(teacherProfile);
+    // The self teacher (the default) is the student served through the tune serving profile, without adapters; its
+    // identity binds the student base and the program's privileged references (tune/selfteach.ts).
+    const self = teacherProfile === SELF_TEACHER;
+    const teacherConfig = loadModelConfiguration(self ? settings.servingProfile : teacherProfile);
     const teacherSession = createResolvedModelSession(teacherConfig.choice, process.env, process.stderr);
+    const teacherId = self ? selfTeacherId(student, readPrivileged(programRoot).digest) : executorIdentityForChoice(teacherConfig.choice).id;
     try {
       const assertStudentBase = async () => {
         if (settings.backend !== 'native') return;
@@ -136,7 +141,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
           apiKey: process.env[serving.choice.apiKeyEnv], headers: serving.choice.headers });
       };
       return await fn({ root: programRoot, program, settings, student, teacher: driverOf(teacherSession),
-        teacherId: executorIdentityForChoice(teacherConfig.choice).id, examplesPath: value('--examples'), log: io.err,
+        teacherId, examplesPath: value('--examples'), log: io.err,
         assertStudentBase,
         serve: async ({ manifest, directory, capture }) => {
           if (settings.backend === 'native') {
@@ -272,7 +277,7 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
       scaffold: scaffoldManifest(program, student.base, { sites: programSites(root, program).sites }) };
     if (exportDir !== undefined) {
       const result = exportCases(context, resolve(exportDir), { includeConfirmation: flags.has('--include-confirmation'),
-        teacherId: identityOf(settings.teacher) });
+        teacherId: settings.teacher === SELF_TEACHER ? selfTeacherId(student, readPrivileged(root).digest) : identityOf(settings.teacher) });
       io.out(flags.has('--json') ? JSON.stringify(result, null, 2) : `${result.cases} case(s) written; ${result.skipped.length} root(s) skipped; ` +
         `manifest ${result.manifest}\nnext: root review and dispatch through the reviewed pool (see plans/TUNING_OPERATIONS_HANDOFF_20261026.md)`);
       return 0;
@@ -297,7 +302,9 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
     const { settings } = loadTuneSettings(process.env, { student: value('--student'), teacher: value('--teacher') });
     const inventory = buildProject({ project: root, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
     if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
-    const profiles = value('--teacher') ? [value('--teacher')!] : settings.teachers?.length ? settings.teachers : [settings.teacher];
+    const profiles = (value('--teacher') ? [value('--teacher')!] : settings.teachers?.length ? settings.teachers : [settings.teacher])
+      .filter(profile => profile !== SELF_TEACHER);
+    if (!profiles.length) throw new Error('--calibrate measures external teacher profiles; the self teacher has none configured');
     const sessions = profiles.map(profile => ({ profile, session: createResolvedModelSession(loadModelConfiguration(profile).choice, process.env, process.stderr) }));
     try {
       const examples = currentSplit(root, value('--examples')).filter(example => example.partition === 'development' && !example.protected);

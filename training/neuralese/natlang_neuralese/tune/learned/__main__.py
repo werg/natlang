@@ -12,6 +12,7 @@
     python -m natlang_neuralese.tune.learned corpus    --spec SPEC   tuner fits on the bank basis + their targets, per program
     python -m natlang_neuralese.tune.learned controls  --spec SPEC   planted-mixture recovery (optimizer vs in-bank fit)
     python -m natlang_neuralese.tune.learned meta-examples --spec SPEC   exact tuning examples for the optimizer's own stages
+    python -m natlang_neuralese.tune.learned adopt-bank --spec SPEC  continue training on the latest published bank (after a refit)
 
 Every spec names its exact checkpoint; outputs are written atomically next to the spec's ``out`` path. The crisp
 operation baseline (`train` with ``cycles``) alternates label refits after bank publications, supervised updates and
@@ -75,17 +76,15 @@ def _source_rows(engine, source):
     return _rows(source['rows'])
 
 
-def _grid(engine, spec):
-    from .numbers import GridTokens
-    if 'grid_tokens' in spec:
-        return GridTokens(**{k: tuple(v) if k == 'digits' else v for k, v in spec['grid_tokens'].items()})
-    return GridTokens.from_encoder(lambda text: engine.tokenizer(text, add_special_tokens=False)['input_ids'])
+def _format(spec):
+    """The bank's component-token law from a bank-init spec's ``mixture`` (`mixture.MixtureFormat` fields)."""
+    from .mixture import MixtureFormat
+    return MixtureFormat(**{key: float(value) for key, value in (spec.get('mixture') or {}).items()})
 
 
 def bank_init(spec):
     from .bank import new_bank, save_bank, weight_svd_basis
     from .growth import source_component
-    from .numbers import NumberFormat
     from .subspace import pooled_basis, row_loss_weights, row_losses, source_gradients
     from ..targets import module_map
     from ...model.native_adapters import target_parameters
@@ -100,7 +99,7 @@ def bank_init(spec):
         descriptors.append({'name': source['name'], 'kind': source['kind'], 'rows': len(rows)})
     basis = pooled_basis(engine.native_identity, gradients, spec['rank'], per_source_rank=spec.get('per_source_rank'),
                          weight_svd=weight_svd_basis(engine, names, spec['rank']), descriptors=descriptors)
-    bank = new_bank(engine, basis, NumberFormat(float(spec.get('step', .05))), quarters=spec.get('quarters', 4))
+    bank = new_bank(engine, basis, _format(spec), quarters=spec.get('quarters', 4))
     components, reports = [], {}
     for source in spec['sources']:
         component, report = source_component(engine, bank, _source_rows(engine, source), source={'name': source['name'], 'kind': source['kind']},
@@ -110,7 +109,10 @@ def bank_init(spec):
         reports[source['name']] = report
     bank = bank.with_components(components, reason='bank-init sources')
     manifest = save_bank(engine, bank)
-    _write(spec['out'], {'bank': manifest, 'reports': reports})
+    from ..targets import deploy_quantized
+    # Targets a required deploy point re-quantizes (LFM3 NVFP4: w1/w2/w3): folded writes there are measured at that
+    # precision before a capability claim (targets.DEPLOY_QUANTIZED).
+    _write(spec['out'], {'bank': manifest, 'reports': reports, 'deploy_quantized': deploy_quantized(names)})
     return manifest['snapshot']
 
 
@@ -270,20 +272,20 @@ def controls(spec):
     from .controls import planted_mixture, planted_rows, recovery
     from .episode import propose as run
     from .fit import ScopeArray, SupportSet, fit_in_bank
-    from .head import executed, shares_from_norms
+    from .mixture import coefficients
     from .program import ProgramContext
     from .trainer import OuterRecipe, OuterTrainer
     engine = _engine(spec)
     bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
     state = json.loads(Path(spec['state']).read_text())
-    trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
+    trainer = OuterTrainer(engine, bank, OuterRecipe.from_json(state['recipe']), [], state=state)
     pc = ProgramContext(engine, bank, spec['plan'], out=Path(spec['work']), scopes=spec.get('scopes'))
     prompts = []
     for row in pc.rows[:spec.get('prompts', 4)]:
         node = row['graph']['nodes'][0]
         first = next((i for i, w in enumerate(node['target_weights']) if w > 0), len(node['token_ids']))
         prompts.append(node['token_ids'][max(0, first - spec.get('prompt_tokens', 48)):first])
-    shares = shares_from_norms(bank.group_norms())
+    fmt = bank.mixture_format
     lambdas = [scope for scope in pc.scopes if scope.startswith('lambda:')] or pc.scopes
     trials = []
     for trial in range(spec.get('trials', 2)):
@@ -291,21 +293,20 @@ def controls(spec):
         view = pc.views[scope]
         planted = planted_mixture(view, rng_seed=spec.get('seed', 0) * 1009 + trial, components=spec.get('components', 2))
         slots = list(view.slots)
-        coefficients = executed(planted, torch.zeros(len(slots)), torch.zeros(len(slots), len(bank.group_labels)), shares[slots],
-                                step=bank.number_format.step, beta=.5, head=False)
-        adapter = bank.compose_adapter(engine, bank.composed_cores(slots, coefficients), None, {'control': 'planted', 'trial': trial}).id
+        executed = coefficients(torch.tensor(planted), torch.full((len(bank.group_labels),), fmt.gain_max * fmt.gain_init))
+        adapter = bank.compose_adapter(engine, bank.composed_cores(slots, executed), None, {'control': 'planted', 'trial': trial}).id
         binding = next(b['id'] for b in pc.manifest['bindings'] if scope in b['ancestry'])
         rows = planted_rows(engine, adapter, prompts, binding=binding, prefix=f'planted-{trial}')
         context = pc.request()
         context['arrays'] = [item for item in context['arrays'] if item['view']['scope'] == scope]
-        _, _, behavior = run(trainer, context, sample=False, seed=trial)
-        proposed = behavior['arrays'][scope]['integers']
+        _, _, behavior = run(trainer, context, seed=trial)
+        proposed = [float.fromhex(x) for x in behavior['arrays'][scope]['distribution']]
         support = SupportSet(engine, pc.manifest, rows)
         fitted = fit_in_bank(engine, bank, support, [ScopeArray(scope, pc.placeholders[scope], slots, list(view.available))],
                              train_states=False, **spec.get('fit', {'steps': 20, 'refine_steps': 5}))
-        trials.append({'scope': scope, 'planted': planted, 'optimizer': proposed, 'inBankFit': fitted['arrays'][scope]['integers'],
-                       'optimizerRecovery': recovery(proposed, planted),
-                       'inBankRecovery': recovery(fitted['arrays'][scope]['integers'], planted)})
+        found = fitted['arrays'][scope]['distribution'].tolist()
+        trials.append({'scope': scope, 'planted': planted, 'optimizer': proposed, 'inBankFit': found,
+                       'optimizerRecovery': recovery(proposed, planted), 'inBankRecovery': recovery(found, planted)})
     summary = {'schema': 'natlang.lopt.planted-controls/1', 'bank': bank.snapshot, 'writer': trainer.state['writer'],
                'trials': trials, 'meanSupportRecall': {
                    'optimizer': sum(t['optimizerRecovery']['supportRecall'] for t in trials) / max(1, len(trials)),
@@ -363,7 +364,7 @@ def train(spec):
     state_path = Path(spec['state'])
     state = json.loads(state_path.read_text()) if state_path.exists() else None
     recipe = OuterRecipe.from_json(spec.get('recipe', {}))
-    trainer = OuterTrainer(engine, bank, _grid(engine, spec), recipe, _rows(spec['targets']), state=state)
+    trainer = OuterTrainer(engine, bank, recipe, _rows(spec['targets']), state=state)
     records = [_rows(path) for path in spec.get('policy_records', [])]
     for _ in range(spec.get('steps', recipe.steps)):
         trainer.step()
@@ -383,11 +384,27 @@ def propose(spec):
     bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
     state = json.loads(Path(spec['state']).read_text())
     context = json.loads(Path(spec['context']).read_text())
-    trainer = OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
-    bundle, proposal, behavior = run(trainer, context, sample=spec.get('sample', False), seed=spec.get('seed', 0),
-                                     temperature=spec.get('temperature'))
+    trainer = OuterTrainer(engine, bank, OuterRecipe.from_json(state['recipe']), [], state=state)
+    bundle, proposal, behavior = run(trainer, context, choose='sample' if spec.get('sample') else None, seed=spec.get('seed', 0))
     _write(spec['out'], {'bundle': bundle, 'proposal': proposal, 'behavior': behavior})
     return bundle['id']
+
+
+def adopt_bank(spec):
+    """After a bank publication: write the published bank as ``out`` (`bank.json` format) and transition the trainer
+    state to it (`trainer.adopt_published_bank`). The operation then refits its labels against ``out`` (``corpus``
+    into a new work directory) and continues ``train`` with that bank and those targets. Spec: ``{checkpoint, store,
+    state, out, recipe?}``; a rerun after a finished adoption is a no-op."""
+    from .trainer import OuterRecipe, adopt_published_bank
+    state_path, out = Path(spec['state']), Path(spec['out'])
+    state = json.loads(state_path.read_text())
+    if out.exists() and not state.get('labels_stale') and json.loads(out.read_text())['bank']['snapshot'] == state['bank']:
+        return state['bank']
+    engine = _engine(spec)
+    adopted, published = adopt_published_bank(engine, state, OuterRecipe.from_json(spec.get('recipe', {})))
+    _write(out, {'bank': state['published_banks'][-1], 'adopted_at_step': state['step'], 'parent': state['bank']})
+    _write(state_path, adopted)
+    return published.snapshot
 
 
 def _outer_trainer(spec):
@@ -396,25 +413,29 @@ def _outer_trainer(spec):
     engine = _engine(spec)
     bank = load_bank(engine, json.loads(Path(spec['bank']).read_text())['bank'])
     state = json.loads(Path(spec['state']).read_text())
-    return engine, OuterTrainer(engine, bank, _grid(engine, spec), OuterRecipe.from_json(state['recipe']), [], state=state)
+    return engine, OuterTrainer(engine, bank, OuterRecipe.from_json(state['recipe']), [], state=state)
 
 
 def _sample_proposals(spec, engine, trainer):
-    """``perContext`` sampled proposals per target context, each with its paired shaping reward (mean change of the
-    training-role actions' log-likelihood against the incoming bundle): ``[(target, [proposal item])]``; an item
-    keeps its whole bundle under ``bundleValue``."""
-    from .episode import action_logprobs, propose as run
+    """Per target context: the optimizer's mixture proposal and one candidate per kept component token of each scope
+    (that token executed alone at the scope's gains, the other scopes at their mixture; at most ``perContext`` per
+    scope, most probable first), each with its paired shaping reward (mean change of the training-role actions'
+    log-likelihood against the incoming bundle): ``[(target, [proposal item])]``; an item keeps its whole bundle under
+    ``bundleValue``. The candidates are the finite set the expected-score update scores."""
+    from .episode import action_logprobs, candidates, propose as run
     out = []
     for index, target in enumerate(_rows(spec['targets'])):
         before = action_logprobs(engine, _incoming_bundle(engine, target), target['manifest'], target['rows'])
-        group = []
-        for sample in range(spec.get('perContext', 4)):
-            bundle, proposal, behavior = run(trainer, target, sample=True, seed=spec.get('seed', 0) * 1000003 + index * 101 + sample)
+        tokens = max(1, sum(1 for _ in target['rows']))
+        def item(choose, candidate, behavior=None):
+            bundle, proposal, own = run(trainer, target, choose=choose, seed=spec.get('seed', 0) * 1000003 + index)
             after = action_logprobs(engine, bundle, target['manifest'], target['rows'])
-            tokens = max(1, sum(1 for _ in target['rows']))
-            group.append({'context': target, 'behavior': behavior, 'bundle': bundle['id'], 'proposal': proposal['id'],
-                          'old_executor_logprob': sum(after), 'shaping': (sum(after) - sum(before)) / tokens,
-                          'bundleValue': bundle})
+            return {'context': target, 'behavior': behavior or own, 'candidate': candidate, 'bundle': bundle['id'],
+                    'proposal': proposal['id'], 'shaping': (sum(after) - sum(before)) / tokens, 'bundleValue': bundle}
+        mixture = item(None, None)
+        group = [mixture]
+        for scope, chosen in candidates(mixture['behavior'], spec.get('perContext')).items():
+            group.extend(item({scope: token}, {'scope': scope, 'token': token}, mixture['behavior']) for token in chosen)
         out.append((target, group))
     return out
 
@@ -542,7 +563,8 @@ def service(spec):
 
 
 COMMANDS = {'bank-init': bank_init, 'targets': targets, 'train': train, 'propose': propose, 'ladder': ladder, 'proposals': proposals,
-            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples}
+            'service': service, 'collect': collect, 'corpus': corpus, 'controls': controls, 'meta-examples': meta_examples,
+            'adopt-bank': adopt_bank}
 
 
 def run_command(command, spec):

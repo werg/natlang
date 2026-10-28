@@ -13,7 +13,7 @@ signal-to-noise of those differences; ladder holds the latest median gaps.
 2. When targetsAdmitted is 0, return the work so far followed by "done", with reason "no admitted targets".
 3. Add "supervised" with supervisedSteps 50. Supervised imitation gives dense learning while the optimizer is weak.
 4. Add "collect-proposals". When contrastGroups is at least 8 and advantageSnr is at least 1, add "policy" after it:
-   the reward signal is strong enough for the joint-ratio update. Otherwise the recorded proposals feed filtered
+   the reward signal is strong enough for the expected-score update. Otherwise the recorded proposals feed filtered
    imitation through the next refit.
 5. When metrics.step is a positive multiple of 200, add "publish-bank" and then "ladder".
 6. Return { work, supervisedSteps: 50, reason } where reason names the metric that decided each added entry.
