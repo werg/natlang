@@ -12,18 +12,19 @@ from pathlib import Path
 
 import pytest
 
+from natlang_neuralese.common import paths
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.data.native_graph_conversion import whole_trajectory_text_row_graph
 from natlang_neuralese.train import own_output_supervision as own
 from natlang_neuralese.train.native_supervision import SCHEMA as POLICY, apply_policy
 from natlang_neuralese.train.text_supervision import ROLE_CODES, failed_assistant_mask
 
-CORPUS = Path('/home/werg/natlang/runs/natlang-native-turns-4962-wholetraj-render-20261013-v3'
-              '/whole-trajectory/lfm25/text-data.jsonl')
-LFM25 = Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/'
-             '9e6c6ccf47cd318696e137d381a7ded8fe4df09f')
-LFM3 = Path('/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
-            '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
+CORPUS = paths.resolve('repo', 'runs/natlang-native-turns-4962-wholetraj-render-20261013-v3',
+                       'whole-trajectory/lfm25/text-data.jsonl')
+LFM25 = Path.home() / ('.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/'
+                       '9e6c6ccf47cd318696e137d381a7ded8fe4df09f')
+LFM3 = Path.home() / ('.cache/huggingface/hub/models--LiquidAI--LFM3-1.7B/snapshots/'
+                      '40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd')
 ROWS = 6
 EXPANDED = 'c' * 64
 ASSISTANT = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
