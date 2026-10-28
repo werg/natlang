@@ -357,6 +357,20 @@ def handle(context, request):
     if op == 'release':
         artifacts, soft_states = release_fragment(context, parent)
         return {'artifacts': artifacts, 'softStates': soft_states}
+    if op == 'finish':
+        controller = request.get('controller')
+        if not isinstance(controller, dict) or not controller.get('release'):
+            raise LearnedOptimizerError('a controller release identity is required')
+        artifacts, soft_states = release_fragment(context, parent)
+        receipt = {'schema': 'natlang.lopt.apply-receipt/1', 'bank': context.bank.snapshot,
+                   'writer': context.trainer.state['writer'], 'head': context.trainer.state['head'],
+                   'incomingLoss': context.evaluate(None), 'selected': None if parent is None else parent['id'],
+                   'history': request.get('history', []), 'operatorPolicy': 'natlang-controller-v1',
+                   'controller': controller}
+        write_release(context.engine, context.manifest, context.out, artifacts, soft_states, receipt)
+        if artifacts and 'gguf' in context.plan.get('exports', []):
+            export_release_nodes(context.engine, context.plan, context.out, artifacts)
+        return receipt
     raise LearnedOptimizerError(f'unknown adaptation service {op}')
 
 

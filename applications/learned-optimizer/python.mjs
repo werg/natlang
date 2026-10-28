@@ -105,6 +105,7 @@ export class AdaptationServices {
   async supportLoss(id) { return (await this.#call('evaluate', { parent: this.#parent(id) })).supportLoss; }
   /** The release fragment (composed scope adapters and writer states) of the selected bundle. */
   release(id) { return this.#call('release', { parent: this.#parent(id) }); }
+  finish(id, history, controller) { return this.#call('finish', { parent: this.#parent(id), history, controller }); }
 }
 
 export const optimizerDeclaration = `/** Exact adaptation services: they score, write and compose; they never decide what to revise. */

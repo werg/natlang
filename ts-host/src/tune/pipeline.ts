@@ -262,7 +262,8 @@ export type TrainVariant = { readonly manifest: WeightManifest; readonly recipe?
   readonly receipts?: Readonly<Record<string, unknown>>;
   /** Another Python entry with the `tune.build` plan/result contract, and its extra plan settings (the learned
    * optimizer, plans/neuralese/JOINT_LEARNED_OPTIMIZER.md). */
-  readonly module?: string; readonly learned?: Readonly<Record<string, unknown>> };
+  readonly module?: string; readonly learned?: Readonly<Record<string, unknown>>;
+  readonly execute?: (plan: string, out: string) => Promise<void> };
 
 /** Train a variant (or reuse its receipt) and store its release with exports. Keyed by data, scaffold, recipe, rows. */
 export async function trainRelease(options: TuneOptions, data: TuneData, variant: TrainVariant, timings: StageTiming[] = [],
@@ -296,7 +297,8 @@ export async function trainRelease(options: TuneOptions, data: TuneData, variant
         ...(variant.artifactDirs?.length ? { artifacts: variant.artifactDirs } : {}),
         ...(variant.pinned ? { pinned: variant.pinned } : {}), ...(variant.warm ? { warm: variant.warm } : {}),
         ...(variant.learned ? { learned: variant.learned } : {}) }, null, 2));
-      await runTrainer(student, plan, out, log, variant.module);
+      if (variant.execute) await variant.execute(plan, out);
+      else await runTrainer(student, plan, out, log, variant.module);
     }
   }, reused);
   const manifest = await timed(timings, 'export', log, () => releaseFromBuild(options, data, variant, out, trainKey, recipe));

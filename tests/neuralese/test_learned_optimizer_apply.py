@@ -70,6 +70,13 @@ def test_services_propose_evaluate_refine_retrieve_and_release(tmp_path):
     refined = service({**common, 'op': 'refine', 'parent': proposed['bundle'], 'steps': 2})
     released = service({**common, 'op': 'release', 'parent': refined['bundle']})
     assert {item['node'] for item in released['artifacts']} == set(evidence['scopes'])
+    controller = {'root': '/controller', 'release': 'earned-release'}
+    service({**common, 'op': 'finish', 'parent': refined['bundle'], 'history': [{'accepted': True}], 'controller': controller})
+    result = json.loads((tmp_path / 'svc' / 'result.json').read_text())
+    assert result['receipt']['controller'] == controller
+    assert result['receipt']['operatorPolicy'] == 'natlang-controller-v1'
+    assert result['receipt']['selected'] == refined['bundle']['id']
+    assert {item['node'] for item in result['artifacts']} == set(evidence['scopes'])
     import torch
     from natlang_neuralese.serve import load_native_engine
     engine = load_native_engine(str(tmp_path / 'native.pt'), device='cpu', dtype=torch.float32)

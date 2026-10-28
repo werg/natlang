@@ -24,6 +24,7 @@ export declare class AdaptationServices {
   };
   supportLoss(id: string | null): Promise<number>;
   release(id: string | null): Promise<Record<string, unknown>>;
+  finish(id: string | null, history: unknown[], controller: Record<string, unknown>): Promise<Record<string, unknown>>;
 }
 
 export declare const optimizerDeclaration: string;

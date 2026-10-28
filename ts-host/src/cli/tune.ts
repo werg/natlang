@@ -180,8 +180,12 @@ export async function tuneCommand(argv: readonly string[], io: { out: (text: str
   };
   const learnedSpec = value('--learned');
   if (learnedSpec && flags.has('--rounds')) throw new Error('--learned and --rounds select the release differently; pass one');
-  const once = () => withOptions(options => tuneProgram(options, learnedSpec ? learnedSelector(options, readLearnedSettings(learnedSpec))
-    : flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined));
+  const once = () => withOptions(async options => {
+    if (!learnedSpec) return tuneProgram(options, flags.has('--rounds') ? roundsSelector(options, options.settings.rounds) : undefined);
+    const settings = readLearnedSettings(learnedSpec);
+    if (settings.policy === 'crisp-baseline') return tuneProgram(options, learnedSelector(options, settings));
+    return withOptions(controller => tuneProgram(options, learnedSelector(options, settings, controller)), settings.controller!.root);
+  });
   const proposalRequest = value('--score-proposals');
   if (proposalRequest !== undefined) {
     io.out(await withOptions(options => scoreProposals(options, resolve(proposalRequest), io.err)));
