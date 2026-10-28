@@ -150,6 +150,13 @@ def uploaded(root, name):
     return store.root / name
 
 
+def _retire_learner_calibration(training, learners):
+    """Archive local calibration and force a fresh window on the merged weights."""
+    calibration = {str(item['diloco']['worker']): item.get('quantization') for item in learners}
+    training.pop('quantization', None)
+    return {'action': 'recalibrate-merged-weights', 'learners': calibration}
+
+
 def export(args):
     from .checkpoint_policy import CheckpointPolicy
     args.learner_checkpoint = [*args.learner_checkpoint, *(uploaded(args.root, name) for name in args.learner_upload)]
@@ -184,11 +191,15 @@ def export(args):
     training['global_step'] = parent['global_step'] + updates
     training['step'] = parent['step'] + updates
     training.pop('diloco')
+    # Learner calibration describes different local weights and batches, not the merged masters.
+    # Retain each exact state as custody and force calibration on the merged continuation.
+    calibration = _retire_learner_calibration(training, learners)
     training['options'] = {**training['options'], 'diloco_export': {
         'schema': EXPORT_SCHEMA, 'run_id': manifest['run_id'], 'coordinator_fingerprint': manifest['fingerprint'],
         'fragment_versions': info['versions'], 'parent_checkpoint_sha256': parent_sha,
         'learner_updates': {str(item['diloco']['worker']): item['global_step'] - parent['global_step'] for item in learners},
-        'inner_optimizer_and_rng_from_learner': 0}}
+        'inner_optimizer_and_rng_from_learner': 0,
+        'quantization_calibration': calibration}}
     training['sft_progress'] = collect_sft_progress(training)
     state.update(model_state(model), step=training['global_step'])
     CheckpointPolicy(args.out).save(state)

@@ -431,3 +431,55 @@ def test_launcher_creates_learners_concurrently_and_reports_failures(monkeypatch
     with pytest.raises(launcher.cwctl.ControllerError):
         launcher.launch_learners(run, "https://c", "t" * 32, b"g", started)
     assert len(started) == 3  # the caller stops every sandbox that did start
+
+
+def test_export_calibration_custody_requires_new_merged_weight_window():
+    from natlang_neuralese.train.native_diloco import _retire_learner_calibration
+    first = {'schema': 'calibration', 'amax': {'x': 1}, 'window': {'batches': 2}}
+    second = {'schema': 'calibration', 'amax': {'x': 3}}
+    learners = [{'diloco': {'worker': 0}, 'quantization': first},
+                {'diloco': {'worker': 1}, 'quantization': second}]
+    training = {'quantization': first, 'options': {'quantization': {'sha256': 'binding'}}}
+    custody = _retire_learner_calibration(training, learners)
+    assert 'quantization' not in training
+    assert training['options']['quantization']['sha256'] == 'binding'
+    assert custody == {'action': 'recalibrate-merged-weights', 'learners': {'0': first, '1': second}}
+
+
+def test_export_recalibrates_merged_weights_and_preserves_worker_custody(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.train import native_diloco, native_continuation, checkpoint_policy
+    from natlang_neuralese.model import native_model
+
+    parent = {'global_step': 4, 'step': 4, 'exposure_counts': {'a': 1}}
+    states = {
+        'parent': {'training': parent},
+        'w0': {'schema': 's', 'training': {'global_step': 5, 'step': 5, 'exposure_counts': {'a': 2},
+                'diloco': {'worker': 0, 'fingerprint': 'f'}, 'quantization': {'amax': {'x': 1}},
+                'options': {'quantization': {'sha256': 'q'}}}},
+        'w1': {'training': {'global_step': 5, 'step': 5, 'exposure_counts': {'a': 1, 'b': 1},
+                'diloco': {'worker': 1, 'fingerprint': 'f'}, 'quantization': {'window': {'batches': 1}}}},
+    }
+    import copy
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, 'load', staticmethod(lambda p: copy.deepcopy(states[str(p)])))
+    saved = {}
+    monkeypatch.setattr(checkpoint_policy.CheckpointPolicy, 'save', lambda self, state: saved.update(state))
+    monkeypatch.setattr(native_diloco, 'read_manifest', lambda root: {'identity': {'parent_checkpoint_sha256': 'p'},
+        'workers': 2, 'fingerprint': 'f', 'run_id': 'r'})
+    monkeypatch.setattr(native_diloco, 'sha256_file_hex_cached', lambda p: 'p')
+    target = _model().to(torch.bfloat16)
+    named = list(target.named_parameters())
+    monkeypatch.setattr(native_diloco, '_trainable', lambda *args: (target, named))
+    monkeypatch.setattr(native_diloco, 'global_masters', lambda root: ({n: torch.zeros_like(p) for n, p in named}, {'versions': []}))
+    monkeypatch.setattr(native_continuation, 'collect_sft_progress', lambda training: {})
+    monkeypatch.setattr(native_model, 'model_state', lambda model: {})
+    args = SimpleNamespace(root=tmp_path, parent='parent', learner_checkpoint=['w0', 'w1'], learner_upload=[],
+                           base=None, out=tmp_path / 'out', ema_out='off')
+    native_diloco.export(args)
+    training = saved['training']
+    assert training['global_step'] == 6 and training['exposure_counts'] == {'a': 2, 'b': 1}
+    assert 'quantization' not in training
+    assert training['options']['quantization']['sha256'] == 'q'
+    custody = training['options']['diloco_export']['quantization_calibration']
+    assert custody['learners'] == {'0': {'amax': {'x': 1}}, '1': {'window': {'batches': 1}}}
+    assert custody['action'] == 'recalibrate-merged-weights'

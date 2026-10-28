@@ -124,7 +124,9 @@ def test_activation_quantizers():
     x = (torch.randn(3, 5, 256) * 3).to(torch.bfloat16)
     value = F.fp8_group_activation_value(x)
     blocks = x.float().reshape(3, 5, 2, 128)
-    scale = blocks.abs().amax(-1, keepdim=True).clamp(min=1e-10) / 448
+    # The deploy kernel uses correctly rounded division; Python scalar division on CUDA
+    # can instead multiply by a reciprocal. Use an FP32 tensor divisor on both devices.
+    scale = blocks.abs().amax(-1, keepdim=True).clamp(min=1e-10) / torch.tensor(448.0, device=x.device)
     assert torch.equal(value, ((blocks / scale).clamp(-448, 448).to(torch.float8_e4m3fn).float() * scale).reshape(x.shape))
     # NVFP4 at a static scale: groups inside the calibrated range keep 16 values on the E2M1 grid times their scale;
     # a group beyond it saturates (scale clamps at 448, values at 6) as deployed.
