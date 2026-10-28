@@ -19,6 +19,7 @@ def test_mmap_coordinator_surface_matches_actual_trainable_parameters(tmp_path):
     state=torch.load(checkpoint,map_location='cpu',weights_only=False);state['model_config']['architecture']='lfm3'
     fixture=tmp_path/'mapped.pt';torch.save(state,fixture)
     mapped=native_diloco._checkpoint_surface(fixture,base)
+    assert set(native_diloco._coordinator_surface(checkpoint,base))==set(actual)  # Other architectures retain the native loader.
     assert set(mapped)==set(actual)
     for name,tensor in mapped.items():assert torch.equal(tensor,actual[name].detach())
     assert parameter_identity(mapped)==parameter_identity(actual)
