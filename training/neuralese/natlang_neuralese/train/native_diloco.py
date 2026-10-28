@@ -98,7 +98,7 @@ def source_identity_transition(original, current, proof):
     if (not isinstance(proof,dict) or proof.get('schema')!='natlang.diloco-source-identity-transition/1'
             or proof.get('correction_verified') is not True or not all(isinstance(proof.get(k),str) and re.fullmatch('[0-9a-f]{64}',proof[k])
                  for k in ('checkpoint_sha256','correction_sha256','previous_source_hash','source_hash'))
-            or proof['previous_source_hash']==proof['source_hash']):
+            or (proof['previous_source_hash']==proof['source_hash'] and proof.get('transition_kind')!='consumed-proof-retirement')):
         raise ValueError('coordinator identity change requires a verified full-checkpoint source correction')
     if (original.get('schema')!=current.get('schema') or original.get('parent_checkpoint_sha256')!=current.get('parent_checkpoint_sha256')
             or original.get('diloco')!=current.get('diloco')
@@ -126,9 +126,29 @@ def attach_learner(args, named, *, parent_continuation, saved_state, argv=None, 
         if current_identity!=original:
             prior=source_transition.get('original_identity')
             if prior is not None:
-                if prior!=original or source_transition.get('current_identity')!=current_identity:
-                    raise ValueError('carried identity transition does not match this exact coordinator and argv')
+                if prior!=original:
+                    raise ValueError('carried identity transition does not match this coordinator')
+                previous_identity=source_transition.get('current_identity')
                 proof={k:v for k,v in source_transition.items() if k not in ('original_identity','current_identity','replay_verified_checkpoint_sha256')}
+                if previous_identity!=current_identity:
+                    # Only retire consumed correction/predecessor switches without
+                    # inventing another data generation; trainer already verified
+                    # their checkpoint history and current bound source.
+                    retired={'--withdrawn-native-graphs','--source-correction','--continued-native-graphs','--continued-held-native-graphs'}
+                    def without_retired(argv):
+                        out=[];i=0
+                        while i<len(argv):
+                            name=argv[i].split('=',1)[0]
+                            if name in retired:
+                                if '=' not in argv[i]:i+=1
+                            else:out.append(argv[i])
+                            i+=1
+                        return out
+                    if without_retired(previous_identity['trainer_argv'])!=without_retired(current_identity['trainer_argv']):
+                        raise ValueError('same-source replay changed more than consumed proof arguments')
+                    proof={**proof,'previous_source_hash':proof['source_hash'],
+                           'checkpoint_sha256':source_transition['replay_verified_checkpoint_sha256'],
+                           'transition_kind':'consumed-proof-retirement'}
                 transition=source_identity_transition(original,current_identity,proof)
             else:
                 transition=source_identity_transition(original,current_identity,source_transition)
