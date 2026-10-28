@@ -212,3 +212,49 @@ def test_real_diloco_full_checkpoint_withdrawal_and_append_keeps_coordinator_ide
         assert final['options']['withdrawal_history'][0]['rows'][0]['consumed_visits']==1
         assert len(json.loads((root/'progress.json').read_text())['identity_transitions']['0'])==3
     finally:stop.set();server.join(timeout=3)
+
+
+def test_diloco_to_standalone_withdrawal_preserves_parent_custody(tmp_path,monkeypatch):
+    import socket,threading,time
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer, native_diloco
+    from natlang_neuralese.train.diloco.coordinator import initialize_coordinator,serve_coordinator
+    from natlang_neuralese.train.diloco.worker import DilocoSettings,Transport
+    base=tmp_path/'base';tiny_source(base);_,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    fp=config['tokenizer_fingerprint'];good=dict(graph('good'),tokenizer_fingerprint=fp);bad=dict(graph('bad'),tokenizer_fingerprint=fp);extra=dict(graph('extra'),tokenizer_fingerprint=fp)
+    seed=tmp_path/'seed.jsonl';old=tmp_path/'old.jsonl';new=tmp_path/'new.jsonl';held=tmp_path/'held.jsonl'
+    seed.write_text(json.dumps(good)+'\n');old.write_text(json.dumps(good)+'\n'+json.dumps(bad)+'\n');new.write_text(json.dumps(good)+'\n'+json.dumps(extra)+'\n');held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    common=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu','--held-native-graphs',str(held),'--epochs','1','--eval-every','100','--stage-id','native_full_sft']
+    assert trainer.main([*common,'--native-graphs',str(seed),'--out',str(tmp_path/'seed')])==0
+    parent=tmp_path/'seed/checkpoint.pt';out=tmp_path/'worker';model,named=native_diloco._trainable(parent,str(base))
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    url=f'http://127.0.0.1:{port}';token='identity-test-token-'+'x'*32
+    settings={'run_id':'actual','workers':1,'worker_id':0,'coordinator_url':url,'local_steps':1,'wire_dtype':'fp32','heartbeat_seconds':.05,'allow_private_http':True}
+    argv=[*common,'--native-graphs',str(old),'--continued-native-graphs',str(seed),'--continue-from',str(parent),'--out',str(out),'--diloco',json.dumps(settings)]
+    identity=native_diloco.identity(parent,argv,DilocoSettings.from_dict(settings))
+    root=tmp_path/'coord';initialize_coordinator(root,run_id='actual',masters={name:p.detach() for name,p in named},identity=identity,workers=1,min_quorum=1,fragment_bytes=1024,grace_seconds=0)
+    stop=threading.Event();server=threading.Thread(target=serve_coordinator,args=(root,'127.0.0.1',port,token),kwargs={'stop':stop},daemon=True);server.start();monkeypatch.setenv('NATLANG_DILOCO_TOKEN',token)
+    for _ in range(100):
+        try:Transport(url,token,5).json('GET','/v1/status');break
+        except OSError:time.sleep(.02)
+    try:
+        assert trainer.main(argv)==0
+        prior=torch.load(out/'checkpoint.pt',weights_only=False)['training'];assert prior['exposure_counts']['bad']==1
+        evidence=tmp_path/'audit.json';evidence.write_text('{"decision":"withdraw"}')
+        withdrawal=tmp_path/'withdrawal.json';withdrawal.write_text(json.dumps({'schema':'natlang.native-graph-withdrawal/1','model_id':config['architecture']+':'+config['base_inventory_sha256'],
+            'evidence':{'path':'audit.json','sha256':sha(evidence)},'rows':[{'id':'bad','binding':prior['source_row_bindings']['bad'],'source_sha256':sha(old),'reason':'rejected'}]}))
+        pin=tmp_path/'immutable-parent.pt';pin.write_bytes((out/'checkpoint.pt').read_bytes())
+        resumed=list(argv);n=resumed.index('--diloco');del resumed[n:n+2]
+        resumed[resumed.index('--native-graphs')+1]=str(new)
+        resumed[resumed.index('--continued-native-graphs')+1]=str(old)
+        resumed += ['--withdrawn-native-graphs',str(withdrawal),'--standalone-diloco-parent',str(pin)]
+        assert trainer.main(resumed)==0
+        result=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+        assert result['global_step']>prior['global_step'] and result['exposure_counts']=={'good':1,'extra':1}
+        assert result['optimizer'] and result['rng'] and result['options']['standalone_diloco_history'][0]['sha256']==sha(pin)
+        assert torch.load(pin,weights_only=False)['training']['diloco'] and sha(pin)==result['options']['standalone_diloco_history'][0]['sha256']
+        assert trainer.main(resumed)==0
+        assert len(torch.load(out/'checkpoint.pt',weights_only=False)['training']['options']['standalone_diloco_history'])==1
+    finally:stop.set();server.join(timeout=3)

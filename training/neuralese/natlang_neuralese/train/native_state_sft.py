@@ -1165,6 +1165,8 @@ def build_parser():
     parser.add_argument('--task-eval', default=None)
     parser.add_argument('--diloco', default=None,
         help='JSON DiLoCo learner block: train this learner\'s shard against a coordinator (train/native_diloco.py)')
+    parser.add_argument('--standalone-diloco-parent', type=Path, default=None,
+        help='immutable full checkpoint retaining prior DiLoCo custody for standalone continuation')
     parser.add_argument('--task-eval-every', type=int, default=0)
     parser.add_argument('--forward-atol', type=float, default=None)
     parser.add_argument('--gradient-atol', type=float, default=None)
@@ -2310,6 +2312,31 @@ def _main(argv=None, *, requested_refresh):
     if optimizer.latent is None or not callable(getattr(optimizer.latent,'set_state_storage',None)):
         raise ValueError('native MuonSR optimizer omitted its explicit history storage mechanism')
     optimizer.latent.set_state_storage(args.optimizer_state_storage)
+    # A standalone continuation must retain the complete prior outer state at
+    # an immutable exact checkpoint; the new standalone updates have no outer
+    # version or contribution credit until a separately recorded reattachment.
+    previous_outer = (resume or {}).get('diloco')
+    prior_outer_history = list(((resume or {}).get('options') or {}).get('standalone_diloco_history') or [])
+    if args.diloco is None and previous_outer is not None:
+        if args.standalone_diloco_parent is None or not policy.slot.is_file():
+            raise ValueError('standalone continuation from DiLoCo requires an immutable full checkpoint pin')
+        pin = args.standalone_diloco_parent.resolve(strict=True)
+        if pin == policy.slot.resolve():
+            raise ValueError('standalone DiLoCo custody pin must not be the writable checkpoint slot')
+        digest = sha256_file_hex_cached(pin)
+        if digest != sha256_file_hex_cached(policy.slot):
+            raise ValueError('standalone DiLoCo custody pin differs from the resumed checkpoint')
+        prior_outer_history.append({'schema':'natlang.diloco-standalone-transition/1',
+            'checkpoint':str(pin), 'sha256':digest, 'global_step':global_step,
+            'outer_history':'historical-only', 'standalone_outer_credit':False})
+    elif args.standalone_diloco_parent is not None:
+        pin = args.standalone_diloco_parent.resolve(strict=True)
+        if (args.diloco is not None or not prior_outer_history or
+                prior_outer_history[-1].get('checkpoint') != str(pin) or
+                prior_outer_history[-1].get('sha256') != sha256_file_hex_cached(pin)):
+            raise ValueError('standalone DiLoCo custody pin does not match committed history')
+    if prior_outer_history:
+        checkpoint_options['standalone_diloco_history'] = prior_outer_history
     from .native_diloco import attach_learner
     diloco_identity_transition = None
     if args.diloco is not None and not parent_continuation and (source_correction_result.get('changed') or diloco_withdrawal_changed or diloco_append_changed):
@@ -2325,7 +2352,7 @@ def _main(argv=None, *, requested_refresh):
         if carried and diloco_previous_source_hash==source_hash:
             diloco_identity_transition={**carried[-1], 'replay_verified_checkpoint_sha256':sha256_file_hex_cached(policy.slot)}
     diloco = attach_learner(args, named, parent_continuation=parent_continuation,
-                            saved_state=None if parent_continuation else (resume or {}).get('diloco'),
+                            saved_state=None if parent_continuation or (args.diloco is None and args.standalone_diloco_parent is not None) else (resume or {}).get('diloco'),
                             argv=argv, source_transition=diloco_identity_transition)
     checkpoint_options['_diloco_learner'] = diloco
     if diloco is not None and getattr(diloco,'identity_transition',None):
