@@ -196,6 +196,60 @@ def iter_rows(path: Path):
         raise RuntimeError(f'zstd failed on {path}')
 
 
+CALL_LINE = re.compile(r'You are inside this call:\s*([^\n]+)')
+NEURALESE_MARK = re.compile(r'<\|neuralese\|>')
+FOLDER = re.compile(r'\bfolders?\.[A-Za-z_$]|\bcallFolder\b|\.folder\s*\(')
+NATLANG_TOOLS = frozenset(('eval', 'return_result', 'read_code', 'execution_plan'))
+
+
+def _text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
+    return ''
+
+
+def call_identity(messages) -> dict:
+    """The executing call's signature (function name, without the @eval:N site), an instruction digest (the
+    function's identity across invocations), and a near-duplicate key of the task text (digits and whitespace
+    normalized, first 400 characters)."""
+    user = next((_text(m.get('content')) for m in messages or [] if m.get('role') == 'user'), '')
+    found = CALL_LINE.search(user)
+    signature = found.group(1).strip() if found else ''
+    name = re.sub(r'@[^()]*', '', signature.split('(', 1)[0]).strip()
+    body = user.split('Instructions:', 1)[-1] if 'Instructions:' in user else user
+    instructions = body.split('In eval you can use', 1)[0].strip()
+    normal = re.sub(r'\s+', ' ', re.sub(r'\d+', '0', instructions.lower()))[:400]
+    import hashlib
+    return {'function': name, 'signature': re.sub(r'@[^()]*', '', signature)[:200],
+            'function_key': hashlib.sha256((name + '\n' + normal).encode()).hexdigest()[:16],
+            'near_duplicate_key': hashlib.sha256(normal.encode()).hexdigest()[:16]}
+
+
+def action_shape(calls, content) -> dict:
+    """Character shares of the decision's output: natlang program actions (eval code, typed return_result answers,
+    natlang runtime tools) versus generic tool use and plain chat text; text-emulated Neuralese markers and callable
+    folder use (a character proxy for the assistant-token share, recorded as such)."""
+    natlang = other = 0
+    tools, markers, folders = [], 0, 0
+    for name, arguments in call_list(calls):
+        size = len(json.dumps(arguments, ensure_ascii=False))
+        tools.append(name)
+        code = arguments.get('code') if isinstance(arguments.get('code'), str) else ''
+        markers += len(NEURALESE_MARK.findall(json.dumps(arguments, ensure_ascii=False)))
+        folders += bool(FOLDER.search(code))
+        if name in NATLANG_TOOLS:
+            natlang += size
+        else:
+            other += size
+    chat = len(_text(content))
+    total = natlang + other + chat
+    return {'tools': sorted(set(t for t in tools if t)), 'natlang_chars': natlang, 'generic_tool_chars': other,
+            'chat_chars': chat, 'natlang_action_share': natlang / total if total else 0.,
+            'text_neuralese_markers': markers + len(NEURALESE_MARK.findall(_text(content))), 'folder_calls': folders}
+
+
 def turn_scores(row: dict, corpus: str, holds: Holds) -> dict:
     program = ((row.get('task') or {}).get('program_ir'))
     invocation = (row.get('source_ref') or {}).get('invocation_id') or ''
@@ -206,6 +260,15 @@ def turn_scores(row: dict, corpus: str, holds: Holds) -> dict:
               'program': row.get('program_id'), 'family': row.get('task_family') or row.get('family'),
               'curriculum_family': ((program or {}).get('curriculum') or {}).get('family'),
               'split': row.get('split'), 'source_groups': row.get('source_groups') or []}
+    source_ref = row.get('source_ref') or {}
+    capture = ((source_ref.get('host_result_capture') or {}).get('capture') or {})
+    curriculum = (program or {}).get('curriculum') or {}
+    target = row.get('target') or {}
+    record.update(invocation=invocation or None, parent_invocation=capture.get('parent_call_id'),
+                  invocation_status='done' if capture.get('complete') else None,
+                  domain=curriculum.get('domain'), task_kind=row.get('task_kind'),
+                  decision_index=decision.get('index'), **call_identity(row.get('messages')),
+                  **action_shape(target.get('tool_calls'), target.get('content')))
     approved = (row.get('training_admission') or {}).get('approved')
     failed = bool(decision.get('failed_action'))
     return finish(record, s, verified=outcome_verified(row.get('outcome')), approved=approved, failed=failed,
@@ -229,7 +292,11 @@ def trajectory_scores(row: dict, corpus: str, holds: Holds):
                   'program': program.get('id'), 'family': program.get('family'),
                   'curriculum_family': (program.get('curriculum') or {}).get('family'),
                   'split': program.get('split'), 'source_groups': program.get('source_groups') or [],
-                  'invocation_status': status}
+                  'invocation_status': status, 'invocation': invocation,
+                  'parent_invocation': (ledger.get(invocation) or {}).get('parent_invocation_id'),
+                  'domain': (program.get('curriculum') or {}).get('domain'), 'task_kind': program.get('kind'),
+                  'decision_index': index, **call_identity(turn.get('context')),
+                  **action_shape(calls, ((turn.get('assistant') or {}).get('content')))}
         failed = status not in (None, 'done')  # a child invocation that did not complete is a failed child action
         yield finish(record, s, verified=verified, approved=None, failed=failed,
                      held=holds(program, program.get('source_groups')), child=child)
