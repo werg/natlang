@@ -23,13 +23,16 @@ import hashlib
 import sys
 from pathlib import Path
 
-REPO = Path('/home/werg/natlang')
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.paths import resolve as machine_path  # noqa: E402 (stdlib-only module)
+
+REPO = machine_path('repo')
 HF_CACHE = Path.home() / '.cache/huggingface/hub'
 STUDENTS = {
     'lfm25': {'path': REPO / 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f',
               'model_type': 'lfm2',
               'model_id': 'lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6'},
-    'mellum21': {'path': Path('/home/werg/data/models/mellum21-12b-a2.5b-thinking'), 'model_type': 'mellum',
+    'mellum21': {'path': machine_path('models', 'mellum21-12b-a2.5b-thinking'), 'model_type': 'mellum',
                  'model_id': 'mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f'},
     'lfm3': {'path': HF_CACHE / 'models--LiquidAI--LFM3-1.7B/snapshots/40ebe0aa6662c9d40389c2f5d565b6a2c6aebacd',
              # Snapshot files are symlinks into the repository's blobs: mount the whole model repository.
@@ -38,7 +41,7 @@ STUDENTS = {
              'chat_template_sha256': 'f45005c50cd2a97329722bf3a2dee9f16c04cdf825a589b280fb7e99e6827818'},
 }
 DEFAULT_STUDENTS = ('lfm25', 'mellum21')
-MOUNTED = (REPO, Path('/home/werg/data'), Path('/mnt/external'))  # the wrappers' standard read-only mounts
+MOUNTED = (REPO, machine_path('data_nvme'), machine_path('data_hdd'))  # the wrappers' standard read-only mounts
 
 
 def _sha(path: Path) -> str:
