@@ -3156,6 +3156,14 @@ def _main(argv=None, *, requested_refresh):
         write_json(args.out / 'metrics.json', metrics)
     completed = completed and not policy.signaled
     checkpoint_sha = sha256_file_hex_cached(policy.slot)
+    progress_path = args.out / 'progress.json'
+    if progress_path.is_file() and last_saved_step == step:
+        final_progress = json.loads(progress_path.read_text())
+        if final_progress.get('step') == step and final_progress.get('global_step') == global_step:
+            final_progress['checkpoint_step'] = step
+            final_progress['checkpoint_global_step'] = global_step
+            final_progress['checkpoint_sha256'] = checkpoint_sha
+            write_json(progress_path, final_progress)
     model_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
     task_summary = metrics.get('task_eval')
     task_receipt_path = None

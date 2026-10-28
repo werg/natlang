@@ -1472,3 +1472,25 @@ def test_parent_read_secret_requires_verified_receipt_and_binds_capability(tmp_p
     with pytest.raises(diloco.cwctl.ControllerError,match='binding changed'):diloco.parent_read_secret(run)
     run['parent_transfer']['receipt_sha256']=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
     with pytest.raises(ValueError,match='independent verification'):diloco.parent_read_secret(run)
+
+
+def test_seed_publisher_accepts_only_hash_bound_final_report_for_stale_cadence(tmp_path):
+    import torch
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_state_sft import TRAINING_SCHEMA
+    seed=load('sft_seed_parent_verify');out=tmp_path/'fresh';train=out/'train';train.mkdir(parents=True)
+    checkpoint=train/'checkpoint.pt'
+    training={'schema':TRAINING_SCHEMA,'global_step':750,'step':750,'optimizer':{'state':{'x':1}},
+              'rng':{'cpu':torch.tensor([1])},'source_receipts':[{'sha256':'source'}],'exposure_counts':{'a':1}}
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':{'source_architecture':'lfm3'},'step':750,'training':training},checkpoint)
+    (train/'progress.json').write_text(json.dumps({'checkpoint_step':700,'global_step':750}))
+    report={'schema':'natlang.neuralese-native-sft-report/1','step':750,'checkpoint':str(checkpoint),'checkpoint_sha256':'0'*64}
+    (train/'report.json').write_text(json.dumps(report))
+    with pytest.raises(ValueError,match='does not bind'):
+        seed.publish(out,tmp_path/'bad.pt',750)
+    report['checkpoint_sha256']=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    (train/'report.json').write_text(json.dumps(report))
+    result=seed.publish(out,tmp_path/'good.pt',750)
+    assert result['checkpoint_step_observed']==700 and result['global_step']==750
+    assert result['final_save_evidence']['checkpoint_sha256']==report['checkpoint_sha256']
+    assert result['final_save_evidence']['cadence_progress_stale'] is True

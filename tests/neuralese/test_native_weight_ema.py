@@ -298,6 +298,9 @@ def test_trainer_ema_resumes_bit_exactly_earns_no_credit_and_leaves_training_unt
     _train(argv, monkeypatch, stop_after=2)
     midway = _load(halted / 'checkpoint.pt')['training']
     assert midway['global_step'] == 2 and midway['ema']['updates'] == 2
+    progress=json.loads((halted/'progress.json').read_text())
+    assert progress['checkpoint_step']==2 and progress['checkpoint_global_step']==2
+    assert progress['checkpoint_sha256']==hashlib.sha256((halted/'checkpoint.pt').read_bytes()).hexdigest()
     _train(argv, monkeypatch)
     a, b, c = (_load(path / 'checkpoint.pt') for path in (plain, straight, halted))
     assert _same_weights(a, b), 'enabling the EMA must not change the trained weights'

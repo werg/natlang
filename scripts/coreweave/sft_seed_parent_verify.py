@@ -30,12 +30,24 @@ def publish(out, parent, stop, args_path=None):
             or not training.get('source_receipts') or not training.get('exposure_counts')
             or not any(value > 0 for value in training['exposure_counts'].values())):
         raise ValueError('seed checkpoint lacks actual full optimizer/RNG/exposure or required updates')
+    size, source_sha = checkpoint.stat().st_size, digest(checkpoint)
+    final_save = None
     if int(progress.get('checkpoint_step') or 0) < stop:
-        raise ValueError('seed progress never recorded the requested committed checkpoint')
+        report_path = out / 'train/report.json'
+        if not report_path.is_file():
+            raise ValueError('seed progress is stale and no authenticated final report exists')
+        report = json.loads(report_path.read_text())
+        if (report.get('schema') != 'natlang.neuralese-native-sft-report/1'
+                or report.get('checkpoint_sha256') != source_sha
+                or report.get('step') != training.get('step', step)
+                or Path(report.get('checkpoint', '')).resolve() != checkpoint.resolve()):
+            raise ValueError('seed final report does not bind the actual checkpoint and step')
+        final_save = {'report': str(report_path), 'sha256': digest(report_path),
+                      'step': report['step'], 'checkpoint_sha256': source_sha,
+                      'cadence_progress_stale': True}
     receipt_path = parent.with_name(parent.name + '.seed.json')
     if receipt_path.exists():
         raise ValueError('seed receipt already exists')
-    size, source_sha = checkpoint.stat().st_size, digest(checkpoint)
     parent.parent.mkdir(parents=True, exist_ok=True)
     os.link(checkpoint, parent)  # atomic, no replacement; seed trainer has exited and cannot mutate this inode
     if parent.stat().st_size != size or digest(parent) != source_sha:
@@ -49,6 +61,7 @@ def publish(out, parent, stop, args_path=None):
                'full_optimizer_rng_exposure': True, 'seed_output': str(out),
                'trainer_arguments': ({'path': str(Path(args_path).resolve()), 'sha256': digest(Path(args_path))}
                                      if args_path is not None else None)}
+    if final_save is not None: receipt['final_save_evidence'] = final_save
     write_json_durable(receipt_path, receipt)
     print(json.dumps(receipt, sort_keys=True))
     return receipt
