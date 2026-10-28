@@ -277,6 +277,44 @@ def test_native_loader_dispatches_lfm3_and_restores_saved_backbone(tmp_path):
         load_native_model(tmp_path, rank=4, dtype=torch.bfloat16, sparse_row_dtype=torch.float32)
 
 
+def test_lfm3_checkpoint_weights_only_reads_cast_across_dtypes(tmp_path):
+    """An LFM3 checkpoint is one dtype throughout: GGUF export reads an all-BF16 checkpoint at FP32 (and an FP32
+    diagnostic at BF16) as a cast of every tensor; only a weights-only read may change the dtype."""
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+    from natlang_neuralese.model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint,
+                                                      load_native_model, model_state)
+    base = tmp_path / 'base'
+    tiny_lfm3_hf().save_pretrained(base, safe_serialization=True)
+    tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'sample': 1, '<think>': 2, '</think>': 3}, unk_token='[UNK]'))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    hf_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]')
+    hf_tokenizer.chat_template = LFM3_TINY_TEMPLATE
+    hf_tokenizer.save_pretrained(base)
+    ids = torch.tensor([[1, 4, 9, 10, 11, 5, 12, 13, 2, 3]])
+    for saved_dtype, read_dtype in ((torch.bfloat16, torch.float32), (torch.float32, torch.bfloat16)):
+        model, _, _, config = load_native_model(base, rank=4, dtype=saved_dtype)
+        with torch.no_grad():
+            model.adapter.up.weight.normal_(0, 0.1)
+            model.input_rows.add_(0.05)
+            model.extra_input_rows.add_(0.05)
+        path = tmp_path / f'{saved_dtype}.pt'
+        torch.save({'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model)}, path)
+        with pytest.raises(ValueError, match='only at its saved dtype'):
+            load_native_checkpoint(path, dtype=read_dtype)
+        read, _, _, read_config, _ = load_native_checkpoint(path, dtype=read_dtype, allow_weights_only=True)
+        assert {parameter.dtype for parameter in read.parameters()} == {read_dtype}
+        assert read_config.get('native_ordinary_precision') == (
+            'bf16-stochastic-rounding-v1' if read_dtype == torch.bfloat16 else None)
+        for name in ('input_rows', 'extra_input_rows'):
+            torch.testing.assert_close(getattr(read, name), getattr(model, name).to(read_dtype))
+        torch.testing.assert_close(read.adapter.up.weight, model.adapter.up.weight.to(read_dtype))
+        with torch.no_grad():
+            expected = model.logits(model.port.forward_ids(ids)['h_final']).float()
+            actual = read.logits(read.port.forward_ids(ids)['h_final']).float()
+        torch.testing.assert_close(actual, expected, atol=0.1, rtol=0.05)
+
+
 def test_native_optimizer_updates_every_lfm3_layer_form_from_an_import_graph():
     from natlang_neuralese.data.native_graph import SCHEMA, parse_graph
     from natlang_neuralese.model.shared_state import SharedStateModel
