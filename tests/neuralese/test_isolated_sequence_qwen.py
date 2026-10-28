@@ -32,10 +32,13 @@ def _maple(tmp_path):
     return MaplePortBackbone(model, ControlTokens(open_id=94, close_id=95))
 
 
-@pytest.fixture(params=["qwen", "qwen-sliding", "maple"])
+@pytest.fixture(params=["qwen", "qwen-sliding", "maple", "lfm3"])
 def backbone(request, tmp_path):
     torch.set_num_threads(1)
-    if request.param == "maple":
+    if request.param == "lfm3":
+        from test_lfm3_port import tiny_lfm3
+        port = tiny_lfm3(window=3)
+    elif request.param == "maple":
         port = _maple(tmp_path)
     else:
         port = _qwen(3 if request.param == "qwen-sliding" else None)

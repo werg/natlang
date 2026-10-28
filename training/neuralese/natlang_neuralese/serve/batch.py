@@ -14,14 +14,17 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from ..model.lfm2_port import AttentionState, ConvState, DeltaState, PortBackbone, PortCache, append_kv
+from ..model.lfm2_port import (AttentionState, ConvState, DeltaState, PortBackbone, PortCache, append_kv,
+                                attention_query, feed_forward_residual, gate_attention_output)
+
+# Declared LFM-family conv/attention stacks with the batched step below; selected by model type, never by layer
+# attribute names (LFM3 shares LFM2's `operator_norm` but has gated, windowed attention and sandwich norms).
+BATCHED_STACKS = frozenset({'lfm2', 'lfm2_moe', 'lfm3'})
 
 
 def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], layers: range
               ) -> tuple[torch.Tensor, list[PortCache]]:
     """Advance N rows by one position through `layers`. `h` is [N, 1, d]; returns [N, 1, d] and the new caches."""
-    from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
-
     rows = h.shape[0]
     if rows != len(caches):
         raise ValueError("one cache per row")
@@ -29,9 +32,9 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
     lengths = [list(c.lengths) for c in caches]
     if not len(layers):
         return h, caches
-    if not hasattr(backbone.layers[layers.start], 'operator_norm'):
-        # Not the native LFM2 stack (the Qwen/Maple port): each row through the backbone's own runner, which this
-        # batched step is checked against. Exact; a batched Qwen step would only be faster.
+    if getattr(backbone.config, 'model_type', None) not in BATCHED_STACKS:
+        # Not an LFM-family stack (the Qwen/Maple/Qwen3.5 ports): each row through the backbone's own runner, which
+        # this batched step is checked against. Exact; a batched Qwen step would only be faster.
         outs, new = [], []
         for row in range(rows):
             out, cache = backbone.run_layers(h[row:row + 1], layers, caches[row])
@@ -44,6 +47,17 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
             raise ValueError("layers in one range must have processed the same number of positions")
     positions = torch.tensor(starts, device=h.device).unsqueeze(1)
     cos, sin = backbone._rope(h, positions)
+
+    def rotate(index, q, k):
+        if hasattr(backbone, '_apply_rope'):
+            return backbone._apply_rope(index, q, k, cos, sin)
+        from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
+        return apply_rotary_pos_emb(q, k, cos, sin)
+
+    def feed_forward(layer, value):
+        if hasattr(backbone, '_feed_forward'):
+            return backbone._feed_forward(layer, value)
+        return feed_forward_residual(layer, value)
     static = not torch.is_grad_enabled()
     from ..model.layer_staging import tape_for_grad
     tape = tape_for_grad()  # an in-backward update steps each layer once, so this step joins the layer staging
@@ -51,22 +65,31 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
         layer = backbone.layers[i]
         if tape is not None:
             h = tape.enter(i, h)
-        x = layer.operator_norm(h)
+        x = backbone._operator_norm(layer, h)
         if backbone.is_attention(i):
             attn = layer.self_attn
             hd = attn.head_dim
-            q = attn.q_layernorm(attn.q_proj(x).view(rows, 1, -1, hd)).transpose(1, 2)
-            k = attn.k_layernorm(attn.k_proj(x).view(rows, 1, -1, hd)).transpose(1, 2)
+            q_norm = getattr(attn, 'q_norm', None) or attn.q_layernorm
+            k_norm = getattr(attn, 'k_norm', None) or attn.k_layernorm
+            q, gate = attention_query(backbone, attn, x)
+            q = q_norm(q).transpose(1, 2)
+            k = k_norm(attn.k_proj(x).view(rows, 1, -1, hd)).transpose(1, 2)
             v = attn.v_proj(x).view(rows, 1, -1, hd).transpose(1, 2)
-            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+            q, k = rotate(i, q, k)
+            # A sliding-window layer's single query sees exactly its last `window` keys (itself included).
+            window = backbone.window(i) if hasattr(backbone, 'window') else None
             outs = []
             for row in range(rows):
                 state = append_kv(states[row][i], k[row:row + 1], v[row:row + 1], static=static)
                 states[row][i] = state
-                outs.append(F.scaled_dot_product_attention(q[row:row + 1], state.k, state.v, scale=attn.scaling,
+                keys, values = state.k, state.v
+                if window is not None:
+                    keys, values = keys[:, :, -window:], values[:, :, -window:]
+                outs.append(F.scaled_dot_product_attention(q[row:row + 1], keys, values, scale=attn.scaling,
                                                            enable_gqa=True))
-            out = torch.cat(outs, 0)
-            h = h + attn.out_proj(out.transpose(1, 2).reshape(rows, 1, -1))
+            out = gate_attention_output(backbone, torch.cat(outs, 0).transpose(1, 2).reshape(rows, 1, -1), gate, hd)
+            projection = getattr(attn, 'o_proj', None) or attn.out_proj
+            h = backbone._operator_residual(layer, h, projection(out))
         else:
             conv = layer.conv
             bcx = conv.in_proj(x).transpose(-1, -2)
@@ -79,11 +102,11 @@ def step_rows(backbone: PortBackbone, h: torch.Tensor, caches: list[PortCache], 
                                else gated.new_zeros(1, gated.shape[1], backbone.conv_window))
             window = torch.cat([torch.cat(windows, 0), gated], dim=-1)
             conv_out = F.conv1d(window, conv.conv.weight, conv.conv.bias, groups=gated.shape[1])
-            h = h + conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
+            h = backbone._operator_residual(layer, h, conv.out_proj((c * conv_out).transpose(-1, -2).contiguous()))
             tail = window[..., -backbone.conv_window:]
             for row in range(rows):
                 states[row][i] = ConvState(tail[row:row + 1])
-        h = h + layer.feed_forward(layer.ffn_norm(h))
+        h = feed_forward(layer, h)
         if tape is not None:
             h = tape.exit(i, h)
         for row in range(rows):

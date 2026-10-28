@@ -133,6 +133,9 @@ def append_kv(prev: AttentionState | None, k_new: torch.Tensor, v_new: torch.Ten
 class ConvState:
     window: torch.Tensor  # [B, C, L_cache - 1]: the last gated inputs (B * x) before the conv
 
+    def fields(self):
+        return (self.window,)
+
 
 @dataclass(frozen=True)
 class DeltaState:
@@ -423,16 +426,83 @@ def load_conv_kernel():
         return None
 
 
-def feed_forward_residual(layer, h, chunk_tokens=0):
+def feed_forward_residual(layer, h, chunk_tokens=0, sandwich=False):
     """Token-local FFN chunks preserve gradients without recomputing activations.
 
     Attention and convolution retain their full context. Chunking the norm and
     FFN bounds temporary expanded-width projections; saved activation storage
     still scales with total tokens unless the caller enables exact CPU offload.
+    `sandwich` (LFM3's declared `use_sandwich_norm`) normalizes the FFN output
+    with `post_ffn_norm` before it enters the residual stream.
     """
     from .native_gradient_partitions import token_local_chunks
+    if sandwich:
+        return token_local_chunks(h, chunk_tokens,
+            lambda part: part + layer.post_ffn_norm(layer.feed_forward(layer.ffn_norm(part))), cpu_rowwise=True)
     return token_local_chunks(h, chunk_tokens,
         lambda part: part + layer.feed_forward(layer.ffn_norm(part)), cpu_rowwise=True)
+
+
+def short_convolution(port, conv, x, previous, padding=None, chunk_real=None):
+    """LFM gated short convolution of normed inputs `x` [B, T, d] continuing `previous` (a ConvState or None).
+
+    Returns the operator output (after `out_proj`, before any post-norm or residual) and the new ConvState, which
+    holds the last `port.conv_window` gated inputs. The causal-conv1d kernel (`port.conv_kernel`) only supports
+    widths 2-4 and fresh prefills; every other case (LFM3's width 7 included) is the exact torch depthwise conv.
+    """
+    if padding is not None:
+        x = x * padding[:, :, None].to(x.dtype)
+    if chunk_real is not None:
+        x = x * chunk_real[:, :, None].to(x.dtype)
+    b, c, xx = conv.in_proj(x).transpose(-1, -2).chunk(3, dim=-2)
+    gated = b * xx
+    steps, width = x.shape[1], conv.conv.weight.shape[-1]
+    if (port.fast and port.conv_kernel is not None and previous is None and x.is_cuda
+            and steps > port.conv_window and 2 <= width <= 4):
+        from .native_weight_carrier import stored_causal_conv1d
+        conv_out = stored_causal_conv1d(port.conv_kernel.causal_conv1d_fn,
+            gated.contiguous(), conv.conv.weight.squeeze(1), conv.conv.bias)
+        return (conv.out_proj((c * conv_out).transpose(-1, -2).contiguous()),
+                ConvState(gated[..., -port.conv_window:]))
+    prev_window = gated.new_zeros(x.shape[0], gated.shape[1], port.conv_window) if previous is None else previous.window
+    window = torch.cat([prev_window, gated], dim=-1)
+    from .native_weight_carrier import stored_conv1d
+    conv_out = stored_conv1d(window, conv.conv.weight, conv.conv.bias, groups=gated.shape[1])
+    return conv.out_proj((c * conv_out).transpose(-1, -2).contiguous()), ConvState(window[..., -port.conv_window:])
+
+
+# Declared attention output gates (``port.attention_gate``). Qwen3.5 packs a per-element gate into q_proj; LFM3
+# projects one gate per head from the same normed attention input (``self_attn.gate_proj``). Both multiply the
+# attention result by the sigmoid gate before the output projection.
+ATTENTION_GATES = (None, 'q_proj_elementwise', 'per_head_input')
+
+
+def attention_query(port, attn, x, linear=None):
+    """The query projection as heads [B, T, H, hd] (before its norm) and the backbone's declared output-gate
+    logits ([B, T, H * hd] per element, [B, T, H] per head) or None."""
+    linear = linear or (lambda module, value: module(value))
+    batch, steps, _ = x.shape
+    hd = attn.head_dim
+    form = getattr(port, 'attention_gate', None)
+    q = linear(attn.q_proj, x)
+    if form is None:
+        return q.view(batch, steps, -1, hd), None
+    if form == 'q_proj_elementwise':
+        q, gate = torch.chunk(q.view(batch, steps, -1, hd * 2), 2, dim=-1)
+        return q, gate.reshape(batch, steps, -1)
+    if form == 'per_head_input':
+        return q.view(batch, steps, -1, hd), linear(attn.gate_proj, x)
+    raise ValueError(f'unknown declared attention gate {form!r}')
+
+
+def gate_attention_output(port, out, gate, head_dim):
+    """`out` [B, T, H * hd] (heads concatenated) times the declared sigmoid gate, before the output projection."""
+    if gate is None:
+        return out
+    if getattr(port, 'attention_gate', None) == 'per_head_input':
+        batch, steps, _ = out.shape
+        return (out.view(batch, steps, -1, head_dim) * torch.sigmoid(gate)[..., None]).reshape(batch, steps, -1)
+    return out * torch.sigmoid(gate)
 
 
 
@@ -449,6 +519,10 @@ class PortBackbone(nn.Module):
     """
 
     attention_checkpoint_prefixes = True
+    # Declared layer forms read by the shared layer helpers (shared_state, isolated_sequence, decode batches):
+    # LFM2 has no attention output gate and no sandwich norm.
+    attention_gate = None
+    sandwich_norm = False
 
     def __init__(self, hf_model, controls: ControlTokens, noise: float = 0.02, seed: int = 0,
                  fast: bool = True, conv_kernel=None, markers: bool = True):
@@ -527,6 +601,14 @@ class PortBackbone(nn.Module):
 
     def final_norm(self, h: torch.Tensor) -> torch.Tensor:
         return self.hf.model.embedding_norm(h)
+
+    def _operator_norm(self, layer, h: torch.Tensor) -> torch.Tensor:
+        """The pre-operator norm of a decoder layer (attention or convolution input)."""
+        return layer.operator_norm(h)
+
+    def _operator_residual(self, layer, h: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+        """Add an operator output (after its output projection) to the residual stream."""
+        return h + layer.post_operator_norm(out) if self.sandwich_norm else h + out
 
     def logits(self, h_final: torch.Tensor) -> torch.Tensor:
         """LM-head logits from the last residual (before the final norm)."""
@@ -681,36 +763,7 @@ class PortBackbone(nn.Module):
                 out = attn.out_proj(out.transpose(1, 2).reshape(batch, steps, -1))
                 states[i] = AttentionState(k, v)
             else:
-                conv = layer.conv
-                if padding is not None:
-                    x = x * padding[:, :, None].to(x.dtype)
-                if chunk_real is not None:
-                    x = x * chunk_real[:, :, None].to(x.dtype)
-                bcx = conv.in_proj(x).transpose(-1, -2)
-                b, c, xx = bcx.chunk(3, dim=-2)
-                gated = b * xx
-                prev = states[i]
-                if (self.fast and self.conv_kernel is not None and prev is None and h.is_cuda
-                        and steps > self.conv_window):
-                    from .native_weight_carrier import stored_causal_conv1d
-                    conv_out = stored_causal_conv1d(self.conv_kernel.causal_conv1d_fn,
-                        gated.contiguous(), conv.conv.weight.squeeze(1), conv.conv.bias)
-                    out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
-                    states[i] = ConvState(gated[..., -self.conv_window:])
-                    h = h + out
-                    h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
-                    lengths[i] = start + steps
-                    continue
-                if prev is None:
-                    prev_window = gated.new_zeros(batch, gated.shape[1], self.conv_window)
-                else:
-                    prev_window = prev.window
-                window = torch.cat([prev_window, gated], dim=-1)
-                from .native_weight_carrier import stored_conv1d
-                conv_out = stored_conv1d(window, conv.conv.weight, conv.conv.bias,
-                                         groups=gated.shape[1])
-                out = conv.out_proj((c * conv_out).transpose(-1, -2).contiguous())
-                states[i] = ConvState(window[..., -self.conv_window:])
+                out, states[i] = short_convolution(self, layer.conv, x, states[i], padding, chunk_real)
             h = h + out
             h = feed_forward_residual(layer, h, getattr(self, 'ffn_chunk_tokens', 0))
             lengths[i] = start + steps

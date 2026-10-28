@@ -32,8 +32,9 @@ def port_named_parameters(backbone, heads) -> list[tuple[str, torch.nn.Parameter
 def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding_ids: set[int]) -> bool:
     return (parameter.ndim == 2 and min(parameter.shape) > 1 and vocab_size not in parameter.shape
             and id(parameter) not in embedding_ids and name != "backbone.control_rows" and "lora_" not in name
-            # Quantizer scales and MoE routers are not hidden-state matrices: AdamW.
-            and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name)
+            # Quantizer scales, MoE routers and per-head attention output gates are not hidden-state matrices: AdamW.
+            and "learned_scale" not in name and not name.endswith("_blocks") and ".mlp.gate." not in name
+            and ".self_attn.gate_proj." not in name)
 
 
 class PortMuonAdamW(torch.optim.Optimizer):
@@ -824,10 +825,12 @@ def latent_split(named, latent_optimizer: str):
     matrices (and stacks of them) stepped by the latent optimizer; MoE routers (``.mlp.gate.``), vectors and, under
     MuonSR, matrices with a side under ``MUON_MIN_SIDE`` (LFM's short-conv kernels [d, 1, k]: no meaningful
     orthogonalization; Moonlight keeps non-matrix weights on Adam) are others, on AdamW at the backbone rate.
+    LFM3's per-head attention output gates (``.self_attn.gate_proj.``, hidden -> one scalar per head) are routed like
+    MoE routers: low-dimensional controls, not hidden-state matrices (declared by name, not by their 16-row shape).
     Shared by the direct and the end-to-end stage."""
     def is_latent(n, q):
         narrow = latent_optimizer == 'muonsr' and q.ndim >= 2 and min(q.shape[-2:]) < MUON_MIN_SIDE
-        return q.ndim >= 2 and '.mlp.gate.' not in n and not narrow
+        return q.ndim >= 2 and '.mlp.gate.' not in n and '.self_attn.gate_proj.' not in n and not narrow
     named = list(named)
     return [(n, q) for n, q in named if is_latent(n, q)], [(n, q) for n, q in named if not is_latent(n, q)]
 

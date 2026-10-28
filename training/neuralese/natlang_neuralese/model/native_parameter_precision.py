@@ -6,7 +6,7 @@ import torch
 PROFILE = 'fp32-norms-v1'
 QWEN35_DELTA_PROFILE = 'fp32-norms-qwen35-delta-controls-v1'
 ORDINARY_PRECISION_PROFILES = (PROFILE, QWEN35_DELTA_PROFILE)
-_NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
+_NORMS = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
           'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 NORM_EXECUTIONS = ('source-v1', 'stable-v1')
 

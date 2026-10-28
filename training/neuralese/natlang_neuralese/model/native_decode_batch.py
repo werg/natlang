@@ -70,9 +70,7 @@ def native_step_batch(model, ids, caches, *, producing=None):
                 out=shared.graph_attention(query,state.k,state.v,layouts[lane],window,layer.self_attn.scaling,
                     prepared_mask=masks[key],precision=getattr(port,'native_attention_precision','ieee'))
                 if gates:
-                    gate=gates[0][:,lane:lane+1]
-                    flat=out.transpose(1,2).reshape(1,1,-1)*torch.sigmoid(gate)
-                    out=flat.view(1,1,-1,layer.self_attn.head_dim).transpose(1,2)
+                    out=shared._gate_heads(port,out,gates[0][:,lane:lane+1],layer.self_attn.head_dim)
                 outputs.append(out);states[lane].append(state)
             out=torch.cat(outputs,dim=2)
         else:

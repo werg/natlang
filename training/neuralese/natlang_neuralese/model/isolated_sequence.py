@@ -1,7 +1,8 @@
 """One changed current input per causal position, sharing the unchanged history."""
 import torch
 import torch.nn.functional as F
-from .lfm2_port import AttentionState, ConvState, PortCache, feed_forward_residual
+from .lfm2_port import (AttentionState, ConvState, PortCache, attention_query, feed_forward_residual,
+                        gate_attention_output)
 
 
 _flex = None
@@ -95,7 +96,8 @@ def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex
 def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
     if fixed.shape != replacements.shape or not 0 < cutoff <= backbone.num_layers:
         raise ValueError('isolated sequence requires matching inputs and a valid cutoff')
-    qwen = hasattr(backbone, "_apply_rope")
+    # Layer forms come from the backbone's declared methods (norm, gate, sandwich residual, rope, window, FFN).
+    token_local_ffn = hasattr(backbone, "_feed_forward")
     batch, steps, _ = fixed.shape
     history, branch = fixed, replacements
     states, lengths = list(cache.states), list(cache.lengths)
@@ -108,7 +110,12 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
     if pad is not None:
         positions = (positions - pad[:, None]).clamp(min=0)
     cos, sin = backbone._rope(fixed, positions)
-    from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
+
+    def rotate(index, q, k):
+        if hasattr(backbone, "_apply_rope"):
+            return backbone._apply_rope(index, q, k, cos, sin)
+        from transformers.models.lfm2.modeling_lfm2 import apply_rotary_pos_emb
+        return apply_rotary_pos_emb(q, k, cos, sin)
 
     from .layer_staging import tape_for_grad
     tape = tape_for_grad()  # an in-backward update steps each layer once, so this pass joins the layer staging
@@ -120,23 +127,26 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
         fields = (() if previous is None else previous.fields() if attention else (previous.window,))
 
         def run_one(h, b, *previous_fields, layer=layer, attention=attention, index=index):
-            norm = layer.input_layernorm if qwen else layer.operator_norm
-            xh, xb = norm(h), norm(b)
+            xh, xb = backbone._operator_norm(layer, h), backbone._operator_norm(layer, b)
             if attention:
                 attn = layer.self_attn
-                qnorm = attn.q_norm if qwen else attn.q_layernorm
-                knorm = attn.k_norm if qwen else attn.k_layernorm
-                output = attn.o_proj if qwen else attn.out_proj
-                window_size = backbone.window(index) if qwen else None
+                qnorm = getattr(attn, 'q_norm', None) or attn.q_layernorm
+                knorm = getattr(attn, 'k_norm', None) or attn.k_layernorm
+                projection = getattr(attn, 'o_proj', None) or attn.out_proj
+                window_size = backbone.window(index) if hasattr(backbone, 'window') else None
                 def qkv(x):
-                    q = qnorm(attn.q_proj(x).view(batch, steps, -1, attn.head_dim)).transpose(1, 2)
+                    q, gate = attention_query(backbone, attn, x)
+                    q = qnorm(q).transpose(1, 2)
                     k = knorm(attn.k_proj(x).view(batch, steps, -1, attn.head_dim)).transpose(1, 2)
                     v = attn.v_proj(x).view(batch, steps, -1, attn.head_dim).transpose(1, 2)
-                    q, k = (backbone._apply_rope(index, q, k, cos, sin) if qwen else
-                            apply_rotary_pos_emb(q, k, cos, sin))
-                    return q, k, v
-                qh, kh, vh = qkv(xh)
-                qb, kb, vb = qkv(xb)
+                    q, k = rotate(index, q, k)
+                    return q, k, v, gate
+
+                def output(out, gate):
+                    out = out.transpose(1, 2).reshape(batch, steps, -1)
+                    return projection(gate_attention_output(backbone, out, gate, attn.head_dim))
+                qh, kh, vh, gh = qkv(xh)
+                qb, kb, vb, gb = qkv(xb)
                 if previous_fields:
                     prev = AttentionState.from_fields(previous_fields)
                     kh, vh = torch.cat((prev.k, kh), 2), torch.cat((prev.v, vh), 2)
@@ -155,9 +165,8 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
                         mask = mask & valid[:, None, None]
                         oh = F.scaled_dot_product_attention(qh, kh, vh, attn_mask=mask,
                             scale=attn.scaling, enable_gqa=True)
-                oh = output(oh.transpose(1, 2).reshape(batch, steps, -1))
-                ob = branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, attn.scaling)
-                ob = output(ob.transpose(1, 2).reshape(batch, steps, -1))
+                oh = output(oh, gh)
+                ob = output(branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, attn.scaling), gb)
                 updated = (kh, vh)
             else:
                 conv = layer.conv
@@ -173,13 +182,14 @@ def isolated_sequence(backbone, fixed, replacements, cache, *, cutoff):
                 oh = conv.out_proj((ch * conv_h).transpose(-1, -2).contiguous())
                 ob = conv.out_proj((cb * conv_b).transpose(-1, -2).contiguous())
                 updated = (window[..., -backbone.conv_window:],)
-            if qwen:
+            h, b = backbone._operator_residual(layer, h, oh), backbone._operator_residual(layer, b, ob)
+            if token_local_ffn:
                 # One token-local feed-forward over both streams: an MoE streams every active expert's weights
                 # once per call, so the history and branch share that sweep.
-                h, b = backbone._feed_forward(layer, torch.cat((h + oh, b + ob), 1)).split(steps, 1)
+                h, b = backbone._feed_forward(layer, torch.cat((h, b), 1)).split(steps, 1)
             else:
-                h = feed_forward_residual(layer, h + oh, getattr(backbone, 'ffn_chunk_tokens', 0))
-                b = feed_forward_residual(layer, b + ob, getattr(backbone, 'ffn_chunk_tokens', 0))
+                h = feed_forward_residual(layer, h, getattr(backbone, 'ffn_chunk_tokens', 0))
+                b = feed_forward_residual(layer, b, getattr(backbone, 'ffn_chunk_tokens', 0))
             return h, b, *updated
 
         if getattr(backbone, 'checkpoint_layers', False) and torch.is_grad_enabled():

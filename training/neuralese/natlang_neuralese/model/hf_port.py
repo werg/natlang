@@ -13,7 +13,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .lfm2_port import AttentionState, DeltaState, ControlTokens, PortBackbone, PortCache, _left_pad_mask, append_kv
+from .lfm2_port import (AttentionState, ConvState, DeltaState, ControlTokens, PortBackbone, PortCache, _left_pad_mask,
+                        append_kv, attention_query, gate_attention_output, short_convolution)
 from .layer_staging import staged_layers
 from ..common.profiling import scope as profile_scope
 
@@ -87,6 +88,7 @@ class QwenPortBackbone(PortBackbone):
             import copy
             self.config = copy.copy(source_config)
             self.config.model_type = 'qwen3_5'
+            self.attention_gate = 'q_proj_elementwise'
         self.controls = controls or qwen_controls()
         self.num_layers = self.config.num_hidden_layers
         self.layer_types = list(getattr(self.config, "layer_types", None) or ["full_attention"] * self.num_layers)
@@ -143,6 +145,18 @@ class QwenPortBackbone(PortBackbone):
     def final_norm(self, h: torch.Tensor) -> torch.Tensor:
         return self.text.norm(h)
 
+    def _operator_norm(self, layer, h: torch.Tensor) -> torch.Tensor:
+        return layer.input_layernorm(h)
+
+    def _state_from_fields(self, layer: int, tensors):
+        """A layer's cache state rebuilt from its checkpointed tensor fields."""
+        kind = self.layer_types[layer]
+        if kind == 'linear_attention':
+            return DeltaState(*tensors)
+        if kind == 'conv':
+            return ConvState(*tensors)
+        return AttentionState.from_fields(tensors)
+
     def _rope(self, h, positions):
         if self.architecture == 'qwen3_5':
             return self.text.rotary_emb(h, positions[None].expand(3, -1, -1))
@@ -195,9 +209,20 @@ class QwenPortBackbone(PortBackbone):
             positions = torch.arange(start, start + steps, device=h.device).unsqueeze(0).expand(batch, -1)
             if pad is not None:
                 positions = (positions - pad[:, None]).clamp(min=0)
+        chunk_real = None
+        if pad is not None:
+            # [B, T]: 1 where this chunk's position is a real (non-pad) token (masks short-convolution inputs).
+            chunk_real = torch.arange(start, start + steps, device=h.device)[None] >= pad[:, None]
         cos, sin = self._rope(h, positions)
         for i in layers:
             layer = self.layers[i]
+            if self.layer_types[i] == 'conv':
+                out, states[i] = short_convolution(self, layer.conv, self._operator_norm(layer, h), states[i],
+                                                   padding, chunk_real)
+                h = self._operator_residual(layer, h, out)
+                h = self._feed_forward(layer, h)
+                lengths[i] = start + steps
+                continue
             if self.layer_types[i] == 'linear_attention':
                 from .native_gated_delta import PAYLOAD_FIELDS, project_inputs, replay
                 module = layer.linear_attn
@@ -227,7 +252,7 @@ class QwenPortBackbone(PortBackbone):
             hd = attn.head_dim
             attention_scope = profile_scope("attention")
             attention_scope.__enter__()
-            x = layer.input_layernorm(h)
+            x = self._operator_norm(layer, h)
             gate = None
             tables = self._fused_rope_tables(i, attn, x, cos, sin)
             if tables is not None:  # maple/rope_kernels.py: q/k norm + rotary + head-major layout in one kernel
@@ -238,12 +263,8 @@ class QwenPortBackbone(PortBackbone):
                     k = qk_norm_rope(k, attn.k_norm.gain(), *tables, attn.k_proj.out_features // hd, attn.k_norm.eps)
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
             else:
-                q_projection = attn.q_proj(x)
-                if self.architecture == 'qwen3_5':
-                    q_projection = q_projection.view(batch, steps, -1, hd * 2)
-                    q_projection, gate = torch.chunk(q_projection, 2, dim=-1)
-                    gate = gate.reshape(batch, steps, -1)
-                q = attn.q_norm(q_projection.view(batch, steps, -1, hd)).transpose(1, 2)
+                q_projection, gate = attention_query(self, attn, x)
+                q = attn.q_norm(q_projection).transpose(1, 2)
                 k = attn.k_norm(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
                 v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
                 q, k = self._apply_rope(i, q, k, cos, sin)
@@ -272,11 +293,9 @@ class QwenPortBackbone(PortBackbone):
                 out = self._attend_fast(attn, q, state.k, state.v, steps, prev is None, padding, pad, pad_offsets)
             sdpa_scope.__exit__(None, None, None)
             states[i] = state
-            out = out.transpose(1, 2).reshape(batch, steps, -1)
-            if gate is not None:
-                # Qwen3.5 gates the attention result before its output projection.
-                out = out * torch.sigmoid(gate)
-            h = h + attn.o_proj(out)
+            # Declared output gate (Qwen3.5 per element, LFM3 per head) before the output projection.
+            out = gate_attention_output(self, out.transpose(1, 2).reshape(batch, steps, -1), gate, hd)
+            h = self._operator_residual(layer, h, attn.o_proj(out))
             attention_scope.__exit__(None, None, None)
             with profile_scope("moe"):
                 h = self._feed_forward(layer, h)
@@ -321,8 +340,7 @@ class QwenPortBackbone(PortBackbone):
             def run_one(value, pos, padding_arg, left_pad_arg, pad_arg, *tensors, index=i, start=start, size=size):
                 states, lengths = [None] * size, [0] * size
                 if tensors:
-                    states[index] = (DeltaState(*tensors) if self.layer_types[index] == 'linear_attention'
-                                     else AttentionState.from_fields(tensors))
+                    states[index] = self._state_from_fields(index, tensors)
                 lengths[index] = start
                 single = PortCache(tuple(states), tuple(lengths), pad_arg, pad_offsets)
                 output, updated = self.run_layers(value, range(index, index + 1), single, positions=pos,
@@ -334,8 +352,7 @@ class QwenPortBackbone(PortBackbone):
             h, *updated = checkpoint(run_one, h, positions, padding, left_pad, cache.pad, *fields,
                                      use_reentrant=False, preserve_rng_state=self.checkpoint_preserve_rng)
             states, lengths = list(cache.states), list(cache.lengths)
-            states[i] = (DeltaState(*updated) if self.layer_types[i] == 'linear_attention'
-                         else AttentionState.from_fields(updated))
+            states[i] = self._state_from_fields(i, updated)
             lengths[i] = start + h.shape[1]
             cache = PortCache(tuple(states), tuple(lengths), pad, pad_offsets)
         return h, cache

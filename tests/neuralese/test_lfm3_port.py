@@ -1,0 +1,225 @@
+"""LFM3 native port (``model/lfm3_port.Lfm3PortBackbone``) against the vendored pinned reference, on a tiny twin.
+
+The twin is built from the vendored ``Lfm3Config`` with every LFM3 layer form (width-7 short convolutions, full
+attention with zero-tail partial RoPE, sliding attention with its own theta and a window shorter than the test
+sequences, per-head output gates, sandwich norms). Real-weight qualification is in ``test_lfm3_real_parity.py``.
+"""
+import copy
+
+import pytest
+import torch
+
+from natlang_neuralese.model.lfm2_port import ControlTokens, ConvState, PortCache
+
+
+def tiny_lfm3_hf(seed=31, *, window=4, layer_types=None, sandwich=True):
+    """A random tiny LFM3 (vendored modeling code) whose norms and gates are perturbed so every form matters."""
+    from natlang_neuralese.third_party import lfm3
+    config_class, model_class = lfm3.config_class(), lfm3.causal_lm_class()
+    layer_types = layer_types or ['conv', 'full_attention', 'conv', 'sliding_attention', 'conv', 'full_attention']
+    config = config_class(vocab_size=64, hidden_size=32, intermediate_size=64, num_hidden_layers=len(layer_types),
+                          num_attention_heads=4, num_key_value_heads=2, head_dim=8, layer_types=layer_types,
+                          sliding_window=window, max_position_embeddings=256, pad_token_id=None, bos_token_id=1,
+                          eos_token_id=2, use_sandwich_norm=sandwich)
+    config._attn_implementation = 'eager'
+    torch.manual_seed(seed)
+    model = model_class(config).eval()
+    with torch.no_grad():
+        for name, parameter in model.named_parameters():
+            if name.endswith('norm.weight'):
+                parameter.copy_(1 + 0.2 * torch.randn_like(parameter))
+            elif 'gate_proj' in name or 'conv.conv' in name:
+                parameter.copy_(0.3 * torch.randn_like(parameter))
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    return model
+
+
+def tiny_lfm3(seed=31, *, fast=False, markers=True, window=4, **kwargs):
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    return Lfm3PortBackbone(tiny_lfm3_hf(seed, window=window, **kwargs), ControlTokens(62, 63), fast=fast,
+                            markers=markers)
+
+
+def test_vendored_sources_are_pinned_and_registered():
+    from transformers import AutoConfig
+    from natlang_neuralese.third_party import lfm3
+    assert lfm3.verify_sources()['modeling_lfm3.py'] == (
+        'e8cd5254ea99ce6bd731b57b10908c2e8b5010ce8315341f895a38484885eeab')
+    lfm3.register()
+    config = AutoConfig.for_model('lfm3')
+    assert type(config).__module__ == 'natlang_neuralese.third_party.lfm3.configuration_lfm3'
+
+
+def test_explicit_role_markers_are_required():
+    from natlang_neuralese.model.lfm3_port import Lfm3PortBackbone
+    with pytest.raises(ValueError, match='role tokens'):
+        Lfm3PortBackbone(tiny_lfm3_hf())
+
+
+@pytest.mark.parametrize('fast', [False, True])
+@pytest.mark.parametrize('sandwich', [True, False])
+def test_port_forward_matches_reference_beyond_window(fast, sandwich):
+    port = tiny_lfm3(fast=fast, markers=False, sandwich=sandwich)
+    ids = torch.randint(3, 60, (2, 19), generator=torch.Generator().manual_seed(0))
+    with torch.no_grad():
+        expected = port.hf(ids).logits
+        actual = port.forward_ids(ids)['logits']
+    torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
+
+
+def test_layer_forms_are_declared():
+    port = tiny_lfm3()
+    assert port.attention_gate == 'per_head_input' and port.sandwich_norm and port.conv_window == 6
+    assert [port.window(i) for i in range(port.num_layers)] == [None, None, None, 4, None, None]
+    cos, sin = port._rope(port.embedding_weight[None, :3], torch.arange(3)[None])
+    assert set(cos) == {'full_attention', 'sliding_attention'}
+    # Zero-tail partial rotary on full attention: the second quarter and last quarter of each head stay unrotated.
+    full = cos['full_attention'][0, 2]
+    assert torch.equal(full[2:4], torch.ones(2)) and torch.equal(full[6:], torch.ones(2))
+    assert not torch.equal(cos['sliding_attention'][0, 2, 2:4], torch.ones(2))
+
+
+@pytest.mark.parametrize('fast', [False, True])
+def test_incremental_cache_equals_full_forward(fast):
+    port = tiny_lfm3(fast=fast, markers=False)
+    ids = torch.randint(3, 60, (1, 17), generator=torch.Generator().manual_seed(1))
+    with torch.no_grad():
+        full = port.forward_ids(ids)
+        cache, pieces = PortCache.empty(port.num_layers), []
+        for start, stop in ((0, 5), (5, 6), (6, 9), *((i, i + 1) for i in range(9, 17))):
+            result = port.forward_ids(ids[:, start:stop], cache=cache)
+            cache = result['cache']
+            pieces.append(result['logits'])
+    torch.testing.assert_close(torch.cat(pieces, 1), full['logits'], atol=2e-5, rtol=2e-5)
+    for index, state in enumerate(cache.states):
+        if port.layer_types[index] == 'conv':
+            assert isinstance(state, ConvState) and state.window.shape[-1] == 6
+            torch.testing.assert_close(state.window, full['cache'].states[index].window, atol=1e-5, rtol=1e-5)
+        else:
+            torch.testing.assert_close(state.k, full['cache'].states[index].k, atol=1e-5, rtol=1e-5)
+
+
+def test_left_padded_rows_match_unpadded_rows():
+    port = tiny_lfm3(markers=False)
+    generator = torch.Generator().manual_seed(2)
+    rows = [torch.randint(3, 60, (n,), generator=generator) for n in (11, 7)]
+    pad = torch.tensor([0, 4])
+    batch = torch.stack([rows[0], torch.cat([torch.zeros(4, dtype=torch.long), rows[1]])])
+    with torch.no_grad():
+        padded = port.forward_ids(batch, left_pad=pad)['logits']
+        for row, ids in enumerate(rows):
+            alone = port.forward_ids(ids[None])['logits'][0]
+            torch.testing.assert_close(padded[row, int(pad[row]):], alone, atol=2e-5, rtol=2e-5)
+
+
+def test_gradients_match_reference():
+    port = tiny_lfm3(markers=False)
+    names = ['model.embed_tokens.weight', 'model.layers.0.conv.conv.weight', 'model.layers.0.conv.in_proj.weight',
+             'model.layers.1.self_attn.gate_proj.weight', 'model.layers.1.self_attn.q_norm.weight',
+             'model.layers.3.self_attn.gate_proj.weight', 'model.layers.3.self_attn.k_proj.weight',
+             'model.layers.3.post_operator_norm.weight', 'model.layers.4.post_ffn_norm.weight',
+             'model.layers.5.self_attn.o_proj.weight', 'model.embedding_norm.weight']
+    parameters = dict(port.hf.named_parameters())
+    watched = [parameters[name] for name in names]
+    for parameter in watched:
+        parameter.requires_grad_(True)
+    ids = torch.randint(3, 60, (2, 15), generator=torch.Generator().manual_seed(3))
+    weight = torch.randn(2, 15, 64, generator=torch.Generator().manual_seed(4))
+    expected = torch.autograd.grad((port.hf(ids).logits * weight).sum(), watched)
+    actual = torch.autograd.grad((port.forward_ids(ids)['logits'] * weight).sum(), watched)
+    for name, left, right in zip(names, actual, expected):
+        assert right.abs().sum() > 0, name
+        # FP32 roundoff relative to each gradient's scale (the tied embedding's reaches ~200).
+        scale = float(right.abs().max())
+        assert float((left - right).abs().max()) <= 2e-6 * scale + 1e-7, name
+
+
+def test_checkpointed_layers_match_plain_outputs_and_gradients():
+    port = tiny_lfm3(markers=False)
+    for parameter in port.hf.parameters():
+        parameter.requires_grad_(True)
+    ids = torch.randint(3, 60, (1, 13), generator=torch.Generator().manual_seed(5))
+    prefix = port.forward_ids(ids[:, :4])['cache']
+    results = []
+    for checkpointed in (False, True):
+        port.checkpoint_layers = checkpointed
+        out = port.forward_ids(ids[:, 4:], cache=prefix)
+        loss = out['logits'].square().mean()
+        grads = torch.autograd.grad(loss, list(port.hf.parameters()), allow_unused=True, retain_graph=True)
+        results.append((out, grads))
+    port.checkpoint_layers = False
+    torch.testing.assert_close(results[0][0]['logits'], results[1][0]['logits'])
+    for left, right in zip(results[0][1], results[1][1]):
+        assert (left is None) == (right is None)
+        if left is not None:
+            torch.testing.assert_close(left, right, atol=1e-6, rtol=1e-5)
+    for left, right in zip(results[0][0]['cache'].states, results[1][0]['cache'].states):
+        for a, b in zip(left.fields(), right.fields()):
+            torch.testing.assert_close(a, b)
+
+
+def test_serving_batch_step_matches_independent_rows():
+    from natlang_neuralese.serve.batch import BATCHED_STACKS, step_rows
+    assert 'lfm3' in BATCHED_STACKS
+    port = tiny_lfm3(markers=False)
+    generator = torch.Generator().manual_seed(6)
+    caches = []
+    with torch.no_grad():
+        for length in (3, 9, 6):  # rows cross the sliding window (4) at different steps
+            caches.append(port.forward_ids(torch.randint(3, 60, (1, length), generator=generator))['cache'])
+        reference = [copy.copy(cache) for cache in caches]
+        for _ in range(3):
+            h = port.embed(torch.randint(3, 60, (3, 1), generator=generator))
+            out, caches = step_rows(port, h, caches, range(port.num_layers))
+            for row in range(3):
+                single, reference[row] = port.run_layers(h[row:row + 1], range(port.num_layers), reference[row])
+                torch.testing.assert_close(out[row:row + 1], single, atol=2e-6, rtol=2e-5)
+
+
+def test_training_plumbing_declares_lfm3_forms():
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.adapters import lora_target_names
+    from natlang_neuralese.train.fp8_backend import _eligible_paths
+    from natlang_neuralese.train.memory_estimator import backbone_memory_layout
+    from natlang_neuralese.train.native_state_sft import native_trainable_parameters
+    from natlang_neuralese.train.optim import latent_split, muon_eligible
+    port = tiny_lfm3(markers=False)
+    names = lora_target_names(port, [0, 1])
+    assert 'model.layers.1.self_attn.o_proj' in names and 'model.layers.1.self_attn.gate_proj' in names
+    assert 'model.layers.0.conv.out_proj' in names and not any('out_proj' in n and 'self_attn' in n for n in names)
+    paths = _eligible_paths(port.hf)
+    assert 'model.layers.1.self_attn.o_proj' in paths and 'model.layers.1.self_attn.gate_proj' not in paths
+    half = copy.deepcopy(port)
+    half.hf.to(torch.bfloat16)
+    layout = backbone_memory_layout(half, checkpointed=False)
+    # operator/ffn/post-operator/post-ffn norms on each layer, plus q/k norms over all heads on attention layers.
+    assert layout['fp32_norm_saved_bytes_per_token'] == 4 * (6 * 4 * 32 + 3 * (32 + 16))
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
+    latent, ordinary = latent_split(native_trainable_parameters(model), 'muonsr')
+    latent_names = {name for name, _ in latent}
+    ordinary_names = {name for name, _ in ordinary}
+    assert 'backbone.model.layers.1.self_attn.gate_proj.weight' in ordinary_names
+    assert 'backbone.model.layers.1.self_attn.o_proj.weight' in latent_names
+    assert 'backbone.model.layers.0.conv.conv.weight' in ordinary_names
+    assert {'interface.input_rows', 'interface.adapter.up.weight'} <= ordinary_names
+    gate = dict(port.hf.named_parameters())['model.layers.1.self_attn.gate_proj.weight']
+    assert not muon_eligible('backbone.model.layers.1.self_attn.gate_proj.weight', gate, 64, set())
+
+
+def test_native_precision_profiles_cover_every_lfm3_norm():
+    from natlang_neuralese.model.native_parameter_precision import PROFILE, configure_norm_precision, norm_parameters
+    from natlang_neuralese.model.shared_execution import configure_shared_execution, validate_shared_execution
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port = tiny_lfm3(markers=False)
+    port.hf.to(torch.bfloat16)
+    model = SharedStateModel(port, (58, 59, 60, 61), rank=4)
+    found = norm_parameters(model)
+    suffixes = {name.split('.', 3)[-1] for name in found}
+    assert {'operator_norm.weight', 'ffn_norm.weight', 'post_operator_norm.weight', 'post_ffn_norm.weight',
+            'self_attn.q_norm.weight', 'self_attn.k_norm.weight'} <= suffixes
+    assert len(found) == 6 * 4 + 3 * 2
+    configure_norm_precision(model, PROFILE)
+    assert all(parameter.dtype == torch.float32 for _, parameter in found.values())
+    configure_shared_execution(model, 'stable-v1')
+    validate_shared_execution(model, {'native_shared_execution': 'stable-v1'})

@@ -19,11 +19,20 @@ BACKEND_VERSION = 'te-dense-lfm-v1'
 ROW_MULTIPLE = 16
 
 
+# Dense attention projections per declared LFM model type. LFM3's per-head output gate (`gate_proj`, hidden -> 16
+# heads) stays in BF16: it is a tiny low-dimensional control whose sigmoid scales every head's output.
+FP8_ATTENTION_LINEARS = {
+    'lfm2': frozenset({'q_proj', 'k_proj', 'v_proj', 'out_proj'}),
+    'lfm3': frozenset({'q_proj', 'k_proj', 'v_proj', 'o_proj'}),
+}
+
+
 def _eligible_paths(model: nn.Module) -> list[str]:
     """Return exact LFM dense-module paths, excluding tied embeddings/readout."""
     model_type = getattr(getattr(model, 'config', None), 'model_type', None)
-    if model_type != 'lfm2':
-        raise ValueError(f'TE FP8 backend supports LFM2 direct training only; got {model_type!r}')
+    if model_type not in FP8_ATTENTION_LINEARS:
+        raise ValueError(f'TE FP8 backend supports LFM2/LFM3 direct training only; got {model_type!r}')
+    attention = FP8_ATTENTION_LINEARS[model_type]
     paths = []
     for name, module in model.named_modules():
         parts = name.split('.')
@@ -32,7 +41,7 @@ def _eligible_paths(model: nn.Module) -> list[str]:
         family, layer = parts[3], parts[4]
         if family == 'feed_forward' and layer in {'w1', 'w2', 'w3'}:
             paths.append(name)
-        elif family == 'self_attn' and layer in {'q_proj', 'k_proj', 'v_proj', 'out_proj'}:
+        elif family == 'self_attn' and layer in attention:
             paths.append(name)
         elif family == 'conv' and layer in {'in_proj', 'out_proj'}:
             paths.append(name)

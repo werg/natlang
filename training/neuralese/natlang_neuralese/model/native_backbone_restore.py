@@ -8,6 +8,10 @@ def restore_backbone(base, architecture, state, *, device, dtype):
     from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
 
     base = Path(base)
+    if architecture == 'lfm3':
+        # Transformers has no lfm3: register the vendored, hash-verified pinned modeling code (no remote code).
+        from ..third_party import lfm3
+        lfm3.register()
     tokenizer = AutoTokenizer.from_pretrained(str(base), trust_remote_code=False)
     embedding_name = ('model.language_model.embed_tokens.weight' if architecture == 'qwen3_5'
                       else 'model.embed_tokens.weight')

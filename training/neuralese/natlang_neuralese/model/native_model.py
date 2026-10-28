@@ -190,6 +190,11 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         if backbone_state is None:
             hf, tokenizer = load_backbone(str(base), dtype=dtype, device=device)
         port_type = PortBackbone
+    elif architecture == 'lfm3':
+        from .lfm3_port import load_lfm3_backbone, Lfm3PortBackbone
+        if backbone_state is None:
+            hf, tokenizer = load_lfm3_backbone(str(base), dtype=dtype, device=device)
+        port_type = Lfm3PortBackbone
     elif architecture in {'qwen3', 'qwen2', 'qwen3_5'}:
         from .hf_port import load_qwen_backbone, QwenPortBackbone
         if backbone_state is None:
@@ -227,6 +232,11 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
+    if architecture == 'lfm3':
+        # The modeling code is part of the backbone identity: the vendored pinned remote code, hash-verified.
+        from ..third_party import lfm3
+        config['vendored_modeling'] = {'repository': lfm3.REPOSITORY, 'revision': lfm3.REVISION,
+                                       'sources': lfm3.verify_sources()}
     if history_reasoning_policy is not None:
         config['history_reasoning_policy'] = history_reasoning_policy
     if native_shared_execution is not None:
@@ -359,6 +369,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     # `precision` is the process's stock arithmetic policy (configure_native_precision), not a property of the saved
     # state: a checkpoint saved under strict IEEE restores under tensor-core arithmetic and the reverse (owner,
     # 2026-10-28). config records the policy the restored model actually runs.
+    if config.get('vendored_modeling') != saved.get('vendored_modeling'):
+        raise ValueError('native checkpoint vendored modeling code changed during restoration')
     for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256'):
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')

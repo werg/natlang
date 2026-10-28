@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 NATIVE_SHARED_EXECUTIONS=('source-v1','stable-v1')
-_NORM_TYPES={'RMSNorm','Lfm2RMSNorm','Qwen2RMSNorm','Qwen3RMSNorm'}
+_NORM_TYPES={'RMSNorm','Lfm2RMSNorm','Lfm3RMSNorm','Qwen2RMSNorm','Qwen3RMSNorm'}
 
 
 def _fixed_ffn(module,value):

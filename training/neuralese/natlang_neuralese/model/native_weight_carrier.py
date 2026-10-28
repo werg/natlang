@@ -18,7 +18,7 @@ from .native_gradient_partitions import active_gradient_partitions, reduce_param
 
 
 _COTANGENT_SCOPE = contextvars.ContextVar('natlang_bf16_parameter_cotangent_scope', default=None)
-_RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
+_RMS_NORM_TYPES = {'RMSNorm', 'Lfm2RMSNorm', 'Lfm3RMSNorm', 'Qwen2RMSNorm', 'Qwen3RMSNorm',
                    'Qwen3_5RMSNorm', 'Qwen3_5RMSNormGated'}
 _COTANGENT_TRANSFER_CHUNK_BYTES = 16 * 1024 * 1024
 

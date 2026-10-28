@@ -13,7 +13,7 @@ def model(family):
     return SharedStateModel(tiny(family),(58,59,60,61),rank=4)
 
 
-@pytest.mark.parametrize('family',['lfm','mellum','qwen','qwen35'])
+@pytest.mark.parametrize('family',['lfm','mellum','qwen','qwen35','lfm3'])
 @pytest.mark.parametrize('grad',[False,True])
 def test_unequal_cached_lanes_mixed_producing_match_independent_states_and_gradients(family,grad):
     a=model(family);b=copy.deepcopy(a)

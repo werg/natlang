@@ -59,7 +59,7 @@ def _rotate_pair(port, query, key, positions, layer, *, tables=None):
 
 
 def _layer_inputs(port, layer, h, attention):
-    x = layer.input_layernorm(h) if hasattr(layer, 'input_layernorm') else layer.operator_norm(h)
+    x = port._operator_norm(layer, h)
     if not attention:
         b, c, xx = _linear(layer.conv.in_proj, x).chunk(3, dim=-1)
         from .shared_execution import convolution_state_dtype
@@ -69,13 +69,10 @@ def _layer_inputs(port, layer, h, attention):
     hd = attn.head_dim
     norm_q = getattr(attn, 'q_norm', None) or attn.q_layernorm
     norm_k = getattr(attn, 'k_norm', None) or attn.k_layernorm
-    q_projection = _linear(attn.q_proj, x)
-    gate = None
-    if getattr(port, 'architecture', None) == 'qwen3_5':
-        q_projection = q_projection.view(batch, steps, -1, hd * 2)
-        q_projection, gate = torch.chunk(q_projection, 2, dim=-1)
-        gate = gate.reshape(batch, steps, -1)
-    q = norm_q(q_projection.view(batch, steps, -1, hd)).transpose(1, 2)
+    # The backbone's declared output gate (Qwen3.5 per element in q_proj, LFM3 per head from the same input).
+    from .lfm2_port import attention_query
+    q_projection, gate = attention_query(port, attn, x, _linear)
+    q = norm_q(q_projection).transpose(1, 2)
     k = norm_k(_linear(attn.k_proj, x).view(batch, steps, -1, hd)).transpose(1, 2)
     v = _linear(attn.v_proj, x).view(batch, steps, -1, hd).transpose(1, 2)
     return (q, k.float(), v.float(), gate) if gate is not None else (q, k.float(), v.float())
@@ -84,9 +81,9 @@ def _layer_inputs(port, layer, h, attention):
 def _finish(port, layer, h, out, attention):
     if attention:
         projection = getattr(layer.self_attn, 'o_proj', None) or layer.self_attn.out_proj
-        h = h + _linear(projection, out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1))
+        h = port._operator_residual(layer, h, _linear(projection, out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1)))
     else:
-        h = h + _linear(layer.conv.out_proj, out)
+        h = port._operator_residual(layer, h, _linear(layer.conv.out_proj, out))
     if hasattr(port, '_feed_forward'):
         return port._feed_forward(layer, h)
     from .lfm2_port import feed_forward_residual
@@ -100,6 +97,16 @@ def _finish_delta(port, layer, h, out):
     from .lfm2_port import feed_forward_residual
     return feed_forward_residual(layer, h, getattr(port, 'ffn_chunk_tokens', 0))
 
+
+
+def _gate_heads(port, out, gate, head_dim):
+    """Attention heads [B, H, T, hd] times the declared output gate, in the same head layout."""
+    if gate is None:
+        return out
+    from .lfm2_port import gate_attention_output
+    batch, _, steps, _ = out.shape
+    flat = gate_attention_output(port, out.transpose(1, 2).reshape(batch, steps, -1), gate, head_dim)
+    return flat.view(batch, steps, -1, head_dim).transpose(1, 2)
 
 
 def _actor_layer_inputs(bank,groups,port,layer,h,attention):
@@ -376,9 +383,7 @@ def _forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None 
                 out = graph_attention(q, kr, value_slots, plan, window,
                                       layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace,
                                       precision=getattr(port, 'native_attention_precision', 'ieee'))
-                if gate is not None:
-                    flat = out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1) * torch.sigmoid(gate)
-                    out = flat.view(h.shape[0], h.shape[1], -1, layer.self_attn.head_dim).transpose(1, 2)
+                out = _gate_heads(port, out, gate, layer.self_attn.head_dim)
             else:
                 gated, c = values
                 if imported and any(value.shape[1] for value in imported):
@@ -501,9 +506,7 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling,
                                       precision=getattr(port, 'native_attention_precision', 'ieee'))
-                if gate is not None:
-                    flat = out.transpose(1, 2).reshape(1, count, -1) * torch.sigmoid(gate)
-                    out = flat.view(1, count, -1, layer.self_attn.head_dim).transpose(1, 2)
+                out = _gate_heads(port, out, gate, layer.self_attn.head_dim)
 
             else:
                 gated, c = values
@@ -1072,9 +1075,7 @@ def native_step(model, ids, cache=None, *, producing=False):
             out = graph_attention(q, state.k, state.v, layout, window, layer.self_attn.scaling,
                                   prepared_mask=masks[window],
                                   precision=getattr(port, 'native_attention_precision', 'ieee'))
-            if gate is not None:
-                flat = out.transpose(1, 2).reshape(ids.shape[0], ids.shape[1], -1) * torch.sigmoid(gate)
-                out = flat.view(ids.shape[0], ids.shape[1], -1, layer.self_attn.head_dim).transpose(1, 2)
+            out = _gate_heads(port, out, gate, layer.self_attn.head_dim)
 
         else:
             gated, c = values

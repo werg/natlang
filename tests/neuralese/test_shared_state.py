@@ -19,6 +19,9 @@ def tiny(family):
             conv_L_cache=4, max_position_embeddings=128)
         model = Lfm2ForCausalLM(config).eval()
         port = PortBackbone(model, ControlTokens(62, 63), fast=False)
+    elif family == 'lfm3':
+        from test_lfm3_port import tiny_lfm3
+        port = tiny_lfm3()
     elif family == 'mellum':
         import tempfile
         from pathlib import Path
@@ -88,7 +91,7 @@ def test_convolution_gather_reused_through_checkpoint_recompute_with_exact_gradi
     assert len(calls) == before + 1  # never reuse another graph's positions
 
 
-@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum', 'lfm3'])
 def test_single_sequence_matches_existing_port(family):
     port = tiny(family)
     ids = torch.tensor([[2, 3, 4, 5, 6, 7]])
@@ -98,7 +101,7 @@ def test_single_sequence_matches_existing_port(family):
     torch.testing.assert_close(actual, expected, atol=3e-6, rtol=2e-5)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum', 'lfm3'])
 def test_dag_forward_and_gradients_match_invocation_reference(family):
     port = tiny(family)
     plan = graph()
@@ -165,7 +168,7 @@ def test_role_rows_and_logical_capture_are_native_embeddings():
     assert model.adapter.up.weight.grad.abs().sum() > 0
 
 
-@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum', 'lfm3'])
 def test_incremental_capture_splice_matches_one_pass_and_gradients(family):
     from types import SimpleNamespace
     from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, capture_invocation_span
@@ -228,7 +231,7 @@ def test_marker_tokenizer_expansion_preserves_all_original_rows():
     assert model.logits(torch.randn(1, 1, 32)).shape[-1] == 68
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 def test_nested_export_keeps_intervening_import_aliases(family, monkeypatch):
     from types import SimpleNamespace
     from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, capture_invocation_span
@@ -288,7 +291,7 @@ def test_sparse_cuda_attention_matches_dense_forward_and_gradients():
             torch.testing.assert_close(ga, gb, atol=8e-5, rtol=3e-4)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 @pytest.mark.parametrize('execution', ['source-v1', 'stable-v1'])
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 def test_external_native_state_has_exact_forward_and_joint_gradients(family, execution, device):
@@ -344,7 +347,7 @@ def test_external_native_state_has_exact_forward_and_joint_gradients(family, exe
     assert grad_source.abs().sum() > 0
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 def test_checkpointed_graph_preserves_outputs_and_gradients(family):
     from natlang_neuralese.model.shared_state import SharedStateModel
     port = tiny(family)
@@ -409,7 +412,7 @@ def test_marker_provisioning_with_installed_transformers_tokenizer_api():
     assert all(token in tokenizer.all_special_tokens for token in ROLE_MARKERS)
 
 
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 def test_token_boundaries_include_start_import_and_exclude_stop_import(family):
     from natlang_neuralese.model.shared_state import SharedStateModel, capture_invocation_span
     port = tiny(family)
@@ -495,7 +498,7 @@ def test_native_fixed_linear_forward_and_input_adjoint_ignore_batch_shape():
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 def test_native_bf16_graph_matches_cached_reference_with_fixed_arithmetic(family):
     from natlang_neuralese.model.shared_state import SharedStateModel
     port = tiny(family).to(device='cuda', dtype=torch.bfloat16)
@@ -527,7 +530,7 @@ def test_marker_free_backbone_has_only_native_role_rows(family):
     assert not any('control_rows' in name for name, _ in model.named_parameters())
 
 
-@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum', 'lfm3'])
 def test_mixed_logical_producer_adapts_own_queries_once_and_matches_incremental(family):
     from natlang_neuralese.model.shared_state import SharedStateModel, capture_block, native_step, splice_block
     port = tiny(family)
@@ -605,7 +608,7 @@ def test_native_attention_cached_adjoint_uses_fixed_delta(heads):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
-@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+@pytest.mark.parametrize('family', ['lfm', 'mellum', 'lfm3'])
 def test_attention_physical_index_reused_through_checkpoint_with_bitwise_adjoints(monkeypatch, family):
     from natlang_neuralese.model import shared_state
     port = tiny(family).to('cuda')

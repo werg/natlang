@@ -38,17 +38,21 @@ def backbone_memory_layout(backbone, *, depth=None, checkpointed, **stage_option
     norm_saved_width = 0
     norm_transient_width = 0
     activation_bytes = int(backbone.embedding_weight.element_size())
+    # LFM2 names its q/k norms q_layernorm/k_layernorm; LFM3 uses q_norm/k_norm (declared by model type).
+    attention_norms = ((('q_norm', 'q_proj'), ('k_norm', 'k_proj'))
+                       if getattr(backbone.config, 'model_type', None) == 'lfm3'
+                       else (('q_layernorm', 'q_proj'), ('k_layernorm', 'k_proj')))
     if activation_bytes < 4:
         for i in range(depth):
             layer = backbone.layers[i]
             layer_widths = []
-            for name in ('operator_norm', 'ffn_norm'):
+            for name in ('operator_norm', 'ffn_norm', 'post_operator_norm', 'post_ffn_norm'):
                 module = getattr(layer, name, None)
                 if module is not None and 'rmsnorm' in type(module).__name__.casefold():
                     layer_widths.append(width)
             if backbone.is_attention(i):
                 attention = layer.self_attn
-                for norm_name, proj_name in (('q_layernorm', 'q_proj'), ('k_layernorm', 'k_proj')):
+                for norm_name, proj_name in attention_norms:
                     module = getattr(attention, norm_name, None)
                     projection = getattr(attention, proj_name, None)
                     if (module is not None and projection is not None and

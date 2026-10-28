@@ -19,6 +19,8 @@ from ..model.lfm2_port import PortBackbone
 ATTENTION_TARGETS = ("q_proj", "k_proj", "v_proj", "out_proj")
 CONV_TARGETS = ("in_proj", "out_proj")
 MLP_TARGETS = ("w1", "w2", "w3")
+# LFM3 keeps LFM2's conv/feed-forward names; its attention has `o_proj` and the per-head output gate `gate_proj`.
+ATTENTION_TARGETS_BY_TYPE = {"lfm3": ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj")}
 
 
 def lora_target_names(backbone: PortBackbone, layers: list[int]) -> list[str]:
@@ -34,9 +36,10 @@ def lora_target_names(backbone: PortBackbone, layers: list[int]) -> list[str]:
                           ('in_proj_qkv', 'in_proj_z', 'in_proj_b', 'in_proj_a', 'out_proj')]
             names += [f'{root}.mlp.{target}' for target in ('gate_proj', 'up_proj', 'down_proj')]
         return names
+    attention_targets = ATTENTION_TARGETS_BY_TYPE.get(getattr(backbone.config, 'model_type', None), ATTENTION_TARGETS)
     for i in layers:
         if backbone.is_attention(i):
-            names += [f"model.layers.{i}.self_attn.{t}" for t in ATTENTION_TARGETS]
+            names += [f"model.layers.{i}.self_attn.{t}" for t in attention_targets]
         else:
             names += [f"model.layers.{i}.conv.{t}" for t in CONV_TARGETS]
         names += [f"model.layers.{i}.feed_forward.{t}" for t in MLP_TARGETS]
