@@ -46,7 +46,7 @@ def complete_update_audit(state, *, checkpoint):
     """Move the active round marker to an audit record only at round commit."""
     from ..common.hashing import sha256_file_hex_cached
     active = {key: state[key] for key in ('active_update_round', 'update_mode', 'update_rollouts',
-        'update_stages', 'update_coefficient_policy') if key in state}
+        'update_stages', 'update_coefficient_policy', 'update_policy_loss') if key in state}
     if not active:
         return state
     from ..train.native_readiness import _bound
@@ -186,6 +186,7 @@ def complete_update_audit(state, *, checkpoint):
         'round_directory': str(round_directory), 'mode': active.get('update_mode'),
         'rollouts': rollouts, 'stages': active.get('update_stages'),
         'coefficient_policy': active.get('update_coefficient_policy'), 'checkpoint': checkpoint,
+        **({'policy_loss': active['update_policy_loss']} if 'update_policy_loss' in active else {}),
         'completion_report':report_binding,
         **({'operation_receipt':operation_receipt} if operation_receipt is not None else {})}
     history = state.setdefault('completed_update_history', [])
@@ -193,7 +194,7 @@ def complete_update_audit(state, *, checkpoint):
         history.append(record)
     state['last_completed_update'] = record
     for key in ('active_update_round', 'update_mode', 'update_rollouts', 'update_stages',
-            'update_coefficient_policy'):
+            'update_coefficient_policy', 'update_policy_loss'):
         state.pop(key, None)
     return state
 
@@ -259,6 +260,7 @@ def normalize_legacy_completed_update(state, state_path):
         'round_directory':str(round_dir),'mode':state.get('update_mode'),
         'rollouts':{'path':str(rollouts),'sha256':sha256_file_hex_cached(rollouts),'bytes':rollouts.stat().st_size},
         'stages':state.get('update_stages'),'coefficient_policy':state.get('update_coefficient_policy'),
+        **({'policy_loss':state['update_policy_loss']} if 'update_policy_loss' in state else {}),
         'checkpoint':checkpoint_ref,'completion_report':round_report_ref,
         'current_head_report':current_report_ref if checkpoint_sha!=round_checkpoint_sha else round_report_ref,
         'source_state':source_state,
@@ -266,7 +268,7 @@ def normalize_legacy_completed_update(state, state_path):
     history=state.setdefault('completed_update_history',[])
     if not history or history[-1]!=record:history.append(record)
     state['last_completed_update']=record
-    for key in active_keys:state.pop(key,None)
+    for key in (*active_keys,'update_policy_loss'):state.pop(key,None)
     return True
 
 
