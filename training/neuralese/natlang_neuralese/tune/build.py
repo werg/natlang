@@ -217,7 +217,14 @@ def main(argv=None):
         parent = json.loads((parent_dir / 'state.json').read_text()) if parent_dir is not None and state is None else None
         # Plan §8 incremental builds: `pinned` nodes stay frozen at earlier artifacts, `warm` nodes start from them (both
         # imported from the plan's `artifacts` directories, e.g. the active release's).
-        trainer = JointTrainer(engine, manifest, rows + rollouts, recipe, state=state,
+        privileged = None
+        if rollouts and plan.get('jolt_cases'):
+            from ..rl.native_stage import jolt_privileged_source
+            privileged = jolt_privileged_source(rows=[row['episode'] for row in rollouts], tokenizer=engine.tokenizer,
+                cases=Path(args.plan).parent / plan['jolt_cases'], roles=engine.role_tokens,
+                tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'],
+                fetch_text=lambda ident: engine.store.get_native_state(ident).block.text)
+        trainer = JointTrainer(engine, manifest, rows + rollouts, recipe, state=state, privileged=privileged,
                                workdir=out / 'rl', parent=parent, pinned=plan.get('pinned'), warm=plan.get('warm'))
         save()
         while trainer.state['step'] < trainer.total_steps:

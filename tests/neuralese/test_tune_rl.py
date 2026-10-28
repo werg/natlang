@@ -168,6 +168,66 @@ def ratios(engine, records, state, workdir):
     return {ident: -loss / probe.rl.advantages[ident] for ident, loss in losses.items()}
 
 
+def test_coefficient_update_with_captured_guidance_and_decision(tmp_path):
+    from natlang_neuralese.model.native_adapters import run_native, execution_identity, execution_binding, SCHEMA
+    from test_rl_jolt import episode_with_top_k, rollouts as graph_rollouts, source_for, DECLARATION
+    from test_jolt_privileged_context import train_case
+    engine = engine_fixture(tmp_path, 'lfm', service_template=True)
+    parent = parent_fit(engine)
+    entries = stack(parent, 'bx')
+    def capture():
+        identity = execution_identity(engine)
+        binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
+                   'adapters': execution_binding(engine)}
+        episode = episode_with_top_k(engine.shared_model, engine.role_tokens, identity, 'write-only',
+                                     adapter_binding=binding)
+        for turn in episode.turns:
+            receipt = turn['sampling']
+            receipt['policy'] = identity
+            receipt['adapter_binding'] = binding
+            receipt['schema'] = 'natlang.native-rl-sampling/3'
+            prompt_length = sum(len(segment['token_ids']) for segment in receipt['prompt'] if segment['kind'] == 'tokens')
+            receipt['generated_inputs'] = []
+            for sample in receipt['samples']:
+                sample['query_own_position'] = prompt_length + sample['index'] - 1
+                if not sample['terminal']:
+                    receipt['generated_inputs'].append({'token_id':sample['token_id'],'input_role':sample['input_role'],
+                                                        'sample_index':sample['index']})
+            for write in receipt['writes']:
+                for name, old in (('own_begin','begin_sample'),('own_end','end_sample'),
+                                  ('payload_own_begin','payload_begin'),('payload_own_end','payload_end')):
+                    write[name] = prompt_length + write[old]
+        root = next(turn for turn in episode.turns if turn['graph_turn'] == 'root#turn1')
+        old = root['sampling']
+        root['sampling'] = {'schema':'natlang.native-decision-capture/1','policy':identity,'adapter_binding':binding,
+            'prompt':old['prompt'],'privileged':old['privileged'],'continuations':[[11,2],[13,2]],
+            'decision_sample':{'schema':'natlang.decision-sample/1','log_probs':[-1.,-2.],
+                               'chosen':0,'temperature':1.,'seed':3}}
+        return episode
+    episode = run_native(engine, capture, entries)
+    for block in episode.states.values():
+        engine.store.put_native_state(block)
+    episodes = graph_rollouts(episode.turns)
+    records = []
+    for index, item in enumerate(episodes):
+        item['policy']['checkpoint_sha256'] = engine.native_identity['checkpoint_sha256']
+        records.append({'schema':ROLLOUT_SCHEMA, 'root':train_case()['id'], 'component':'c','partition':'train',
+            'group':item['group'],'sample':index,'reward':{'quality':item['reward']['quality'],'source':'root-oracle'},
+            'behavior':{'release':None,'node_artifacts':dict(parent.state['node_artifacts']),'gates':{},
+                        'soft_states':{},'temperature':.8,'seed':21+index},
+            'bindings':{turn['invocation_id']:'bx' for turn in item['turns']},'episode':item})
+    trainer = JointTrainer(engine, manifest_for(engine), records,
+        Recipe(objectives=['rl'],batch_rows=2,optimizer={'name':'sgd','learning_rate':.5},
+               rl_policy_loss=DECLARATION,**NEUTRAL), workdir=tmp_path/'joint', parent=copy.deepcopy(parent.state),
+        privileged=source_for(episodes,episode))
+    objective = json.loads(Path(trainer.rl.objective['path']).read_text())
+    assert all(row['jolt']['privileged'] is not None and row['decision_actions'][0]['twin_options']
+               for row in objective['rows'].values())
+    before = dict(trainer.state['node_artifacts'])
+    update = trainer.step()
+    assert update['updated_nodes'] and any(trainer.state['node_artifacts'][key] != value for key,value in before.items())
+
+
 def test_rl_sign_and_whole_graph_coverage(tmp_path, monkeypatch):
     torch.manual_seed(1)
     engine = engine_fixture(tmp_path, 'lfm', service_template=True)

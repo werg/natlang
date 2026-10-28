@@ -153,7 +153,7 @@ def insert(segments, at, pieces, roles, identity):
     return result
 
 
-def run_episode(model, roles, identity, mode='none', budget_tokens=512):
+def run_episode(model, roles, identity, mode='none', budget_tokens=512, adapter_binding=None):
     """Explicit incremental cached execution of the episode (writers, child, root), with its captures."""
     device = next(model.parameters()).device
     spec = rendering(budget_tokens=budget_tokens)
@@ -188,7 +188,8 @@ def run_episode(model, roles, identity, mode='none', budget_tokens=512):
         logps[name] = values
         order.append(name)
         if chunks:
-            block = NativeStateBlock(text=text, **identity, **concatenate_captures(chunks)).validate()
+            block = NativeStateBlock(text=text, **identity, adapter_binding=adapter_binding,
+                                     **concatenate_captures(chunks)).validate()
             states[native_state_id(block)] = block
             record['writes'] = [{'state_id': native_state_id(block), 'begin_sample': 0, 'end_sample': len(plan) - 1,
                                  'payload_begin': 1, 'payload_end': len(plan) - 2, 'native_identity': identity}]

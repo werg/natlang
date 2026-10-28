@@ -23,7 +23,7 @@ DECLARATION = {'schema': 'jolt-plus/1', 'beta_s': 0.7, 'beta_t': 0.3,
                'outcome': {'schema': 'score-centered/1', 'k': K, 'importance': 'tis'}}
 
 
-def episode_with_top_k(model, roles, identity, mode='write-only'):
+def episode_with_top_k(model, roles, identity, mode='write-only', **options):
     """The shared fixture episode with the sampler's top-k recorded at every sampled position."""
     seen, original = [], model.logits
     def recording(hidden):
@@ -32,7 +32,7 @@ def episode_with_top_k(model, roles, identity, mode='write-only'):
         return value
     model.logits = recording
     try:
-        episode = run_episode(model, roles, identity, mode)
+        episode = run_episode(model, roles, identity, mode, **options)
     finally:
         del model.logits
     by_name = {turn['graph_turn']: turn for turn in episode.turns}
@@ -231,6 +231,27 @@ def test_coefficient_actor_sources_cover_decision_options_and_twins():
            'jolt': {'role': 'student', 'twin_turns': ['option0' + suffix, 'option1' + suffix, 'writer' + suffix]}}
     assert actor_sources(row) == {'option0': 'decision', 'option1': 'decision', 'writer': 'writer',
         'option0' + suffix: 'decision', 'option1' + suffix: 'decision', 'writer' + suffix: 'writer'}
+
+
+def test_captured_guidance_decision_twins_train_through_option_nodes(tmp_path):
+    model, roles, identity = load('lfm')
+    episode = episode_with_top_k(model, roles, identity, 'write-only')
+    root = next(turn for turn in episode.turns if turn['graph_turn'] == 'root#turn1')
+    old = root['sampling']
+    root['sampling'] = {'schema': 'natlang.native-decision-capture/1', 'policy': old['policy'],
+        'prompt': old['prompt'], 'privileged': old['privileged'], 'continuations': [[11, 2], [13, 2]],
+        'decision_sample': {'schema': 'natlang.decision-sample/1', 'log_probs': [-1., -2.],
+                            'chosen': 0, 'temperature': 1., 'seed': 3}}
+    graphs, spec = prepare(rollouts(episode.turns), episode, roles, identity)
+    row = spec['rows'][graphs[0]['id']]
+    assert len(row['decision_actions'][0]['twin_options']) == 2
+    assert row['jolt']['privileged'] is not None
+    objective = objective_for(tmp_path, spec)
+    _, context, result = forward(model, graphs[0], identity)
+    loss, details = objective(model, result, context)
+    assert details['sampled_decisions'] == 1 and torch.isfinite(loss)
+    loss.backward()
+    assert model.adapter.up.weight.grad.abs().sum() > 0
 
 
 def test_custody_refusal_keeps_the_episode_on_its_outcome_term(tmp_path):

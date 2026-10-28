@@ -258,7 +258,7 @@ class JointTrainer:
     """Resumable joint trainer over one program manifest and its admitted training rows."""
 
     def __init__(self, engine, manifest, rows, recipe, *, state=None, owner=None, workdir=None, parent=None,
-                 pinned=None, warm=None):
+                 pinned=None, warm=None, privileged=None):
         """`rows` are SFT rows (`{binding, graph, ...}`) and RL rollouts (`natlang.tune-rollout/v1`); RL admission
         archives its behavior bundle and registered objective under `workdir`.
 
@@ -307,7 +307,8 @@ class JointTrainer:
                 # Each objective archives its own behavior bundle and registered objective.
                 self.episodes[kind] = RLEpisodes(engine, rollouts, Path(workdir) / kind if kind == 'rft' else workdir,
                                                  mode='grpo' if kind == 'rl' else 'rft', min_quality=recipe.rft_min_quality,
-                                                 policy_loss=self.rl_policy_loss if kind == 'rl' else None)
+                                                 policy_loss=self.rl_policy_loss if kind == 'rl' else None,
+                                                 privileged=privileged if kind == 'rl' else None)
             self._admit_rl()
         available = target_parameters(engine.shared_model)
         self.targets, self.target_classes = module_map(sorted(available), classes=recipe.target_classes)
