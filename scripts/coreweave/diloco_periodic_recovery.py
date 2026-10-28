@@ -620,6 +620,30 @@ def health_loop(record, ownership_path, destination, interval):
             print(json.dumps({'event':'worker_health_unavailable','error_type':type(error).__name__}),flush=True)
         time.sleep(interval)
 
+
+def supervise_recovery(record, state_path, backend_factory, *, interval, retry_interval=60, once=False, sleep=time.sleep):
+    """Retry transient initialization and incomplete exports without losing the journal."""
+    if interval<=0 or retry_interval<=0:raise ValueError('recovery intervals must be positive')
+    backend=None
+    while True:
+        retry=False
+        try:
+            if backend is None:backend=backend_factory()
+            state=run_once(record,state_path,backend)
+            cycle=state.get('pending') or state['cycles'][-1]
+            print(json.dumps({'cycle':cycle['id'],'phase':cycle['phase'],'errors':cycle['errors'],
+                              'latest_exported':state.get('latest_exported'),
+                              'recovery_blocker':state.get('recovery_blocker') or cycle.get('recovery_blocker'),
+                              'observed_progress':cycle.get('observed_progress')},sort_keys=True),flush=True)
+            retry=cycle['phase']!='verified-components-and-dependencies'
+        except Exception as error:
+            print(json.dumps({'error':type(error).__name__,'detail':str(error)}),flush=True)
+            if once:raise
+            backend=None;retry=True
+        if once:return
+        sleep(min(interval,retry_interval) if retry else interval)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run_id');p.add_argument('--state',type=Path,required=True)
     p.add_argument('--storage',type=Path,required=True);p.add_argument('--parent-local',type=Path,required=True);
@@ -644,20 +668,8 @@ def main():
                 if len(workers)==len(record['learners']) and all(v['state']=='live' and isinstance(v.get('progress'),dict) and type(v['progress'].get('global_step')) is int for v in workers.values()):break
             except (OSError,ValueError,KeyError):pass
             time.sleep(args.health_interval)
-    backend=Backend(record,args.storage,args.parent_local,args.parent_qualification,args.parent_copy_receipt,runtime_bundle=args.runtime_bundle)
-    while True:
-        try:
-            state=run_once(record,args.state,backend)
-            cycle=state.get('pending') or state['cycles'][-1]
-            print(json.dumps({'cycle':cycle['id'],'phase':cycle['phase'],'errors':cycle['errors'],
-                              'latest_exported':state.get('latest_exported'),
-                              'recovery_blocker':state.get('recovery_blocker') or cycle.get('recovery_blocker'),
-                              'observed_progress':cycle.get('observed_progress')},sort_keys=True),flush=True)
-        except Exception as error:
-            print(json.dumps({'error':type(error).__name__,'detail':str(error)}),flush=True)
-            if args.once:raise
-        if args.once:break
-        time.sleep(args.interval)
+    supervise_recovery(record,args.state,lambda:Backend(record,args.storage,args.parent_local,args.parent_qualification,
+        args.parent_copy_receipt,runtime_bundle=args.runtime_bundle),interval=args.interval,once=args.once)
 
 
 if __name__=='__main__':
